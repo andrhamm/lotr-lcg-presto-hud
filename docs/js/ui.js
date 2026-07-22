@@ -169,6 +169,18 @@ export function drawHeart(ctx, cx, cy, r, broken, color) {
   }
 }
 
+// Small pennant flag (a target reached its max). Canvas primitives.
+export function drawFlag(ctx, x, y, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, Math.max(2, h * 0.14), h);            // pole
+  ctx.beginPath();                                          // pennant
+  ctx.moveTo(x + h * 0.14, y);
+  ctx.lineTo(x + h * 0.95, y + h * 0.18);
+  ctx.lineTo(x + h * 0.14, y + h * 0.4);
+  ctx.closePath();
+  ctx.fill();
+}
+
 // Detailed, coloured weather glyph for the heading facings (canvas
 // primitives, so it ports to PicoGraphics' circle/line/poly). idx: 0 sun,
 // 1 cloud, 2 rain, 3 storm. Drawn centred on (cx, cy) at radius r.

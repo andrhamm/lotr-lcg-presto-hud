@@ -303,16 +303,19 @@ export class GameState {
   questLabel() { return `${this.quest.stage_n}${this.quest.side}`; }
 
   autoSplit(budget) {
+    // Fill the active location, then the quest - each capped at its own
+    // quest points. Side quests are left untouched; any overflow beyond
+    // location + quest capacity is discarded.
     const alloc = { location: 0, quest: 0,
                     side_quests: this.side_quests.map(() => 0) };
     let remaining = budget;
     if (this.active_location) {
       const room = Math.max(0, this.active_location.points - this.active_location.progress);
-      const toLoc = Math.min(remaining, room);
-      alloc.location = toLoc;
-      remaining -= toLoc;
+      alloc.location = Math.min(remaining, room);
+      remaining -= alloc.location;
     }
-    alloc.quest = remaining;
+    const qroom = Math.max(0, this.quest.points - this.quest.progress);
+    alloc.quest = Math.min(remaining, qroom);
     return alloc;
   }
 

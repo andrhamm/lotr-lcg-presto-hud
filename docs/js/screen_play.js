@@ -1,6 +1,6 @@
 // Port of ui/screen_play.py — the guided round.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
-         truncateText, ribbon, notePanel, drawWeather, drawHeart } from "./ui.js";
+         truncateText, ribbon, notePanel, drawWeather, drawHeart, drawFlag } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS } from "./gamestate.js";
@@ -431,63 +431,59 @@ export class ScreenPlay {
     if (this.alloc === null) {
       const a = game.autoSplit(game.pending_budget);
       this.alloc = { location: a.location, quest: a.quest,
-                     side_quests: game.side_quests.map(() => 0) };
+                     side_quests: game.side_quests.map((_, i) => a.side_quests[i] ?? 0) };
     }
     const alloc = this.alloc;
     const used = alloc.location + alloc.quest + alloc.side_quests.reduce((a, b) => a + b, 0);
-    const remaining = game.pending_budget - used;
+    const discard = game.pending_budget - used;
 
-    textCenter(ctx, `Place ${game.pending_budget} progress  (remaining ${remaining})`,
-               240, HEADER_H + 8, 2, pal.gold);
-    textCenter(ctx, "Location fills first; overflow -> quest. Adjust freely.",
-               240, HEADER_H + 34, 1, pal.muted);
-    textCenter(ctx, "Progress past a stage's quest points is discarded when it clears.",
-               240, HEADER_H + 48, 1, pal.dim);
+    textCenter(ctx, `Place ${game.pending_budget} progress`, 240, HEADER_H + 12, 3, pal.gold);
 
-    let y = HEADER_H + 56;
     const rows = [];
     if (game.active_location) {
-      rows.push(["location", null, "Active Location",
+      rows.push(["location", null, "Location",
                  game.active_location.progress, game.active_location.points]);
     }
     rows.push(["quest", null, `Quest ${game.questLabel()}`,
                game.quest.progress, game.quest.points]);
     game.side_quests.forEach((sq, i) => {
-      rows.push(["side", i, `Side quest ${i + 1}`, sq.progress, sq.points]);
+      rows.push(["side", i, `Side Quest ${i + 1}`, sq.progress, sq.points]);
     });
 
+    const rw = 480 - 2 * MARGIN;
+    let y = HEADER_H + 46;
     for (const [key, idx, label, cur, pts] of rows) {
       const add = key === "side" ? alloc.side_quests[idx] : alloc[key];
-      panel(ctx, MARGIN, y, 480 - 2 * MARGIN, 56);
-      textLeft(ctx, label, 22, y + 8, 2, pal.tan);
-      textLeft(ctx, `${cur} + ${add} / ${pts}`, 22, y + 34, 1, pal.muted);
-      const mn = new Button(["am", key, idx], 300, y + 8, 50, 40);
-      const pl = new Button(["ap", key, idx], 414, y + 8, 50, 40);
+      const result = cur + add;
+      const done = pts > 0 && result >= pts;
+      panel(ctx, MARGIN, y, rw, 52, done ? pal.card_hi : pal.card,
+            done ? pal.border_gold : pal.border);
+      textLeft(ctx, label, 22, y + 18, 2, done ? pal.gold : pal.tan);
+      if (done) drawFlag(ctx, 24 + measureText(label, 2) + 10, y + 14, 22, pal.gold);
+      const mn = new Button(["am", key, idx], 276, y + 6, 50, 40);
+      const pl = new Button(["ap", key, idx], MARGIN + rw - 58, y + 6, 50, 40);
       for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
         bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
         textCenter(ctx, s, b.x + 25, b.y + 8, 3, pal.tan);
         this.buttons.push(b);
       }
-      textCenter(ctx, String(cur + add), 382, y + 14, 3, pal.gold);
-      y += 62;
+      textCenter(ctx, `${result} / ${pts}`, 369, y + 14, 3, done ? pal.gold : pal.tan);
+      y += 58;
     }
 
-    const ab = new Button(["aauto"], MARGIN, y + 4, 230, 44);
-    bevel(ctx, ab.x, ab.y, ab.w, ab.h, pal.btn);
-    textCenter(ctx, "Auto loc->quest", ab.x + 115, ab.y + 12, 2, pal.tan);
-    this.buttons.push(ab);
-    const rb = new Button(["areset"], 250, y + 4, 110, 44);
+    if (discard > 0) {
+      panel(ctx, MARGIN, y, rw, 46, pal.card);
+      textLeft(ctx, "Discarded (over capacity)", 22, y + 15, 2, pal.dim);
+      textCenter(ctx, String(discard), MARGIN + rw - 44, y + 6, 3, pal.red);
+      y += 52;
+    }
+
+    const rb = new Button(["areset"], MARGIN, y + 2, rw, 38);
     bevel(ctx, rb.x, rb.y, rb.w, rb.h, pal.btn);
-    textCenter(ctx, "Reset", rb.x + 55, rb.y + 12, 2, pal.tan);
+    textCenter(ctx, "Reset (auto-fill location, then quest)", 240, y + 12, 2, pal.tan);
     this.buttons.push(rb);
 
-    if (remaining > 0) {
-      const b = new Button(["apply_alloc_disabled"], MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H);
-      bevel(ctx, b.x, b.y, b.w, b.h, pal.card, false, 3);
-      textCenter(ctx, `Place ${remaining} more to continue`, 240, CTA_Y + 20, 2, pal.dim);
-    } else {
-      this._cta(ctx, `Next Phase: ${VIEW_LABELS.travel}`, ["apply_alloc"]);
-    }
+    this._cta(ctx, `Next Phase: ${VIEW_LABELS.travel}`, ["apply_alloc"]);
   }
 
   onButton(btn, game) {
@@ -508,7 +504,7 @@ export class ScreenPlay {
           if (game.players[i].threat !== before) {
             game.logEvent(`P${i + 1} threat ${before} -> ${game.players[i].threat}`);
           }
-        }, "threat", `Eliminated at ${game.players[i].elimination}`)];
+        }, "threat", `Elimination at ${game.players[i].elimination}`)];
     }
     if (k === "commit") return ["modal", new CommitModal(game, btn.id[1])];
     if (k === "commit_tip") return ["modal", new CommitModal(game, 0)];
@@ -537,26 +533,31 @@ export class ScreenPlay {
       const [, key, idx] = btn.id;
       const delta = k === "ap" ? 1 : -1;
       const a = this.alloc;
+      const cur = key === "side" ? game.side_quests[idx].progress
+        : key === "location" ? game.active_location.progress : game.quest.progress;
+      const pts = key === "side" ? game.side_quests[idx].points
+        : key === "location" ? game.active_location.points : game.quest.points;
+      const room = Math.max(0, pts - cur);                       // can't exceed quest points
       const used = a.location + a.quest + a.side_quests.reduce((x, y) => x + y, 0);
       if (delta > 0 && used >= game.pending_budget) return true;
-      if (key === "side") a.side_quests[idx] = Math.max(0, a.side_quests[idx] + delta);
-      else a[key] = Math.max(0, a[key] + delta);
-      return true;
-    }
-    if (k === "aauto") {
-      const a = game.autoSplit(game.pending_budget);
-      this.alloc = { location: a.location, quest: a.quest,
-                     side_quests: game.side_quests.map(() => 0) };
+      const set = v => key === "side" ? (a.side_quests[idx] = v) : (a[key] = v);
+      const now = key === "side" ? a.side_quests[idx] : a[key];
+      set(Math.max(0, Math.min(room, now + delta)));
       return true;
     }
     if (k === "areset") {
-      this.alloc = { location: 0, quest: 0,
-                     side_quests: game.side_quests.map(() => 0) };
+      const a = game.autoSplit(game.pending_budget);             // re-fill location, then quest
+      this.alloc = { location: a.location, quest: a.quest,
+                     side_quests: game.side_quests.map((_, i) => a.side_quests[i] ?? 0) };
       return true;
     }
     if (k === "apply_alloc") {
+      const used = this.alloc.location + this.alloc.quest
+        + this.alloc.side_quests.reduce((x, y) => x + y, 0);
+      const discard = game.pending_budget - used;
       const completed = game.placeProgress(this.alloc);
-      let msg = `Placed ${game.pending_budget} progress`;
+      let msg = `Placed ${used} progress`;
+      if (discard > 0) msg += `, discarded ${discard} (over capacity)`;
       if (completed.length) msg += ` (${completed.join(", ")})`;
       game.logEvent(msg);
       game.pending_budget = 0;
