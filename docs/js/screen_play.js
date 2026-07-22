@@ -6,7 +6,7 @@ import * as icons from "./icons.js";
 import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS } from "./gamestate.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal, CommitModal,
          QuestingForModal, RemindersModal, LocationPickModal, SideQuestsModal,
-         QuestConfigModal, StageCompleteModal } from "./screens.js";
+         QuestConfigModal, StageCompleteModal, SailingModal } from "./screens.js";
 
 const MARGIN = 8;
 const STRIP_Y = HEADER_H + 10;
@@ -95,11 +95,51 @@ export class ScreenPlay {
     this.buttons.push(b);
   }
 
-  _headingChip(ctx, game, y, xoff = 0) {
+  _headingPen(h) { return h === 0 ? pal.gold : h === 3 ? pal.red : pal.amber; }
+
+  // Zoomed heading dial clipped to (x,y,w,h): the current facing is big at
+  // top-centre, its two neighbours peek in half-clipped at the sides, the
+  // opposite facing sits off the bottom. `cur` is fractional while easing,
+  // so the icons slide/grow smoothly as the wheel turns.
+  _headingDial(ctx, game, x, y, w, h) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    const dcx = x + w / 2;
+    const SPREAD = 52 * Math.PI / 180;
+    const R = (w / 2) / Math.sin(SPREAD);        // neighbours land at side edges
+    const dcy = y + 32 + R;                        // current icon ~32px below top
+    const cur = (this._headingAngle ?? game.heading * 90) / 90;
+    for (let i = 0; i < 4; i++) {
+      let d = i - cur;
+      while (d > 2) d -= 4; while (d < -2) d += 4;
+      const ang = d * SPREAD;
+      if (Math.abs(ang) > Math.PI / 2 + 0.15) continue;      // opposite: off-card
+      const ix = dcx + R * Math.sin(ang), iy = dcy - R * Math.cos(ang);
+      const prox = Math.max(0, 1 - Math.abs(d));             // 1 at current -> 0
+      const sc = 1 + prox;                                    // grows to 2x at top
+      const sz = 12 * sc;
+      const pen = this._headingPen(i);
+      ctx.globalAlpha = 0.2 + 0.8 * prox;
+      icons.drawIcon(ctx, icons[HEADINGS[i][1]], ix - sz, iy - sz, pen, sc);
+      const la = 1 - Math.min(1, Math.abs(d) * 2);
+      if (la > 0) {
+        ctx.globalAlpha = la;
+        textCenter(ctx, HEADINGS[i][2], ix, iy + sz + 3, 1, pen, false);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Compact heading card (wheel gutter icon + current facing + term),
+  // tappable, for the commit/staging views where space is tight.
+  _headingMini(ctx, game, x, y, w, h) {
     if (!game.sailing) return;
-    const ic = icons[HEADINGS[game.heading][1]];
-    const pen = game.heading === 0 ? pal.gold : game.heading === 3 ? pal.red : pal.amber;
-    icons.drawIcon(ctx, ic, 480 - MARGIN - 32 - xoff, y + 8, pen);
+    const pen = this._headingPen(game.heading);
+    bevel(ctx, x, y, w, h, pal.card);
+    icons.drawIcon(ctx, icons[HEADINGS[game.heading][1]], x + 10, y + Math.floor((h - 24) / 2), pen);
+    textLeft(ctx, HEADINGS[game.heading][0], x + 40, y + Math.floor((h - 16) / 2), 2, pen);
+    this.buttons.push(new Button(["sail_modal"], x, y, w, h));
   }
 
   _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
@@ -136,10 +176,29 @@ export class ScreenPlay {
     });
   }
 
+  _animateHeading(game) {
+    // Ease the displayed dial angle toward the current heading. Runs every
+    // frame (any view) so the winds-shift on entering the sailing view
+    // animates from the pre-shift facing rather than snapping.
+    if (!game.sailing) { this._headingAngle = null; this.animating = false; return; }
+    const target = game.heading * 90;
+    if (this._headingAngle == null) { this._headingAngle = target; this.animating = false; return; }
+    const d = target - this._headingAngle;
+    if (Math.abs(d) > 0.5) {
+      this._headingAngle += d * 0.16;                 // ease-out
+      if (Math.abs(target - this._headingAngle) <= 0.5) this._headingAngle = target;
+      this.animating = true;
+    } else {
+      this._headingAngle = target;
+      this.animating = false;
+    }
+  }
+
   draw(ctx, game) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     drawHeader(ctx, game, this.buttons);
+    this._animateHeading(game);
     const view = game.view;
 
     if (view === "setup_game") {
@@ -168,20 +227,19 @@ export class ScreenPlay {
       this._chips(ctx, game);
       this._progressRow(ctx, game, true);
       notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                ["Collect resources.", "Draw cards.", "Play allies and attachments."],
-                2, game.sailing ? 42 : 0);
-      this._headingChip(ctx, game, CONTENT_Y + 6);
+                ["Collect resources.", "Draw cards.", "Play allies and attachments."]);
       this._cta(ctx, "Quest >", ["advance"]);
     } else if (view === "quest_commit") {
       this._chips(ctx, game);
       this._progressRow(ctx, game);
       this._commitRow(ctx, game, CONTENT_Y);
-      const th = notePanel(ctx, MARGIN, CONTENT_Y + 60, 480 - 2 * MARGIN,
-                           "Commit characters to the quest.");
+      const rsv = game.sailing ? 156 : 0;
+      const tip = game.sailing ? "Commit characters." : "Commit characters to the quest.";
+      const th = notePanel(ctx, MARGIN, CONTENT_Y + 60, 480 - 2 * MARGIN, tip, 2, rsv);
       this.buttons.push(new Button(["commit_tip"], MARGIN, CONTENT_Y + 60,
-                                   480 - 2 * MARGIN, th));
+                                   480 - 2 * MARGIN - rsv, th));
+      if (game.sailing) this._headingMini(ctx, game, 480 - MARGIN - 150, CONTENT_Y + 60, 150, th);
       this._totalsRow(ctx, game, CONTENT_Y + 108, false, ["wp", "stg"]);
-      this._headingChip(ctx, game, CONTENT_Y + 60);
       this._cta(ctx, "Quest (Staging) >", ["advance"]);
     } else if (view === "quest_sailing") {
       this._chips(ctx, game);
@@ -197,50 +255,31 @@ export class ScreenPlay {
         this.buttons.push(eb);
         this._cta(ctx, "Questing (Commit) >", ["advance"]);
       } else {
-        // physical heading card: 4 symbols round the edges, read at the top;
-        // off-course = rotate 90deg counter-clockwise (rulebook p.5)
-        const CW2 = 126;
-        const cx0 = MARGIN + 4, cy0 = CONTENT_Y + 2;
-        const ccx = cx0 + CW2 / 2, ccy = cy0 + CW2 / 2;
-        panel(ctx, cx0, cy0, CW2, CW2, pal.card, pal.border_gold);
-        rect(ctx, ccx - 6, cy0 + 2, 12, 5, pal.gold);
-        icons.drawIcon(ctx, icons.WHEEL, ccx - 12, ccy - 12, pal.well);
-        const topPen = game.heading === 0 ? pal.gold
-          : game.heading === 3 ? pal.red : pal.amber;
-        const spots = [
-          [ccx - 12, cy0 + 8],           // top - current heading
-          [cx0 + CW2 - 32, ccy - 12],    // right
-          [ccx - 12, cy0 + CW2 - 32],    // bottom
-          [cx0 + 8, ccy - 12],           // left
-        ];
-        spots.forEach(([sx, sy], edge) => {
-          const [, icName] = HEADINGS[(edge + game.heading) % 4];
-          icons.drawIcon(ctx, icons[icName], sx, sy, edge === 0 ? topPen : pal.dim);
-        });
-        const rx = cx0 + CW2 + 18, rw = 480 - MARGIN - (cx0 + CW2 + 18);
-        textLeft(ctx, game.headingLabel(), rx, cy0 + 2, 3, topPen);
-        textLeft(ctx, `${HEADINGS[game.heading][2]} - ${HEADINGS[game.heading][3]}`,
-                 rx, cy0 + 32, 1, pal.dim);
-        const offB = new Button(["head", 1], rx, cy0 + 46, rw, 42);
-        bevel(ctx, offB.x, offB.y, offB.w, offB.h, pal.btn);
-        textCenter(ctx, "Shift off-course", rx + rw / 2, offB.y + 12, 2, pal.red);
-        const onB = new Button(["head", -1], rx, cy0 + 92, rw, 42);
-        bevel(ctx, onB.x, onB.y, onB.w, onB.h, pal.btn);
-        textCenter(ctx, "Shift on-course", rx + rw / 2, onB.y + 12, 2, pal.green);
-        this.buttons.push(offB, onB);
-        // tip with the wheel symbol drawn inline (notePanel chrome by hand)
-        const tw = 480 - 2 * MARGIN, ty0 = cy0 + 136;
-        const gutter = 28 + 14, lh = 26, th = 3 * lh + 16;
+        // Zoomed heading dial in a card, laid out like the other HUD rows:
+        // a wheel gutter icon on the left, then the gauge. The dial eases a
+        // quarter-turn on every heading change (notably the winds shift on
+        // entry, rulebook p.6); the current facing is emphasised while its
+        // neighbours peek in at the sides. Tap to log the wheels found.
+        const cardY = CONTENT_Y, cardH = 96;
+        const cardX = GUTTER, cardW = 480 - MARGIN - GUTTER;
+        icons.drawIcon(ctx, icons.WHEEL, MARGIN + 2, cardY + Math.floor((cardH - 24) / 2), pal.gold);
+        panel(ctx, cardX, cardY, cardW, cardH, pal.card, pal.border_gold);
+        this._headingDial(ctx, game, cardX + 6, cardY + 4, 150, cardH - 8);
+        const rx = cardX + 6 + 150 + 16;
+        const tPen = this._headingPen(game.heading);
+        textLeft(ctx, HEADINGS[game.heading][0], rx, cardY + 16, 3, tPen);
+        textLeft(ctx, HEADINGS[game.heading][3], rx, cardY + 48, 1, pal.dim);
+        icons.drawIcon(ctx, icons.WHEEL_SM, rx, cardY + 68, pal.gold);
+        textLeft(ctx, "tap to log wheels found", rx + 22, cardY + 69, 1, pal.dim);
+        this.buttons.push(new Button(["sail_modal"], cardX, cardY, cardW, cardH));
+        // tip (pipe medallion; wheel glyph inline in the sentence)
+        const tw = 480 - 2 * MARGIN, ty0 = cardY + cardH + 8;
+        const gutt = 28 + 14, lh = 26, th = 3 * lh + 16;
         rect(ctx, MARGIN, ty0, tw, th, pal.card_hi);
         rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
-        icons.drawIcon(ctx, icons.PIPE, MARGIN + 10,
-                       ty0 + Math.floor((th - 28) / 2), pal.gold);
-        const tx = MARGIN + 12 + gutter;
+        icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + Math.floor((th - 28) / 2), pal.gold);
+        const tx = MARGIN + 12 + gutt;
         let ly = ty0 + 8;
-        // "P<n> <ribbon> exhausts N characters (ships count) and looks at N
-        // encounter cards. <wheel> found = steps on-course." Ribbon marks the
-        // actual first player. Wheels shift ON-course (rulebook p.6) - the
-        // mandatory 1-step off-course shift already fired entering this view.
         const fp = `P${game.first_player + 1}`;
         textLeft(ctx, fp, tx, ly, 2, pal.muted);
         let sx0 = tx + measureText(fp, 2) + 6;
@@ -248,19 +287,19 @@ export class ScreenPlay {
         sx0 += 10 + 6;
         textLeft(ctx, "exhausts N characters (ships", sx0, ly, 2, pal.muted);
         ly += lh;
-        textLeft(ctx, "count), looks at N encounter cards.", tx, ly, 2, pal.muted);
+        textLeft(ctx, "count), looks at and discards N cards.", tx, ly, 2, pal.muted);
         ly += lh;
         icons.drawIcon(ctx, icons.WHEEL_SM, tx, ly, pal.gold);
-        let sx2 = tx + 16 + 6;
-        textLeft(ctx, "found = steps on-course.", sx2, ly, 2, pal.muted);
+        textLeft(ctx, "found = steps on-course.", tx + 22, ly, 2, pal.muted);
         this._cta(ctx, "Questing (Commit) >", ["advance"]);
       }
     } else if (view === "quest_staging") {
       this._chips(ctx, game);
       this._progressRow(ctx, game, true);
-      notePanel(ctx, MARGIN, CONTENT_Y + 2, 480 - 2 * MARGIN,
-                "Reveal 1 encounter card per player.");
-      this._headingChip(ctx, game, CONTENT_Y + 2);
+      const srsv = game.sailing ? 156 : 0;
+      const snote = game.sailing ? "Reveal 1 card / player." : "Reveal 1 encounter card per player.";
+      notePanel(ctx, MARGIN, CONTENT_Y + 2, 480 - 2 * MARGIN, snote, 2, srsv);
+      if (game.sailing) this._headingMini(ctx, game, 480 - MARGIN - 150, CONTENT_Y + 2, 150, 42);
       this._totalsRow(ctx, game, CONTENT_Y + 52, true);
       if (game.quest_resolved) {
         this._cta(ctx, "Travel >", ["advance"]);
@@ -282,8 +321,7 @@ export class ScreenPlay {
       this._progressRow(ctx, game);
       notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                 ["Ready all exhausted cards.", "Threat increases (automatic).",
-                 "Pass the first player token."], 2, game.sailing ? 42 : 0);
-      this._headingChip(ctx, game, CONTENT_Y + 6);
+                 "Pass the first player token."]);
       this._cta(ctx, "End round >", ["endround"]);
     } else {
       this._chips(ctx, game);
@@ -303,14 +341,13 @@ export class ScreenPlay {
       };
       let noteText = notes[view] ?? "";
       if (game.sailing && shipNotes[view]) noteText = [noteText, shipNotes[view]];
-      const reserve = (flavor ? 34 : 0) + (game.sailing ? 42 : 0);
+      const reserve = flavor ? 34 : 0;
       const h = notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                           noteText, 2, reserve);
       if (flavor) {
         icons.drawIcon(ctx, flavor[0], 480 - MARGIN - 34,
                        CONTENT_Y + 6 + Math.floor((h - 20) / 2), flavor[1]);
       }
-      this._headingChip(ctx, game, CONTENT_Y + 6, flavor ? 42 : 0);
       const i = VIEW_ORDER.indexOf(view);
       const nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
       this._cta(ctx, `${VIEW_LABELS[nxt] ?? nxt} >`, ["advance"]);
@@ -362,21 +399,15 @@ export class ScreenPlay {
     const loc = game.active_location;
     let y = CONTENT_Y + 4;
     if (!loc) {
-      const ny = y;
       y += notePanel(ctx, MARGIN, y, 480 - 2 * MARGIN,
-        "Players may travel to 1 location. It becomes the active location.",
-        2, game.sailing ? 42 : 0) + 10;
-      this._headingChip(ctx, game, ny);
+        "Players may travel to 1 location. It becomes the active location.") + 10;
       const tb = new Button(["travel_new"], MARGIN, y, 480 - 2 * MARGIN, 56);
       bevel(ctx, tb.x, tb.y, tb.w, tb.h, pal.btn);
       textCenter(ctx, "Travel to location", 240, y + 18, 2, pal.tan);
       this.buttons.push(tb);
     } else {
-      const ny = y;
       y += notePanel(ctx, MARGIN, y, 480 - 2 * MARGIN,
-        "Travel is only possible while there is no active location (rulebook).",
-        2, game.sailing ? 42 : 0) + 10;
-      this._headingChip(ctx, game, ny);
+        "Travel is only possible while there is no active location (rulebook).") + 10;
       const cb = new Button(["travel_change"], MARGIN, y, 480 - 2 * MARGIN, 48);
       panel(ctx, cb.x, cb.y, cb.w, cb.h);
       textCenter(ctx, "Replace location (card effect)", 240, y + 14, 2, pal.muted);
@@ -557,10 +588,7 @@ export class ScreenPlay {
     }
     if (k === "travel_new") return ["modal", new LocationPickModal(game, "new")];
     if (k === "travel_change") return ["modal", new LocationPickModal(game, "change")];
-    if (k === "head") {
-      game.shiftHeading(btn.id[1], "sailing test");
-      return true;
-    }
+    if (k === "sail_modal") return ["modal", new SailingModal(game)];
     if (k === "sail_toggle") {
       game.sailing = !game.sailing;
       if (game.sailing) game.heading = 0;

@@ -5,7 +5,7 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          stepper, wrapText, truncateText, ribbon, notePanel } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
-import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, REMINDER_DEFS,
+import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, REMINDER_DEFS, HEADINGS,
          DEFAULT_START_THREAT, MAX_PLAYERS, viewForStep, fmtMs } from "./gamestate.js";
 import { PHASES, STEPS, step as phaseStep } from "./phases.js";
 
@@ -530,6 +530,84 @@ export class EliminationModal {
       }
       return "close";
     }
+    return null;
+  }
+}
+
+export class SailingModal {
+  // Log the result of a Sailing test: +v = wheels found (shift on-course),
+  // -v = steps off-course (winds/card effects). Heading index 0 = on-course.
+  constructor(game) { this.game = game; this.v = 0; this.buttons = []; }
+  _result() { return Math.max(0, Math.min(3, this.game.heading - this.v)); }
+  draw(ctx) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    textLeft(ctx, `R${this.game.round} ${this.game.step}`, 10, 12, 2, pal.muted);
+    textCenter(ctx, "Sailing test", 240, 12, 2, pal.gold);
+    textLeft(ctx, "X", 480 - 16 - measureText("X", 3), 8, 3, pal.no_fg);
+    this.buttons.push(new Button(["cancel"], 330, 0, 150, 40));
+    rect(ctx, 0, 40, 480, 1, pal.border);
+
+    const heading = (h, cy, scale) => {
+      const [term, icName, facing] = HEADINGS[h];
+      const pen = h === 0 ? pal.gold : h === 3 ? pal.red : pal.amber;
+      const label = `${facing} - ${term}`;
+      const lw = measureText(label, scale);
+      const total = 24 + 8 + lw;
+      const x0 = Math.floor(240 - total / 2);
+      icons.drawIcon(ctx, icons[icName], x0, cy - 2, pen);
+      textLeft(ctx, label, x0 + 32, cy + (scale === 2 ? 2 : 0), scale, pen);
+    };
+
+    textCenter(ctx, "Current heading", 240, 54, 1, pal.dim);
+    heading(this.game.heading, 74, 2);
+
+    // wheel stepper
+    const big = String(Math.abs(this.v));
+    const bw = measureText(big, 6);
+    const bx = Math.floor(240 - (this.v > 0 ? (bw + 14 + 48) : bw) / 2);
+    const bpen = this.v < 0 ? pal.red : this.v > 0 ? pal.gold : pal.muted;
+    textLeft(ctx, big, bx, 128, 6, bpen);
+    // wheel as a currency symbol, its 48px height matching the scale-6 digit
+    if (this.v > 0) icons.drawIcon(ctx, icons.WHEEL, bx + bw + 14, 128, pal.gold, 2);
+    let sub, spen;
+    if (this.v > 0) { sub = `${this.v} wheel${this.v > 1 ? "s" : ""} found - shift on-course`; spen = pal.green; }
+    else if (this.v < 0) { sub = `${-this.v} step${this.v < -1 ? "s" : ""} off-course (card effect)`; spen = pal.red; }
+    else { sub = "no wheels found - heading stays"; spen = pal.dim; }
+    textCenter(ctx, sub, 240, 200, 1, spen);
+
+    const mn = new Button(["d", -1], 34, 128, 64, 60);
+    const pl = new Button(["d", 1], 480 - 34 - 64, 128, 64, 60);
+    bevel(ctx, mn.x, mn.y, mn.w, mn.h, pal.btn);
+    textCenter(ctx, "-", mn.x + 32, mn.y + 14, 4, pal.tan);
+    bevel(ctx, pl.x, pl.y, pl.w, pl.h, pal.btn);
+    textCenter(ctx, "+", pl.x + 32, pl.y + 14, 4, pal.tan);
+    this.buttons.push(mn, pl);
+
+    textCenter(ctx, "Result", 240, 240, 1, pal.dim);
+    heading(this._result(), 262, 2);
+
+    const no = new Button(["cancel"], 24, 404, 200, 64);
+    const ok = new Button(["apply"], 256, 404, 200, 64);
+    bevel(ctx, no.x, no.y, no.w, no.h, pal.btn_no, false, 3);
+    textCenter(ctx, "Cancel", no.x + 100, no.y + 20, 2, pal.no_fg);
+    bevel(ctx, ok.x, ok.y, ok.w, ok.h, pal.btn_ok, false, 3);
+    textCenter(ctx, "Apply", ok.x + 100, ok.y + 20, 2, pal.ok_fg);
+    this.buttons.push(no, ok);
+  }
+  onButton(btn) {
+    const k = btn.id[0];
+    if (k === "d") { this.v = Math.max(-3, Math.min(8, this.v + btn.id[1])); return null; }
+    if (k === "apply") {
+      if (this.v !== 0) {
+        const why = this.v > 0
+          ? `${this.v} wheel${this.v > 1 ? "s" : ""} found (sailing test)`
+          : "card effect";
+        this.game.shiftHeading(-this.v, why);
+      }
+      return "close";
+    }
+    if (k === "cancel") return "cancel";
     return null;
   }
 }

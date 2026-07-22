@@ -255,6 +255,8 @@ function main() {
     if (prefs.scene === "torch" && active !== "boot" && active !== "setup") {
       if (tick % 10 === 0) updateLeds(game, prefs, tick);
     }
+    // keep redrawing while the heading dial is spinning
+    if (!modal && active === "play" && screens.play.animating) dirty = true;
     tick += 1;
     if (dirty) { draw(); dirty = false; }
   }, 20);
