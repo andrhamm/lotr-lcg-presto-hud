@@ -237,7 +237,14 @@ export class ScreenPlay {
                        ty0 + Math.floor((th - 28) / 2), pal.gold);
         const tx = MARGIN + 12 + gutter;
         let ly = ty0 + 8;
-        textLeft(ctx, "First player exhausts characters (ships", tx, ly, 2, pal.muted);
+        // "P<n> <first-player ribbon> exhausts characters (ships" - ribbon
+        // inline marks the actual first player doing the test
+        const fp = `P${game.first_player + 1}`;
+        textLeft(ctx, fp, tx, ly, 2, pal.muted);
+        let sx0 = tx + measureText(fp, 2) + 6;
+        ribbon(ctx, sx0, ly - 1, 10, 18);
+        sx0 += 10 + 6;
+        textLeft(ctx, "exhausts characters (ships", sx0, ly, 2, pal.muted);
         ly += lh;
         textLeft(ctx, "count, Dream-chaser = 2) and looks at", tx, ly, 2, pal.muted);
         ly += lh;
