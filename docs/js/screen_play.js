@@ -197,7 +197,7 @@ export class ScreenPlay {
       } else {
         // physical heading card: 4 symbols round the edges, read at the top;
         // off-course = rotate 90deg counter-clockwise (rulebook p.5)
-        const CW2 = 160;
+        const CW2 = 126;
         const cx0 = MARGIN + 4, cy0 = CONTENT_Y + 2;
         const ccx = cx0 + CW2 / 2, ccy = cy0 + CW2 / 2;
         panel(ctx, cx0, cy0, CW2, CW2, pal.card, pal.border_gold);
@@ -206,28 +206,44 @@ export class ScreenPlay {
         const topPen = game.heading === 0 ? pal.gold
           : game.heading === 3 ? pal.red : pal.amber;
         const spots = [
-          [ccx - 12, cy0 + 12],          // top - current heading
-          [cx0 + CW2 - 36, ccy - 12],    // right
-          [ccx - 12, cy0 + CW2 - 36],    // bottom
-          [cx0 + 12, ccy - 12],          // left
+          [ccx - 12, cy0 + 8],           // top - current heading
+          [cx0 + CW2 - 32, ccy - 12],    // right
+          [ccx - 12, cy0 + CW2 - 32],    // bottom
+          [cx0 + 8, ccy - 12],           // left
         ];
         spots.forEach(([sx, sy], edge) => {
           const [, icName] = HEADINGS[(edge + game.heading) % 4];
           icons.drawIcon(ctx, icons[icName], sx, sy, edge === 0 ? topPen : pal.dim);
         });
         const rx = cx0 + CW2 + 18, rw = 480 - MARGIN - (cx0 + CW2 + 18);
-        textLeft(ctx, game.headingLabel(), rx, cy0 + 4, 3, topPen);
-        textLeft(ctx, "current heading (top of card)", rx, cy0 + 34, 1, pal.dim);
-        const offB = new Button(["head", 1], rx, cy0 + 54, rw, 46);
+        textLeft(ctx, game.headingLabel(), rx, cy0 + 2, 3, topPen);
+        textLeft(ctx, "current heading (top of card)", rx, cy0 + 32, 1, pal.dim);
+        const offB = new Button(["head", 1], rx, cy0 + 46, rw, 42);
         bevel(ctx, offB.x, offB.y, offB.w, offB.h, pal.btn);
-        textCenter(ctx, "Rotate off-course", rx + rw / 2, offB.y + 14, 2, pal.red);
-        const onB = new Button(["head", -1], rx, cy0 + 108, rw, 46);
+        textCenter(ctx, "Rotate off-course", rx + rw / 2, offB.y + 12, 2, pal.red);
+        const onB = new Button(["head", -1], rx, cy0 + 92, rw, 42);
         bevel(ctx, onB.x, onB.y, onB.w, onB.h, pal.btn);
-        textCenter(ctx, "Rotate on-course", rx + rw / 2, onB.y + 14, 2, pal.green);
+        textCenter(ctx, "Rotate on-course", rx + rw / 2, onB.y + 12, 2, pal.green);
         this.buttons.push(offB, onB);
-        notePanel(ctx, MARGIN, cy0 + CW2 + 8, 480 - 2 * MARGIN,
-                  ["Exhaust characters; look at that many",
-                   "cards. Each wheel = 1 step on-course."], 2, 0, icons.WHEEL);
+        // tip with the wheel symbol drawn inline (notePanel chrome by hand)
+        const tw = 480 - 2 * MARGIN, ty0 = cy0 + 136;
+        const gutter = 28 + 14, lh = 26, th = 3 * lh + 16;
+        rect(ctx, MARGIN, ty0, tw, th, pal.card_hi);
+        rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
+        icons.drawIcon(ctx, icons.PIPE, MARGIN + 10,
+                       ty0 + Math.floor((th - 28) / 2), pal.gold);
+        const tx = MARGIN + 12 + gutter;
+        let ly = ty0 + 8;
+        textLeft(ctx, "First player exhausts characters (ships", tx, ly, 2, pal.muted);
+        ly += lh;
+        textLeft(ctx, "count, Dream-chaser = 2) and looks at", tx, ly, 2, pal.muted);
+        ly += lh;
+        const seg1 = "that many cards. ";
+        textLeft(ctx, seg1, tx, ly, 2, pal.muted);
+        let sx2 = tx + measureText(seg1, 2) + 2;
+        icons.drawIcon(ctx, icons.WHEEL_SM, sx2, ly, pal.gold);
+        sx2 += 16 + 6;
+        textLeft(ctx, "= 1 step on-course.", sx2, ly, 2, pal.muted);
         this._cta(ctx, "Questing (Commit) >", ["advance"]);
       }
     } else if (view === "quest_staging") {
@@ -271,8 +287,14 @@ export class ScreenPlay {
       const flavor = { combat_enemy: [icons.DEFENSE, pal.green],
                        combat_player: [icons.ATTACK, pal.tan] }[view];
       this._progressRow(ctx, game);
+      const shipNotes = {
+        combat_enemy: "Ships: only a ship can defend a ship-enemy. Undefended ship attacks must damage a ship you control.",
+        combat_player: "Ships: your ships attack only ship-enemies - but any character may attack a ship-enemy.",
+      };
+      let noteText = notes[view] ?? "";
+      if (game.sailing && shipNotes[view]) noteText = [noteText, shipNotes[view]];
       const h = notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                          notes[view] ?? "", 2, flavor ? 34 : 0);
+                          noteText, 2, flavor ? 34 : 0);
       if (flavor) {
         icons.drawIcon(ctx, flavor[0], 480 - MARGIN - 34,
                        CONTENT_Y + 6 + Math.floor((h - 20) / 2), flavor[1]);
