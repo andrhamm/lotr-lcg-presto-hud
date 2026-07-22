@@ -47,6 +47,9 @@ export class ScreenPlay {
       textCenter(ctx, val, x + chipW / 2, STRIP_Y + 26, 3,
                  p.eliminated ? pal.red : pal.threatPen(p.threat));
       if (i === game.first_player) ribbon(ctx, x + chipW - 20, STRIP_Y + 1);
+      const tfrac = p.eliminated ? 1 : (p.elimination > 0 ? p.threat / p.elimination : 0);
+      this._bottomBar(ctx, x, chipW, STRIP_Y + CHIP_H, tfrac,
+                      p.eliminated ? pal.red : pal.threatPen(p.threat));
       this.buttons.push(new Button(["thr", i], x, STRIP_Y, chipW, CHIP_H));
     });
   }
@@ -66,20 +69,24 @@ export class ScreenPlay {
     const y = PROG_Y;
     icons.drawIcon(ctx, icons.TRAIL, MARGIN + 4, y + 24, pal.gold);   // taps -> progress view
     this.buttons.push(new Button(["prog_view"], 0, y, GUTTER, PROG_H));
+    const frac = (prog, pts) => (pts > 0 ? prog / pts : 0);
     const cards = [[`Q${game.quest.stage_n}${game.quest.side}`,
-                    `${game.quest.progress}/${game.quest.points}`, pal.gold, ["prog_view"]]];
+                    `${game.quest.progress}/${game.quest.points}`, pal.gold, ["prog_view"],
+                    frac(game.quest.progress, game.quest.points)]];
     if (game.active_location) {
       cards.push(["LOC", `${game.active_location.progress}/${game.active_location.points}`,
-                  pal.gold, ["prog_view"]]);
+                  pal.gold, ["prog_view"],
+                  frac(game.active_location.progress, game.active_location.points)]);
     }
     game.side_quests.forEach((sq, i) => {
-      cards.push([`SQ${i + 1}`, `${sq.progress}/${sq.points}`, pal.gold, ["prog_view"]]);
+      cards.push([`SQ${i + 1}`, `${sq.progress}/${sq.points}`, pal.gold, ["prog_view"],
+                  frac(sq.progress, sq.points)]);
     });
     const heading = showHeading && game.sailing;
     const n = cards.length + (heading ? 1 : 0);
     const cw = Math.min(this._chipW(game),
                         Math.floor((480 - GUTTER - MARGIN - (n - 1) * MARGIN) / n));
-    cards.forEach(([label, val, pen, bid], i) => {
+    cards.forEach(([label, val, pen, bid, cfrac], i) => {
       const x = GUTTER + i * (cw + MARGIN);
       panel(ctx, x, y, cw, PROG_H);
       if (val) {
@@ -94,6 +101,7 @@ export class ScreenPlay {
         const ok = game.quest_outcome === "success";
         drawHeart(ctx, x + cw - 15, y + 15, 7, !ok, ok ? pal.green : pal.red);
       }
+      if (val) this._bottomBar(ctx, x, cw, y + PROG_H, cfrac ?? 0, pal.gold);
       if (bid) this.buttons.push(new Button(bid, x, y, cw, PROG_H));
     });
     if (heading) this._headingProgressCard(ctx, game, GUTTER + cards.length * (cw + MARGIN), y, cw);
@@ -125,6 +133,14 @@ export class ScreenPlay {
     bevel(ctx, b.x, b.y, b.w, b.h, fill, false, 3);
     textCenter(ctx, label, 240, CTA_Y + 20, 2, fg);
     this.buttons.push(b);
+  }
+
+  // 2px progress bar along a card's bottom edge (threat/elimination,
+  // progress/quest-points). Dim track + coloured fill.
+  _bottomBar(ctx, x, w, bottomY, frac, color) {
+    const by = bottomY - 2;
+    rect(ctx, x, by, w, 2, pal.border);
+    if (frac > 0) rect(ctx, x, by, Math.max(1, Math.round(w * Math.min(1, frac))), 2, color);
   }
 
   _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
