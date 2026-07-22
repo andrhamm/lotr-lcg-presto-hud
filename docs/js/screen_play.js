@@ -508,7 +508,7 @@ export class ScreenPlay {
           if (game.players[i].threat !== before) {
             game.logEvent(`P${i + 1} threat ${before} -> ${game.players[i].threat}`);
           }
-        }, "threat")];
+        }, "threat", `Eliminated at ${game.players[i].elimination}`)];
     }
     if (k === "commit") return ["modal", new CommitModal(game, btn.id[1])];
     if (k === "commit_tip") return ["modal", new CommitModal(game, 0)];

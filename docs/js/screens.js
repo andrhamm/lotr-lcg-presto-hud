@@ -92,11 +92,12 @@ export class CounterModal {
   static STEPS = [[-5, "-5"], [-1, "-1"], [1, "+1"], [5, "+5"]];
   static ICONS = { threat: ["THREAT", "red"], willpower: ["WILLPOWER", "gold"] };
 
-  constructor(title, value, onCommit = null, icon = null) {
+  constructor(title, value, onCommit = null, icon = null, subtext = null) {
     this.title = title;
     this.state = new CounterState(value);
     this.onCommit = onCommit;
     this.icon = icon;
+    this.subtext = subtext;
     this.buttons = [];
   }
 
@@ -114,6 +115,7 @@ export class CounterModal {
     }
     const val = this.state.preview;
     textCenter(ctx, String(val), 240, 90, 9, pal.gold);
+    if (this.subtext) textCenter(ctx, this.subtext, 240, 168, 2, pal.muted);
     if (this.state.pending) {
       const dlt = this.state.delta;
       textCenter(ctx, `${this.state.value}  ->  ${val}`, 240, 190, 2, pal.muted);
