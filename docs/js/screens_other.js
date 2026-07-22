@@ -268,23 +268,24 @@ export class ScreenAbout {
     drawHeader(ctx, game, this.buttons, { title: "About", close: true });
     let y = HEADER_H + 18;
     textCenter(ctx, "LOTR LCG HUD", 240, y, 3, pal.gold);
-    y += 40;
-    const para = (lines, color, scale = 1) => {
+    y += 42;
+    const para = (lines, color) => {
       for (const ln of lines) {
-        textCenter(ctx, ln, 240, y, scale, color);
-        y += scale === 1 ? 16 : 22;
+        textCenter(ctx, ln, 240, y, 2, color);
+        y += 22;
       }
       y += 12;
     };
-    para(["A companion tracker for the table -", "not a rules engine."], pal.tan, 2);
-    para(["The Lord of the Rings: The Card Game is (c)",
-          "Fantasy Flight Games / Middle-earth Enterprises.",
-          "This is an unofficial fan project for personal",
-          "use. Not produced, endorsed or supported by,",
-          "or affiliated with FFG or MEE."], pal.muted);
-    para(["Turn sequence from the DragnCards",
-          "LOTR LCG plugin (seastan).",
-          "Iconography from lotr-lcg-assets (KevBelisle)."], pal.muted);
+    para(["A companion tracker for the table."], pal.tan);
+    para(["An unofficial fan project for",
+          "The Lord of the Rings: The Card Game.",
+          "Not endorsed, supported by, or affiliated",
+          "with Fantasy Flight Publishing, Inc."], pal.muted);
+    para(["The Lord of the Rings and its characters",
+          "are trademarks of Middle-earth Enterprises,",
+          "used under license by Fantasy Flight Games."], pal.muted);
+    para(["Turn sequence: DragnCards plugin (seastan).",
+          "Icons: lotr-lcg-assets (KevBelisle)."], pal.muted);
     const label = "made with <3 by";
     const handle = "@andrhamm";
     const lw = measureText(label, 2), hw = measureText(handle, 2);
@@ -339,10 +340,13 @@ export class BootScreen {
     } else {
       this._button(ctx, ["new"], "New Game", null, 388, 58, true);
     }
-    const dw = measureText("disclaimers", 1);
+    const dw = measureText("disclaimers", 2);
     const dx = 240 - Math.floor(dw / 2);
-    textLeft(ctx, "disclaimers", dx, 464, 1, pal.outline);
-    this.buttons.push(new Button(["about"], dx - 12, 452, dw + 24, 28));
+    for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1]]) {
+      textLeft(ctx, "disclaimers", dx + ox, 462 + oy, 2, pal.tan, false);
+    }
+    textLeft(ctx, "disclaimers", dx, 462, 2, pal.outline, false);
+    this.buttons.push(new Button(["about"], dx - 12, 450, dw + 24, 30));
   }
   onButton(btn) { return ["boot", btn.id[0]]; }
 }

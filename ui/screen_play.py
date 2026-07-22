@@ -178,7 +178,6 @@ class ScreenPlay:
                 text_center(d, pal, s, b.x + 26, b.y + 12, 3, pal.tan)
                 self.buttons.append(b)
             text_center(d, pal, str(game.quest["points"]), 382, y + 12, 3, pal.gold)
-            text_left(d, pal, "so round 1 starts knowing the goal", MARGIN + 8, y + 58, 1, pal.dim)
             self._cta(d, pal, "Begin Round 1 >", ("advance",))
         elif view == "resource_planning":
             self._chips(d, pal, game)
