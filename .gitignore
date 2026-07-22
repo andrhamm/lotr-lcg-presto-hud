@@ -4,3 +4,8 @@ __pycache__/
 .DS_Store
 .obsidian/workspace*.json
 .obsidian/cache
+# local-only art sources (hi-res / third-party packs kept out of the repo)
+assets/srcart/
+assets/icons/
+assets/gameicons_svg/
+assets/gameicons/
