@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LOTR LCG HUD — web twin</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <div class="device">
+      <canvas id="screen" width="480" height="480"></canvas>
+      <div class="ledbar">
+        <span class="led"></span><span class="led"></span><span class="led"></span>
+        <span class="led"></span><span class="led"></span><span class="led"></span>
+        <span class="led"></span>
+      </div>
+    </div>
+    <p class="note">
+      Digital twin of the <a href="https://github.com/andrhamm/lotr-lcg-presto-hud">Pimoroni
+      Presto firmware</a> — a touch HUD for <em>The Lord of the Rings: The Card
+      Game</em>. Click/tap like the touchscreen. Progress saves to your browser.
+    </p>
+  </main>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+html, body {
+  margin: 0;
+  min-height: 100vh;
+  background: #14100c;
+  color: #c8b690;
+  font: 15px/1.6 -apple-system, system-ui, sans-serif;
+  display: grid;
+  place-items: center;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 16px;
+}
+
+.device {
+  background: #2a211a;
+  border-radius: 26px;
+  padding: 18px 18px 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .55);
+}
+
+canvas {
+  display: block;
+  width: min(480px, calc(100vw - 68px));
+  aspect-ratio: 1 / 1;
+  image-rendering: pixelated;
+  border-radius: 10px;
+  background: #100c09;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.ledbar {
+  display: flex;
+  justify-content: center;
+  gap: 26px;
+  padding: 12px 0 4px;
+}
+
+.led {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #0a0805;
+  transition: background .15s, box-shadow .15s;
+}
+
+.note {
+  max-width: 480px;
+  text-align: center;
+  font-size: 13px;
+  color: #8d7c5c;
+}
+.note a { color: #d8b45a; }
