@@ -1,0 +1,14 @@
+name: 💛 Appreciation
+description: Say thanks or share what you enjoy about the HUD
+title: "[Appreciation]: "
+labels: ["appreciation"]
+body:
+  - type: markdown
+    attributes:
+      value: You just made my day. Tell me what you like — it genuinely helps keep this going.
+  - type: textarea
+    id: message
+    attributes:
+      label: Your message
+    validations:
+      required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🗺️ Roadmap & wishlist
+    url: https://github.com/andrhamm/lotr-lcg-presto-hud/blob/main/ROADMAP.md
+    about: See what's shipped, planned, and wished-for.
+  - name: 🎮 Play the web version
+    url: https://andrhamm.com/lotr-lcg-presto-hud/
+    about: Try the HUD in your browser before filing.

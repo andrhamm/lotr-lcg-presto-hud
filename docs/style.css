@@ -49,10 +49,33 @@ canvas {
   transition: background .15s, box-shadow .15s;
 }
 
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 520px;
+  margin: 0 auto;
+}
 .note {
   max-width: 480px;
   text-align: center;
   font-size: 13px;
   color: #8d7c5c;
+  margin: 0;
 }
-.note a { color: #d8b45a; }
+.note a, .made a, .disclaimer a { color: #d8b45a; }
+.made {
+  text-align: center;
+  font-size: 14px;
+  color: #c8b690;
+  margin: 2px 0 0;
+}
+.disclaimer {
+  max-width: 500px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6d6047;
+  margin: 4px 0 0;
+}

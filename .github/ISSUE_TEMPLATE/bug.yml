@@ -1,0 +1,28 @@
+name: 🐛 Bug
+description: Report something that isn't working right
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can I make it happen? Screen, phase, and the taps that led to it.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where?
+      options:
+        - Web twin (browser)
+        - Presto firmware (device)
+        - Both
+        - Not sure
+    validations:
+      required: true
