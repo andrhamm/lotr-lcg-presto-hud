@@ -2,7 +2,7 @@
 // Structure mirrors the Python: every screen/modal draws into ctx, rebuilds
 // .buttons, and handles taps in onButton returning the same protocol values.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
-         stepper, wrapText, truncateText, ribbon, notePanel } from "./ui.js";
+         stepper, wrapText, truncateText, ribbon, notePanel, drawWeather } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, REMINDER_DEFS, HEADINGS,
@@ -549,13 +549,13 @@ export class SailingModal {
     rect(ctx, 0, 40, 480, 1, pal.border);
 
     const heading = (h, cy, scale) => {
-      const [term, icName, facing] = HEADINGS[h];
+      const [term, , facing] = HEADINGS[h];
       const pen = h === 0 ? pal.gold : h === 3 ? pal.red : pal.amber;
       const label = `${facing} - ${term}`;
       const lw = measureText(label, scale);
       const total = 24 + 8 + lw;
       const x0 = Math.floor(240 - total / 2);
-      icons.drawIcon(ctx, icons[icName], x0, cy - 2, pen);
+      drawWeather(ctx, h, x0 + 12, cy + 10, 12);
       textLeft(ctx, label, x0 + 32, cy + (scale === 2 ? 2 : 0), scale, pen);
     };
 

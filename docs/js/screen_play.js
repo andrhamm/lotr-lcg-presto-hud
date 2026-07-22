@@ -1,6 +1,6 @@
 // Port of ui/screen_play.py — the guided round.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
-         truncateText, ribbon, notePanel } from "./ui.js";
+         truncateText, ribbon, notePanel, drawWeather } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS } from "./gamestate.js";
@@ -97,48 +97,46 @@ export class ScreenPlay {
 
   _headingPen(h) { return h === 0 ? pal.gold : h === 3 ? pal.red : pal.amber; }
 
-  // Zoomed heading dial clipped to (x,y,w,h): the current facing is big at
-  // top-centre, its two neighbours peek in half-clipped at the sides, the
-  // opposite facing sits off the bottom. `cur` is fractional while easing,
-  // so the icons slide/grow smoothly as the wheel turns.
-  _headingDial(ctx, game, x, y, w, h) {
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    const dcx = x + w / 2;
-    const SPREAD = 52 * Math.PI / 180;
-    const R = (w / 2) / Math.sin(SPREAD);        // neighbours land at side edges
-    const dcy = y + 32 + R;                        // current icon ~32px below top
-    const cur = (this._headingAngle ?? game.heading * 90) / 90;
+  // Heading card, styled like the other HUD cards: "HEADING" label on top,
+  // a dial (ring + rotating facing dots) with the current weather glyph in
+  // the middle, then the facing name (big) over its on/off-course state
+  // (small). The dot ring turns and the glyph cross-fades a quarter-turn on
+  // every heading change - notably the winds shift on entry (rulebook p.6).
+  _headingCard(ctx, game, x, y, w, h) {
+    const mid = x + w / 2, pen = this._headingPen(game.heading);
+    panel(ctx, x, y, w, h, pal.card, pal.border_gold);
+    textCenter(ctx, "HEADING", mid, y + 6, 2, pal.muted);
+    const cy = y + 54, R = 26;
+    ctx.strokeStyle = pal.border_gold; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(mid, cy, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = pal.gold;                                   // fixed reading notch
+    ctx.beginPath(); ctx.moveTo(mid - 5, y + 24); ctx.lineTo(mid + 5, y + 24); ctx.lineTo(mid, y + 32); ctx.closePath(); ctx.fill();
+    const ang0 = (this._headingAngle ?? game.heading * 90) * Math.PI / 180;
     for (let i = 0; i < 4; i++) {
-      let d = i - cur;
-      while (d > 2) d -= 4; while (d < -2) d += 4;
-      const ang = d * SPREAD;
-      if (Math.abs(ang) > Math.PI / 2 + 0.15) continue;      // opposite: off-card
-      const ix = dcx + R * Math.sin(ang), iy = dcy - R * Math.cos(ang);
-      const prox = Math.max(0, 1 - Math.abs(d));             // 1 at current -> 0
-      const sc = 1 + prox;                                    // grows to 2x at top
-      const sz = 12 * sc;
-      const pen = this._headingPen(i);
-      ctx.globalAlpha = 0.2 + 0.8 * prox;
-      icons.drawIcon(ctx, icons[HEADINGS[i][1]], ix - sz, iy - sz, pen, sc);
-      const la = 1 - Math.min(1, Math.abs(d) * 2);
-      if (la > 0) {
-        ctx.globalAlpha = la;
-        textCenter(ctx, HEADINGS[i][2], ix, iy + sz + 3, 1, pen, false);
-      }
+      const a = i * Math.PI / 2 - ang0;
+      const top = Math.cos(a) > 0.92;
+      ctx.fillStyle = top ? pal.gold : pal.dim;
+      ctx.beginPath(); ctx.arc(mid + R * Math.sin(a), cy - R * Math.cos(a), top ? 3 : 2, 0, Math.PI * 2); ctx.fill();
     }
+    const frac = (this._headingAngle ?? game.heading * 90) / 90;
+    const lo = Math.floor(frac), b = frac - lo, i0 = ((lo % 4) + 4) % 4, i1 = (i0 + 1) % 4;
+    ctx.globalAlpha = 1 - b; drawWeather(ctx, i0, mid, cy, 17);
+    if (b > 0.001) { ctx.globalAlpha = b; drawWeather(ctx, i1, mid, cy, 17); }
     ctx.globalAlpha = 1;
-    ctx.restore();
+    textCenter(ctx, HEADINGS[game.heading][2], mid, y + 86, 3, pen);
+    textCenter(ctx, `(${HEADINGS[game.heading][0]})`, mid, y + 114, 1, pal.dim);
+    this.buttons.push(new Button(["sail_modal"], x, y, w, h));
   }
 
-  // Compact heading card (wheel gutter icon + current facing + term),
+  // Compact heading card (wheel icon + current weather glyph + term),
   // tappable, for the commit/staging views where space is tight.
   _headingMini(ctx, game, x, y, w, h) {
     if (!game.sailing) return;
     const pen = this._headingPen(game.heading);
     bevel(ctx, x, y, w, h, pal.card);
-    icons.drawIcon(ctx, icons[HEADINGS[game.heading][1]], x + 10, y + Math.floor((h - 24) / 2), pen);
-    textLeft(ctx, HEADINGS[game.heading][0], x + 40, y + Math.floor((h - 16) / 2), 2, pen);
+    icons.drawIcon(ctx, icons.WHEEL_SM, x + 8, y + Math.floor((h - 16) / 2), pal.gold);
+    drawWeather(ctx, game.heading, x + 38, y + h / 2, 11);
+    textLeft(ctx, HEADINGS[game.heading][0], x + 56, y + Math.floor((h - 16) / 2), 2, pen);
     this.buttons.push(new Button(["sail_modal"], x, y, w, h));
   }
 
@@ -255,29 +253,18 @@ export class ScreenPlay {
         this.buttons.push(eb);
         this._cta(ctx, "Questing (Commit) >", ["advance"]);
       } else {
-        // Zoomed heading dial in a card, laid out like the other HUD rows:
-        // a wheel gutter icon on the left, then the gauge. The dial eases a
-        // quarter-turn on every heading change (notably the winds shift on
-        // entry, rulebook p.6); the current facing is emphasised while its
-        // neighbours peek in at the sides. Tap to log the wheels found.
-        const cardY = CONTENT_Y, cardH = 96;
-        const cardX = GUTTER, cardW = 480 - MARGIN - GUTTER;
-        icons.drawIcon(ctx, icons.WHEEL, MARGIN + 2, cardY + Math.floor((cardH - 24) / 2), pal.gold);
-        panel(ctx, cardX, cardY, cardW, cardH, pal.card, pal.border_gold);
-        this._headingDial(ctx, game, cardX + 6, cardY + 4, 150, cardH - 8);
-        const rx = cardX + 6 + 150 + 16;
-        const tPen = this._headingPen(game.heading);
-        textLeft(ctx, HEADINGS[game.heading][0], rx, cardY + 16, 3, tPen);
-        textLeft(ctx, HEADINGS[game.heading][3], rx, cardY + 48, 1, pal.dim);
-        icons.drawIcon(ctx, icons.WHEEL_SM, rx, cardY + 68, pal.gold);
-        textLeft(ctx, "tap to log wheels found", rx + 22, cardY + 69, 1, pal.dim);
-        this.buttons.push(new Button(["sail_modal"], cardX, cardY, cardW, cardH));
-        // tip (pipe medallion; wheel glyph inline in the sentence)
+        // Compact heading card (like the other cards) with a wheel gutter
+        // icon to its left. See _headingCard for the dial behaviour.
+        const cardY = CONTENT_Y, cardH = 128, cardW = 176;
+        const cardX = Math.floor((480 - cardW) / 2);
+        icons.drawIcon(ctx, icons.WHEEL, cardX - 34, cardY + Math.floor((cardH - 24) / 2), pal.gold);
+        this._headingCard(ctx, game, cardX, cardY, cardW, cardH);
+        // tip (pipe medallion top-left; wheel glyph inline in the sentence)
         const tw = 480 - 2 * MARGIN, ty0 = cardY + cardH + 8;
         const gutt = 28 + 14, lh = 26, th = 3 * lh + 16;
         rect(ctx, MARGIN, ty0, tw, th, pal.card_hi);
         rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
-        icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + Math.floor((th - 28) / 2), pal.gold);
+        icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold);
         const tx = MARGIN + 12 + gutt;
         let ly = ty0 + 8;
         const fp = `P${game.first_player + 1}`;

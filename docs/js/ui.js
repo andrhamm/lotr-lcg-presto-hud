@@ -138,11 +138,65 @@ export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon)
   const h = Math.max(lines.length * lh + 16, gutter ? isz + 14 : 0);
   rect(ctx, x, y, w, h, pal.card_hi);
   rect(ctx, x, y, 4, h, pal.border_gold);
-  if (gutter) icons.drawIcon(ctx, mask, x + 10, y + Math.floor((h - isz) / 2), pal.gold);
+  if (gutter) icons.drawIcon(ctx, mask, x + 10, y + 8, pal.gold);   // top-left, not centered
   let ty = y + 8;
   for (const s of lines) {
     textLeft(ctx, s, x + 12 + gutter, ty, scale, pal.muted);
     ty += lh;
   }
   return h;
+}
+
+// Detailed, coloured weather glyph for the heading facings (canvas
+// primitives, so it ports to PicoGraphics' circle/line/poly). idx: 0 sun,
+// 1 cloud, 2 rain, 3 storm. Drawn centred on (cx, cy) at radius r.
+export function drawWeather(ctx, idx, cx, cy, r) {
+  const puff = (fill) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.5, cy + r * 0.15, r * 0.42, 0, Math.PI * 2);
+    ctx.arc(cx - r * 0.05, cy - r * 0.28, r * 0.5, 0, Math.PI * 2);
+    ctx.arc(cx + r * 0.55, cy + r * 0.05, r * 0.42, 0, Math.PI * 2);
+    ctx.rect(cx - r * 0.92, cy + r * 0.05, r * 1.55, r * 0.46);
+    ctx.fill();
+  };
+  ctx.lineCap = "round";
+  if (idx === 0) {                              // sun
+    ctx.strokeStyle = "#e2952a";
+    ctx.lineWidth = Math.max(2, r * 0.14);
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r * 0.72, cy + Math.sin(a) * r * 0.72);
+      ctx.lineTo(cx + Math.cos(a) * r * 1.05, cy + Math.sin(a) * r * 1.05);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#f2c247";
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffe293";
+    ctx.beginPath(); ctx.arc(cx - r * 0.18, cy - r * 0.18, r * 0.26, 0, Math.PI * 2); ctx.fill();
+  } else if (idx === 1) {                        // cloud
+    puff("#b9bcc6");
+    ctx.fillStyle = "#e2e5ed";
+    ctx.beginPath(); ctx.arc(cx - r * 0.05, cy - r * 0.3, r * 0.34, 0, Math.PI * 2); ctx.fill();
+  } else if (idx === 2) {                        // rain
+    puff("#a7abb6");
+    ctx.strokeStyle = "#5fa8e6";
+    ctx.lineWidth = Math.max(2, r * 0.13);
+    for (let k = -1; k <= 1; k++) {
+      const sx = cx + k * r * 0.42 + r * 0.1;
+      ctx.beginPath(); ctx.moveTo(sx, cy + r * 0.55); ctx.lineTo(sx - r * 0.16, cy + r * 0.98); ctx.stroke();
+    }
+  } else {                                       // storm
+    puff("#8f939e");
+    ctx.fillStyle = "#f7d21c";
+    ctx.beginPath();
+    ctx.moveTo(cx + r * 0.12, cy + r * 0.3);
+    ctx.lineTo(cx - r * 0.28, cy + r * 0.74);
+    ctx.lineTo(cx - r * 0.02, cy + r * 0.74);
+    ctx.lineTo(cx - r * 0.22, cy + r * 1.08);
+    ctx.lineTo(cx + r * 0.32, cy + r * 0.56);
+    ctx.lineTo(cx + r * 0.05, cy + r * 0.56);
+    ctx.closePath(); ctx.fill();
+  }
 }
