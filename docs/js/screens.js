@@ -612,7 +612,11 @@ export class QuestingProgressModal {
     const g = this.game;
     if (k === "qP-" || k === "qP+") { g.quest.progress = this._clampAdj(g.quest.progress, k.endsWith("+") ? 1 : -1); return null; }
     if (k === "qT-" || k === "qT+") { g.quest.points = this._clampAdj(g.quest.points, k.endsWith("+") ? 1 : -1); return null; }
-    if (k === "lP-" || k === "lP+") { g.active_location.progress = this._clampAdj(g.active_location.progress, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "lP-" || k === "lP+") {
+      g.active_location.progress = this._clampAdj(g.active_location.progress, k.endsWith("+") ? 1 : -1);
+      g.exploreLocationIfDone();
+      return null;
+    }
     if (k === "lT-" || k === "lT+") { g.active_location.points = this._clampAdj(g.active_location.points, k.endsWith("+") ? 1 : -1); return null; }
     if (k === "lX") { g.active_location = null; g.logEvent("Active location cleared (progress view)"); return null; }
     if (k === "sP-" || k === "sP+") { const s = g.side_quests[a]; s.progress = this._clampAdj(s.progress, k.endsWith("+") ? 1 : -1); return null; }

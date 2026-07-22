@@ -268,6 +268,17 @@ export class GameState {
     this._applyTravelStaging(contribution);
   }
 
+  // A location at its quest points is Explored - remove it from the row.
+  exploreLocationIfDone() {
+    const loc = this.active_location;
+    if (loc && loc.points > 0 && loc.progress >= loc.points) {
+      this.logEvent(`Active location Explored (${loc.progress}/${loc.points}) - removed`);
+      this.active_location = null;
+      return true;
+    }
+    return false;
+  }
+
   actionWindowOpen() { return phaseStep(this.step).action_window; }
 
   endRound() {
