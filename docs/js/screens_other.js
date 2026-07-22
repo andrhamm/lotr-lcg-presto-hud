@@ -284,8 +284,7 @@ export class ScreenAbout {
     para(["The Lord of the Rings and its characters",
           "are trademarks of Middle-earth Enterprises,",
           "used under license by Fantasy Flight Games."], pal.muted);
-    para(["Turn sequence: DragnCards plugin (seastan).",
-          "Icons: lotr-lcg-assets (KevBelisle)."], pal.muted);
+    para(["Icons: lotr-lcg-assets (KevBelisle)."], pal.muted);
     const label = "made with <3 by";
     const handle = "@andrhamm";
     const lw = measureText(label, 2), hw = measureText(handle, 2);

@@ -136,8 +136,6 @@ mpremote connect <port> fs cp assets/boot_bg.png :
 
 ## Credits
 
-- Turn-sequence data from the
-  [DragnCards LOTR LCG plugin](https://github.com/seastan/dragncards-lotrlcg-plugin)
 - Game iconography from
   [KevBelisle/lotr-lcg-assets](https://github.com/KevBelisle/lotr-lcg-assets)
 - *The Lord of the Rings: The Card Game* is © Fantasy Flight Games /
