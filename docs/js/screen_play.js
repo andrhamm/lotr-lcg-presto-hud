@@ -434,10 +434,20 @@ export class ScreenPlay {
                      side_quests: game.side_quests.map((_, i) => a.side_quests[i] ?? 0) };
     }
     const alloc = this.alloc;
+    // Rules: progress fills the active location first; only the overflow
+    // beyond its quest points reaches the quest. The location's share is
+    // therefore forced (never hand-editable) - the quest/side steppers split
+    // whatever spills over.
+    if (game.active_location) {
+      const locroom = Math.max(0, game.active_location.points - game.active_location.progress);
+      alloc.location = Math.min(game.pending_budget, locroom);
+    } else {
+      alloc.location = 0;
+    }
     const used = alloc.location + alloc.quest + alloc.side_quests.reduce((a, b) => a + b, 0);
     const discard = game.pending_budget - used;
 
-    textCenter(ctx, `Place ${game.pending_budget} progress`, 240, HEADER_H + 10, 3, pal.gold);
+    textCenter(ctx, `Place ${game.pending_budget} progress`, 240, HEADER_H + 6, 3, pal.gold);
 
     const rows = [];
     if (game.active_location) {
@@ -455,30 +465,41 @@ export class ScreenPlay {
     const cxWas = 176, cxPlace = 300, cxGoal = 432;
     const mnX = 212, plX = 340, btnW = 44, btnH = 40;
 
-    const hy = HEADER_H + 42;
+    let hy = HEADER_H + 40;
+    if (game.active_location) {
+      textCenter(ctx, "Location fills first, then the quest", 240, HEADER_H + 32, 1, pal.dim);
+      hy = HEADER_H + 50;
+    }
     textLeft(ctx, "TARGET", 20, hy, 1, pal.dim);
     textCenter(ctx, "WAS", cxWas, hy, 1, pal.dim);
     textCenter(ctx, "PLACE", cxPlace, hy, 1, pal.dim);
     textCenter(ctx, "GOAL", cxGoal, hy, 1, pal.dim);
 
-    let y = HEADER_H + 54;
+    let y = hy + 12;
     for (const [key, idx, label, cur, pts] of rows) {
       const add = key === "side" ? alloc.side_quests[idx] : alloc[key];
       const result = cur + add;                                  // was + place
       const done = pts > 0 && result >= pts;
+      const locked = key === "location";                         // forced: fills first
       panel(ctx, MARGIN, y, rw, 52, done ? pal.card_hi : pal.card,
             done ? pal.border_gold : pal.border);
       textLeft(ctx, label, 20, y + 16, 2, done ? pal.gold : pal.tan);
       if (done) drawFlag(ctx, 20 + measureText(label, 2) + 8, y + 12, 20, pal.gold);
       textCenter(ctx, String(cur), cxWas, y + 16, 2, pal.dim);   // WAS - read-only base
-      const mn = new Button(["am", key, idx], mnX, y + 6, btnW, btnH);
-      const pl = new Button(["ap", key, idx], plX, y + 6, btnW, btnH);
-      for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
-        bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-        textCenter(ctx, s, b.x + btnW / 2, b.y + 8, 3, pal.tan);
-        this.buttons.push(b);
+      if (locked) {
+        // no steppers: the location's share is dictated by the rules
+        textCenter(ctx, String(add), cxPlace, y + 10, 3, add > 0 ? pal.gold : pal.dim);
+        textCenter(ctx, "auto", cxPlace, y + 38, 1, pal.dim);
+      } else {
+        const mn = new Button(["am", key, idx], mnX, y + 6, btnW, btnH);
+        const pl = new Button(["ap", key, idx], plX, y + 6, btnW, btnH);
+        for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
+          bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+          textCenter(ctx, s, b.x + btnW / 2, b.y + 8, 3, pal.tan);
+          this.buttons.push(b);
+        }
+        textCenter(ctx, String(add), cxPlace, y + 10, 3, add > 0 ? pal.gold : pal.dim);
       }
-      textCenter(ctx, String(add), cxPlace, y + 10, 3, add > 0 ? pal.gold : pal.dim);
       textCenter(ctx, String(pts), cxGoal, y + 16, 2, pal.tan);  // GOAL - points needed
       // running total bar: (was + place) / goal
       this._bottomBar(ctx, MARGIN, rw, y + 52, pts > 0 ? result / pts : 0, pal.gold);
@@ -560,11 +581,10 @@ export class ScreenPlay {
       return true;
     }
     if (k === "areset") {
-      // clear only the PLACE column; each value falls back to its pre-
-      // resolution base (was), never lower
+      // clear the editable PLACE cells (quest + side); the active location's
+      // share is forced by the rules and re-filled on the next draw
       const a = this.alloc;
       if (a) {
-        a.location = 0;
         a.quest = 0;
         a.side_quests = a.side_quests.map(() => 0);
       }
