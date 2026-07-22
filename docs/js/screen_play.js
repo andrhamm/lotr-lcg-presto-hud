@@ -237,23 +237,22 @@ export class ScreenPlay {
                        ty0 + Math.floor((th - 28) / 2), pal.gold);
         const tx = MARGIN + 12 + gutter;
         let ly = ty0 + 8;
-        // "P<n> <first-player ribbon> exhausts characters (ships" - ribbon
-        // inline marks the actual first player doing the test
+        // "P<n> <ribbon> exhausts N characters (ships count) and looks at N
+        // encounter cards. <wheel> found = steps on-course." Ribbon marks the
+        // actual first player. Wheels shift ON-course (rulebook p.6) - the
+        // mandatory 1-step off-course shift already fired entering this view.
         const fp = `P${game.first_player + 1}`;
         textLeft(ctx, fp, tx, ly, 2, pal.muted);
         let sx0 = tx + measureText(fp, 2) + 6;
         ribbon(ctx, sx0, ly - 1, 10, 18);
         sx0 += 10 + 6;
-        textLeft(ctx, "exhausts characters (ships", sx0, ly, 2, pal.muted);
+        textLeft(ctx, "exhausts N characters (ships", sx0, ly, 2, pal.muted);
         ly += lh;
-        textLeft(ctx, "count, Dream-chaser = 2) and looks at", tx, ly, 2, pal.muted);
+        textLeft(ctx, "count), looks at N encounter cards.", tx, ly, 2, pal.muted);
         ly += lh;
-        const seg1 = "that many cards. ";
-        textLeft(ctx, seg1, tx, ly, 2, pal.muted);
-        let sx2 = tx + measureText(seg1, 2) + 2;
-        icons.drawIcon(ctx, icons.WHEEL_SM, sx2, ly, pal.gold);
-        sx2 += 16 + 6;
-        textLeft(ctx, "= 1 step on-course.", sx2, ly, 2, pal.muted);
+        icons.drawIcon(ctx, icons.WHEEL_SM, tx, ly, pal.gold);
+        let sx2 = tx + 16 + 6;
+        textLeft(ctx, "found = steps on-course.", sx2, ly, 2, pal.muted);
         this._cta(ctx, "Questing (Commit) >", ["advance"]);
       }
     } else if (view === "quest_staging") {
