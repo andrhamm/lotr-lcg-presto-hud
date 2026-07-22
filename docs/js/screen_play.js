@@ -12,7 +12,8 @@ const MARGIN = 8;
 const STRIP_Y = HEADER_H + 10;
 const CHIP_H = 56;
 const PROG_Y = STRIP_Y + CHIP_H + 8;
-const CONTENT_Y = PROG_Y + CHIP_H + 8;
+const PROG_H = 72;                        // progress row is taller (heading card)
+const CONTENT_Y = PROG_Y + PROG_H + 8;
 const CTA_Y = 410;
 const CTA_H = 58;
 const GUTTER = MARGIN + 40;
@@ -59,9 +60,9 @@ export class ScreenPlay {
     });
   }
 
-  _progressRow(ctx, game, allowAdd = false) {
+  _progressRow(ctx, game, allowAdd = false, showHeading = false) {
     const y = PROG_Y;
-    icons.drawIcon(ctx, icons.TRAIL, MARGIN + 4, y + 18, pal.gold);
+    icons.drawIcon(ctx, icons.TRAIL, MARGIN + 4, y + 24, pal.gold);
     const cards = [[`Q${game.quest.stage_n}${game.quest.side}`,
                     `${game.quest.progress}/${game.quest.points}`, pal.gold, ["prog_q"]]];
     if (game.active_location) {
@@ -72,20 +73,43 @@ export class ScreenPlay {
       cards.push([`SQ${i + 1}`, `${sq.progress}/${sq.points}`, pal.gold, ["prog_sq", i]]);
     });
     if (allowAdd) cards.push(["+SQ", "", pal.dim, ["sq_add"]]);
-    const n = cards.length;
+    const heading = showHeading && game.sailing;
+    const n = cards.length + (heading ? 1 : 0);
     const cw = Math.min(this._chipW(game),
                         Math.floor((480 - GUTTER - MARGIN - (n - 1) * MARGIN) / n));
     cards.forEach(([label, val, pen, bid], i) => {
       const x = GUTTER + i * (cw + MARGIN);
-      panel(ctx, x, y, cw, CHIP_H);
+      panel(ctx, x, y, cw, PROG_H);
       if (val) {
-        textCenter(ctx, label, x + cw / 2, y + 5, 2, pal.tan);
-        textCenter(ctx, val, x + cw / 2, y + 26, 3, pen);
+        textCenter(ctx, label, x + cw / 2, y + 8, 2, pal.tan);
+        textCenter(ctx, val, x + cw / 2, y + 34, 3, pen);
       } else {
-        textCenter(ctx, label, x + cw / 2, y + 18, 2, pen);
+        textCenter(ctx, label, x + cw / 2, y + 26, 2, pen);
       }
-      if (bid) this.buttons.push(new Button(bid, x, y, cw, CHIP_H));
+      if (bid) this.buttons.push(new Button(bid, x, y, cw, PROG_H));
     });
+    if (heading) this._headingProgressCard(ctx, game, GUTTER + cards.length * (cw + MARGIN), y, cw);
+  }
+
+  _headingPen(h) { return h === 0 ? pal.gold : h === 3 ? pal.red : pal.amber; }
+
+  // The heading is just another progress card: HEADING label, the current
+  // weather glyph next to its facing name, and "off-course" beneath (nothing
+  // extra when on-course / sunny). Tap to log a sailing test.
+  _headingProgressCard(ctx, game, x, y, cw) {
+    const pen = this._headingPen(game.heading);
+    panel(ctx, x, y, cw, PROG_H);
+    textCenter(ctx, "HEADING", x + cw / 2, y + 8, 2, pal.tan);
+    const name = HEADINGS[game.heading][2];
+    const nw = measureText(name, 2);
+    const gx = x + Math.floor((cw - (24 + 4 + nw)) / 2);
+    drawWeather(ctx, game.heading, gx + 12, y + 38, 12);
+    textLeft(ctx, name, gx + 28, y + 32, 2, pen);
+    if (game.heading !== 0) {
+      const s = measureText("off-course", 2) <= cw - 6 ? 2 : 1;   // readable when it fits
+      textCenter(ctx, "off-course", x + cw / 2, y + (s === 2 ? 54 : 56), s, pal.muted);
+    }
+    this.buttons.push(new Button(["sail_modal"], x, y, cw, PROG_H));
   }
 
   _cta(ctx, label, id, fill = pal.btn_ok, fg = pal.gold) {
@@ -93,51 +117,6 @@ export class ScreenPlay {
     bevel(ctx, b.x, b.y, b.w, b.h, fill, false, 3);
     textCenter(ctx, label, 240, CTA_Y + 20, 2, fg);
     this.buttons.push(b);
-  }
-
-  _headingPen(h) { return h === 0 ? pal.gold : h === 3 ? pal.red : pal.amber; }
-
-  // Heading card, styled like the other HUD cards: "HEADING" label on top,
-  // a dial (ring + rotating facing dots) with the current weather glyph in
-  // the middle, then the facing name (big) over its on/off-course state
-  // (small). The dot ring turns and the glyph cross-fades a quarter-turn on
-  // every heading change - notably the winds shift on entry (rulebook p.6).
-  _headingCard(ctx, game, x, y, w, h) {
-    const mid = x + w / 2, pen = this._headingPen(game.heading);
-    panel(ctx, x, y, w, h, pal.card, pal.border_gold);
-    textCenter(ctx, "HEADING", mid, y + 6, 2, pal.muted);
-    const cy = y + 54, R = 26;
-    ctx.strokeStyle = pal.border_gold; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(mid, cy, R, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = pal.gold;                                   // fixed reading notch
-    ctx.beginPath(); ctx.moveTo(mid - 5, y + 24); ctx.lineTo(mid + 5, y + 24); ctx.lineTo(mid, y + 32); ctx.closePath(); ctx.fill();
-    const ang0 = (this._headingAngle ?? game.heading * 90) * Math.PI / 180;
-    for (let i = 0; i < 4; i++) {
-      const a = i * Math.PI / 2 - ang0;
-      const top = Math.cos(a) > 0.92;
-      ctx.fillStyle = top ? pal.gold : pal.dim;
-      ctx.beginPath(); ctx.arc(mid + R * Math.sin(a), cy - R * Math.cos(a), top ? 3 : 2, 0, Math.PI * 2); ctx.fill();
-    }
-    const frac = (this._headingAngle ?? game.heading * 90) / 90;
-    const lo = Math.floor(frac), b = frac - lo, i0 = ((lo % 4) + 4) % 4, i1 = (i0 + 1) % 4;
-    ctx.globalAlpha = 1 - b; drawWeather(ctx, i0, mid, cy, 17);
-    if (b > 0.001) { ctx.globalAlpha = b; drawWeather(ctx, i1, mid, cy, 17); }
-    ctx.globalAlpha = 1;
-    textCenter(ctx, HEADINGS[game.heading][2], mid, y + 86, 3, pen);
-    textCenter(ctx, `(${HEADINGS[game.heading][0]})`, mid, y + 114, 1, pal.dim);
-    this.buttons.push(new Button(["sail_modal"], x, y, w, h));
-  }
-
-  // Compact heading card (wheel icon + current weather glyph + term),
-  // tappable, for the commit/staging views where space is tight.
-  _headingMini(ctx, game, x, y, w, h) {
-    if (!game.sailing) return;
-    const pen = this._headingPen(game.heading);
-    bevel(ctx, x, y, w, h, pal.card);
-    icons.drawIcon(ctx, icons.WHEEL_SM, x + 8, y + Math.floor((h - 16) / 2), pal.gold);
-    drawWeather(ctx, game.heading, x + 38, y + h / 2, 11);
-    textLeft(ctx, HEADINGS[game.heading][0], x + 56, y + Math.floor((h - 16) / 2), 2, pen);
-    this.buttons.push(new Button(["sail_modal"], x, y, w, h));
   }
 
   _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
@@ -174,29 +153,10 @@ export class ScreenPlay {
     });
   }
 
-  _animateHeading(game) {
-    // Ease the displayed dial angle toward the current heading. Runs every
-    // frame (any view) so the winds-shift on entering the sailing view
-    // animates from the pre-shift facing rather than snapping.
-    if (!game.sailing) { this._headingAngle = null; this.animating = false; return; }
-    const target = game.heading * 90;
-    if (this._headingAngle == null) { this._headingAngle = target; this.animating = false; return; }
-    const d = target - this._headingAngle;
-    if (Math.abs(d) > 0.5) {
-      this._headingAngle += d * 0.16;                 // ease-out
-      if (Math.abs(target - this._headingAngle) <= 0.5) this._headingAngle = target;
-      this.animating = true;
-    } else {
-      this._headingAngle = target;
-      this.animating = false;
-    }
-  }
-
   draw(ctx, game) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     drawHeader(ctx, game, this.buttons);
-    this._animateHeading(game);
     const view = game.view;
 
     if (view === "setup_game") {
@@ -229,19 +189,16 @@ export class ScreenPlay {
       this._cta(ctx, "Quest >", ["advance"]);
     } else if (view === "quest_commit") {
       this._chips(ctx, game);
-      this._progressRow(ctx, game);
+      this._progressRow(ctx, game, false, true);
       this._commitRow(ctx, game, CONTENT_Y);
-      const rsv = game.sailing ? 156 : 0;
-      const tip = game.sailing ? "Commit characters." : "Commit characters to the quest.";
-      const th = notePanel(ctx, MARGIN, CONTENT_Y + 60, 480 - 2 * MARGIN, tip, 2, rsv);
-      this.buttons.push(new Button(["commit_tip"], MARGIN, CONTENT_Y + 60,
-                                   480 - 2 * MARGIN - rsv, th));
-      if (game.sailing) this._headingMini(ctx, game, 480 - MARGIN - 150, CONTENT_Y + 60, 150, th);
+      const th = notePanel(ctx, MARGIN, CONTENT_Y + 60, 480 - 2 * MARGIN,
+                           "Commit characters to the quest.");
+      this.buttons.push(new Button(["commit_tip"], MARGIN, CONTENT_Y + 60, 480 - 2 * MARGIN, th));
       this._totalsRow(ctx, game, CONTENT_Y + 108, false, ["wp", "stg"]);
       this._cta(ctx, "Quest (Staging) >", ["advance"]);
     } else if (view === "quest_sailing") {
       this._chips(ctx, game);
-      this._progressRow(ctx, game);
+      this._progressRow(ctx, game, true, true);
       if (!game.sailing) {
         notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                   ["No Sailing keyword on this quest.", "Enable it if the stage says Sailing."]);
@@ -253,14 +210,8 @@ export class ScreenPlay {
         this.buttons.push(eb);
         this._cta(ctx, "Questing (Commit) >", ["advance"]);
       } else {
-        // Compact heading card (like the other cards) with a wheel gutter
-        // icon to its left. See _headingCard for the dial behaviour.
-        const cardY = CONTENT_Y, cardH = 128, cardW = 176;
-        const cardX = Math.floor((480 - cardW) / 2);
-        icons.drawIcon(ctx, icons.WHEEL, cardX - 34, cardY + Math.floor((cardH - 24) / 2), pal.gold);
-        this._headingCard(ctx, game, cardX, cardY, cardW, cardH);
         // tip (pipe medallion top-left; wheel glyph inline in the sentence)
-        const tw = 480 - 2 * MARGIN, ty0 = cardY + cardH + 8;
+        const tw = 480 - 2 * MARGIN, ty0 = CONTENT_Y + 6;
         const gutt = 28 + 14, lh = 26, th = 3 * lh + 16;
         rect(ctx, MARGIN, ty0, tw, th, pal.card_hi);
         rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
@@ -282,11 +233,9 @@ export class ScreenPlay {
       }
     } else if (view === "quest_staging") {
       this._chips(ctx, game);
-      this._progressRow(ctx, game, true);
-      const srsv = game.sailing ? 156 : 0;
-      const snote = game.sailing ? "Reveal 1 card / player." : "Reveal 1 encounter card per player.";
-      notePanel(ctx, MARGIN, CONTENT_Y + 2, 480 - 2 * MARGIN, snote, 2, srsv);
-      if (game.sailing) this._headingMini(ctx, game, 480 - MARGIN - 150, CONTENT_Y + 2, 150, 42);
+      this._progressRow(ctx, game, true, true);
+      notePanel(ctx, MARGIN, CONTENT_Y + 2, 480 - 2 * MARGIN,
+                "Reveal 1 encounter card per player.");
       this._totalsRow(ctx, game, CONTENT_Y + 52, true);
       if (game.quest_resolved) {
         this._cta(ctx, "Travel >", ["advance"]);
