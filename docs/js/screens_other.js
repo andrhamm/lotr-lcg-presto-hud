@@ -281,10 +281,10 @@ export class ScreenAbout {
           "The Lord of the Rings: The Card Game.",
           "Not endorsed, supported by, or affiliated",
           "with Fantasy Flight Publishing, Inc."], pal.muted);
-    para(["The Lord of the Rings and its characters",
-          "are trademarks of Middle-earth Enterprises,",
-          "used under license by Fantasy Flight Games."], pal.muted);
-    para(["Icons: lotr-lcg-assets (KevBelisle)."], pal.muted);
+    para(["The Lord of the Rings, its characters and",
+          "game iconography are trademarks of",
+          "Middle-earth Enterprises, used under",
+          "license by Fantasy Flight Games."], pal.muted);
     const label = "made with <3 by";
     const handle = "@andrhamm";
     const lw = measureText(label, 2), hw = measureText(handle, 2);

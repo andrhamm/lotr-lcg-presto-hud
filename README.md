@@ -134,10 +134,9 @@ mpremote connect <port> fs cp assets/boot_bg.png :
 
 `main.py` auto-runs on boot. Host tests: `python -m pytest tests/`.
 
-## Credits
+## Disclaimer
 
-- Game iconography from
-  [KevBelisle/lotr-lcg-assets](https://github.com/KevBelisle/lotr-lcg-assets)
-- *The Lord of the Rings: The Card Game* is © Fantasy Flight Games /
-  Middle-earth Enterprises. This is an unofficial fan-made companion for
-  personal use at the table.
+An unofficial fan project, not endorsed, supported by, or affiliated with
+Fantasy Flight Publishing, Inc. *The Lord of the Rings*, its characters and
+game iconography are trademarks of Middle-earth Enterprises, used under
+license by Fantasy Flight Games. Made for personal use at the table.
