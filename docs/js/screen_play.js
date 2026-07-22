@@ -1,6 +1,6 @@
 // Port of ui/screen_play.py — the guided round.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
-         truncateText, ribbon, notePanel, drawWeather } from "./ui.js";
+         truncateText, ribbon, notePanel, drawWeather, drawHeart } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS } from "./gamestate.js";
@@ -28,6 +28,7 @@ export class ScreenPlay {
     this.notifPie = null;
     this.notifEdge = "amber";
     this.alloc = null;
+    this.toast = null;       // [[icon, text, color]] picked up by the main loop
   }
 
   _chipW(game) {
@@ -86,6 +87,12 @@ export class ScreenPlay {
         textCenter(ctx, val, x + cw / 2, y + 34, 3, pen);
       } else {
         textCenter(ctx, label, x + cw / 2, y + 26, 2, pen);
+      }
+      // quest card carries the last resolution's heart (whole/broken), like
+      // the first-player ribbon but on the main quest
+      if (i === 0 && game.quest_outcome) {
+        const ok = game.quest_outcome === "success";
+        drawHeart(ctx, x + cw - 15, y + 15, 7, !ok, ok ? pal.green : pal.red);
       }
       if (bid) this.buttons.push(new Button(bid, x, y, cw, PROG_H));
     });
@@ -181,22 +188,23 @@ export class ScreenPlay {
       textCenter(ctx, game.sailing ? "On" : "Off", sb.x + 82, sb.y + 12, 2,
                  game.sailing ? pal.bg : pal.tan, false);
       this.buttons.push(sb);
-      this._cta(ctx, "Begin Round 1 >", ["advance"]);
+      this._cta(ctx, "Begin Round 1", ["advance"]);
     } else if (view === "resource_planning") {
       this._chips(ctx, game);
       this._progressRow(ctx, game, true);
       notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                 ["Collect resources.", "Draw cards.", "Play allies and attachments."]);
-      this._cta(ctx, "Quest >", ["advance"]);
+      this._cta(ctx, `Next Phase: ${VIEW_LABELS[game.sailing ? "quest_sailing" : "quest_commit"]}`, ["advance"]);
     } else if (view === "quest_commit") {
       this._chips(ctx, game);
       this._progressRow(ctx, game, false, true);
-      this._commitRow(ctx, game, CONTENT_Y);
-      const th = notePanel(ctx, MARGIN, CONTENT_Y + 60, 480 - 2 * MARGIN,
-                           "Commit characters to the quest.");
-      this.buttons.push(new Button(["commit_tip"], MARGIN, CONTENT_Y + 60, 480 - 2 * MARGIN, th));
-      this._totalsRow(ctx, game, CONTENT_Y + 108, false, ["wp", "stg"]);
-      this._cta(ctx, "Quest (Staging) >", ["advance"]);
+      // per-player willpower row is redundant with a single player
+      let ty = CONTENT_Y;
+      if (game.players.length > 1) { this._commitRow(ctx, game, CONTENT_Y); ty += 60; }
+      const th = notePanel(ctx, MARGIN, ty, 480 - 2 * MARGIN, "Commit characters to the quest.");
+      this.buttons.push(new Button(["commit_tip"], MARGIN, ty, 480 - 2 * MARGIN, th));
+      this._totalsRow(ctx, game, ty + 48, false, ["wp", "stg"]);
+      this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_staging}`, ["advance"]);
     } else if (view === "quest_sailing") {
       this._chips(ctx, game);
       this._progressRow(ctx, game, true, true);
@@ -209,7 +217,7 @@ export class ScreenPlay {
         icons.drawIcon(ctx, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold);
         textCenter(ctx, "Enable Sailing", 254, CONTENT_Y + 96 + 16, 2, pal.tan);
         this.buttons.push(eb);
-        this._cta(ctx, "Questing (Commit) >", ["advance"]);
+        this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       } else {
         // tip (pipe medallion top-left; wheel glyph inline in the sentence)
         const tw = 480 - 2 * MARGIN, ty0 = CONTENT_Y + 6;
@@ -230,23 +238,37 @@ export class ScreenPlay {
         ly += lh;
         icons.drawIcon(ctx, icons.WHEEL_SM, tx, ly, pal.gold);
         textLeft(ctx, "found = steps on-course.", tx + 22, ly, 2, pal.muted);
-        this._cta(ctx, "Questing (Commit) >", ["advance"]);
+        this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       }
     } else if (view === "quest_staging") {
       this._chips(ctx, game);
       this._progressRow(ctx, game, true, true);
-      notePanel(ctx, MARGIN, CONTENT_Y + 2, 480 - 2 * MARGIN,
-                "Reveal 1 encounter card per player.");
-      this._totalsRow(ctx, game, CONTENT_Y + 52, true);
-      if (game.quest_resolved) {
-        this._cta(ctx, "Travel >", ["advance"]);
+      // tip: reveal reminder, then a live preview of the resolution outcome
+      const tw = 480 - 2 * MARGIN, gutt = 28 + 14, lh = 26;
+      const tx = MARGIN + 12 + gutt, usable = tw - 12 - gutt;
+      const lines = wrapText(
+        "Reveal 1 encounter card per player and adjust staging area threat accordingly.",
+        2, usable);
+      const ty0 = CONTENT_Y + 2, th = (lines.length + 1) * lh + 16;
+      rect(ctx, MARGIN, ty0, tw, th, pal.card_hi);
+      rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
+      icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold);
+      let ly = ty0 + 8;
+      for (const ln of lines) { textLeft(ctx, ln, tx, ly, 2, pal.muted); ly += lh; }
+      const diff = game.willpower - game.staging;
+      if (diff !== 0) {
+        // success places shared progress ("You"); a fail raises each player's threat
+        const pre = `${diff > 0 ? "You" : "Each player"} will gain ${Math.abs(diff)} `;
+        textLeft(ctx, pre, tx, ly, 2, pal.muted);
+        const px = tx + measureText(pre, 2);
+        const ic = diff > 0 ? icons.TRAIL : icons.THREAT_SM;
+        icons.drawIcon(ctx, ic, px, ly - 1, diff > 0 ? pal.gold : pal.red);
+        textLeft(ctx, "at resolution.", px + ic[0] + 6, ly, 2, pal.muted);
       } else {
-        const diff = game.willpower - game.staging;
-        const lbl = diff > 0 ? `Resolve Quest - success, +${diff} progress`
-          : diff < 0 ? `Resolve Quest - failure, +${-diff} threat all`
-          : "Resolve Quest - unsuccessful (tie)";
-        this._cta(ctx, lbl, ["resolve"]);
+        textLeft(ctx, "No change at resolution (tie).", tx, ly, 2, pal.muted);
       }
+      this._totalsRow(ctx, game, ty0 + th + 8, true);
+      this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_resolution}`, ["stage_advance"]);
     } else if (view === "quest_resolution") {
       this._drawResolution(ctx, game);
     } else if (view === "travel") {
@@ -259,7 +281,7 @@ export class ScreenPlay {
       notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                 ["Ready all exhausted cards.", "Threat increases (automatic).",
                  "Pass the first player token."]);
-      this._cta(ctx, "End round >", ["endround"]);
+      this._cta(ctx, "End round (raise threat, pass token)", ["endround"]);
     } else {
       this._chips(ctx, game);
       const notes = {
@@ -287,7 +309,7 @@ export class ScreenPlay {
       }
       const i = VIEW_ORDER.indexOf(view);
       const nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
-      this._cta(ctx, `${VIEW_LABELS[nxt] ?? nxt} >`, ["advance"]);
+      this._cta(ctx, `Next Phase: ${VIEW_LABELS[nxt] ?? nxt}`, ["advance"]);
     }
 
     if (this.notif) {
@@ -350,10 +372,46 @@ export class ScreenPlay {
       textCenter(ctx, "Replace location (card effect)", 240, y + 14, 2, pal.muted);
       this.buttons.push(cb);
     }
-    this._cta(ctx, "Encounter (Opt. Engage) >", ["advance"]);
+    this._cta(ctx, `Next Phase: ${VIEW_LABELS.enc_optional}`, ["advance"]);
+  }
+
+  _outcomeToast(game) {
+    if (game.quest_outcome === "success")
+      return ["TRAIL", `Quested successfully! +${game.quest_outcome_n} progress`, "green"];
+    if (game.quest_outcome === "fail")
+      return ["THREAT_SM", `Quest failed. +${game.quest_outcome_n} threat to all`, "red"];
+    return [null, "Quest unsuccessful - a tie, no change", "amber"];
   }
 
   _drawResolution(ctx, game) {
+    if (game.quest_outcome !== "success") {
+      // fail / tie: no placement - just report the outcome and move on
+      this._chips(ctx, game);
+      this._progressRow(ctx, game);
+      const fail = game.quest_outcome === "fail";
+      const ty0 = CONTENT_Y + 6, gutt = 28 + 14, tx = MARGIN + 12 + gutt, lh = 26;
+      const th = 2 * lh + 16;
+      rect(ctx, MARGIN, ty0, 480 - 2 * MARGIN, th, pal.card_hi);
+      rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
+      icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold);
+      // line 1: outcome + a broken heart marking the failed quest
+      const l1 = fail ? "Quest failed. " : "Quest unsuccessful - a tie. ";
+      textLeft(ctx, l1, tx, ty0 + 8, 2, pal.muted);
+      drawHeart(ctx, tx + measureText(l1, 2) + 8, ty0 + 8 + 8, 7, true, pal.red);
+      // line 2
+      const y2 = ty0 + 8 + lh;
+      if (fail) {
+        const a = "Each player's ";
+        textLeft(ctx, a, tx, y2, 2, pal.muted);
+        const ax = tx + measureText(a, 2);
+        icons.drawIcon(ctx, icons.THREAT_SM, ax, y2 - 1, pal.red);
+        textLeft(ctx, `rose by ${game.quest_outcome_n}.`, ax + icons.THREAT_SM[0] + 6, y2, 2, pal.muted);
+      } else {
+        textLeft(ctx, "No progress placed, no threat gained.", tx, y2, 2, pal.muted);
+      }
+      this._cta(ctx, `Next Phase: ${VIEW_LABELS.travel}`, ["advance"]);
+      return;
+    }
     if (this.alloc === null) {
       const a = game.autoSplit(game.pending_budget);
       this.alloc = { location: a.location, quest: a.quest,
@@ -367,6 +425,8 @@ export class ScreenPlay {
                240, HEADER_H + 8, 2, pal.gold);
     textCenter(ctx, "Location fills first; overflow -> quest. Adjust freely.",
                240, HEADER_H + 34, 1, pal.muted);
+    textCenter(ctx, "Progress past a stage's quest points is discarded when it clears.",
+               240, HEADER_H + 48, 1, pal.dim);
 
     let y = HEADER_H + 56;
     const rows = [];
@@ -410,7 +470,7 @@ export class ScreenPlay {
       bevel(ctx, b.x, b.y, b.w, b.h, pal.card, false, 3);
       textCenter(ctx, `Place ${remaining} more to continue`, 240, CTA_Y + 20, 2, pal.dim);
     } else {
-      this._cta(ctx, "Apply placement - Travel >", ["apply_alloc"]);
+      this._cta(ctx, `Next Phase: ${VIEW_LABELS.travel}`, ["apply_alloc"]);
     }
   }
 
@@ -447,17 +507,14 @@ export class ScreenPlay {
     if (k === "stg-") { game.staging = Math.max(0, game.staging - 1); return true; }
     if (k === "stg+") { game.staging += 1; return true; }
     if (k === "prog_view") return ["modal", new QuestingProgressModal(game)];
-    if (k === "resolve") {
-      const res = game.resolveQuest(game.willpower, game.staging);
-      if (res.outcome === "success") {
-        game.pending_budget = res.budget;
-        game.enterView("quest_resolution");
+    if (k === "stage_advance") {
+      if (!game.quest_resolved) {
+        const res = game.resolveQuest(game.willpower, game.staging);
         this.alloc = null;
-      } else if (res.outcome === "fail") {
-        this.banner = [`Quest failed. +${res.threat} threat to all`, "bad", "quest_staging"];
-      } else {
-        this.banner = ["Quest unsuccessful - tie, no change", "mid", "quest_staging"];
+        if (res.outcome === "success") game.pending_budget = res.budget;
+        this.toast = [this._outcomeToast(game)];   // shown as a toast, not a banner
       }
+      game.enterView("quest_resolution");
       return true;
     }
     if (k === "am" || k === "ap") {

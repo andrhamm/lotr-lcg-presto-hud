@@ -222,6 +222,14 @@ function main() {
         dirty = true;
       }
     }
+    // a requested toast (e.g. quest-resolution outcome) overrides view notifs
+    if (screens.play.toast) {
+      screens.play.notif = screens.play.toast;
+      screens.play.notifFrac = 1.0;
+      notifT = NOTIF_TICKS;
+      screens.play.toast = null;
+      dirty = true;
+    }
     if (notifT > 0) {
       notifT -= 1;
       const play = screens.play;

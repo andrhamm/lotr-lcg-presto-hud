@@ -147,6 +147,28 @@ export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon)
   return h;
 }
 
+// Small heart glyph (quest-outcome marker). `broken` splits it with a
+// jagged notch. Canvas primitives, so it ports to PicoGraphics.
+export function drawHeart(ctx, cx, cy, r, broken, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r);
+  ctx.bezierCurveTo(cx - r * 1.5, cy - r * 0.4, cx - r * 0.6, cy - r * 1.2, cx, cy - r * 0.35);
+  ctx.bezierCurveTo(cx + r * 0.6, cy - r * 1.2, cx + r * 1.5, cy - r * 0.4, cx, cy + r);
+  ctx.closePath();
+  ctx.fill();
+  if (broken) {
+    ctx.strokeStyle = pal.bg;
+    ctx.lineWidth = Math.max(1.5, r * 0.28);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r * 0.5);
+    ctx.lineTo(cx - r * 0.32, cy - r * 0.05);
+    ctx.lineTo(cx + r * 0.24, cy + r * 0.28);
+    ctx.lineTo(cx - r * 0.1, cy + r * 0.72);
+    ctx.stroke();
+  }
+}
+
 // Detailed, coloured weather glyph for the heading facings (canvas
 // primitives, so it ports to PicoGraphics' circle/line/poly). idx: 0 sun,
 // 1 cloud, 2 rain, 3 storm. Drawn centred on (cx, cy) at radius r.

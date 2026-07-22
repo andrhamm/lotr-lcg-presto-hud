@@ -117,6 +117,8 @@ export class GameState {
     this.pending_elim = null;
     this.reminders = Object.fromEntries(REMINDER_DEFS.map(d => [d[0], false]));
     this.quest_resolved = false;
+    this.quest_outcome = null;      // "success" | "fail" | "tie" - last resolution
+    this.quest_outcome_n = 0;       // progress gained / threat taken
     this.sailing = false;
     this.heading = 0;
     this.game_over = null;
@@ -292,6 +294,7 @@ export class GameState {
     this.view = VIEW_ORDER[0];
     this.willpower = this.players.reduce((a, p) => a + p.commit, 0);
     this.quest_resolved = false;
+    this.quest_outcome = null;
     this.logEvent(`New round ${this.round} - threat raised, first player -> P${this.first_player + 1}`);
     this.logEvent(`Phase: ${VIEW_LABELS[VIEW_ORDER[0]]}`);
     this._snapshotRound();
@@ -356,14 +359,19 @@ export class GameState {
   resolveQuest(willpower, staging) {
     const diff = willpower - staging;
     this.quest_resolved = true;
-    if (diff > 0) return { outcome: "success", budget: diff };
+    if (diff > 0) {
+      this.quest_outcome = "success"; this.quest_outcome_n = diff;
+      return { outcome: "success", budget: diff };
+    }
     if (diff < 0) {
       const shortfall = -diff;
       this.players.forEach((p, i) => { if (!p.eliminated) this.adjustThreat(i, shortfall); });
       this.logEvent(`Quest failed. +${shortfall} threat to all`);
+      this.quest_outcome = "fail"; this.quest_outcome_n = shortfall;
       return { outcome: "fail", threat: shortfall };
     }
     this.logEvent("Quest unsuccessful - tie, no change");
+    this.quest_outcome = "tie"; this.quest_outcome_n = 0;
     return { outcome: "tie" };
   }
 
@@ -382,6 +390,7 @@ export class GameState {
       reminders: { ...this.reminders },
       elimination_threat: this.elimination_threat,
       quest_resolved: this.quest_resolved,
+      quest_outcome: this.quest_outcome, quest_outcome_n: this.quest_outcome_n,
       sailing: this.sailing, heading: this.heading,
       game_over: this.game_over ? { ...this.game_over } : null,
       pending_stage: this.pending_stage ? { ...this.pending_stage } : null,
@@ -418,6 +427,8 @@ export class GameState {
       if (d.reminders && k in d.reminders) g.reminders[k] = d.reminders[k];
     }
     g.quest_resolved = d.quest_resolved ?? false;
+    g.quest_outcome = d.quest_outcome ?? null;
+    g.quest_outcome_n = d.quest_outcome_n ?? 0;
     g.sailing = d.sailing ?? false;
     g.heading = d.heading ?? 0;
     g.game_over = d.game_over ? { ...d.game_over } : null;

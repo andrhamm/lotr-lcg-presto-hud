@@ -417,15 +417,6 @@ export class CommitModal {
     const vy = zoneTop + Math.floor((zoneBottom - zoneTop - ISZ) / 2);
     textLeft(ctx, String(val), vx, vy, VSCALE, pal.gold);
     icons.drawIcon(ctx, icons.WILLPOWER_XL, vx + vw + 14, vy, pal.gold);
-    const committed = val + this.order.slice(0, this.pos)
-      .reduce((a, i) => a + this.game.players[i].commit, 0);
-    const remaining = this.order.slice(this.pos + 1)
-      .reduce((a, i) => a + this.game.players[i].commit, 0);
-    const p1 = `committed ${committed}`, p2 = `uncommitted ${remaining}`;
-    const w1 = measureText(p1, 2), w2 = measureText(p2, 2);
-    const x0 = Math.floor((480 - (w1 + 24 + w2)) / 2);
-    textLeft(ctx, p1, x0, 226, 2, pal.green);
-    textLeft(ctx, p2, x0 + w1 + 24, 226, 2, pal.dim);
     const bw = 104, bh = 76, gap = 8;
     const sx0 = (480 - (4 * bw + 3 * gap)) / 2;
     CommitModal.STEPS.forEach(([step, label], i) => {
@@ -742,24 +733,14 @@ export class StageCompleteModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, `Stage ${this.cleared} cleared!`, 240, 26, 3, pal.gold);
-    let y = 70;
-    if (this.excess > 0) {
-      textCenter(ctx, `${this.excess} excess progress discarded (rulebook)`,
-                 240, y, 1, pal.dim);
-      y += 20;
-    }
+    textCenter(ctx, `Quest Stage ${this.cleared} cleared!`, 240, 26, 3, pal.gold);
+    let y = 74;
     textCenter(ctx, "Set up the next stage", 240, y, 2, pal.tan);
     y += 40;
     textLeft(ctx, "Stage", 30, y + 14, 2, pal.tan);
-    stepper(ctx, this.buttons, ["n", -1], ["n", 1], 190, y, String(this.n), 130, 52);
-    ["A", "B"].forEach((s, idx) => {
-      const b = new Button(["side", s], 336 + idx * 60, y, 52, 52);
-      const on = this.side === s;
-      panel(ctx, b.x, b.y, b.w, b.h, on ? pal.gold : pal.btn);
-      textCenter(ctx, s, b.x + 26, b.y + 16, 3, on ? pal.bg : pal.tan, false);
-      this.buttons.push(b);
-    });
+    stepper(ctx, this.buttons, ["n", -1], ["n", 1], 160, y, String(this.n), 130, 52);
+    // side cycles A-H (multi-variant quests go beyond A/B - DragnCards data)
+    stepper(ctx, this.buttons, ["side", -1], ["side", 1], 316, y, this.side, 144, 52);
     y += 76;
     textLeft(ctx, "Quest points", 30, y + 14, 2, pal.tan);
     stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 240, y, String(this.pts), 210, 52);
@@ -777,7 +758,11 @@ export class StageCompleteModal {
   onButton(btn) {
     const k = btn.id[0];
     if (k === "n") { this.n = Math.max(1, Math.min(9, this.n + btn.id[1])); return null; }
-    if (k === "side") { this.side = btn.id[1]; return null; }
+    if (k === "side") {
+      const i = (this.side.charCodeAt(0) - 65 + btn.id[1] + 8) % 8;   // cycle A-H
+      this.side = String.fromCharCode(65 + i);
+      return null;
+    }
     if (k === "pts") { this.pts = Math.max(0, Math.min(30, this.pts + btn.id[1])); return null; }
     if (k === "go") {
       const g = this.game;
@@ -811,13 +796,7 @@ export class QuestConfigModal {
     textLeft(ctx, "Stage number", 30, 84, 2, pal.tan);
     stepper(ctx, this.buttons, ["n", -1], ["n", 1], 300, 70, String(this.q.stage_n), 150, 52);
     textLeft(ctx, "Side", 30, 156, 2, pal.tan);
-    ["A", "B"].forEach((s, idx) => {
-      const b = new Button(["side", s], 300 + idx * 78, 142, 70, 52);
-      const on = this.q.side === s;
-      panel(ctx, b.x, b.y, b.w, b.h, on ? pal.gold : pal.btn);
-      textCenter(ctx, s, b.x + 35, b.y + 16, 3, on ? pal.bg : pal.tan, false);
-      this.buttons.push(b);
-    });
+    stepper(ctx, this.buttons, ["side", -1], ["side", 1], 300, 142, this.q.side, 150, 52);
     textLeft(ctx, "Quest points", 30, 228, 2, pal.tan);
     stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 300, 214, String(this.q.points), 150, 52);
     textLeft(ctx, "Sailing quest", 30, 296, 2, pal.tan);
@@ -836,7 +815,11 @@ export class QuestConfigModal {
   onButton(btn) {
     const k = btn.id[0];
     if (k === "n") { this.q.stage_n = Math.max(1, Math.min(9, this.q.stage_n + btn.id[1])); return null; }
-    if (k === "side") { this.q.side = btn.id[1]; return null; }
+    if (k === "side") {
+      const i = (this.q.side.charCodeAt(0) - 65 + btn.id[1] + 8) % 8;   // cycle A-H
+      this.q.side = String.fromCharCode(65 + i);
+      return null;
+    }
     if (k === "pts") { this.q.points = Math.max(0, Math.min(30, this.q.points + btn.id[1])); return null; }
     if (k === "adv") {
       if (this.q.side === "A") this.q.side = "B";
