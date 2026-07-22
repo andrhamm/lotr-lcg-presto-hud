@@ -58,15 +58,15 @@ export const SETUP_TIP = [
   "then flip 1A -> 1B and begin.",
 ];
 
-// Heading card facings, best -> worst. Official terms (Grey Havens
-// rulebook p.5): only the sun facing is "on-course"; every other facing
-// is "off-course" - sun is the best possible setting, lightning the
-// worst. [term, icon, degree phrase]
+// Heading card facings, best -> worst (Grey Havens rulebook p.5). Only
+// the sun facing is "on-course"; the rest are "off-course". Facing names
+// are the official ones card text uses: "off-course (Cloudy, Rainy, or
+// Stormy)". [term, icon, facing name, degree phrase]
 export const HEADINGS = [
-  ["On-course", "SUN", "best possible setting"],
-  ["Off-course", "CLOUD", "1 step off-course"],
-  ["Off-course", "RAIN", "2 steps off-course"],
-  ["Off-course", "STORM", "worst possible setting"],
+  ["On-course", "SUN", "Sunny", "best possible setting"],
+  ["Off-course", "CLOUD", "Cloudy", "1 step off-course"],
+  ["Off-course", "RAIN", "Rainy", "2 steps off-course"],
+  ["Off-course", "STORM", "Stormy", "worst possible setting"],
 ];
 
 // [key, label, view, notification text, icon name or null]
@@ -210,8 +210,8 @@ export class GameState {
   headingLabel() { return HEADINGS[this.heading][0]; }
 
   headingDesc() {
-    const [term, , degree] = HEADINGS[this.heading];
-    return this.heading === 0 ? term : `${term} (${degree})`;
+    const [term, , facing] = HEADINGS[this.heading];
+    return `${term} (${facing})`;
   }
 
   shiftHeading(delta, why = "") {

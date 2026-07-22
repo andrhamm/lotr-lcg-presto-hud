@@ -95,11 +95,11 @@ export class ScreenPlay {
     this.buttons.push(b);
   }
 
-  _headingChip(ctx, game, y) {
+  _headingChip(ctx, game, y, xoff = 0) {
     if (!game.sailing) return;
     const ic = icons[HEADINGS[game.heading][1]];
     const pen = game.heading === 0 ? pal.gold : game.heading === 3 ? pal.red : pal.amber;
-    icons.drawIcon(ctx, ic, 480 - MARGIN - 32, y + 8, pen);
+    icons.drawIcon(ctx, ic, 480 - MARGIN - 32 - xoff, y + 8, pen);
   }
 
   _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
@@ -168,7 +168,9 @@ export class ScreenPlay {
       this._chips(ctx, game);
       this._progressRow(ctx, game, true);
       notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                ["Collect resources.", "Draw cards.", "Play allies and attachments."]);
+                ["Collect resources.", "Draw cards.", "Play allies and attachments."],
+                2, game.sailing ? 42 : 0);
+      this._headingChip(ctx, game, CONTENT_Y + 6);
       this._cta(ctx, "Quest >", ["advance"]);
     } else if (view === "quest_commit") {
       this._chips(ctx, game);
@@ -217,7 +219,8 @@ export class ScreenPlay {
         });
         const rx = cx0 + CW2 + 18, rw = 480 - MARGIN - (cx0 + CW2 + 18);
         textLeft(ctx, game.headingLabel(), rx, cy0 + 2, 3, topPen);
-        textLeft(ctx, HEADINGS[game.heading][2], rx, cy0 + 32, 1, pal.dim);
+        textLeft(ctx, `${HEADINGS[game.heading][2]} - ${HEADINGS[game.heading][3]}`,
+                 rx, cy0 + 32, 1, pal.dim);
         const offB = new Button(["head", 1], rx, cy0 + 46, rw, 42);
         bevel(ctx, offB.x, offB.y, offB.w, offB.h, pal.btn);
         textCenter(ctx, "Shift off-course", rx + rw / 2, offB.y + 12, 2, pal.red);
@@ -273,7 +276,8 @@ export class ScreenPlay {
       this._progressRow(ctx, game);
       notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                 ["Ready all exhausted cards.", "Threat increases (automatic).",
-                 "Pass the first player token."]);
+                 "Pass the first player token."], 2, game.sailing ? 42 : 0);
+      this._headingChip(ctx, game, CONTENT_Y + 6);
       this._cta(ctx, "End round >", ["endround"]);
     } else {
       this._chips(ctx, game);
@@ -293,12 +297,14 @@ export class ScreenPlay {
       };
       let noteText = notes[view] ?? "";
       if (game.sailing && shipNotes[view]) noteText = [noteText, shipNotes[view]];
+      const reserve = (flavor ? 34 : 0) + (game.sailing ? 42 : 0);
       const h = notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                          noteText, 2, flavor ? 34 : 0);
+                          noteText, 2, reserve);
       if (flavor) {
         icons.drawIcon(ctx, flavor[0], 480 - MARGIN - 34,
                        CONTENT_Y + 6 + Math.floor((h - 20) / 2), flavor[1]);
       }
+      this._headingChip(ctx, game, CONTENT_Y + 6, flavor ? 42 : 0);
       const i = VIEW_ORDER.indexOf(view);
       const nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
       this._cta(ctx, `${VIEW_LABELS[nxt] ?? nxt} >`, ["advance"]);
@@ -350,15 +356,21 @@ export class ScreenPlay {
     const loc = game.active_location;
     let y = CONTENT_Y + 4;
     if (!loc) {
+      const ny = y;
       y += notePanel(ctx, MARGIN, y, 480 - 2 * MARGIN,
-        "Players may travel to 1 location. It becomes the active location.") + 10;
+        "Players may travel to 1 location. It becomes the active location.",
+        2, game.sailing ? 42 : 0) + 10;
+      this._headingChip(ctx, game, ny);
       const tb = new Button(["travel_new"], MARGIN, y, 480 - 2 * MARGIN, 56);
       bevel(ctx, tb.x, tb.y, tb.w, tb.h, pal.btn);
       textCenter(ctx, "Travel to location", 240, y + 18, 2, pal.tan);
       this.buttons.push(tb);
     } else {
+      const ny = y;
       y += notePanel(ctx, MARGIN, y, 480 - 2 * MARGIN,
-        "Travel is only possible while there is no active location (rulebook).") + 10;
+        "Travel is only possible while there is no active location (rulebook).",
+        2, game.sailing ? 42 : 0) + 10;
+      this._headingChip(ctx, game, ny);
       const cb = new Button(["travel_change"], MARGIN, y, 480 - 2 * MARGIN, 48);
       panel(ctx, cb.x, cb.y, cb.w, cb.h);
       textCenter(ctx, "Replace location (card effect)", 240, y + 14, 2, pal.muted);
