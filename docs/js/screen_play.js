@@ -3,10 +3,10 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
          truncateText, ribbon, notePanel } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
-import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP } from "./gamestate.js";
+import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS } from "./gamestate.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal, CommitModal,
          QuestingForModal, RemindersModal, LocationPickModal, SideQuestsModal,
-         QuestConfigModal } from "./screens.js";
+         QuestConfigModal, StageCompleteModal } from "./screens.js";
 
 const MARGIN = 8;
 const STRIP_Y = HEADER_H + 10;
@@ -95,6 +95,13 @@ export class ScreenPlay {
     this.buttons.push(b);
   }
 
+  _headingChip(ctx, game, y) {
+    if (!game.sailing) return;
+    const ic = game.heading === 0 ? icons.SUN : icons.STORM;
+    const pen = game.heading === 0 ? pal.gold : game.heading === 3 ? pal.red : pal.amber;
+    icons.drawIcon(ctx, ic, 480 - MARGIN - 32, y + 8, pen);
+  }
+
   _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
     const half = Math.floor((480 - 3 * MARGIN) / 2);
     const defs = [
@@ -147,7 +154,15 @@ export class ScreenPlay {
         this.buttons.push(b);
       }
       textCenter(ctx, String(game.quest.points), 382, y + 12, 3, pal.gold);
-      textLeft(ctx, "so round 1 starts knowing the goal", MARGIN + 8, y + 58, 1, pal.dim);
+      const sy = y + 50;
+      textLeft(ctx, "Sailing quest", MARGIN + 8, sy + 11, 2, pal.tan);
+      icons.drawIcon(ctx, icons.WHEEL, 160, sy + 7,
+                     game.sailing ? pal.gold : pal.dim);
+      const sb = new Button(["sail_toggle"], 300, sy, 164, 38);
+      panel(ctx, sb.x, sb.y, sb.w, sb.h, game.sailing ? pal.gold : pal.btn);
+      textCenter(ctx, game.sailing ? "On" : "Off", sb.x + 82, sb.y + 12, 2,
+                 game.sailing ? pal.bg : pal.tan, false);
+      this.buttons.push(sb);
       this._cta(ctx, "Begin Round 1 >", ["advance"]);
     } else if (view === "resource_planning") {
       this._chips(ctx, game);
@@ -164,12 +179,57 @@ export class ScreenPlay {
       this.buttons.push(new Button(["commit_tip"], MARGIN, CONTENT_Y + 60,
                                    480 - 2 * MARGIN, th));
       this._totalsRow(ctx, game, CONTENT_Y + 108, false, ["wp", "stg"]);
+      this._headingChip(ctx, game, CONTENT_Y + 60);
       this._cta(ctx, "Quest (Staging) >", ["advance"]);
+    } else if (view === "quest_sailing") {
+      this._chips(ctx, game);
+      this._progressRow(ctx, game);
+      if (!game.sailing) {
+        notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
+                  ["No Sailing keyword on this quest.", "Enable it if the stage says Sailing."]);
+        const eb = new Button(["sail_toggle"], MARGIN, CONTENT_Y + 96,
+                              480 - 2 * MARGIN, 52);
+        bevel(ctx, eb.x, eb.y, eb.w, eb.h, pal.btn);
+        icons.drawIcon(ctx, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold);
+        textCenter(ctx, "Enable Sailing", 254, CONTENT_Y + 96 + 16, 2, pal.tan);
+        this.buttons.push(eb);
+        this._cta(ctx, "Questing (Commit) >", ["advance"]);
+      } else {
+        const cw = Math.floor((480 - 2 * MARGIN - 3 * 8) / 4);
+        HEADINGS.forEach(([label, icName], i) => {
+          const x = MARGIN + i * (cw + 8);
+          const on = game.heading === i;
+          panel(ctx, x, CONTENT_Y, cw, 70,
+                on ? pal.card_hi : pal.card, on ? pal.border_gold : pal.border);
+          const pen = on ? (i === 0 ? pal.gold : i === 3 ? pal.red : pal.amber) : pal.dim;
+          if (icName) {
+            icons.drawIcon(ctx, icons[icName], x + Math.floor((cw - 24) / 2),
+                           CONTENT_Y + 10, pen);
+          } else {
+            textCenter(ctx, i === 1 ? "~" : "~~", x + cw / 2, CONTENT_Y + 16, 2, pen, false);
+          }
+          textCenter(ctx, label, x + cw / 2, CONTENT_Y + 48, 1, on ? pal.tan : pal.dim);
+        });
+        const bw = Math.floor((480 - 2 * MARGIN - 12) / 2);
+        const onB = new Button(["head", -1], MARGIN, CONTENT_Y + 82, bw, 44);
+        const offB = new Button(["head", 1], MARGIN + bw + 12, CONTENT_Y + 82, bw, 44);
+        bevel(ctx, onB.x, onB.y, onB.w, onB.h, pal.btn);
+        textCenter(ctx, "< On-course", onB.x + bw / 2, onB.y + 12, 2, pal.green);
+        bevel(ctx, offB.x, offB.y, offB.w, offB.h, pal.btn);
+        textCenter(ctx, "Off-course >", offB.x + bw / 2, offB.y + 12, 2, pal.red);
+        this.buttons.push(onB, offB);
+        notePanel(ctx, MARGIN, CONTENT_Y + 140, 480 - 2 * MARGIN,
+                  ["Exhaust characters, look at that many",
+                   "encounter cards. Each wheel symbol =",
+                   "1 step on-course. Dream-chaser = 2."], 2, 0, icons.WHEEL);
+        this._cta(ctx, "Questing (Commit) >", ["advance"]);
+      }
     } else if (view === "quest_staging") {
       this._chips(ctx, game);
       this._progressRow(ctx, game, true);
       notePanel(ctx, MARGIN, CONTENT_Y + 2, 480 - 2 * MARGIN,
                 "Reveal 1 encounter card per player.");
+      this._headingChip(ctx, game, CONTENT_Y + 2);
       this._totalsRow(ctx, game, CONTENT_Y + 52, true);
       if (game.quest_resolved) {
         this._cta(ctx, "Travel >", ["advance"]);
@@ -446,10 +506,23 @@ export class ScreenPlay {
       game.pending_budget = 0;
       this.alloc = null;
       game.enterView("travel");
+      if (game.pending_stage) return ["modal", new StageCompleteModal(game)];
       return true;
     }
     if (k === "travel_new") return ["modal", new LocationPickModal(game, "new")];
     if (k === "travel_change") return ["modal", new LocationPickModal(game, "change")];
+    if (k === "head") {
+      game.shiftHeading(btn.id[1], "sailing test");
+      return true;
+    }
+    if (k === "sail_toggle") {
+      game.sailing = !game.sailing;
+      if (game.sailing) game.heading = 0;
+      game.logEvent(game.sailing
+        ? "Sailing enabled (Dream-chaser) - heading starts On-course"
+        : "Sailing disabled");
+      return true;
+    }
     if (k === "endround") { game.endRound(); this.banner = null; return true; }
     if (k === "advance") { game.advanceView(); this.banner = null; return true; }
     return null;

@@ -11,7 +11,8 @@ export const VIEW_ORDER = ["resource_planning", "quest_commit", "quest_staging",
   "combat_shadow", "combat_enemy", "combat_player", "refresh"];
 
 export const VIEW_STEP = {
-  setup_game: "0.0", resource_planning: "1.R", quest_commit: "3.2",
+  setup_game: "0.0", resource_planning: "1.R", quest_sailing: "3.1",
+  quest_commit: "3.2",
   quest_staging: "3.3", quest_resolution: "3.4", travel: "4.2",
   enc_optional: "5.2", enc_checks: "5.3", combat_shadow: "6.2",
   combat_enemy: "6.E", combat_player: "6.P", refresh: "7.R",
@@ -19,7 +20,7 @@ export const VIEW_STEP = {
 
 export const VIEW_LABELS = {
   setup_game: "Setup", resource_planning: "Resource & Planning",
-  quest_commit: "Questing (Commit)", quest_staging: "Questing (Staging)",
+  quest_sailing: "Questing (Sailing)", quest_commit: "Questing (Commit)", quest_staging: "Questing (Staging)",
   quest_resolution: "Questing (Resolution)", travel: "Travel",
   enc_optional: "Encounter (Opt. Engage)", enc_checks: "Encounter (Checks)",
   combat_shadow: "Combat (Shadow Cards)", combat_enemy: "Combat (Enemy Attacks)",
@@ -55,6 +56,12 @@ export const SETUP_TIP = [
   "Keywords on setup reveals (Surge/Doomed) do resolve.",
   "Shuffle the encounter deck AFTER setup searches,",
   "then flip 1A -> 1B and begin.",
+];
+
+// Heading card facings, best -> worst. Only the sun facing is on-course
+// (Grey Havens rulebook p.5); each shift rotates one step.
+export const HEADINGS = [
+  ["On-course", "SUN"], ["Cloudy", null], ["Rainy", null], ["Storm", "STORM"],
 ];
 
 // [key, label, view, notification text, icon name or null]
@@ -105,6 +112,10 @@ export class GameState {
     this.pending_elim = null;
     this.reminders = Object.fromEntries(REMINDER_DEFS.map(d => [d[0], false]));
     this.quest_resolved = false;
+    this.sailing = false;
+    this.heading = 0;
+    this.game_over = null;
+    this.pending_stage = null;
     this.log = [];
     this._seq = 0;
   }
@@ -181,10 +192,43 @@ export class GameState {
       this._snapshotRound();
       return;
     }
+    if (this.view === "quest_sailing") { this.enterView("quest_commit"); return; }
     const i = VIEW_ORDER.indexOf(this.view);
     let nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
     if (this.view === "quest_staging") nxt = "travel";
+    if (this.view === "resource_planning" && this.sailing) nxt = "quest_sailing";
     this.enterView(nxt);
+    // a Sailing test begins by shifting one step off-course (rulebook p.6)
+    if (nxt === "quest_sailing") this.shiftHeading(1, "winds shift");
+  }
+
+  headingLabel() { return HEADINGS[this.heading][0]; }
+
+  shiftHeading(delta, why = "") {
+    const to = Math.max(0, Math.min(HEADINGS.length - 1, this.heading + delta));
+    if (to === this.heading) return false;
+    const was = this.headingLabel();
+    this.heading = to;
+    const dir = delta > 0 ? "off-course" : "on-course";
+    this.logEvent(`Sailing: heading ${was} -> ${this.headingLabel()}` +
+                  ` (${dir}${why ? ", " + why : ""})`);
+    return true;
+  }
+
+  allEliminated() { return this.players.every(p => p.eliminated); }
+
+  gameDuration() {
+    const t0 = this.log.length ? this.log[0].t : null;
+    const now = this._now();
+    return (t0 !== null && now !== null) ? fmtMs(now - t0) : null;
+  }
+
+  setGameOver(result) {
+    if (this.game_over) return;
+    this.game_over = { result, round: this.round, duration: this.gameDuration() };
+    this.logEvent(result === "victory"
+      ? "GAME OVER - Victory! The final quest stage is complete"
+      : "GAME OVER - Defeat. All players are eliminated");
   }
 
   _applyTravelStaging(contribution) {
@@ -272,11 +316,13 @@ export class GameState {
     n = alloc.quest ?? 0;
     if (n) {
       this.quest.progress += n;
-      while (this.quest.points > 0 && this.quest.progress >= this.quest.points) {
-        this.quest.progress -= this.quest.points;
+      if (this.quest.points > 0 && this.quest.progress >= this.quest.points) {
         const was = this.questLabel();
+        const excess = this.quest.progress - this.quest.points;
         this._advanceQuestStage();
-        completed.push(`Quest ${was} cleared -> ${this.questLabel()}`);
+        this.quest.points = 0;
+        this.pending_stage = { cleared: was, excess };
+        completed.push(`Quest ${was} cleared`);
       }
     }
     for (let i = this.side_quests.length - 1; i >= 0; i--) {
@@ -326,6 +372,9 @@ export class GameState {
       reminders: { ...this.reminders },
       elimination_threat: this.elimination_threat,
       quest_resolved: this.quest_resolved,
+      sailing: this.sailing, heading: this.heading,
+      game_over: this.game_over ? { ...this.game_over } : null,
+      pending_stage: this.pending_stage ? { ...this.pending_stage } : null,
       log: this.log.map(e => ({ ...e })), seq: this._seq,
     };
   }
@@ -359,6 +408,10 @@ export class GameState {
       if (d.reminders && k in d.reminders) g.reminders[k] = d.reminders[k];
     }
     g.quest_resolved = d.quest_resolved ?? false;
+    g.sailing = d.sailing ?? false;
+    g.heading = d.heading ?? 0;
+    g.game_over = d.game_over ? { ...d.game_over } : null;
+    g.pending_stage = d.pending_stage ? { ...d.pending_stage } : null;
     g.log = (d.log ?? []).map(e => ({ ...e }));
     g._seq = d.seq ?? 0;
     return g;

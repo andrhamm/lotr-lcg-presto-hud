@@ -5,7 +5,7 @@ import { GameState, VIEW_LABELS, viewForStep } from "./gamestate.js";
 import { step as phaseStep, phase as phaseInfo } from "./phases.js";
 import { ScreenPlay } from "./screen_play.js";
 import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
-         LedModal, ScreenAbout } from "./screens_other.js";
+         LedModal, ScreenAbout, GameOverScreen } from "./screens_other.js";
 import { EliminationModal } from "./screens.js";
 
 const STATE_KEY = "lotr-hud-state";
@@ -91,6 +91,7 @@ function main() {
     boot: new BootScreen(savedMeta, bootImg),
     setup: new SetupScreen(),
     about: new ScreenAbout(),
+    gameover: new GameOverScreen(),
   };
   let active = "boot";
   let navStack = [];
@@ -235,6 +236,19 @@ function main() {
     // elimination confirmation
     if (!modal && active !== "boot" && active !== "setup" && game.pending_elim !== null) {
       modal = new EliminationModal(game, game.pending_elim);
+      dirty = true;
+    }
+    // defeat: every player eliminated
+    if (!modal && active === "play" && game.pending_elim === null &&
+        !game.game_over && game.players.length && game.allEliminated()) {
+      game.setGameOver("defeat");
+      saveState(game);
+      dirty = true;
+    }
+    // game-over screen takes over the play surface
+    if (!modal && active === "play" && game.game_over) {
+      active = "gameover";
+      navStack = [];
       dirty = true;
     }
     // torch flicker

@@ -534,31 +534,108 @@ export class EliminationModal {
   }
 }
 
+export class StageCompleteModal {
+  constructor(game) {
+    this.game = game;
+    const ps = game.pending_stage ?? { cleared: "?", excess: 0 };
+    this.cleared = ps.cleared;
+    this.excess = ps.excess;
+    this.n = game.quest.stage_n;
+    this.side = game.quest.side;
+    this.pts = 0;
+    this.buttons = [];
+  }
+  draw(ctx) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    textCenter(ctx, `Stage ${this.cleared} cleared!`, 240, 26, 3, pal.gold);
+    let y = 70;
+    if (this.excess > 0) {
+      textCenter(ctx, `${this.excess} excess progress discarded (rulebook)`,
+                 240, y, 1, pal.dim);
+      y += 20;
+    }
+    textCenter(ctx, "Set up the next stage", 240, y, 2, pal.tan);
+    y += 40;
+    textLeft(ctx, "Stage", 30, y + 14, 2, pal.tan);
+    stepper(ctx, this.buttons, ["n", -1], ["n", 1], 190, y, String(this.n), 130, 52);
+    ["A", "B"].forEach((s, idx) => {
+      const b = new Button(["side", s], 336 + idx * 60, y, 52, 52);
+      const on = this.side === s;
+      panel(ctx, b.x, b.y, b.w, b.h, on ? pal.gold : pal.btn);
+      textCenter(ctx, s, b.x + 26, b.y + 16, 3, on ? pal.bg : pal.tan, false);
+      this.buttons.push(b);
+    });
+    y += 76;
+    textLeft(ctx, "Quest points", 30, y + 14, 2, pal.tan);
+    stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 240, y, String(this.pts), 210, 52);
+    y += 90;
+    const go = new Button(["go"], 30, y, 420, 60);
+    bevel(ctx, go.x, go.y, go.w, go.h, pal.btn_ok, false, 3);
+    textCenter(ctx, `Continue to ${this.n}${this.side} >`, 240, y + 20, 2, pal.ok_fg);
+    this.buttons.push(go);
+    y += 74;
+    const win = new Button(["win"], 30, y, 420, 60);
+    bevel(ctx, win.x, win.y, win.w, win.h, pal.card_hi, false, 3);
+    textCenter(ctx, "That was the final stage - Victory!", 240, y + 20, 2, pal.gold);
+    this.buttons.push(win);
+  }
+  onButton(btn) {
+    const k = btn.id[0];
+    if (k === "n") { this.n = Math.max(1, Math.min(9, this.n + btn.id[1])); return null; }
+    if (k === "side") { this.side = btn.id[1]; return null; }
+    if (k === "pts") { this.pts = Math.max(0, Math.min(30, this.pts + btn.id[1])); return null; }
+    if (k === "go") {
+      const g = this.game;
+      g.quest.stage_n = this.n;
+      g.quest.side = this.side;
+      g.quest.points = this.pts;
+      g.pending_stage = null;
+      g.logEvent(`Advance to stage ${g.questLabel()} (needs ${this.pts})`);
+      return "close";
+    }
+    if (k === "win") {
+      this.game.pending_stage = null;
+      this.game.setGameOver("victory");
+      return "close";
+    }
+    return null;
+  }
+}
+
 export class QuestConfigModal {
   constructor(game) {
     this.game = game;
     this.q = { ...game.quest };
+    this.sail = game.sailing;
     this.buttons = [];
   }
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     textCenter(ctx, `Quest  ${this.q.stage_n}${this.q.side}`, 240, 24, 3, pal.gold);
-    textLeft(ctx, "Stage number", 30, 92, 2, pal.tan);
-    stepper(ctx, this.buttons, ["n", -1], ["n", 1], 300, 78, String(this.q.stage_n), 150, 52);
-    textLeft(ctx, "Side", 30, 168, 2, pal.tan);
+    textLeft(ctx, "Stage number", 30, 84, 2, pal.tan);
+    stepper(ctx, this.buttons, ["n", -1], ["n", 1], 300, 70, String(this.q.stage_n), 150, 52);
+    textLeft(ctx, "Side", 30, 156, 2, pal.tan);
     ["A", "B"].forEach((s, idx) => {
-      const b = new Button(["side", s], 300 + idx * 78, 154, 70, 52);
+      const b = new Button(["side", s], 300 + idx * 78, 142, 70, 52);
       const on = this.q.side === s;
       panel(ctx, b.x, b.y, b.w, b.h, on ? pal.gold : pal.btn);
       textCenter(ctx, s, b.x + 35, b.y + 16, 3, on ? pal.bg : pal.tan, false);
       this.buttons.push(b);
     });
-    textLeft(ctx, "Quest points", 30, 244, 2, pal.tan);
-    stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 300, 230, String(this.q.points), 150, 52);
-    const adv = new Button(["adv"], 30, 320, 420, 56);
+    textLeft(ctx, "Quest points", 30, 228, 2, pal.tan);
+    stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 300, 214, String(this.q.points), 150, 52);
+    textLeft(ctx, "Sailing quest", 30, 296, 2, pal.tan);
+    icons.drawIcon(ctx, icons.WHEEL, 176, 292, this.sail ? pal.gold : pal.dim);
+    const sb = new Button(["sail"], 300, 284, 150, 48);
+    panel(ctx, sb.x, sb.y, sb.w, sb.h, this.sail ? pal.gold : pal.btn);
+    textCenter(ctx, this.sail ? "On" : "Off", sb.x + 75, sb.y + 14, 2,
+               this.sail ? pal.bg : pal.tan, false);
+    this.buttons.push(sb);
+    const adv = new Button(["adv"], 30, 344, 420, 48);
     bevel(ctx, adv.x, adv.y, adv.w, adv.h, pal.btn);
-    textCenter(ctx, "Advance stage (progress -> 0)", adv.x + 210, adv.y + 18, 2, pal.tan);
+    textCenter(ctx, "Advance stage (progress -> 0)", adv.x + 210, adv.y + 14, 2, pal.tan);
     this.buttons.push(adv);
     footer(ctx, this.buttons);
   }
@@ -573,7 +650,18 @@ export class QuestConfigModal {
       this.q.progress = 0;
       return null;
     }
-    if (k === "save") { this.game.quest = this.q; return "close"; }
+    if (k === "sail") { this.sail = !this.sail; return null; }
+    if (k === "save") {
+      this.game.quest = this.q;
+      if (this.sail !== this.game.sailing) {
+        this.game.sailing = this.sail;
+        this.game.logEvent(this.sail
+          ? "Sailing enabled (Dream-chaser) - heading starts On-course"
+          : "Sailing disabled");
+        if (this.sail) this.game.heading = 0;
+      }
+      return "close";
+    }
     if (k === "cancel") return "cancel";
     return null;
   }

@@ -220,6 +220,46 @@ export class ScreenSettings {
   }
 }
 
+export class GameOverScreen {
+  constructor() { this.buttons = []; }
+  draw(ctx, game) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    const win = game.game_over?.result === "victory";
+    textCenter(ctx, win ? "VICTORY!" : "DEFEAT", 240, 64, 5,
+               win ? pal.gold : pal.red);
+    textCenter(ctx, win ? "The final quest stage is complete."
+                        : "All players have been eliminated.", 240, 132, 2, pal.tan);
+    let y = 190;
+    const line = (label, val) => {
+      textLeft(ctx, label, 120, y, 2, pal.muted);
+      textLeft(ctx, String(val), 300, y, 2, pal.gold);
+      y += 30;
+    };
+    line("Rounds", game.game_over?.round ?? game.round);
+    if (game.game_over?.duration) line("Duration", game.game_over.duration);
+    game.players.forEach((p, i) => {
+      line(`P${i + 1} threat`, p.eliminated ? `${p.threat} (out)` : p.threat);
+    });
+    const fin = new Button(["finish"], 100, 396, 280, 58);
+    bevel(ctx, fin.x, fin.y, fin.w, fin.h, pal.btn_ok, false, 3);
+    textCenter(ctx, "Finish - clear save", 240, 414, 2, pal.ok_fg);
+    this.buttons.push(fin);
+    const back = new Button(["back"], 180, 356, 120, 32);
+    textCenter(ctx, "back to game", 240, 364, 1, pal.dim);
+    this.buttons.push(back);
+  }
+  onButton(btn, game) {
+    if (btn.id[0] === "finish") return ["end_game"];
+    if (btn.id[0] === "back") {
+      game.game_over = null;
+      game.logEvent("Game over dismissed - back to the table");
+      return ["goto", "play"];
+    }
+    return null;
+  }
+}
+
 export class ScreenAbout {
   constructor() { this.buttons = []; }
   draw(ctx, game) {
