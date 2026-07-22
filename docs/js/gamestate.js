@@ -58,10 +58,15 @@ export const SETUP_TIP = [
   "then flip 1A -> 1B and begin.",
 ];
 
-// Heading card facings, best -> worst. Only the sun facing is on-course
-// (Grey Havens rulebook p.5); each shift rotates one step.
+// Heading card facings, best -> worst. Official terms (Grey Havens
+// rulebook p.5): only the sun facing is "on-course"; every other facing
+// is "off-course" - sun is the best possible setting, lightning the
+// worst. [term, icon, degree phrase]
 export const HEADINGS = [
-  ["On-course", "SUN"], ["Cloudy", "CLOUD"], ["Rainy", "RAIN"], ["Storm", "STORM"],
+  ["On-course", "SUN", "best possible setting"],
+  ["Off-course", "CLOUD", "1 step off-course"],
+  ["Off-course", "RAIN", "2 steps off-course"],
+  ["Off-course", "STORM", "worst possible setting"],
 ];
 
 // [key, label, view, notification text, icon name or null]
@@ -204,14 +209,19 @@ export class GameState {
 
   headingLabel() { return HEADINGS[this.heading][0]; }
 
+  headingDesc() {
+    const [term, , degree] = HEADINGS[this.heading];
+    return this.heading === 0 ? term : `${term} (${degree})`;
+  }
+
   shiftHeading(delta, why = "") {
     const to = Math.max(0, Math.min(HEADINGS.length - 1, this.heading + delta));
     if (to === this.heading) return false;
-    const was = this.headingLabel();
+    const was = this.headingDesc();
     this.heading = to;
     const dir = delta > 0 ? "off-course" : "on-course";
-    this.logEvent(`Sailing: heading ${was} -> ${this.headingLabel()}` +
-                  ` (${dir}${why ? ", " + why : ""})`);
+    this.logEvent(`Sailing: heading ${was} -> ${this.headingDesc()}` +
+                  ` (shifted ${dir}${why ? ", " + why : ""})`);
     return true;
   }
 

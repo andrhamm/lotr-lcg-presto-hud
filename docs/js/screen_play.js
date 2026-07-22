@@ -217,13 +217,13 @@ export class ScreenPlay {
         });
         const rx = cx0 + CW2 + 18, rw = 480 - MARGIN - (cx0 + CW2 + 18);
         textLeft(ctx, game.headingLabel(), rx, cy0 + 2, 3, topPen);
-        textLeft(ctx, "current heading (top of card)", rx, cy0 + 32, 1, pal.dim);
+        textLeft(ctx, HEADINGS[game.heading][2], rx, cy0 + 32, 1, pal.dim);
         const offB = new Button(["head", 1], rx, cy0 + 46, rw, 42);
         bevel(ctx, offB.x, offB.y, offB.w, offB.h, pal.btn);
-        textCenter(ctx, "Rotate off-course", rx + rw / 2, offB.y + 12, 2, pal.red);
+        textCenter(ctx, "Shift off-course", rx + rw / 2, offB.y + 12, 2, pal.red);
         const onB = new Button(["head", -1], rx, cy0 + 92, rw, 42);
         bevel(ctx, onB.x, onB.y, onB.w, onB.h, pal.btn);
-        textCenter(ctx, "Rotate on-course", rx + rw / 2, onB.y + 12, 2, pal.green);
+        textCenter(ctx, "Shift on-course", rx + rw / 2, onB.y + 12, 2, pal.green);
         this.buttons.push(offB, onB);
         // tip with the wheel symbol drawn inline (notePanel chrome by hand)
         const tw = 480 - 2 * MARGIN, ty0 = cy0 + 136;
