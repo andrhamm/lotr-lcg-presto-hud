@@ -155,7 +155,7 @@ export class ScreenPlay {
         this.buttons.push(new Button([key], x, y, half, 84));
         if (key === "stg") {
           textCenter(ctx, `reveal up to +${game.stagingRevealEstimate()}`,
-                     x + half / 2, y + 68, 1, pal.dim);
+                     x + half / 2, y + 64, 2, pal.dim);
         }
       }
     });
