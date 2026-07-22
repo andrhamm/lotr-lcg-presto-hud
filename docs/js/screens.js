@@ -534,6 +534,122 @@ export class EliminationModal {
   }
 }
 
+export class QuestingProgressModal {
+  // All questing progress in one place: main quest, active location and each
+  // side quest, with progress + quest-points editable; add/remove side
+  // quests; shift the heading. Value edits are logged on close.
+  constructor(game) {
+    this.game = game;
+    this.buttons = [];
+    this._snap = this._snapshot();
+  }
+  _snapshot() {
+    const g = this.game;
+    return {
+      q: { p: g.quest.progress, t: g.quest.points },
+      loc: g.active_location ? { p: g.active_location.progress, t: g.active_location.points } : null,
+      sqLen: g.side_quests.length,
+      sq: g.side_quests.map(s => ({ p: s.progress, t: s.points })),
+    };
+  }
+  _items() {
+    const g = this.game;
+    const items = [{ kind: "q", name: `Quest ${g.questLabel()}` }];
+    if (g.active_location) items.push({ kind: "l", name: "Location", removable: true });
+    g.side_quests.forEach((s, i) =>
+      items.push({ kind: "s", idx: i, name: `Side Quest ${i + 1}`, sub: s.since || null, removable: true }));
+    return items;
+  }
+  _row(ctx, it, y) {
+    const g = this.game;
+    let prog, pts, pfx;
+    if (it.kind === "q") { prog = g.quest.progress; pts = g.quest.points; pfx = "q"; }
+    else if (it.kind === "l") { prog = g.active_location.progress; pts = g.active_location.points; pfx = "l"; }
+    else { prog = g.side_quests[it.idx].progress; pts = g.side_quests[it.idx].points; pfx = "s"; }
+    panel(ctx, 12, y, 456, 58);
+    textLeft(ctx, it.name, 22, y + 8, 2, pal.tan);
+    if (it.sub) textLeft(ctx, `since ${it.sub}`, 22, y + 32, 1, pal.dim);
+    const idx = it.idx ?? null;
+    textLeft(ctx, "current", 166, y + 4, 1, pal.muted);
+    stepper(ctx, this.buttons, [pfx + "P-", idx], [pfx + "P+", idx], 164, y + 16, String(prog), 130, 34);
+    textLeft(ctx, "points", 304, y + 4, 1, pal.muted);
+    stepper(ctx, this.buttons, [pfx + "T-", idx], [pfx + "T+", idx], 300, y + 16, String(pts), 130, 34);
+    if (it.removable) {
+      const rm = new Button([pfx + "X", idx], 438, y + 15, 28, 28);
+      bevel(ctx, rm.x, rm.y, rm.w, rm.h, pal.btn_no);
+      textCenter(ctx, "x", rm.x + 14, rm.y + 6, 2, pal.no_fg);
+      this.buttons.push(rm);
+    }
+  }
+  draw(ctx) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    textLeft(ctx, `R${this.game.round} ${this.game.step}`, 10, 12, 2, pal.muted);
+    textCenter(ctx, "Questing Progress", 240, 12, 2, pal.gold);
+    textLeft(ctx, "X", 480 - 16 - measureText("X", 3), 8, 3, pal.no_fg);
+    this.buttons.push(new Button(["close"], 330, 0, 150, 40));
+    rect(ctx, 0, 40, 480, 1, pal.border);
+    let y = 48;
+    for (const it of this._items()) { this._row(ctx, it, y); y += 62; }
+    const add = new Button(["add"], 12, y, 456, 38);
+    bevel(ctx, add.x, add.y, add.w, add.h, pal.btn);
+    textCenter(ctx, "+ Add side quest", 240, y + 11, 2, pal.tan);
+    this.buttons.push(add);
+    y += 46;
+    if (this.game.sailing) {
+      const pen = this.game.heading === 0 ? pal.gold : this.game.heading === 3 ? pal.red : pal.amber;
+      panel(ctx, 12, y, 456, 52);
+      textLeft(ctx, "Heading", 22, y + 18, 2, pal.tan);
+      drawWeather(ctx, this.game.heading, 176, y + 26, 12);
+      textLeft(ctx, HEADINGS[this.game.heading][2], 196, y + 18, 2, pen);
+      const mn = new Button(["hd", -1], 320, y + 10, 60, 32);
+      const pl = new Button(["hd", 1], 388, y + 10, 60, 32);
+      button(ctx, this.buttons, mn, "-", 3);
+      button(ctx, this.buttons, pl, "+", 3);
+      this.buttons.push(mn, pl);
+    }
+    const done = new Button(["close"], 12, 430, 456, 42);
+    bevel(ctx, done.x, done.y, done.w, done.h, pal.btn_ok, false, 3);
+    textCenter(ctx, "Done", 240, 442, 2, pal.ok_fg);
+    this.buttons.push(done);
+  }
+  _clampAdj(cur, d) { return Math.max(0, Math.min(99, cur + d)); }
+  onButton(btn) {
+    const [k, a, b] = btn.id;
+    const g = this.game;
+    if (k === "qP-" || k === "qP+") { g.quest.progress = this._clampAdj(g.quest.progress, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "qT-" || k === "qT+") { g.quest.points = this._clampAdj(g.quest.points, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "lP-" || k === "lP+") { g.active_location.progress = this._clampAdj(g.active_location.progress, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "lT-" || k === "lT+") { g.active_location.points = this._clampAdj(g.active_location.points, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "lX") { g.active_location = null; g.logEvent("Active location cleared (progress view)"); return null; }
+    if (k === "sP-" || k === "sP+") { const s = g.side_quests[a]; s.progress = this._clampAdj(s.progress, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "sT-" || k === "sT+") { const s = g.side_quests[a]; s.points = this._clampAdj(s.points, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "sX") { g.side_quests.splice(a, 1); g.logEvent(`Side quest ${a + 1} removed (progress view)`); return null; }
+    if (k === "add") {
+      g.side_quests.push({ points: 4, progress: 0, since: `R${g.round} ${g.step}` });
+      g.logEvent(`Side quest ${g.side_quests.length} added (progress view)`);
+      return null;
+    }
+    if (k === "hd") { g.shiftHeading(a, "progress view"); return null; }
+    if (k === "close") { this._logChanges(); return "close"; }
+    return null;
+  }
+  _logChanges() {
+    const s = this._snap, g = this.game;
+    if (g.quest.progress !== s.q.p || g.quest.points !== s.q.t)
+      g.logEvent(`Quest ${g.questLabel()} set ${g.quest.progress}/${g.quest.points} (progress view)`);
+    if (s.loc && g.active_location &&
+        (g.active_location.progress !== s.loc.p || g.active_location.points !== s.loc.t))
+      g.logEvent(`Active location set ${g.active_location.progress}/${g.active_location.points} (progress view)`);
+    if (g.side_quests.length === s.sqLen) {
+      g.side_quests.forEach((sq, i) => {
+        if (sq.progress !== s.sq[i].p || sq.points !== s.sq[i].t)
+          g.logEvent(`Side quest ${i + 1} set ${sq.progress}/${sq.points} (progress view)`);
+      });
+    }
+  }
+}
+
 export class SailingModal {
   // Log the result of a Sailing test: +v = wheels found (shift on-course),
   // -v = steps off-course (winds/card effects). Heading index 0 = on-course.

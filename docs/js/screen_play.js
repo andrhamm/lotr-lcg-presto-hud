@@ -6,7 +6,8 @@ import * as icons from "./icons.js";
 import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS } from "./gamestate.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal, CommitModal,
          QuestingForModal, RemindersModal, LocationPickModal, SideQuestsModal,
-         QuestConfigModal, StageCompleteModal, SailingModal } from "./screens.js";
+         QuestConfigModal, StageCompleteModal, SailingModal,
+         QuestingProgressModal } from "./screens.js";
 
 const MARGIN = 8;
 const STRIP_Y = HEADER_H + 10;
@@ -62,17 +63,17 @@ export class ScreenPlay {
 
   _progressRow(ctx, game, allowAdd = false, showHeading = false) {
     const y = PROG_Y;
-    icons.drawIcon(ctx, icons.TRAIL, MARGIN + 4, y + 24, pal.gold);
+    icons.drawIcon(ctx, icons.TRAIL, MARGIN + 4, y + 24, pal.gold);   // taps -> progress view
+    this.buttons.push(new Button(["prog_view"], 0, y, GUTTER, PROG_H));
     const cards = [[`Q${game.quest.stage_n}${game.quest.side}`,
-                    `${game.quest.progress}/${game.quest.points}`, pal.gold, ["prog_q"]]];
+                    `${game.quest.progress}/${game.quest.points}`, pal.gold, ["prog_view"]]];
     if (game.active_location) {
       cards.push(["LOC", `${game.active_location.progress}/${game.active_location.points}`,
-                  pal.gold, ["prog_loc"]]);
+                  pal.gold, ["prog_view"]]);
     }
     game.side_quests.forEach((sq, i) => {
-      cards.push([`SQ${i + 1}`, `${sq.progress}/${sq.points}`, pal.gold, ["prog_sq", i]]);
+      cards.push([`SQ${i + 1}`, `${sq.progress}/${sq.points}`, pal.gold, ["prog_view"]]);
     });
-    if (allowAdd) cards.push(["+SQ", "", pal.dim, ["sq_add"]]);
     const heading = showHeading && game.sailing;
     const n = cards.length + (heading ? 1 : 0);
     const cw = Math.min(this._chipW(game),
@@ -445,38 +446,7 @@ export class ScreenPlay {
     if (k === "wp+") { game.willpower += 1; return true; }
     if (k === "stg-") { game.staging = Math.max(0, game.staging - 1); return true; }
     if (k === "stg+") { game.staging += 1; return true; }
-    if (k === "prog_q") {
-      return ["modal", new CounterModal(`Quest ${game.questLabel()} progress`,
-        game.quest.progress, v => {
-          const b = game.quest.progress;
-          if (v !== b) {
-            game.quest.progress = v;
-            game.logEvent(`Quest ${game.questLabel()} progress ${b} -> ${v} (manual)`);
-          }
-        })];
-    }
-    if (k === "prog_loc") {
-      return ["modal", new CounterModal("Location progress",
-        game.active_location.progress, v => {
-          const b = game.active_location.progress;
-          if (v !== b) {
-            game.active_location.progress = v;
-            game.logEvent(`Location progress ${b} -> ${v} (manual)`);
-          }
-        })];
-    }
-    if (k === "prog_sq") {
-      const i = btn.id[1];
-      return ["modal", new CounterModal(`Side quest ${i + 1} progress`,
-        game.side_quests[i].progress, v => {
-          const b = game.side_quests[i].progress;
-          if (v !== b) {
-            game.side_quests[i].progress = v;
-            game.logEvent(`Side quest ${i + 1} progress ${b} -> ${v} (manual)`);
-          }
-        })];
-    }
-    if (k === "sq_add") return ["modal", new SideQuestsModal(game)];
+    if (k === "prog_view") return ["modal", new QuestingProgressModal(game)];
     if (k === "resolve") {
       const res = game.resolveQuest(game.willpower, game.staging);
       if (res.outcome === "success") {
