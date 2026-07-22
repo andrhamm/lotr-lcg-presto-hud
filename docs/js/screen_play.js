@@ -437,7 +437,7 @@ export class ScreenPlay {
     const used = alloc.location + alloc.quest + alloc.side_quests.reduce((a, b) => a + b, 0);
     const discard = game.pending_budget - used;
 
-    textCenter(ctx, `Place ${game.pending_budget} progress`, 240, HEADER_H + 12, 3, pal.gold);
+    textCenter(ctx, `Place ${game.pending_budget} progress`, 240, HEADER_H + 10, 3, pal.gold);
 
     const rows = [];
     if (game.active_location) {
@@ -451,36 +451,50 @@ export class ScreenPlay {
     });
 
     const rw = 480 - 2 * MARGIN;
-    let y = HEADER_H + 46;
+    // spreadsheet columns: TARGET | WAS (before) | PLACE (this round) | GOAL
+    const cxWas = 176, cxPlace = 300, cxGoal = 432;
+    const mnX = 212, plX = 340, btnW = 44, btnH = 40;
+
+    const hy = HEADER_H + 42;
+    textLeft(ctx, "TARGET", 20, hy, 1, pal.dim);
+    textCenter(ctx, "WAS", cxWas, hy, 1, pal.dim);
+    textCenter(ctx, "PLACE", cxPlace, hy, 1, pal.dim);
+    textCenter(ctx, "GOAL", cxGoal, hy, 1, pal.dim);
+
+    let y = HEADER_H + 54;
     for (const [key, idx, label, cur, pts] of rows) {
       const add = key === "side" ? alloc.side_quests[idx] : alloc[key];
-      const result = cur + add;
+      const result = cur + add;                                  // was + place
       const done = pts > 0 && result >= pts;
       panel(ctx, MARGIN, y, rw, 52, done ? pal.card_hi : pal.card,
             done ? pal.border_gold : pal.border);
-      textLeft(ctx, label, 22, y + 18, 2, done ? pal.gold : pal.tan);
-      if (done) drawFlag(ctx, 24 + measureText(label, 2) + 10, y + 14, 22, pal.gold);
-      const mn = new Button(["am", key, idx], 276, y + 6, 50, 40);
-      const pl = new Button(["ap", key, idx], MARGIN + rw - 58, y + 6, 50, 40);
+      textLeft(ctx, label, 20, y + 16, 2, done ? pal.gold : pal.tan);
+      if (done) drawFlag(ctx, 20 + measureText(label, 2) + 8, y + 12, 20, pal.gold);
+      textCenter(ctx, String(cur), cxWas, y + 16, 2, pal.dim);   // WAS - read-only base
+      const mn = new Button(["am", key, idx], mnX, y + 6, btnW, btnH);
+      const pl = new Button(["ap", key, idx], plX, y + 6, btnW, btnH);
       for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
         bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-        textCenter(ctx, s, b.x + 25, b.y + 8, 3, pal.tan);
+        textCenter(ctx, s, b.x + btnW / 2, b.y + 8, 3, pal.tan);
         this.buttons.push(b);
       }
-      textCenter(ctx, `${result} / ${pts}`, 369, y + 14, 3, done ? pal.gold : pal.tan);
+      textCenter(ctx, String(add), cxPlace, y + 10, 3, add > 0 ? pal.gold : pal.dim);
+      textCenter(ctx, String(pts), cxGoal, y + 16, 2, pal.tan);  // GOAL - points needed
+      // running total bar: (was + place) / goal
+      this._bottomBar(ctx, MARGIN, rw, y + 52, pts > 0 ? result / pts : 0, pal.gold);
       y += 58;
     }
 
     if (discard > 0) {
-      panel(ctx, MARGIN, y, rw, 46, pal.card);
-      textLeft(ctx, "Discarded (over capacity)", 22, y + 15, 2, pal.dim);
-      textCenter(ctx, String(discard), MARGIN + rw - 44, y + 6, 3, pal.red);
-      y += 52;
+      panel(ctx, MARGIN, y, rw, 44, pal.card);
+      textLeft(ctx, "Unplaced (discarded)", 20, y + 14, 2, pal.dim);
+      textCenter(ctx, String(discard), cxGoal, y + 8, 3, pal.red);
+      y += 50;
     }
 
     const rb = new Button(["areset"], MARGIN, y + 2, rw, 38);
     bevel(ctx, rb.x, rb.y, rb.w, rb.h, pal.btn);
-    textCenter(ctx, "Reset (auto-fill location, then quest)", 240, y + 12, 2, pal.tan);
+    textCenter(ctx, "Reset", 240, y + 12, 2, pal.tan);
     this.buttons.push(rb);
 
     this._cta(ctx, `Next Phase: ${VIEW_LABELS.travel}`, ["apply_alloc"]);
@@ -546,9 +560,14 @@ export class ScreenPlay {
       return true;
     }
     if (k === "areset") {
-      const a = game.autoSplit(game.pending_budget);             // re-fill location, then quest
-      this.alloc = { location: a.location, quest: a.quest,
-                     side_quests: game.side_quests.map((_, i) => a.side_quests[i] ?? 0) };
+      // clear only the PLACE column; each value falls back to its pre-
+      // resolution base (was), never lower
+      const a = this.alloc;
+      if (a) {
+        a.location = 0;
+        a.quest = 0;
+        a.side_quests = a.side_quests.map(() => 0);
+      }
       return true;
     }
     if (k === "apply_alloc") {
