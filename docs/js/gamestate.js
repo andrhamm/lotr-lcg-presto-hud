@@ -61,7 +61,7 @@ export const SETUP_TIP = [
 // Heading card facings, best -> worst. Only the sun facing is on-course
 // (Grey Havens rulebook p.5); each shift rotates one step.
 export const HEADINGS = [
-  ["On-course", "SUN"], ["Cloudy", null], ["Rainy", null], ["Storm", "STORM"],
+  ["On-course", "SUN"], ["Cloudy", "CLOUD"], ["Rainy", "RAIN"], ["Storm", "STORM"],
 ];
 
 // [key, label, view, notification text, icon name or null]

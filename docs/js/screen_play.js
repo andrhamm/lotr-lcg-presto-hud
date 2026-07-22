@@ -97,7 +97,7 @@ export class ScreenPlay {
 
   _headingChip(ctx, game, y) {
     if (!game.sailing) return;
-    const ic = game.heading === 0 ? icons.SUN : icons.STORM;
+    const ic = icons[HEADINGS[game.heading][1]];
     const pen = game.heading === 0 ? pal.gold : game.heading === 3 ? pal.red : pal.amber;
     icons.drawIcon(ctx, ic, 480 - MARGIN - 32, y + 8, pen);
   }
@@ -195,33 +195,39 @@ export class ScreenPlay {
         this.buttons.push(eb);
         this._cta(ctx, "Questing (Commit) >", ["advance"]);
       } else {
-        const cw = Math.floor((480 - 2 * MARGIN - 3 * 8) / 4);
-        HEADINGS.forEach(([label, icName], i) => {
-          const x = MARGIN + i * (cw + 8);
-          const on = game.heading === i;
-          panel(ctx, x, CONTENT_Y, cw, 70,
-                on ? pal.card_hi : pal.card, on ? pal.border_gold : pal.border);
-          const pen = on ? (i === 0 ? pal.gold : i === 3 ? pal.red : pal.amber) : pal.dim;
-          if (icName) {
-            icons.drawIcon(ctx, icons[icName], x + Math.floor((cw - 24) / 2),
-                           CONTENT_Y + 10, pen);
-          } else {
-            textCenter(ctx, i === 1 ? "~" : "~~", x + cw / 2, CONTENT_Y + 16, 2, pen, false);
-          }
-          textCenter(ctx, label, x + cw / 2, CONTENT_Y + 48, 1, on ? pal.tan : pal.dim);
+        // physical heading card: 4 symbols round the edges, read at the top;
+        // off-course = rotate 90deg counter-clockwise (rulebook p.5)
+        const CW2 = 160;
+        const cx0 = MARGIN + 4, cy0 = CONTENT_Y + 2;
+        const ccx = cx0 + CW2 / 2, ccy = cy0 + CW2 / 2;
+        panel(ctx, cx0, cy0, CW2, CW2, pal.card, pal.border_gold);
+        rect(ctx, ccx - 6, cy0 + 2, 12, 5, pal.gold);
+        icons.drawIcon(ctx, icons.WHEEL, ccx - 12, ccy - 12, pal.well);
+        const topPen = game.heading === 0 ? pal.gold
+          : game.heading === 3 ? pal.red : pal.amber;
+        const spots = [
+          [ccx - 12, cy0 + 12],          // top - current heading
+          [cx0 + CW2 - 36, ccy - 12],    // right
+          [ccx - 12, cy0 + CW2 - 36],    // bottom
+          [cx0 + 12, ccy - 12],          // left
+        ];
+        spots.forEach(([sx, sy], edge) => {
+          const [, icName] = HEADINGS[(edge + game.heading) % 4];
+          icons.drawIcon(ctx, icons[icName], sx, sy, edge === 0 ? topPen : pal.dim);
         });
-        const bw = Math.floor((480 - 2 * MARGIN - 12) / 2);
-        const onB = new Button(["head", -1], MARGIN, CONTENT_Y + 82, bw, 44);
-        const offB = new Button(["head", 1], MARGIN + bw + 12, CONTENT_Y + 82, bw, 44);
-        bevel(ctx, onB.x, onB.y, onB.w, onB.h, pal.btn);
-        textCenter(ctx, "< On-course", onB.x + bw / 2, onB.y + 12, 2, pal.green);
+        const rx = cx0 + CW2 + 18, rw = 480 - MARGIN - (cx0 + CW2 + 18);
+        textLeft(ctx, game.headingLabel(), rx, cy0 + 4, 3, topPen);
+        textLeft(ctx, "current heading (top of card)", rx, cy0 + 34, 1, pal.dim);
+        const offB = new Button(["head", 1], rx, cy0 + 54, rw, 46);
         bevel(ctx, offB.x, offB.y, offB.w, offB.h, pal.btn);
-        textCenter(ctx, "Off-course >", offB.x + bw / 2, offB.y + 12, 2, pal.red);
-        this.buttons.push(onB, offB);
-        notePanel(ctx, MARGIN, CONTENT_Y + 140, 480 - 2 * MARGIN,
-                  ["Exhaust characters, look at that many",
-                   "encounter cards. Each wheel symbol =",
-                   "1 step on-course. Dream-chaser = 2."], 2, 0, icons.WHEEL);
+        textCenter(ctx, "Rotate off-course", rx + rw / 2, offB.y + 14, 2, pal.red);
+        const onB = new Button(["head", -1], rx, cy0 + 108, rw, 46);
+        bevel(ctx, onB.x, onB.y, onB.w, onB.h, pal.btn);
+        textCenter(ctx, "Rotate on-course", rx + rw / 2, onB.y + 14, 2, pal.green);
+        this.buttons.push(offB, onB);
+        notePanel(ctx, MARGIN, cy0 + CW2 + 8, 480 - 2 * MARGIN,
+                  ["Exhaust characters; look at that many",
+                   "cards. Each wheel = 1 step on-course."], 2, 0, icons.WHEEL);
         this._cta(ctx, "Questing (Commit) >", ["advance"]);
       }
     } else if (view === "quest_staging") {
