@@ -79,3 +79,60 @@ canvas {
   color: #6d6047;
   margin: 4px 0 0;
 }
+
+/* Mobile portrait: HUD spans the full width (square), footer below it. */
+@media (orientation: portrait) and (max-width: 700px) {
+  html, body { place-items: start stretch; }
+  main { flex-direction: column; gap: 0; padding: 0 0 24px; width: 100%; box-sizing: border-box; }
+  .device {
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 0;
+    padding: 6px 6px 2px;
+  }
+  canvas { width: 100%; max-width: 100%; border-radius: 0; }
+  .foot { padding: 18px 16px 0; max-width: 100%; }
+  .note, .disclaimer { max-width: 100%; }
+}
+
+/* Mobile landscape: full-height square HUD on the left, footer to the right. */
+@media (orientation: landscape) and (max-height: 500px) {
+  html, body { place-items: center; }
+  main {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 8px 12px;
+    width: 100%;
+    height: 100vh;
+    box-sizing: border-box;
+  }
+  .device {
+    flex: 0 0 auto;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6px;
+    border-radius: 14px;
+  }
+  canvas {
+    height: calc(100vh - 44px);
+    width: auto;
+    max-width: 62vw;
+    aspect-ratio: 1 / 1;
+  }
+  .foot {
+    flex: 1 1 0;
+    align-items: flex-start;
+    text-align: left;
+    max-height: 100vh;
+    overflow-y: auto;
+    margin: 0;
+    padding: 4px 0;
+    gap: 8px;
+  }
+  .note, .made, .disclaimer { text-align: left; max-width: 100%; margin: 0; }
+}
