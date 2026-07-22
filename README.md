@@ -4,7 +4,7 @@ A touchscreen companion HUD for **The Lord of the Rings: The Card Game**,
 running as custom MicroPython firmware on the
 [Pimoroni Presto](https://shop.pimoroni.com/en-us/products/presto)
 (480×480 IPS touch, RP2350B, 7 RGB LEDs) — with a pixel-faithful
-**[web digital twin you can play with right now →](https://andrhamm.github.io/lotr-lcg-presto-hud/)**
+**[web digital twin you can play with right now →](https://andrhamm.com/lotr-lcg-presto-hud/)**
 
 It is a manual companion tracker, not a rules engine: players tap to adjust
 state while the HUD guides the official turn sequence, tracks threat and quest
