@@ -5,7 +5,7 @@ import { GameState, VIEW_LABELS, viewForStep } from "./gamestate.js";
 import { step as phaseStep, phase as phaseInfo } from "./phases.js";
 import { ScreenPlay } from "./screen_play.js";
 import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
-         LedModal } from "./screens_other.js";
+         LedModal, ScreenAbout } from "./screens_other.js";
 import { EliminationModal } from "./screens.js";
 
 const STATE_KEY = "lotr-hud-state";
@@ -90,6 +90,7 @@ function main() {
     settings: new ScreenSettings(prefs),
     boot: new BootScreen(savedMeta, bootImg),
     setup: new SetupScreen(),
+    about: new ScreenAbout(),
   };
   let active = "boot";
   let navStack = [];
@@ -150,7 +151,7 @@ function main() {
       if (kind === "goto") {
         let target = result[1];
         if (target === "close") target = navStack.pop() ?? "play";
-        else if (["settings", "log", "phases"].includes(target)) {
+        else if (["settings", "log", "phases", "about"].includes(target)) {
           if (active !== target) navStack.push(active);
         } else navStack = [];
         active = target;
@@ -158,7 +159,10 @@ function main() {
         modal = result[1];
       } else if (kind === "boot") {
         if (result[1] === "resume") active = "play";
+        else if (result[1] === "about") { navStack.push("boot"); active = "about"; }
         else { screens.setup.hasSave = saveExists(); active = "setup"; }
+      } else if (kind === "open_repo") {
+        window.open("https://github.com/andrhamm/lotr-lcg-presto-hud", "_blank");
       } else if (kind === "start_game") {
         const [, threats, first] = result;
         clearState();
@@ -192,7 +196,12 @@ function main() {
     }
   }
 
+  let lastTapT = 0;
   canvas.addEventListener("pointerdown", ev => {
+    // some environments double-dispatch pointerdown for one click
+    const now = performance.now();
+    if (now - lastTapT < 50) return;
+    lastTapT = now;
     const r = canvas.getBoundingClientRect();
     const x = (ev.clientX - r.left) * (480 / r.width);
     const y = (ev.clientY - r.top) * (480 / r.height);

@@ -192,6 +192,11 @@ export class ScreenSettings {
     icons.drawIcon(ctx, icons.LED, 16 + 30, y + 14, pal.gold, 2);
     textCenter(ctx, "LEDs", 16 + TILE / 2, y + TILE - 22, 1, pal.tan);
     this.buttons.push(new Button(["led"], 16, y, TILE, TILE));
+    const ax = 16 + TILE + 16;
+    bevel(ctx, ax, y, TILE, TILE, pal.card);
+    icons.drawIcon(ctx, icons.LORE, ax + 26, y + 16, pal.gold, 2);
+    textCenter(ctx, "About", ax + TILE / 2, y + TILE - 22, 1, pal.tan);
+    this.buttons.push(new Button(["about"], ax, y, TILE, TILE));
     y += TILE + 24;
     textLeft(ctx, "APPS  (coming soon)", 16, y, 1, pal.dim);
     y += 18;
@@ -207,9 +212,58 @@ export class ScreenSettings {
     const k = btn.id[0];
     if (k === "nav") { this.confirmEnd = false; return ["goto", btn.id[1]]; }
     if (k === "led") return ["modal", new LedModal(this.prefs, game)];
+    if (k === "about") return ["goto", "about"];
     if (k === "save_quit") { this.confirmEnd = false; return ["save_quit"]; }
     if (k === "end_game") { this.confirmEnd = true; return true; }
     if (k === "end_game2") { this.confirmEnd = false; return ["end_game"]; }
+    return null;
+  }
+}
+
+export class ScreenAbout {
+  constructor() { this.buttons = []; }
+  draw(ctx, game) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    drawHeader(ctx, game, this.buttons, { title: "About", close: true });
+    let y = HEADER_H + 18;
+    textCenter(ctx, "LOTR LCG HUD", 240, y, 3, pal.gold);
+    y += 40;
+    const para = (lines, color, scale = 1) => {
+      for (const ln of lines) {
+        textCenter(ctx, ln, 240, y, scale, color);
+        y += scale === 1 ? 16 : 22;
+      }
+      y += 12;
+    };
+    para(["A companion tracker for the table -", "not a rules engine."], pal.tan, 2);
+    para(["The Lord of the Rings: The Card Game is (c)",
+          "Fantasy Flight Games / Middle-earth Enterprises.",
+          "This is an unofficial fan project for personal",
+          "use. Not produced, endorsed or supported by,",
+          "or affiliated with FFG or MEE."], pal.muted);
+    para(["Turn sequence from the DragnCards",
+          "LOTR LCG plugin (seastan).",
+          "Iconography from lotr-lcg-assets (KevBelisle)."], pal.muted);
+    const label = "made with <3 by";
+    const handle = "@andrhamm";
+    const lw = measureText(label, 2), hw = measureText(handle, 2);
+    const total = lw + 8 + 20 + 6 + hw;
+    let x = 240 - Math.floor(total / 2);
+    const by = 402;
+    const b = new Button(["repo"], x - 10, by - 12, total + 20, 44);
+    bevel(ctx, b.x, b.y, b.w, b.h, pal.card, false, 2);
+    textLeft(ctx, label, x, by, 2, pal.tan);
+    x += lw + 8;
+    icons.drawIcon(ctx, icons.GITHUB, x, by - 2, pal.gold);
+    x += 20 + 6;
+    textLeft(ctx, handle, x, by, 2, pal.gold);
+    this.buttons.push(b);
+  }
+  onButton(btn) {
+    const k = btn.id[0];
+    if (k === "nav") return ["goto", btn.id[1]];
+    if (k === "repo") return ["open_repo"];
     return null;
   }
 }
@@ -240,11 +294,15 @@ export class BootScreen {
     }
     if (this.saved) {
       const sub = `R${this.saved.round} - ${this.saved.phase} (${this.saved.saved_at})`;
-      this._button(ctx, ["resume"], "Resume Game", sub, 352, 58, true);
-      this._button(ctx, ["new"], "New Game", null, 420, 48, false);
+      this._button(ctx, ["resume"], "Resume Game", sub, 344, 58, true);
+      this._button(ctx, ["new"], "New Game", null, 410, 48, false);
     } else {
-      this._button(ctx, ["new"], "New Game", null, 396, 58, true);
+      this._button(ctx, ["new"], "New Game", null, 388, 58, true);
     }
+    const dw = measureText("disclaimers", 1);
+    const dx = 240 - Math.floor(dw / 2);
+    textLeft(ctx, "disclaimers", dx, 464, 1, pal.outline);
+    this.buttons.push(new Button(["about"], dx - 12, 452, dw + 24, 28));
   }
   onButton(btn) { return ["boot", btn.id[0]]; }
 }

@@ -58,15 +58,12 @@ export const SETUP_TIP = [
 ];
 
 // [key, label, view, notification text, icon name or null]
+// (trimmed 2026-07-22: shadow-discard + Time counters dropped per user)
 export const REMINDER_DEFS = [
   ["archery", "Archery damage", "combat_shadow",
     "Archery: deal damage now (defense does not block)", "ARCHERY"],
   ["battle", "Battle / Siege questing", "quest_commit",
     "Battle/Siege: commit ATK/DEF instead of willpower", null],
-  ["shadow", "Discard shadow cards", "refresh",
-    "Discard all shadow cards", null],
-  ["time", "Time counters", "refresh",
-    "Remove 1 Time counter from each Time X card", null],
 ];
 
 export class Player {
