@@ -434,16 +434,10 @@ export class ScreenPlay {
                      side_quests: game.side_quests.map((_, i) => a.side_quests[i] ?? 0) };
     }
     const alloc = this.alloc;
-    // Rules: progress fills the active location first; only the overflow
-    // beyond its quest points reaches the quest. The location's share is
-    // therefore forced (never hand-editable) - the quest/side steppers split
-    // whatever spills over.
-    if (game.active_location) {
-      const locroom = Math.max(0, game.active_location.points - game.active_location.progress);
-      alloc.location = Math.min(game.pending_budget, locroom);
-    } else {
-      alloc.location = 0;
-    }
+    // Rules: progress fills the active location first; only the overflow past
+    // its quest points reaches a quest. The quest/side '+' steppers cascade
+    // that way (they fill the location first), so location need not be locked.
+    if (!game.active_location) alloc.location = 0;
     const used = alloc.location + alloc.quest + alloc.side_quests.reduce((a, b) => a + b, 0);
     const discard = game.pending_budget - used;
 
@@ -487,9 +481,8 @@ export class ScreenPlay {
       if (done) drawFlag(ctx, 20 + measureText(label, 2) + 8, y + 12, 20, pal.gold);
       textCenter(ctx, String(cur), cxWas, y + 16, 2, pal.dim);   // WAS - read-only base
       if (locked) {
-        // no steppers: the location's share is dictated by the rules
+        // display only: the location is filled first via the quest '+' cascade
         textCenter(ctx, String(add), cxPlace, y + 10, 3, add > 0 ? pal.gold : pal.dim);
-        textCenter(ctx, "auto", cxPlace, y + 38, 1, pal.dim);
       } else {
         const mn = new Button(["am", key, idx], mnX, y + 6, btnW, btnH);
         const pl = new Button(["ap", key, idx], plX, y + 6, btnW, btnH);
@@ -565,26 +558,34 @@ export class ScreenPlay {
       return true;
     }
     if (k === "am" || k === "ap") {
-      const [, key, idx] = btn.id;
-      const delta = k === "ap" ? 1 : -1;
+      const [, key, idx] = btn.id;                 // key: "quest" | "side"
       const a = this.alloc;
-      const cur = key === "side" ? game.side_quests[idx].progress
-        : key === "location" ? game.active_location.progress : game.quest.progress;
-      const pts = key === "side" ? game.side_quests[idx].points
-        : key === "location" ? game.active_location.points : game.quest.points;
-      const room = Math.max(0, pts - cur);                       // can't exceed quest points
       const used = a.location + a.quest + a.side_quests.reduce((x, y) => x + y, 0);
-      if (delta > 0 && used >= game.pending_budget) return true;
-      const set = v => key === "side" ? (a.side_quests[idx] = v) : (a[key] = v);
-      const now = key === "side" ? a.side_quests[idx] : a[key];
-      set(Math.max(0, Math.min(room, now + delta)));
+      const locRoom = game.active_location
+        ? Math.max(0, game.active_location.points - game.active_location.progress) : 0;
+      const qCur = key === "side" ? game.side_quests[idx].progress : game.quest.progress;
+      const qPts = key === "side" ? game.side_quests[idx].points : game.quest.points;
+      const qRoom = Math.max(0, qPts - qCur);
+      const nowQ = key === "side" ? a.side_quests[idx] : a.quest;
+      const bumpQ = d => key === "side" ? (a.side_quests[idx] += d) : (a.quest += d);
+      if (k === "ap") {                            // + : active location fills first
+        if (used >= game.pending_budget) return true;   // budget spent
+        if (a.location < locRoom) { a.location += 1; return true; }
+        if (nowQ < qRoom) bumpQ(1);               // location full -> the quest itself
+        return true;
+      }
+      // - : pull back the quest first, then unwind the location fill
+      if (nowQ > 0) { bumpQ(-1); return true; }
+      const overflow = a.quest + a.side_quests.reduce((x, y) => x + y, 0);
+      if (overflow === 0 && a.location > 0) a.location -= 1;
       return true;
     }
     if (k === "areset") {
-      // clear the editable PLACE cells (quest + side); the active location's
-      // share is forced by the rules and re-filled on the next draw
+      // clear every placement; each value falls back to its pre-resolution
+      // base, and the budget is re-placed via the '+' cascade
       const a = this.alloc;
       if (a) {
+        a.location = 0;
         a.quest = 0;
         a.side_quests = a.side_quests.map(() => 0);
       }
