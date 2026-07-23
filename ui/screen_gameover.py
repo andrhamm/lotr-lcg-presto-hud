@@ -38,8 +38,9 @@ class GameOverScreen:
         bevel(d, pal, fin.x, fin.y, fin.w, fin.h, pal.btn_ok, t=3)
         text_center(d, pal, "Finish - clear save", 240, 414, 2, pal.ok_fg)
         self.buttons.append(fin)
-        back = Button(("back",), 180, 356, 120, 32)
-        text_center(d, pal, "back to game", 240, 364, 1, pal.dim)
+        back = Button(("back",), 150, 358, 180, 34)
+        bevel(d, pal, back.x, back.y, back.w, back.h, pal.card, t=2)
+        text_center(d, pal, "back to game", 240, back.y + 9, 2, pal.tan)
         self.buttons.append(back)
 
     def on_button(self, btn, game):

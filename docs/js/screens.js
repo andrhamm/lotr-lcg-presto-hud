@@ -563,14 +563,14 @@ export class QuestingProgressModal {
     textLeft(ctx, it.name, 22, y + 8, 2, pal.tan);
     if (it.sub) textLeft(ctx, `since ${it.sub}`, 22, y + 32, 1, pal.dim);
     const idx = it.idx ?? null;
-    textLeft(ctx, "current", 166, y + 4, 1, pal.muted);
-    stepper(ctx, this.buttons, [pfx + "P-", idx], [pfx + "P+", idx], 164, y + 16, String(prog), 130, 34);
-    textLeft(ctx, "points", 304, y + 4, 1, pal.muted);
-    stepper(ctx, this.buttons, [pfx + "T-", idx], [pfx + "T+", idx], 300, y + 16, String(pts), 130, 34);
+    textLeft(ctx, "current", 166, y + 2, 1, pal.muted);
+    stepper(ctx, this.buttons, [pfx + "P-", idx], [pfx + "P+", idx], 164, y + 12, String(prog), 130, 42);
+    textLeft(ctx, "points", 304, y + 2, 1, pal.muted);
+    stepper(ctx, this.buttons, [pfx + "T-", idx], [pfx + "T+", idx], 300, y + 12, String(pts), 130, 42);
     if (it.removable) {
-      const rm = new Button([pfx + "X", idx], 438, y + 15, 28, 28);
+      const rm = new Button([pfx + "X", idx], 436, y + 15, 36, 36);
       bevel(ctx, rm.x, rm.y, rm.w, rm.h, pal.btn_no);
-      textCenter(ctx, "x", rm.x + 14, rm.y + 6, 2, pal.no_fg);
+      textCenter(ctx, "x", rm.x + 18, rm.y + 10, 2, pal.no_fg);
       this.buttons.push(rm);
     }
   }
@@ -753,7 +753,7 @@ export class StageCompleteModal {
     y += 90;
     const go = new Button(["go"], 30, y, 420, 60);
     bevel(ctx, go.x, go.y, go.w, go.h, pal.btn_ok, false, 3);
-    textCenter(ctx, `Continue to ${this.n}${this.side} >`, 240, y + 20, 2, pal.ok_fg);
+    textCenter(ctx, `Continue to ${this.n}${this.side}`, 240, y + 20, 2, pal.ok_fg);
     this.buttons.push(go);
     y += 74;
     const win = new Button(["win"], 30, y, 420, 60);

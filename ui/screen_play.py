@@ -377,12 +377,12 @@ class ScreenPlay:
         sx0 = tx + d.measure_text(fp, 2) + 6
         ribbon(d, pal, sx0, ly - 1, 10, 18)
         sx0 += 10 + 6
-        text_left(d, pal, "exhausts N characters (ships", sx0, ly, 2, pal.muted)
+        text_left(d, pal, "exhausts characters (ships", sx0, ly, 2, pal.muted)
         ly += lh
-        text_left(d, pal, "count), looks at and discards N cards.", tx, ly, 2, pal.muted)
+        text_left(d, pal, "count), looks at that many cards.", tx, ly, 2, pal.muted)
         ly += lh
         icons.draw(d, icons.WHEEL_SM, tx, ly, pal.gold)
-        text_left(d, pal, "found = steps on-course.", tx + 22, ly, 2, pal.muted)
+        text_left(d, pal, "found: move 1 step on-course.", tx + 22, ly, 2, pal.muted)
         self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_commit"], ("advance",))
 
     def _draw_staging(self, d, pal, game):

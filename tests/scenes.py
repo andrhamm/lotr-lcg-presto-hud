@@ -149,7 +149,7 @@ def _counter():
     from ui.modal_counter import CounterModal
     hw = FakeHardware()
     pal = Palette(hw.display)
-    m = CounterModal("P1 threat", 14, icon="threat")
+    m = CounterModal("P1 threat", 14, icon="threat", subtext="Elimination at 50")
     m.state.tap(5)
     m.draw(hw, None, pal)
     return hw, m

@@ -45,10 +45,10 @@ class BootScreen:
         if self.saved:
             sub = "R%d - %s (%s)" % (self.saved["round"], self.saved["phase"],
                                      self.saved["saved_at"])
-            self._button(d, pal, ("resume",), "Resume Game", sub, 352, 58, True)
-            self._button(d, pal, ("new",), "New Game", None, 420, 48, False)
+            self._button(d, pal, ("resume",), "Resume Game", sub, 336, 58, True)
+            self._button(d, pal, ("new",), "New Game", None, 402, 48, False)
         else:
-            self._button(d, pal, ("new",), "New Game", None, 396, 58, True)
+            self._button(d, pal, ("new",), "New Game", None, 388, 58, True)
 
         # bottom "disclaimers" link -> About (dropshadow for legibility over art)
         dw = d.measure_text("disclaimers", 2)

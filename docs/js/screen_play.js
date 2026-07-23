@@ -248,12 +248,12 @@ export class ScreenPlay {
         let sx0 = tx + measureText(fp, 2) + 6;
         ribbon(ctx, sx0, ly - 1, 10, 18);
         sx0 += 10 + 6;
-        textLeft(ctx, "exhausts N characters (ships", sx0, ly, 2, pal.muted);
+        textLeft(ctx, "exhausts characters (ships", sx0, ly, 2, pal.muted);
         ly += lh;
-        textLeft(ctx, "count), looks at and discards N cards.", tx, ly, 2, pal.muted);
+        textLeft(ctx, "count), looks at that many cards.", tx, ly, 2, pal.muted);
         ly += lh;
         icons.drawIcon(ctx, icons.WHEEL_SM, tx, ly, pal.gold);
-        textLeft(ctx, "found = steps on-course.", tx + 22, ly, 2, pal.muted);
+        textLeft(ctx, "found: move 1 step on-course.", tx + 22, ly, 2, pal.muted);
         this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       }
     } else if (view === "quest_staging") {

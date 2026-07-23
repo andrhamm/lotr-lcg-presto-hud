@@ -245,8 +245,9 @@ export class GameOverScreen {
     bevel(ctx, fin.x, fin.y, fin.w, fin.h, pal.btn_ok, false, 3);
     textCenter(ctx, "Finish - clear save", 240, 414, 2, pal.ok_fg);
     this.buttons.push(fin);
-    const back = new Button(["back"], 180, 356, 120, 32);
-    textCenter(ctx, "back to game", 240, 364, 1, pal.dim);
+    const back = new Button(["back"], 150, 358, 180, 34);
+    bevel(ctx, back.x, back.y, back.w, back.h, pal.card, false, 2);
+    textCenter(ctx, "back to game", 240, back.y + 9, 2, pal.tan);
     this.buttons.push(back);
   }
   onButton(btn, game) {
@@ -334,8 +335,8 @@ export class BootScreen {
     }
     if (this.saved) {
       const sub = `R${this.saved.round} - ${this.saved.phase} (${this.saved.saved_at})`;
-      this._button(ctx, ["resume"], "Resume Game", sub, 344, 58, true);
-      this._button(ctx, ["new"], "New Game", null, 410, 48, false);
+      this._button(ctx, ["resume"], "Resume Game", sub, 336, 58, true);
+      this._button(ctx, ["new"], "New Game", null, 402, 48, false);
     } else {
       this._button(ctx, ["new"], "New Game", null, 388, 58, true);
     }

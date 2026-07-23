@@ -839,14 +839,14 @@ class QuestingProgressModal:
         if it.get("sub"):
             text_left(d, pal, "since %s" % it["sub"], 22, y + 32, 1, pal.dim)
         idx = it.get("idx")
-        text_left(d, pal, "current", 166, y + 4, 1, pal.muted)
-        stepper(d, pal, self.buttons, (pfx + "P-", idx), (pfx + "P+", idx), 164, y + 16, str(prog), 130, 34)
-        text_left(d, pal, "points", 304, y + 4, 1, pal.muted)
-        stepper(d, pal, self.buttons, (pfx + "T-", idx), (pfx + "T+", idx), 300, y + 16, str(pts), 130, 34)
+        text_left(d, pal, "current", 166, y + 2, 1, pal.muted)
+        stepper(d, pal, self.buttons, (pfx + "P-", idx), (pfx + "P+", idx), 164, y + 12, str(prog), 130, 42)
+        text_left(d, pal, "points", 304, y + 2, 1, pal.muted)
+        stepper(d, pal, self.buttons, (pfx + "T-", idx), (pfx + "T+", idx), 300, y + 12, str(pts), 130, 42)
         if it.get("removable"):
-            rm = Button((pfx + "X", idx), 438, y + 15, 28, 28)
+            rm = Button((pfx + "X", idx), 436, y + 15, 36, 36)
             bevel(d, pal, rm.x, rm.y, rm.w, rm.h, pal.btn_no)
-            text_center(d, pal, "x", rm.x + 14, rm.y + 6, 2, pal.no_fg)
+            text_center(d, pal, "x", rm.x + 18, rm.y + 10, 2, pal.no_fg)
             self.buttons.append(rm)
 
     def draw(self, hw, game, pal):
@@ -1080,7 +1080,7 @@ class StageCompleteModal:
         y += 90
         go = Button(("go",), 30, y, 420, 60)
         bevel(d, pal, go.x, go.y, go.w, go.h, pal.btn_ok, t=3)
-        text_center(d, pal, "Continue to %d%s >" % (self.n, self.side), 240, y + 20, 2, pal.ok_fg)
+        text_center(d, pal, "Continue to %d%s" % (self.n, self.side), 240, y + 20, 2, pal.ok_fg)
         self.buttons.append(go)
         y += 74
         win = Button(("win",), 30, y, 420, 60)
