@@ -159,9 +159,52 @@ def note_panel(d, pal, x, y, w, text, scale=2, reserve_right=0, icon=None):
     d.set_pen(pal.border_gold)
     d.rectangle(x, y, 4, h)
     if gutter:
-        _icons.draw(d, icon, x + 10, y + (h - isz) // 2, pal.gold)
+        _icons.draw(d, icon, x + 10, y + 8, pal.gold)   # top-left, not centered
     ty = y + 8
     for s in lines:
         text_left(d, pal, s, x + 12 + gutter, ty, scale, pal.muted)
         ty += lh
     return h
+
+
+def draw_flag(d, x, y, h, pen):
+    """Small pennant flag (a target reached its max). rect pole + triangle."""
+    d.set_pen(pen)
+    d.rectangle(x, y, max(2, int(h * 0.14)), h)
+    d.triangle(int(x + h * 0.14), y,
+               int(x + h * 0.95), int(y + h * 0.18),
+               int(x + h * 0.14), int(y + h * 0.4))
+
+
+def draw_heart(d, pal, cx, cy, r, broken, pen):
+    """Small heart (quest-outcome marker); `broken` carves a jagged notch.
+    Blocky rect+triangle build - PicoGraphics has no bezier, and the two lobes
+    read as a heart above the downward point."""
+    lobe_h = max(2, int(r * 0.75))
+    lobe_w = max(2, int(r))
+    top = int(cy - r * 0.7)
+    d.set_pen(pen)
+    d.rectangle(cx - lobe_w, top, lobe_w, lobe_h)          # left lobe
+    d.rectangle(cx, top, lobe_w, lobe_h)                   # right lobe
+    d.triangle(cx - lobe_w, int(cy - r * 0.2),             # bottom point
+               cx + lobe_w, int(cy - r * 0.2),
+               cx, int(cy + r))
+    if broken:
+        w = max(1, int(r * 0.22))
+        d.set_pen(pal.bg)
+        d.rectangle(cx - w // 2, top, w, lobe_h + 2)                    # upper crack
+        d.rectangle(int(cx - r * 0.35), int(cy - r * 0.1), w, int(r * 0.7))  # lower (offset)
+
+
+# heading facing -> (icon mask name, pen attr). Masks live in ui/icons.py.
+_WEATHER = [("SUN", "amber"), ("CLOUD", "cloud"), ("RAIN", "sky"), ("STORM", "dim")]
+
+
+def draw_weather(d, pal, idx, cx, cy, r):
+    """Heading facing glyph via the shared icon masks (SUN/CLOUD/RAIN/STORM),
+    tinted. Centred on (cx, cy). The masks are 24px = 2*r at the card's r=12."""
+    from ui import icons as _icons
+    name, pen_attr = _WEATHER[idx]
+    mask = getattr(_icons, name)
+    size = len(mask)
+    _icons.draw(d, mask, int(cx - size / 2), int(cy - size / 2), getattr(pal, pen_attr))

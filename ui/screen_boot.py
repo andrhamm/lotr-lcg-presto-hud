@@ -3,7 +3,7 @@
 Falls back to a plain layout when the art/decoder is unavailable (host tests).
 """
 
-from ui.widgets import Button, panel, bevel, text_center
+from ui.widgets import Button, panel, bevel, text_center, text_left
 
 
 class BootScreen:
@@ -49,6 +49,14 @@ class BootScreen:
             self._button(d, pal, ("new",), "New Game", None, 420, 48, False)
         else:
             self._button(d, pal, ("new",), "New Game", None, 396, 58, True)
+
+        # bottom "disclaimers" link -> About (dropshadow for legibility over art)
+        dw = d.measure_text("disclaimers", 2)
+        dx = 240 - dw // 2
+        for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1), (1, 1)):
+            text_left(d, pal, "disclaimers", dx + ox, 462 + oy, 2, pal.tan, shadow=False)
+        text_left(d, pal, "disclaimers", dx, 462, 2, pal.outline, shadow=False)
+        self.buttons.append(Button(("about",), dx - 12, 450, dw + 24, 30))
 
     def on_button(self, btn, game):
         return ("boot", btn.id[0])  # handled by main

@@ -22,6 +22,7 @@ VIEW_ORDER = ["resource_planning", "quest_commit", "quest_staging",
 VIEW_STEP = {
     "setup_game": "0.0",
     "resource_planning": "1.R",
+    "quest_sailing": "3.1",
     "quest_commit": "3.2",
     "quest_staging": "3.3",
     "quest_resolution": "3.4",
@@ -72,6 +73,7 @@ def view_for_step(step_id):
 VIEW_LABELS = {
     "setup_game": "Setup",
     "resource_planning": "Resource & Planning",
+    "quest_sailing": "Questing (Sailing)",
     "quest_commit": "Questing (Commit)",
     "quest_staging": "Questing (Staging)",
     "quest_resolution": "Questing (Resolution)",
@@ -103,16 +105,24 @@ SETUP_TIP = [
     "then flip 1A -> 1B and begin.",
 ]
 
+# Heading card facings, best -> worst (Grey Havens rulebook p.5). Only the sun
+# facing is "on-course"; the rest are "off-course". Facing names are the
+# official ones card text uses: "off-course (Cloudy, Rainy, or Stormy)".
+# [term, icon, facing name, degree phrase]
+HEADINGS = [
+    ("On-course", "SUN", "Sunny", "best possible setting"),
+    ("Off-course", "CLOUD", "Cloudy", "1 step off-course"),
+    ("Off-course", "RAIN", "Rainy", "2 steps off-course"),
+    ("Off-course", "STORM", "Stormy", "worst possible setting"),
+]
+
 # (key, label, view, notification text, icon name or None)
+# (trimmed 2026-07-22: shadow-discard + Time counters dropped per user)
 REMINDER_DEFS = [
     ("archery", "Archery damage", "combat_shadow",
      "Archery: deal damage now (defense does not block)", "ARCHERY"),
     ("battle", "Battle / Siege questing", "quest_commit",
      "Battle/Siege: commit ATK/DEF instead of willpower", None),
-    ("shadow", "Discard shadow cards", "refresh",
-     "Discard all shadow cards", None),
-    ("time", "Time counters", "refresh",
-     "Remove 1 Time counter from each Time X card", None),
 ]
 
 
@@ -150,6 +160,12 @@ class GameState:
         self.pending_elim = None     # player index that just crossed elimination
         self.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         self.quest_resolved = False  # quest resolved this round
+        self.quest_outcome = None    # "success" | "fail" | "tie" - last resolution
+        self.quest_outcome_n = 0     # progress gained / threat taken
+        self.sailing = False         # Dream-chaser Sailing test active
+        self.heading = 0             # index into HEADINGS (0 = on-course)
+        self.game_over = None        # or {"result", "round", "duration"}
+        self.pending_stage = None    # or {"cleared", "excess"} awaiting new stage
         self.log = []                # oldest-first list of {seq, round, step, text}
         self._seq = 0
 
@@ -243,11 +259,57 @@ class GameState:
             self.enter_view(VIEW_ORDER[0])
             self._snapshot_round()
             return
+        if self.view == "quest_sailing":
+            self.enter_view("quest_commit")
+            return
         i = VIEW_ORDER.index(self.view)
         nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
         if self.view == "quest_staging":
             nxt = "travel"
+        if self.view == "resource_planning" and self.sailing:
+            nxt = "quest_sailing"
         self.enter_view(nxt)
+        # a Sailing test begins by shifting one step off-course (rulebook p.6)
+        if nxt == "quest_sailing":
+            self.shift_heading(1, "winds shift")
+
+    # -- sailing / game end ------------------------------------------------
+    def heading_label(self):
+        return HEADINGS[self.heading][0]
+
+    def heading_desc(self):
+        term, _icon, facing, _deg = HEADINGS[self.heading]
+        return "%s (%s)" % (term, facing)
+
+    def shift_heading(self, delta, why=""):
+        to = max(0, min(len(HEADINGS) - 1, self.heading + delta))
+        if to == self.heading:
+            return False
+        was = self.heading_desc()
+        self.heading = to
+        direction = "off-course" if delta > 0 else "on-course"
+        self.log_event("Sailing: heading %s -> %s (shifted %s%s)"
+                       % (was, self.heading_desc(), direction,
+                          ", " + why if why else ""))
+        return True
+
+    def all_eliminated(self):
+        return all(p.eliminated for p in self.players)
+
+    def game_duration(self):
+        t0 = self.log[0]["t"] if self.log else None
+        now = self._now()
+        return fmt_ms(now - t0) if (t0 is not None and now is not None) else None
+
+    def set_game_over(self, result):
+        if self.game_over:
+            return
+        self.game_over = {"result": result, "round": self.round,
+                          "duration": self.game_duration()}
+        self.log_event(
+            "GAME OVER - Victory! The final quest stage is complete"
+            if result == "victory"
+            else "GAME OVER - Defeat. All players are eliminated")
 
     # -- travel ------------------------------------------------------------
     def _apply_travel_staging(self, contribution):
@@ -274,6 +336,16 @@ class GameState:
         else:
             self.log_event("Changed active location -> new (%d quest points)" % points)
         self._apply_travel_staging(contribution)
+
+    def explore_location_if_done(self):
+        """A location at its quest points is Explored - remove it from the row."""
+        loc = self.active_location
+        if loc and loc["points"] > 0 and loc["progress"] >= loc["points"]:
+            self.log_event("Active location Explored (%d/%d) - removed"
+                           % (loc["progress"], loc["points"]))
+            self.active_location = None
+            return True
+        return False
 
     # -- step navigation ---------------------------------------------------
     def action_window_open(self):
@@ -321,6 +393,7 @@ class GameState:
         # commits persist as next round's defaults; refresh the derived total
         self.willpower = sum(p.commit for p in self.players)
         self.quest_resolved = False
+        self.quest_outcome = None
         self.log_event("New round %d - threat raised, first player -> P%d"
                        % (self.round, self.first_player + 1))
         self.log_event("Phase: %s" % VIEW_LABELS[VIEW_ORDER[0]])
@@ -331,15 +404,17 @@ class GameState:
         return "%d%s" % (self.quest["stage_n"], self.quest["side"])
 
     def auto_split(self, budget):
-        """Standard placement: fill the active location first, overflow to quest."""
+        """Fill the active location, then the quest - each capped at its own
+        quest points. Side quests are left untouched; any overflow beyond
+        location + quest capacity is discarded."""
         alloc = {"location": 0, "quest": 0, "side_quests": [0] * len(self.side_quests)}
         remaining = budget
         if self.active_location is not None:
             room = max(0, self.active_location["points"] - self.active_location["progress"])
-            to_loc = min(remaining, room)
-            alloc["location"] = to_loc
-            remaining -= to_loc
-        alloc["quest"] = remaining
+            alloc["location"] = min(remaining, room)
+            remaining -= alloc["location"]
+        qroom = max(0, self.quest["points"] - self.quest["progress"])
+        alloc["quest"] = min(remaining, qroom)
         return alloc
 
     def place_progress(self, alloc):
@@ -356,11 +431,13 @@ class GameState:
         n = alloc.get("quest", 0)
         if n:
             self.quest["progress"] += n
-            while self.quest["points"] > 0 and self.quest["progress"] >= self.quest["points"]:
-                self.quest["progress"] -= self.quest["points"]
+            if self.quest["points"] > 0 and self.quest["progress"] >= self.quest["points"]:
                 was = self.quest_label()
+                excess = self.quest["progress"] - self.quest["points"]
                 self._advance_quest_stage()
-                completed.append("Quest %s cleared -> %s" % (was, self.quest_label()))
+                self.quest["points"] = 0
+                self.pending_stage = {"cleared": was, "excess": excess}
+                completed.append("Quest %s cleared" % was)
 
         for i in range(len(self.side_quests) - 1, -1, -1):
             add = alloc.get("side_quests", [])
@@ -392,6 +469,8 @@ class GameState:
         diff = willpower - staging
         self.quest_resolved = True
         if diff > 0:
+            self.quest_outcome = "success"
+            self.quest_outcome_n = diff
             return {"outcome": "success", "budget": diff}
         if diff < 0:
             shortfall = -diff
@@ -399,8 +478,12 @@ class GameState:
                 if not p.eliminated:
                     self.adjust_threat(i, shortfall)
             self.log_event("Quest failed. +%d threat to all" % shortfall)
+            self.quest_outcome = "fail"
+            self.quest_outcome_n = shortfall
             return {"outcome": "fail", "threat": shortfall}
         self.log_event("Quest unsuccessful - tie, no change")
+        self.quest_outcome = "tie"
+        self.quest_outcome_n = 0
         return {"outcome": "tie"}
 
     # -- persistence -------------------------------------------------------
@@ -425,6 +508,12 @@ class GameState:
             "pending_elim": self.pending_elim,
             "reminders": dict(self.reminders),
             "quest_resolved": self.quest_resolved,
+            "quest_outcome": self.quest_outcome,
+            "quest_outcome_n": self.quest_outcome_n,
+            "sailing": self.sailing,
+            "heading": self.heading,
+            "game_over": dict(self.game_over) if self.game_over else None,
+            "pending_stage": dict(self.pending_stage) if self.pending_stage else None,
             "elimination_threat": self.elimination_threat,
             "log": [dict(e) for e in self.log],
             "seq": self._seq,
@@ -461,6 +550,14 @@ class GameState:
             if k in saved_rem:
                 g.reminders[k] = saved_rem[k]
         g.quest_resolved = d.get("quest_resolved", False)
+        g.quest_outcome = d.get("quest_outcome", None)
+        g.quest_outcome_n = d.get("quest_outcome_n", 0)
+        g.sailing = d.get("sailing", False)
+        g.heading = d.get("heading", 0)
+        go = d.get("game_over", None)
+        g.game_over = dict(go) if go else None
+        ps = d.get("pending_stage", None)
+        g.pending_stage = dict(ps) if ps else None
         g.log = [dict(e) for e in d["log"]]
         g._seq = d["seq"]
         return g

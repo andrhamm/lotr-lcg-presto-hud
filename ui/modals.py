@@ -5,8 +5,10 @@ Each modal mutates the passed GameState directly on confirm. Protocol:
   on_button(btn)       -> "close" (save+dismiss), "cancel" (dismiss), or None
 """
 
-from ui.widgets import Button, panel, bevel, text_center, text_left, button, stepper
+from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
+                        stepper, draw_weather)
 from ui import icons
+from gamestate import HEADINGS
 
 CANCEL_Y = 404
 BTN_H = 64
@@ -85,6 +87,7 @@ class QuestConfigModal:
     def __init__(self, game):
         self.game = game
         self.q = dict(game.quest)
+        self.sail = game.sailing
         self.buttons = []
 
     def draw(self, hw, game, pal):
@@ -95,24 +98,27 @@ class QuestConfigModal:
         text_center(d, pal, "Quest  %d%s" % (self.q["stage_n"], self.q["side"]),
                     240, 24, 3, pal.gold)
 
-        text_left(d, pal, "Stage number", 30, 92, 2, pal.tan)
-        stepper(d, pal, self.buttons, ("n", -1), ("n", 1), 300, 78, str(self.q["stage_n"]), 150, 52)
+        text_left(d, pal, "Stage number", 30, 84, 2, pal.tan)
+        stepper(d, pal, self.buttons, ("n", -1), ("n", 1), 300, 70, str(self.q["stage_n"]), 150, 52)
 
-        text_left(d, pal, "Side", 30, 168, 2, pal.tan)
-        for idx, s in enumerate(("A", "B")):
-            b = Button(("side", s), 300 + idx * 78, 154, 70, 52)
-            on = self.q["side"] == s
-            panel(d, pal, b.x, b.y, b.w, b.h, fill=pal.gold if on else pal.btn)
-            text_center(d, pal, s, b.x + b.w / 2, b.y + 16, 3,
-                        pal.bg if on else pal.tan)
-            self.buttons.append(b)
+        # side cycles A-H (multi-variant quests go beyond A/B - DragnCards data)
+        text_left(d, pal, "Side", 30, 156, 2, pal.tan)
+        stepper(d, pal, self.buttons, ("side", -1), ("side", 1), 300, 142, self.q["side"], 150, 52)
 
-        text_left(d, pal, "Quest points", 30, 244, 2, pal.tan)
-        stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 300, 230, str(self.q["points"]), 150, 52)
+        text_left(d, pal, "Quest points", 30, 228, 2, pal.tan)
+        stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 300, 214, str(self.q["points"]), 150, 52)
 
-        adv = Button(("adv",), 30, 320, 420, 56)
-        panel(d, pal, adv.x, adv.y, adv.w, adv.h, fill=pal.btn)
-        text_center(d, pal, "Advance stage (progress -> 0)", adv.x + adv.w / 2, adv.y + 18, 2, pal.tan)
+        text_left(d, pal, "Sailing quest", 30, 296, 2, pal.tan)
+        icons.draw(d, icons.WHEEL, 176, 292, pal.gold if self.sail else pal.dim)
+        sb = Button(("sail",), 300, 284, 150, 48)
+        panel(d, pal, sb.x, sb.y, sb.w, sb.h, fill=pal.gold if self.sail else pal.btn)
+        text_center(d, pal, "On" if self.sail else "Off", sb.x + 75, sb.y + 14, 2,
+                    pal.bg if self.sail else pal.tan, shadow=False)
+        self.buttons.append(sb)
+
+        adv = Button(("adv",), 30, 344, 420, 48)
+        bevel(d, pal, adv.x, adv.y, adv.w, adv.h, pal.btn)
+        text_center(d, pal, "Advance stage (progress -> 0)", adv.x + adv.w / 2, adv.y + 14, 2, pal.tan)
         self.buttons.append(adv)
 
         _footer(d, pal, self.buttons)
@@ -123,7 +129,8 @@ class QuestConfigModal:
             self.q["stage_n"] = max(1, min(9, self.q["stage_n"] + btn.id[1]))
             return None
         if k == "side":
-            self.q["side"] = btn.id[1]
+            i = (ord(self.q["side"][0]) - 65 + btn.id[1] + 8) % 8   # cycle A-H
+            self.q["side"] = chr(65 + i)
             return None
         if k == "pts":
             self.q["points"] = max(0, min(30, self.q["points"] + btn.id[1]))
@@ -136,8 +143,18 @@ class QuestConfigModal:
                 self.q["stage_n"] += 1
             self.q["progress"] = 0
             return None
+        if k == "sail":
+            self.sail = not self.sail
+            return None
         if k == "save":
             self.game.quest = self.q
+            if self.sail != self.game.sailing:
+                self.game.sailing = self.sail
+                self.game.log_event(
+                    "Sailing enabled (Dream-chaser) - heading starts On-course"
+                    if self.sail else "Sailing disabled")
+                if self.sail:
+                    self.game.heading = 0
             return "close"
         if k == "cancel":
             return "cancel"
@@ -427,19 +444,6 @@ class CommitModal:
         vy = zone_top + (zone_bottom - zone_top - ISZ) // 2
         text_left(d, pal, str(val), vx, vy, VSCALE, pal.gold)
         icons.draw(d, icons.WILLPOWER_XL, vx + vw + 14, vy, pal.gold)
-        # party questing totals: committed so far (this player's live value
-        # included) vs the not-yet-visited players' carried values
-        committed = val + sum(self.game.players[i].commit
-                              for i in self.order[:self.pos])
-        remaining = sum(self.game.players[i].commit
-                        for i in self.order[self.pos + 1:])
-        part1 = "committed %d" % committed
-        part2 = "uncommitted %d" % remaining
-        w1 = d.measure_text(part1, 2)
-        w2 = d.measure_text(part2, 2)
-        x0 = (480 - (w1 + 24 + w2)) // 2
-        text_left(d, pal, part1, x0, 226, 2, pal.green)
-        text_left(d, pal, part2, x0 + w1 + 24, 226, 2, pal.dim)
 
         bw, bh, gap = 104, 76, 8
         total = 4 * bw + 3 * gap
@@ -788,4 +792,324 @@ class AllocationModal:
             return "close"
         if k == "cancel":
             return "cancel"
+        return None
+
+
+class QuestingProgressModal:
+    """All questing progress in one place: main quest, active location and each
+    side quest (progress + quest-points editable), add/remove side quests, and
+    the heading shift when sailing. Value edits are logged on close."""
+
+    def __init__(self, game):
+        self.game = game
+        self.buttons = []
+        self._snap = self._snapshot()
+
+    def _snapshot(self):
+        g = self.game
+        return {
+            "q": {"p": g.quest["progress"], "t": g.quest["points"]},
+            "loc": ({"p": g.active_location["progress"], "t": g.active_location["points"]}
+                    if g.active_location else None),
+            "sqLen": len(g.side_quests),
+            "sq": [{"p": s["progress"], "t": s["points"]} for s in g.side_quests],
+        }
+
+    def _items(self):
+        g = self.game
+        items = [{"kind": "q", "name": "Quest %s" % g.quest_label()}]
+        if g.active_location:
+            items.append({"kind": "l", "name": "Location", "removable": True})
+        for i, s in enumerate(g.side_quests):
+            items.append({"kind": "s", "idx": i, "name": "Side Quest %d" % (i + 1),
+                          "sub": s.get("since"), "removable": True})
+        return items
+
+    def _row(self, d, pal, it, y):
+        g = self.game
+        if it["kind"] == "q":
+            prog, pts, pfx = g.quest["progress"], g.quest["points"], "q"
+        elif it["kind"] == "l":
+            prog, pts, pfx = g.active_location["progress"], g.active_location["points"], "l"
+        else:
+            s = g.side_quests[it["idx"]]
+            prog, pts, pfx = s["progress"], s["points"], "s"
+        panel(d, pal, 12, y, 456, 58)
+        text_left(d, pal, it["name"], 22, y + 8, 2, pal.tan)
+        if it.get("sub"):
+            text_left(d, pal, "since %s" % it["sub"], 22, y + 32, 1, pal.dim)
+        idx = it.get("idx")
+        text_left(d, pal, "current", 166, y + 4, 1, pal.muted)
+        stepper(d, pal, self.buttons, (pfx + "P-", idx), (pfx + "P+", idx), 164, y + 16, str(prog), 130, 34)
+        text_left(d, pal, "points", 304, y + 4, 1, pal.muted)
+        stepper(d, pal, self.buttons, (pfx + "T-", idx), (pfx + "T+", idx), 300, y + 16, str(pts), 130, 34)
+        if it.get("removable"):
+            rm = Button((pfx + "X", idx), 438, y + 15, 28, 28)
+            bevel(d, pal, rm.x, rm.y, rm.w, rm.h, pal.btn_no)
+            text_center(d, pal, "x", rm.x + 14, rm.y + 6, 2, pal.no_fg)
+            self.buttons.append(rm)
+
+    def draw(self, hw, game, pal):
+        d = hw.display
+        self.buttons = []
+        d.set_pen(pal.bg)
+        d.clear()
+        text_left(d, pal, "R%d %s" % (self.game.round, self.game.step), 10, 12, 2, pal.muted)
+        text_center(d, pal, "Questing Progress", 240, 12, 2, pal.gold)
+        text_left(d, pal, "X", 480 - 16 - d.measure_text("X", 3), 8, 3, pal.no_fg)
+        self.buttons.append(Button(("close",), 330, 0, 150, 40))
+        d.set_pen(pal.border)
+        d.rectangle(0, 40, 480, 1)
+        y = 48
+        for it in self._items():
+            self._row(d, pal, it, y)
+            y += 62
+        add = Button(("add",), 12, y, 456, 38)
+        bevel(d, pal, add.x, add.y, add.w, add.h, pal.btn)
+        text_center(d, pal, "+ Add side quest", 240, y + 11, 2, pal.tan)
+        self.buttons.append(add)
+        y += 46
+        if self.game.sailing:
+            h = self.game.heading
+            pen = pal.gold if h == 0 else (pal.red if h == 3 else pal.amber)
+            panel(d, pal, 12, y, 456, 52)
+            text_left(d, pal, "Heading", 22, y + 18, 2, pal.tan)
+            draw_weather(d, pal, h, 176, y + 26, 12)
+            text_left(d, pal, HEADINGS[h][2], 196, y + 18, 2, pen)
+            mn = Button(("hd", -1), 320, y + 10, 60, 32)
+            pl = Button(("hd", 1), 388, y + 10, 60, 32)
+            button(d, pal, mn, "-", 3)
+            button(d, pal, pl, "+", 3)
+            self.buttons.append(mn)
+            self.buttons.append(pl)
+        done = Button(("close",), 12, 430, 456, 42)
+        bevel(d, pal, done.x, done.y, done.w, done.h, pal.btn_ok, t=3)
+        text_center(d, pal, "Done", 240, 442, 2, pal.ok_fg)
+        self.buttons.append(done)
+
+    def _clamp_adj(self, cur, delta):
+        return max(0, min(99, cur + delta))
+
+    def on_button(self, btn):
+        k = btn.id[0]
+        a = btn.id[1] if len(btn.id) > 1 else None
+        g = self.game
+        up = k.endswith("+")
+        if k in ("qP-", "qP+"):
+            g.quest["progress"] = self._clamp_adj(g.quest["progress"], 1 if up else -1)
+            return None
+        if k in ("qT-", "qT+"):
+            g.quest["points"] = self._clamp_adj(g.quest["points"], 1 if up else -1)
+            return None
+        if k in ("lP-", "lP+"):
+            g.active_location["progress"] = self._clamp_adj(g.active_location["progress"], 1 if up else -1)
+            g.explore_location_if_done()
+            return None
+        if k in ("lT-", "lT+"):
+            g.active_location["points"] = self._clamp_adj(g.active_location["points"], 1 if up else -1)
+            return None
+        if k == "lX":
+            g.active_location = None
+            g.log_event("Active location cleared (progress view)")
+            return None
+        if k in ("sP-", "sP+"):
+            s = g.side_quests[a]
+            s["progress"] = self._clamp_adj(s["progress"], 1 if up else -1)
+            return None
+        if k in ("sT-", "sT+"):
+            s = g.side_quests[a]
+            s["points"] = self._clamp_adj(s["points"], 1 if up else -1)
+            return None
+        if k == "sX":
+            g.side_quests.pop(a)
+            g.log_event("Side quest %d removed (progress view)" % (a + 1))
+            return None
+        if k == "add":
+            g.side_quests.append({"points": 4, "progress": 0,
+                                  "since": "R%d %s" % (g.round, g.step)})
+            g.log_event("Side quest %d added (progress view)" % len(g.side_quests))
+            return None
+        if k == "hd":
+            g.shift_heading(a, "progress view")
+            return None
+        if k == "close":
+            self._log_changes()
+            return "close"
+        return None
+
+    def _log_changes(self):
+        s, g = self._snap, self.game
+        if g.quest["progress"] != s["q"]["p"] or g.quest["points"] != s["q"]["t"]:
+            g.log_event("Quest %s set %d/%d (progress view)"
+                        % (g.quest_label(), g.quest["progress"], g.quest["points"]))
+        if s["loc"] and g.active_location and (
+                g.active_location["progress"] != s["loc"]["p"]
+                or g.active_location["points"] != s["loc"]["t"]):
+            g.log_event("Active location set %d/%d (progress view)"
+                        % (g.active_location["progress"], g.active_location["points"]))
+        if len(g.side_quests) == s["sqLen"]:
+            for i, sq in enumerate(g.side_quests):
+                if sq["progress"] != s["sq"][i]["p"] or sq["points"] != s["sq"][i]["t"]:
+                    g.log_event("Side quest %d set %d/%d (progress view)"
+                                % (i + 1, sq["progress"], sq["points"]))
+
+
+class SailingModal:
+    """Log the result of a Sailing test: +v = wheels found (shift on-course),
+    -v = steps off-course (winds/card effects). Heading index 0 = on-course."""
+
+    def __init__(self, game):
+        self.game = game
+        self.v = 0
+        self.buttons = []
+
+    def _result(self):
+        return max(0, min(3, self.game.heading - self.v))
+
+    def _heading(self, d, pal, h, cy, scale):
+        term, _icon, facing, _deg = HEADINGS[h]
+        pen = pal.gold if h == 0 else (pal.red if h == 3 else pal.amber)
+        label = "%s - %s" % (facing, term)
+        lw = d.measure_text(label, scale)
+        total = 24 + 8 + lw
+        x0 = int(240 - total / 2)
+        draw_weather(d, pal, h, x0 + 12, cy + 10, 12)
+        text_left(d, pal, label, x0 + 32, cy + (2 if scale == 2 else 0), scale, pen)
+
+    def draw(self, hw, game, pal):
+        d = hw.display
+        self.buttons = []
+        d.set_pen(pal.bg)
+        d.clear()
+        text_left(d, pal, "R%d %s" % (self.game.round, self.game.step), 10, 12, 2, pal.muted)
+        text_center(d, pal, "Sailing test", 240, 12, 2, pal.gold)
+        text_left(d, pal, "X", 480 - 16 - d.measure_text("X", 3), 8, 3, pal.no_fg)
+        self.buttons.append(Button(("cancel",), 330, 0, 150, 40))
+        d.set_pen(pal.border)
+        d.rectangle(0, 40, 480, 1)
+
+        text_center(d, pal, "Current heading", 240, 54, 1, pal.dim)
+        self._heading(d, pal, self.game.heading, 74, 2)
+
+        big = str(abs(self.v))
+        bw = d.measure_text(big, 6)
+        bx = int(240 - ((bw + 14 + 48) if self.v > 0 else bw) / 2)
+        bpen = pal.red if self.v < 0 else (pal.gold if self.v > 0 else pal.muted)
+        text_left(d, pal, big, bx, 128, 6, bpen)
+        if self.v > 0:
+            icons.draw(d, icons.WHEEL, bx + bw + 14, 128, pal.gold, 2)
+        if self.v > 0:
+            sub = "%d wheel%s found - shift on-course" % (self.v, "s" if self.v > 1 else "")
+            spen = pal.green
+        elif self.v < 0:
+            sub = "%d step%s off-course (card effect)" % (-self.v, "s" if self.v < -1 else "")
+            spen = pal.red
+        else:
+            sub = "no wheels found - heading stays"
+            spen = pal.dim
+        text_center(d, pal, sub, 240, 200, 1, spen)
+
+        mn = Button(("d", -1), 34, 128, 64, 60)
+        pl = Button(("d", 1), 480 - 34 - 64, 128, 64, 60)
+        bevel(d, pal, mn.x, mn.y, mn.w, mn.h, pal.btn)
+        text_center(d, pal, "-", mn.x + 32, mn.y + 14, 4, pal.tan)
+        bevel(d, pal, pl.x, pl.y, pl.w, pl.h, pal.btn)
+        text_center(d, pal, "+", pl.x + 32, pl.y + 14, 4, pal.tan)
+        self.buttons.append(mn)
+        self.buttons.append(pl)
+
+        text_center(d, pal, "Result", 240, 240, 1, pal.dim)
+        self._heading(d, pal, self._result(), 262, 2)
+
+        no = Button(("cancel",), 24, 404, 200, 64)
+        ok = Button(("apply",), 256, 404, 200, 64)
+        bevel(d, pal, no.x, no.y, no.w, no.h, pal.btn_no, t=3)
+        text_center(d, pal, "Cancel", no.x + 100, no.y + 20, 2, pal.no_fg)
+        bevel(d, pal, ok.x, ok.y, ok.w, ok.h, pal.btn_ok, t=3)
+        text_center(d, pal, "Apply", ok.x + 100, ok.y + 20, 2, pal.ok_fg)
+        self.buttons.append(no)
+        self.buttons.append(ok)
+
+    def on_button(self, btn):
+        k = btn.id[0]
+        if k == "d":
+            self.v = max(-3, min(8, self.v + btn.id[1]))
+            return None
+        if k == "apply":
+            if self.v != 0:
+                if self.v > 0:
+                    why = "%d wheel%s found (sailing test)" % (self.v, "s" if self.v > 1 else "")
+                else:
+                    why = "card effect"
+                self.game.shift_heading(-self.v, why)
+            return "close"
+        if k == "cancel":
+            return "cancel"
+        return None
+
+
+class StageCompleteModal:
+    """After a quest stage clears, set up the next stage (number, side A-H,
+    quest points) - or declare the final stage a Victory."""
+
+    def __init__(self, game):
+        self.game = game
+        ps = game.pending_stage or {"cleared": "?", "excess": 0}
+        self.cleared = ps["cleared"]
+        self.excess = ps["excess"]
+        self.n = game.quest["stage_n"]
+        self.side = game.quest["side"]
+        self.pts = 0
+        self.buttons = []
+
+    def draw(self, hw, game, pal):
+        d = hw.display
+        self.buttons = []
+        d.set_pen(pal.bg)
+        d.clear()
+        text_center(d, pal, "Quest Stage %s cleared!" % self.cleared, 240, 26, 3, pal.gold)
+        y = 74
+        text_center(d, pal, "Set up the next stage", 240, y, 2, pal.tan)
+        y += 40
+        text_left(d, pal, "Stage", 30, y + 14, 2, pal.tan)
+        stepper(d, pal, self.buttons, ("n", -1), ("n", 1), 160, y, str(self.n), 130, 52)
+        stepper(d, pal, self.buttons, ("side", -1), ("side", 1), 316, y, self.side, 144, 52)
+        y += 76
+        text_left(d, pal, "Quest points", 30, y + 14, 2, pal.tan)
+        stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 240, y, str(self.pts), 210, 52)
+        y += 90
+        go = Button(("go",), 30, y, 420, 60)
+        bevel(d, pal, go.x, go.y, go.w, go.h, pal.btn_ok, t=3)
+        text_center(d, pal, "Continue to %d%s >" % (self.n, self.side), 240, y + 20, 2, pal.ok_fg)
+        self.buttons.append(go)
+        y += 74
+        win = Button(("win",), 30, y, 420, 60)
+        bevel(d, pal, win.x, win.y, win.w, win.h, pal.card_hi, t=3)
+        text_center(d, pal, "That was the final stage - Victory!", 240, y + 20, 2, pal.gold)
+        self.buttons.append(win)
+
+    def on_button(self, btn):
+        k = btn.id[0]
+        if k == "n":
+            self.n = max(1, min(9, self.n + btn.id[1]))
+            return None
+        if k == "side":
+            i = (ord(self.side[0]) - 65 + btn.id[1] + 8) % 8   # cycle A-H
+            self.side = chr(65 + i)
+            return None
+        if k == "pts":
+            self.pts = max(0, min(30, self.pts + btn.id[1]))
+            return None
+        if k == "go":
+            g = self.game
+            g.quest["stage_n"] = self.n
+            g.quest["side"] = self.side
+            g.quest["points"] = self.pts
+            g.pending_stage = None
+            g.log_event("Advance to stage %s (needs %d)" % (g.quest_label(), self.pts))
+            return "close"
+        if k == "win":
+            self.game.pending_stage = None
+            self.game.set_game_over("victory")
+            return "close"
         return None

@@ -17,12 +17,13 @@ ICONS = {"threat": ("THREAT", "red"), "willpower": ("WILLPOWER", "gold")}
 
 class CounterModal:
     def __init__(self, title, value, on_commit=None, minimum=0, maximum=99,
-                 big_color=None, icon=None):
+                 big_color=None, icon=None, subtext=None):
         self.title = title
         self.state = CounterState(value, minimum, maximum)
         self.on_commit = on_commit   # called with the committed value
         self.big_color = big_color
         self.icon = icon             # "threat" | "willpower" | None
+        self.subtext = subtext       # small line under the value (e.g. elim level)
         self.buttons = []
 
     def draw(self, hw, game, pal):
@@ -44,6 +45,9 @@ class CounterModal:
         val = self.state.preview
         color = self.big_color or pal.gold
         text_center(d, pal, str(val), 240, 90, 9, color)
+
+        if self.subtext:
+            text_center(d, pal, self.subtext, 240, 168, 2, pal.muted)
 
         if self.state.pending:
             dlt = self.state.delta

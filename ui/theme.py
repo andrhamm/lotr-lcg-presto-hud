@@ -20,6 +20,9 @@ class Palette:
         self.green = d.create_pen(136, 168, 92)
         self.amber = d.create_pen(214, 164, 70)
         self.red = d.create_pen(206, 84, 52)
+        # weather (heading facing glyphs)
+        self.cloud = d.create_pen(185, 188, 198)
+        self.sky = d.create_pen(95, 168, 230)
         # controls
         self.btn = d.create_pen(52, 42, 26)
         self.btn_ok = d.create_pen(40, 50, 26)

@@ -20,6 +20,8 @@ from ui.screen_log import ScreenLog
 from ui.screen_settings import ScreenSettings
 from ui.screen_boot import BootScreen
 from ui.screen_setup import SetupScreen
+from ui.screen_gameover import GameOverScreen
+from ui.screen_about import ScreenAbout
 
 STATE_PATH = "/state.json"
 PREFS_PATH = "/device.json"
@@ -130,6 +132,8 @@ def main():
         "settings": ScreenSettings(prefs),
         "boot": BootScreen(saved_meta),
         "setup": SetupScreen(),
+        "gameover": GameOverScreen(),
+        "about": ScreenAbout(),
     }
     active = "boot"
     nav_stack = []  # origins to return to when overlay screens (log/settings) close
@@ -154,6 +158,13 @@ def main():
                 screens["play"].notif_frac = 1.0
                 notif_t = NOTIF_TICKS
                 dirty = True
+        # a requested toast (e.g. quest-resolution outcome) overrides view notifs
+        if screens["play"].toast:
+            screens["play"].notif = screens["play"].toast
+            screens["play"].notif_frac = 1.0
+            notif_t = NOTIF_TICKS
+            screens["play"].toast = None
+            dirty = True
         if notif_t > 0:
             notif_t -= 1
             play = screens["play"]
@@ -194,6 +205,16 @@ def main():
                 and game.pending_elim is not None:
             from ui.modals import EliminationModal
             modal = EliminationModal(game, game.pending_elim)
+            dirty = True
+            continue
+
+        # game over: all players eliminated -> defeat (victory is set via the
+        # stage-complete modal). Route to the game-over screen from play.
+        if modal is None and active == "play" and not game.game_over \
+                and game.players and game.all_eliminated():
+            game.set_game_over("defeat")
+        if modal is None and active == "play" and game.game_over:
+            active = "gameover"
             dirty = True
             continue
 
@@ -241,9 +262,14 @@ def main():
                         elif kind == "boot":
                             if result[1] == "resume":
                                 active = "play"
+                            elif result[1] == "about":
+                                nav_stack.append("boot")
+                                active = "about"
                             else:
                                 screens["setup"].has_save = save_exists()
                                 active = "setup"
+                        elif kind == "open_repo":
+                            pass  # no browser on the device; link lives in the web twin
                         elif kind == "start_game":
                             threats = result[1]
                             first = result[2] if len(result) > 2 else 0

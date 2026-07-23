@@ -180,9 +180,9 @@ def test_due_notifications_archery_requires_staging_threat():
 
 def test_due_notifications_only_for_matching_view():
     g = GameState()
-    g.reminders["shadow"] = True
-    g.view = "refresh"
-    assert any("shadow" in t.lower() for _ic, t in g.due_notifications())
+    g.reminders["battle"] = True
+    g.view = "quest_commit"
+    assert any("battle" in t.lower() for _ic, t in g.due_notifications())
     g.view = "travel"
     assert g.due_notifications() == []
 

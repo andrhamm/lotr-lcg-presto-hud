@@ -171,18 +171,20 @@ def test_commit_modal_reset_button_zeroes():
     assert game.players[0].commit == 0
 
 
-def test_commit_modal_shows_party_totals():
+def test_commit_modal_shows_value_without_party_labels():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
     for i, c in enumerate((3, 4, 2, 2)):
         game.set_commit(i, c)
-    m = modals.CommitModal(game, 2)   # P3 current (2), remaining P4,P1,P2 = 2+3+4
+    m = modals.CommitModal(game, 2)   # P3 current (2)
     m.state.tap(2)                    # preview 4
     m.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "committed 4" in texts     # current preview only, none visited yet
-    assert "uncommitted 9" in texts
+    assert "4" in texts               # big willpower value shown
+    # committed/uncommitted party totals were dropped (web parity)
+    assert not any(t.startswith("committed") for t in texts)
+    assert not any(t.startswith("uncommitted") for t in texts)
 
 
 def test_reminders_modal_toggles_and_persists():

@@ -17,15 +17,15 @@ def _draw(saved):
     return hw, s
 
 
-def test_saved_game_shows_resume_and_new_only():
+def test_saved_game_shows_resume_new_and_disclaimers():
     hw, s = _draw({"round": 2, "phase": "Travel", "saved_at": "earlier session"})
     ids = [b.id for b in s.buttons]
-    assert ids == [("resume",), ("new",)]
+    assert ids == [("resume",), ("new",), ("about",)]
 
 
-def test_no_save_shows_new_only():
+def test_no_save_shows_new_and_disclaimers():
     hw, s = _draw(None)
-    assert [b.id for b in s.buttons] == [("new",)]
+    assert [b.id for b in s.buttons] == [("new",), ("about",)]
 
 
 def test_no_header_round_text():

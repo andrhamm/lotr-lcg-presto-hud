@@ -63,24 +63,24 @@ def test_resolve_success_enters_resolution_view_with_budget():
     game.willpower = 11
     game.staging = 7
     screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("resolve",)), game)
+    screen.on_button(_find(screen, ("stage_advance",)), game)
     assert game.view == "quest_resolution"
     assert game.pending_budget == 4
+    assert game.quest_outcome == "success"
 
 
-def test_resolve_failure_stays_on_staging_with_banner_and_travel_cta():
+def test_resolve_failure_enters_resolution_with_outcome_toast():
     hw, pal, game, screen = _setup("quest_staging")
     game.willpower = 2
     game.staging = 7
     screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("resolve",)), game)
-    assert game.view == "quest_staging"        # outcome shown where it happened
-    assert game.players[0].threat == 5
-    assert screen.banner[1] == "bad"
-    assert screen.banner[2] == "quest_staging"
-    screen.draw(hw, game, pal)                 # resolved -> CTA becomes Travel
+    screen.on_button(_find(screen, ("stage_advance",)), game)
+    assert game.view == "quest_resolution"     # outcome shown on the resolution view
+    assert game.players[0].threat == 5         # shortfall applied to all
+    assert game.quest_outcome == "fail"
+    assert screen.toast is not None            # picked up by the main loop
+    screen.draw(hw, game, pal)                 # fail resolution -> Travel CTA
     ids = [b.id[0] for b in screen.buttons]
-    assert "resolve" not in ids
     assert "advance" in ids
 
 
@@ -117,6 +117,8 @@ def test_commit_staging_tap_opens_counter():
 def test_resolution_apply_places_and_goes_to_travel():
     hw, pal, game, screen = _setup("quest_resolution")
     game.quest = {"stage_n": 1, "side": "B", "points": 8, "progress": 0}
+    game.quest_outcome = "success"
+    game.quest_outcome_n = 4
     game.pending_budget = 4
     screen.draw(hw, game, pal)
     screen.on_button(_find(screen, ("apply_alloc",)), game)
@@ -159,22 +161,24 @@ def test_progress_row_shows_quest_loc_sq_labels():
         assert t in texts
 
 
-def test_add_sq_only_in_planning_and_staging():
-    for view, expect in (("resource_planning", True), ("quest_staging", True),
-                         ("enc_optional", False), ("refresh", False),
-                         ("travel", False)):
+def test_progress_view_tap_present_and_sq_add_card_dropped():
+    # The +SQ placeholder card is gone; every play view routes progress edits
+    # (incl. adding side quests) through the Questing Progress view.
+    for view in ("resource_planning", "quest_commit", "quest_staging",
+                 "enc_optional", "refresh", "travel"):
         hw, pal, game, screen = _setup(view)
         screen.draw(hw, game, pal)
         ids = [b.id[0] for b in screen.buttons]
-        assert ("sq_add" in ids) is expect, view
+        assert "prog_view" in ids, view
+        assert "sq_add" not in ids, view
 
 
-def test_sq_add_opens_side_quest_manager():
-    from ui.modals import SideQuestsModal
+def test_prog_view_opens_questing_progress_modal():
+    from ui.modals import QuestingProgressModal
     hw, pal, game, screen = _setup("resource_planning")
     screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("sq_add",)), game)
-    assert isinstance(result[1], SideQuestsModal)
+    result = screen.on_button(_find(screen, ("prog_view",)), game)
+    assert isinstance(result[1], QuestingProgressModal)
 
 
 def test_commit_view_stacks_threat_progress_then_willpower():
@@ -259,18 +263,19 @@ def test_notification_pie_fraction_controls_fan_size():
     assert full == 24 and quarter == 6
 
 
-def test_apply_placement_disabled_until_budget_fully_placed():
+def test_resolution_apply_always_enabled_and_shows_discard():
     hw, pal, game, screen = _setup("quest_resolution")
     game.quest = {"stage_n": 1, "side": "B", "points": 8, "progress": 0}
     game.active_location = None
+    game.quest_outcome = "success"
     game.pending_budget = 4
-    screen.draw(hw, game, pal)          # auto-split places all 4 -> enabled
+    screen.draw(hw, game, pal)          # auto-split places all 4
     assert any(b.id == ("apply_alloc",) for b in screen.buttons)
     screen.on_button(_find(screen, ("areset",)), game)   # clear allocation
     screen.draw(hw, game, pal)
     ids = [b.id for b in screen.buttons]
-    assert ("apply_alloc",) not in ids   # gated
-    assert "Place 4 more to continue" in _texts(hw)
+    assert ("apply_alloc",) in ids       # always enabled (no gating)
+    assert "Unplaced (discarded)" in _texts(hw)
 
 
 def test_travel_modal_passes_contribution():
@@ -308,22 +313,20 @@ def test_setup_view_tip_and_quest_points_then_begin():
     assert any("needs 8" in e["text"] for e in game.log)
 
 
-def test_progress_cards_open_logged_adjusters():
+def test_prog_view_edits_quest_and_logs_on_close():
     hw, pal, game, screen = _setup("travel")
     game.active_location = {"points": 3, "progress": 1}
     game.side_quests = [{"points": 5, "progress": 2}]
     screen.draw(hw, game, pal)
-    m = screen.on_button(_find(screen, ("prog_q",)), game)[1]
-    m.state.tap(5)
-    m.state.confirm()
-    m.on_commit(m.state.value)
-    assert game.quest["progress"] == 5
-    assert any("(manual)" in e["text"] for e in game.log)
-    m2 = screen.on_button(_find(screen, ("prog_sq", 0)), game)[1]
-    m2.state.tap(1)
-    m2.state.confirm()
-    m2.on_commit(m2.state.value)
+    m = screen.on_button(_find(screen, ("prog_view",)), game)[1]
+    m.draw(hw, game, pal)
+    # bump quest progress via its stepper, bump the side quest, then close
+    m.on_button([b for b in m.buttons if b.id == ("qP+", None)][0])
+    m.on_button([b for b in m.buttons if b.id == ("sP+", 0)][0])
+    m.on_button([b for b in m.buttons if b.id == ("close",)][0])
+    assert game.quest["progress"] == 1
     assert game.side_quests[0]["progress"] == 3
+    assert any("(progress view)" in e["text"] for e in game.log)
 
 
 def test_questing_for_card_taps_open_modal_on_both_views():

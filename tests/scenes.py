@@ -38,6 +38,8 @@ def _play(view, mutate=None):
                 g.set_commit(i, c)
         if view == "quest_resolution":
             g.pending_budget = 4
+            g.quest_outcome = "success"
+            g.quest_outcome_n = 4
         if mutate:
             mutate(g)
         s = ScreenPlay()
@@ -125,7 +127,7 @@ def _reminders_modal():
     pal = Palette(hw.display)
     g = _game()
     g.reminders["archery"] = True
-    g.reminders["shadow"] = True
+    g.reminders["battle"] = True
     m = RemindersModal(g)
     m.draw(hw, g, pal)
     return hw, m
@@ -158,6 +160,88 @@ def _log_prep(g):
         g.log_event("P%d threat %d -> %d after a fairly long explanation" % ((i % 4) + 1, 20 + i, 21 + i))
 
 
+def _sailing_on(g):
+    g.sailing = True
+    g.heading = 2
+
+
+def _resolution_fail(g):
+    g.quest_outcome = "fail"
+    g.quest_outcome_n = 3
+
+
+def _questing_progress_modal():
+    from ui.modals import QuestingProgressModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.sailing = True
+    g.heading = 2
+    m = QuestingProgressModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _sailing_modal():
+    from ui.modals import SailingModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.sailing = True
+    g.heading = 2
+    m = SailingModal(g)
+    m.v = 1
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _stage_complete_modal():
+    from ui.modals import StageCompleteModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.pending_stage = {"cleared": "2B", "excess": 2}
+    m = StageCompleteModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _quest_config_modal():
+    from ui.modals import QuestConfigModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.sailing = True
+    m = QuestConfigModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _gameover(result):
+    def build():
+        from ui.screen_gameover import GameOverScreen
+        hw = FakeHardware()
+        pal = Palette(hw.display)
+        g = _game()
+        g.game_over = {"result": result, "round": g.round, "duration": "12m30s"}
+        if result == "defeat":
+            for p in g.players:
+                p.eliminated = True
+        s = GameOverScreen()
+        s.draw(hw, g, pal)
+        return hw, s
+    return build
+
+
+def _about():
+    from ui.screen_about import ScreenAbout
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    s = ScreenAbout()
+    s.draw(hw, _game(), pal)
+    return hw, s
+
+
 SCENES = {
     "boot": _boot({"round": 3, "phase": "Combat (Enemy Attacks)", "saved_at": "2026-07-21 19:04"}),
     "boot_fresh": _boot(None),
@@ -165,10 +249,14 @@ SCENES = {
     "setup3": _setup([25, 27, 29], first=1),
     "setup4": _setup([25, 27, 29, 31], first=3),
     "play_setup": _play("setup_game"),
+    "play_setup_sailing": _play("setup_game", mutate=_sailing_on),
     "play_resource_planning": _play("resource_planning"),
+    "play_quest_sailing": _play("quest_sailing", mutate=_sailing_on),
     "play_quest_commit": _play("quest_commit"),
+    "play_quest_commit_sailing": _play("quest_commit", mutate=_sailing_on),
     "play_quest_staging": _play("quest_staging"),
     "play_quest_resolution": _play("quest_resolution"),
+    "play_quest_resolution_fail": _play("quest_resolution", mutate=_resolution_fail),
     "play_travel": _play("travel"),
     "play_travel_none": _play("travel", mutate=lambda g: setattr(g, "active_location", None)),
     "play_enc_optional": _play("enc_optional"),
@@ -186,4 +274,11 @@ SCENES = {
     "questing_for_modal": _questing_for,
     "reminders_modal": _reminders_modal,
     "led_modal": _led_modal,
+    "questing_progress_modal": _questing_progress_modal,
+    "sailing_modal": _sailing_modal,
+    "stage_complete_modal": _stage_complete_modal,
+    "quest_config_modal": _quest_config_modal,
+    "gameover_victory": _gameover("victory"),
+    "gameover_defeat": _gameover("defeat"),
+    "about": _about,
 }

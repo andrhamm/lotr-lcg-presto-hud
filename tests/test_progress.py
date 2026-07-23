@@ -28,6 +28,7 @@ def test_quest_label():
 
 def test_auto_split_with_no_location_puts_all_on_quest():
     g = GameState()
+    g.quest["points"] = 10
     assert g.active_location is None
     alloc = g.auto_split(5)
     assert alloc["location"] == 0
@@ -36,10 +37,22 @@ def test_auto_split_with_no_location_puts_all_on_quest():
 
 def test_auto_split_fills_location_first_then_overflows_to_quest():
     g = GameState()
+    g.quest["points"] = 10
     g.active_location = {"points": 3, "progress": 1}  # 2 room left
     alloc = g.auto_split(5)
     assert alloc["location"] == 2
     assert alloc["quest"] == 3
+
+
+def test_auto_split_caps_quest_at_its_points_discarding_overflow():
+    g = GameState()
+    g.quest["points"] = 6
+    g.quest["progress"] = 5              # 1 room left on the quest
+    g.active_location = {"points": 3, "progress": 1}  # 2 room left
+    alloc = g.auto_split(7)
+    assert alloc["location"] == 2       # location fills first
+    assert alloc["quest"] == 1          # quest capped at its room
+    # remaining 4 is discarded (budget - location - quest)
 
 
 def test_auto_split_smaller_than_location_room_stays_on_location():
