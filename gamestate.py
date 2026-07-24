@@ -153,6 +153,10 @@ class GameState:
         self.first_player = 0
         self.step = phases.STEP_ORDER[0]
         self.quest = {"stage_n": 1, "side": "A", "points": 0, "progress": 0}
+        self.scenario = None         # preloaded quest-picker scenario metadata
+        self.stages = []             # preloaded quest stage/card data
+        self.stage_idx = 0           # index into self.stages
+        self.card_idx = 0            # index into stages[stage_idx]["cards"]
         self.active_location = None  # or {"points": int, "progress": int}
         self.side_quests = []        # list of {"points": int, "progress": int}
         self.willpower = 0           # transient questing input
@@ -411,6 +415,28 @@ class GameState:
         self._snapshot_round()
 
     # -- quest / progress --------------------------------------------------
+    def preload_scenario(self, scn, stages):
+        """Load a quest-picker scenario: scn is metadata (slug/name/pack/...),
+        stages is the stage/card tree. Resets quest to stage 1 side A."""
+        import copy
+        self.scenario = scn
+        self.stages = copy.deepcopy(stages)
+        self.stage_idx = 0
+        self.card_idx = 0
+        st = self.stages[0]
+        self.quest["stage_n"] = st["stage"]
+        self.quest["side"] = "A"
+        self.quest["points"] = 0
+        self.quest["progress"] = 0
+        self.sailing = bool(st["cards"][0].get("sailing"))
+
+    def flip_to_b(self):
+        """1A -> 1B: load the current card's questPoints as side B's target."""
+        card = self.stages[self.stage_idx]["cards"][self.card_idx]
+        self.quest["side"] = "B"
+        self.quest["points"] = card["questPoints"]
+        return self.quest["points"]
+
     def quest_label(self):
         return "%d%s" % (self.quest["stage_n"], self.quest["side"])
 
@@ -518,6 +544,10 @@ class GameState:
             "first_player": self.first_player,
             "step": self.step,
             "quest": dict(self.quest),
+            "scenario": self.scenario,
+            "stages": self.stages,
+            "stage_idx": self.stage_idx,
+            "card_idx": self.card_idx,
             "active_location": dict(self.active_location) if self.active_location else None,
             "side_quests": [dict(s) for s in self.side_quests],
             "willpower": self.willpower,
@@ -558,6 +588,10 @@ class GameState:
         g.first_player = d["first_player"]
         g.step = d["step"]
         g.quest = dict(d["quest"])
+        g.scenario = d.get("scenario")
+        g.stages = d.get("stages", [])
+        g.stage_idx = d.get("stage_idx", 0)
+        g.card_idx = d.get("card_idx", 0)
         g.active_location = dict(d["active_location"]) if d["active_location"] else None
         g.side_quests = [dict(s) for s in d["side_quests"]]
         g.willpower = d.get("willpower", 0)

@@ -110,6 +110,10 @@ export class GameState {
     this.first_player = 0;
     this.step = STEP_ORDER[0];
     this.quest = { stage_n: 1, side: "A", points: 0, progress: 0 };
+    this.scenario = null;        // preloaded quest-picker scenario metadata
+    this.stages = [];            // preloaded quest stage/card data
+    this.stage_idx = 0;          // index into this.stages
+    this.card_idx = 0;           // index into stages[stage_idx].cards
     this.active_location = null;
     this.side_quests = [];
     this.willpower = 0;
@@ -320,6 +324,29 @@ export class GameState {
     this._snapshotRound();
   }
 
+  // Load a quest-picker scenario: scn is metadata (slug/name/pack/...),
+  // stages is the stage/card tree. Resets quest to stage 1 side A.
+  preloadScenario(scn, stages) {
+    this.scenario = scn;
+    this.stages = JSON.parse(JSON.stringify(stages));
+    this.stage_idx = 0;
+    this.card_idx = 0;
+    const st = this.stages[0];
+    this.quest.stage_n = st.stage;
+    this.quest.side = "A";
+    this.quest.points = 0;
+    this.quest.progress = 0;
+    this.sailing = !!st.cards[0].sailing;
+  }
+
+  // 1A -> 1B: load the current card's questPoints as side B's target.
+  flipToB() {
+    const card = this.stages[this.stage_idx].cards[this.card_idx];
+    this.quest.side = "B";
+    this.quest.points = card.questPoints;
+    return this.quest.points;
+  }
+
   questLabel() { return `${this.quest.stage_n}${this.quest.side}`; }
 
   autoSplit(budget) {
@@ -415,6 +442,8 @@ export class GameState {
         elimination: p.elimination, commit: p.commit, commit_touched: p.commit_touched })),
       view: this.view, round: this.round, first_player: this.first_player,
       step: this.step, quest: { ...this.quest },
+      scenario: this.scenario, stages: this.stages,
+      stage_idx: this.stage_idx, card_idx: this.card_idx,
       active_location: this.active_location ? { ...this.active_location } : null,
       side_quests: this.side_quests.map(s => ({ ...s })),
       willpower: this.willpower, staging: this.staging,
@@ -450,6 +479,10 @@ export class GameState {
     g.first_player = d.first_player;
     g.step = d.step;
     g.quest = { ...d.quest };
+    g.scenario = d.scenario ?? null;
+    g.stages = d.stages ?? [];
+    g.stage_idx = d.stage_idx ?? 0;
+    g.card_idx = d.card_idx ?? 0;
     g.active_location = d.active_location ? { ...d.active_location } : null;
     g.side_quests = (d.side_quests ?? []).map(s => ({ ...s }));
     g.willpower = d.willpower ?? 0;
