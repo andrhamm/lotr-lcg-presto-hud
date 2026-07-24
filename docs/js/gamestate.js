@@ -87,6 +87,7 @@ export class Player {
     this.eliminated = false;
     this.elimination = DEFAULT_ELIMINATION;
     this.commit = 0;
+    this.commit_touched = false;
   }
 }
 
@@ -119,6 +120,7 @@ export class GameState {
     this.quest_resolved = false;
     this.quest_outcome = null;      // "success" | "fail" | "tie" - last resolution
     this.quest_outcome_n = 0;       // progress gained / threat taken
+    this.quest_history = [];        // by-round chart data, capped at last 20
     this.sailing = false;
     this.heading = 0;
     this.game_over = null;
@@ -169,7 +171,12 @@ export class GameState {
 
   setCommit(index, value) {
     this.players[index].commit = Math.max(0, value);
+    this.players[index].commit_touched = true;
     this.willpower = this.players.reduce((a, p) => a + p.commit, 0);
+  }
+
+  touchCommit(i) {
+    this.players[i].commit_touched = true;
   }
 
   _totalProgress() {
@@ -196,6 +203,7 @@ export class GameState {
     if (this.view === "setup_game") {
       this.logEvent(`Setup complete - round 1 begins (quest ${this.questLabel()} needs ${this.quest.points})`);
       this.enterView(VIEW_ORDER[0]);
+      this.players.forEach(p => p.commit_touched = false);
       this._snapshotRound();
       return;
     }
@@ -287,6 +295,7 @@ export class GameState {
         this.adjustThreat(i, this.players[i].threat_per_round);
       }
     }
+    this.players.forEach(p => p.commit_touched = false);
     const snap = this._round_snap;
     if (snap) {
       const parts = [];
@@ -373,20 +382,29 @@ export class GameState {
   resolveQuest(willpower, staging) {
     const diff = willpower - staging;
     this.quest_resolved = true;
+    let outcome, n, result;
     if (diff > 0) {
-      this.quest_outcome = "success"; this.quest_outcome_n = diff;
-      return { outcome: "success", budget: diff };
-    }
-    if (diff < 0) {
+      outcome = "success"; n = diff;
+      result = { outcome, budget: n };
+    } else if (diff < 0) {
       const shortfall = -diff;
       this.players.forEach((p, i) => { if (!p.eliminated) this.adjustThreat(i, shortfall); });
       this.logEvent(`Quest failed. +${shortfall} threat to all`);
-      this.quest_outcome = "fail"; this.quest_outcome_n = shortfall;
-      return { outcome: "fail", threat: shortfall };
+      outcome = "fail"; n = shortfall;
+      result = { outcome, threat: n };
+    } else {
+      this.logEvent("Quest unsuccessful - tie, no change");
+      outcome = "tie"; n = 0;
+      result = { outcome };
     }
-    this.logEvent("Quest unsuccessful - tie, no change");
-    this.quest_outcome = "tie"; this.quest_outcome_n = 0;
-    return { outcome: "tie" };
+    this.quest_outcome = outcome;
+    this.quest_outcome_n = n;
+    this.quest_history.push({
+      round: this.round, willpower, staging, outcome, n, heading: this.heading });
+    if (this.quest_history.length > 20) {
+      this.quest_history = this.quest_history.slice(-20);
+    }
+    return result;
   }
 
   toDict() {
@@ -394,7 +412,7 @@ export class GameState {
       players: this.players.map(p => ({
         label: p.label, threat: p.threat, starting_threat: p.starting_threat,
         threat_per_round: p.threat_per_round, eliminated: p.eliminated,
-        elimination: p.elimination, commit: p.commit })),
+        elimination: p.elimination, commit: p.commit, commit_touched: p.commit_touched })),
       view: this.view, round: this.round, first_player: this.first_player,
       step: this.step, quest: { ...this.quest },
       active_location: this.active_location ? { ...this.active_location } : null,
@@ -405,6 +423,7 @@ export class GameState {
       elimination_threat: this.elimination_threat,
       quest_resolved: this.quest_resolved,
       quest_outcome: this.quest_outcome, quest_outcome_n: this.quest_outcome_n,
+      quest_history: this.quest_history.map(e => ({ ...e })),
       sailing: this.sailing, heading: this.heading,
       game_over: this.game_over ? { ...this.game_over } : null,
       pending_stage: this.pending_stage ? { ...this.pending_stage } : null,
@@ -423,6 +442,7 @@ export class GameState {
       p.eliminated = pd.eliminated;
       p.elimination = pd.elimination ?? DEFAULT_ELIMINATION;
       p.commit = pd.commit ?? 0;
+      p.commit_touched = pd.commit_touched ?? false;
       return p;
     });
     g.view = d.view ?? VIEW_ORDER[0];
@@ -443,6 +463,7 @@ export class GameState {
     g.quest_resolved = d.quest_resolved ?? false;
     g.quest_outcome = d.quest_outcome ?? null;
     g.quest_outcome_n = d.quest_outcome_n ?? 0;
+    g.quest_history = (d.quest_history ?? []).map(e => ({ ...e }));
     g.sailing = d.sailing ?? false;
     g.heading = d.heading ?? 0;
     g.game_over = d.game_over ? { ...d.game_over } : null;

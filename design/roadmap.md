@@ -1,0 +1,64 @@
+---
+title: Roadmap — prototype to beta
+type: design-note
+tags:
+  - lotr-lcg/design
+  - prototype-to-beta
+related:
+  - "[[design-review]]"
+  - "[[stat-system]]"
+  - "[[stats-redesign]]"
+---
+
+# Roadmap — prototype to beta
+
+Five shippable milestones. Each runs the full cadence: **web-first → verify in
+browser → port to firmware → pytest + layout scenes → deploy to Presto → soak**.
+Web and firmware stay in lockstep. See [[design-review]] and [[stat-system]].
+
+## Milestones
+1. **M1 · Visual foundation** — the rethemed look across every screen (evolve the
+   existing dark theme; consistent [[stat-system]]; icon colours; hierarchy).
+   *Done when* the theme is applied everywhere and gold marks a single focal
+   element per screen. **Status: DONE** — stat-colour system + the two-zone
+   [[stats-redesign]] (flipped Players/Progress zones, circular token/arc
+   primitives, Players + Progress detail views, DONE header) shipped on
+   `feat/stats-redesign`; 382 host tests green. Pending: merge + device deploy.
+2. **M2 · Phase clarity** — framework (red) / action-window (green) / stat model
+   on every phase; threat-as-risk on Encounter & Combat; live willpower-vs-staging.
+   *Done when* each phase answers: what happens, when can I act, what matters.
+3. **M3 · Speed** — inline threat −/+, direct willpower total, one-tap all-players;
+   declutter commit. No tap-and-hold. *Done when* a common round hits a tap budget.
+4. **M4 · Quest awareness** — quest picker preloads stages/points + **encounter
+   sets to gather** (icon-pack glyphs); conditional advancement; per-quest threat
+   warnings; **quest appendix** (tips/FAQ/campaign-cards from blog+forums);
+   optional chase track. *Done when* picking Passage Through Mirkwood preloads
+   8/2/10, lists its sets, and warnings go live.
+5. **M5 · Beta hardening** — first-run guidance + a legend for HUD conventions;
+   copy/tone pass (incl. the Sailing "discarded" fix); accessibility + touch;
+   full tests + on-device soak.
+
+## Definition of beta (acceptance)
+1. A **new player** completes a full game guided by the HUD alone.
+2. A **veteran** plays a round at/near the tap budget.
+3. It **looks like a crafted Middle-earth companion**, not a form.
+4. **Quest-aware** for the captured quests.
+5. Runs a **full multi-round game on the Presto**, zero tracebacks, state
+   surviving a power cycle.
+
+## Artifacts (claude.ai, private)
+- **Roadmap deck** (prototype→beta presentation): https://claude.ai/code/artifact/77229372-a5be-4555-93eb-c17c4f927bdb
+- **Three dark directions** (Wayfarer/Illuminated/Signalfire — A & C rejected,
+  all "too modern"; kept for reference of what NOT to do):
+  https://claude.ai/code/artifact/1b62c19e-f561-427c-88aa-275f4558a000
+
+## Current state / next step
+- **M1 shipped** on `feat/stats-redesign` (see [[stats-redesign]]): two-zone
+  layout, circular primitives, both detail views, DONE header, staging inline ±,
+  `commit_touched` + `quest_history`. 382 host tests green, verified
+  device-faithful via `tools/preview.py`.
+- **Pending ops:** land the final review-fix + staging-button commits (blocked on
+  1Password signing), merge to main, deploy to the Presto + soak.
+- **Next milestone: M2 · Phase clarity** — framework (red) / action-window
+  (green) / stat model per phase; threat-as-risk on Encounter & Combat.
+- Mockups must be **device-faithful** (render via `tools/preview.py`), not HTML.

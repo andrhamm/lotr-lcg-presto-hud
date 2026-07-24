@@ -26,6 +26,7 @@ def test_all_modals_draw_without_error():
         modals.LocationConfigModal(game),
         modals.SideQuestsModal(game),
         modals.LocationPickModal(game, mode="change"),
+        modals.QuestingProgressModal(game),
         CounterModal("t", 3, icon="willpower"),
     ):
         modal.draw(hw, game, pal)
@@ -200,31 +201,402 @@ def test_reminders_modal_toggles_and_persists():
     assert m.on_button(_find(m, ("close",))) == "close"
 
 
-def test_questing_for_modal_adjusts_and_logs_on_save():
+def test_reminders_modal_done_header_button_geometry():
+    # modal_header's DONE button: round id upper-left, DONE upper-right,
+    # no leftover "X" — shared by every full-screen modal via modal_header.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.set_commit(0, 2)
-    game.adjust_threat(3, 50)          # eliminated -> no row
-    game.pending_elim = None
-    m = modals.QuestingForModal(game)
+    m = modals.RemindersModal(game)
     m.draw(hw, game, pal)
-    assert not any(b.id == ("wpm", 3, 1) for b in m.buttons)
-    plus1 = _find(m, ("wpm", 1, 1))
-    m.on_button(plus1)
-    m.on_button(plus1)
-    assert m.on_button(_find(m, ("save",))) == "close"
-    assert game.players[1].commit == 2
-    assert game.willpower == 4
-    assert any("P2 committed 2" in e["text"] for e in game.log)
+    close = _find(m, ("close",))
+    assert (close.x, close.y, close.w, close.h) == (408, 4, 64, 32)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "DONE" in texts and "X" not in texts
+    assert "R%d %s" % (game.round, game.step) in texts
 
 
-def test_questing_for_modal_cancel_discards():
+def test_sailing_modal_done_header_dismisses_without_applying():
+    # The header DONE button (id ("close",), from modal_header) must dismiss
+    # like Cancel, not commit — only the footer Apply button shifts heading.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    m = modals.QuestingForModal(game)
+    game.sailing = True
+    game.heading = 2
+    m = modals.SailingModal(game)
     m.draw(hw, game, pal)
-    m.on_button(_find(m, ("wpm", 0, 1)))
-    m.on_button(_find(m, ("cancel",)))
-    assert game.players[0].commit == 0
+    close = _find(m, ("close",))
+    assert (close.x, close.y, close.w, close.h) == (408, 4, 64, 32)
+    m.on_button(_find(m, ("d", 1)))         # dial in a pending wheel (+1)
+    assert m.on_button(close) == "cancel"
+    assert game.heading == 2                # unchanged — DONE discards the pending delta
+
+
+def test_sailing_modal_apply_still_commits_heading_shift():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.sailing = True
+    game.heading = 2
+    m = modals.SailingModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("d", 1)))
+    assert m.on_button(_find(m, ("apply",))) == "close"
+    assert game.heading == 1                 # shifted on-course by the found wheel
+
+
+def test_players_detail_modal_grid_has_editor_buttons_for_each_player():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    m = modals.PlayersDetailModal(game)
+    m.draw(hw, game, pal)
+    assert len(m.buttons) > 0
+    for i in range(len(game.players)):
+        for key in ("t", "w"):
+            for action in (-1, 1, "edit"):
+                assert any(b.id == (key, i, action) for b in m.buttons), (key, i, action)
+    close = _find(m, ("close",))
+    assert (close.x, close.y, close.w, close.h) == (408, 4, 64, 32)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "Players" in texts and "Threat" in texts and "Willpower" in texts
+
+
+def test_players_detail_modal_threat_step_adjusts_and_logs():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    m = modals.PlayersDetailModal(game)
+    m.draw(hw, game, pal)
+    before = game.players[0].threat
+    assert m.on_button(_find(m, ("t", 0, 1))) is None
+    assert game.players[0].threat == before + 1
+    assert any("P1 threat %d -> %d" % (before, before + 1) in e["text"] for e in game.log)
+
+
+def test_players_detail_modal_willpower_step_touches_commit_and_logs():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    m = modals.PlayersDetailModal(game)
+    m.draw(hw, game, pal)
+    game.players[1].commit_touched = False
+    assert m.on_button(_find(m, ("w", 1, 1))) is None
+    assert game.players[1].commit == 1
+    assert game.players[1].commit_touched is True
+    assert any("P2 committed 1 willpower" in e["text"] for e in game.log)
+
+
+def test_players_detail_modal_inline_edit_pad_commits_on_ok_and_returns_to_grid():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.set_commit(2, 3)
+    game.players[2].commit_touched = False
+    m = modals.PlayersDetailModal(game)
+    m.draw(hw, game, pal)
+    # opening the willpower editor (token tap) touches the commit immediately
+    assert m.on_button(_find(m, ("w", 2, "edit"))) is None
+    assert m.edit is not None
+    assert game.players[2].commit_touched is True
+    m.draw(hw, game, pal)                       # edit-mode redraw (grid replaced)
+    m.on_button(_find(m, ("step", 5)))
+    assert m.on_button(_find(m, ("ok",))) is None      # never closes the outer modal
+    assert m.edit is None                              # back to the grid
+    assert game.players[2].commit == 8
+    assert any("P3 committed 8 willpower" in e["text"] for e in game.log)
+
+
+def test_players_detail_modal_inline_edit_pad_preserves_value_above_99():
+    # CounterState's default max=99 is a cosmetic pad ceiling, not a game
+    # rule (adjust_threat has no upper bound - a spammed-past-99 threat is
+    # reachable, e.g. on an eliminated player). Opening the pad must not
+    # silently clamp an already-high value down to 99 on an untouched OK tap.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.adjust_threat(0, 150)
+    m = modals.PlayersDetailModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("t", 0, "edit")))
+    assert m.edit[2].preview == 150
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("ok",))) is None
+    assert game.players[0].threat == 150           # untouched - no silent clamp to 99
+
+
+def test_players_detail_modal_inline_edit_pad_back_discards():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.adjust_threat(0, 20)
+    m = modals.PlayersDetailModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("t", 0, "edit")))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("step", -5)))
+    assert m.on_button(_find(m, ("back",))) is None
+    assert m.edit is None
+    assert game.players[0].threat == 20            # unchanged - back discards
+
+
+def test_questing_progress_modal_header_geometry_and_title():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    close = _find(m, ("close",))
+    assert (close.x, close.y, close.w, close.h) == (408, 4, 64, 32)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "Progress" in texts and "DONE" in texts
+
+
+def test_questing_progress_modal_main_quest_row_has_no_complete_or_remove():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert not any(b.id == ("qdone", None) for b in m.buttons)
+    assert not any(b.id[0] == "qX" for b in m.buttons)
+
+
+def test_questing_progress_modal_quest_editors_adjust_and_log_on_close():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.quest = {"stage_n": 1, "side": "A", "points": 10, "progress": 3}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("qP+", None))) is None
+    assert game.quest["progress"] == 4
+    assert m.on_button(_find(m, ("qT-", None))) is None
+    assert game.quest["points"] == 9
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("close",))) == "close"
+    assert any("Quest 1A set 4/9 (progress view)" in e["text"] for e in game.log)
+
+
+def test_questing_progress_modal_location_current_bump_explores_when_done():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 3, "progress": 2}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("lP+", None))) is None
+    assert game.active_location is None
+    assert any("Explored" in e["text"] for e in game.log)
+
+
+def test_questing_progress_modal_complete_location_logs_and_clears():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 5, "progress": 1}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("ldone", None))) is None
+    assert game.active_location is None
+    assert game.log[-1]["text"] == "Active location Explored"
+
+
+def test_questing_progress_modal_complete_side_quest_logs_and_pops():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.side_quests = [{"points": 5, "progress": 5}]
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("sdone", 0))) is None
+    assert game.side_quests == []
+    assert game.log[-1]["text"] == "Side quest 1 completed"
+
+
+def test_questing_progress_modal_remove_side_quest_logs_and_pops():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.side_quests = [{"points": 5, "progress": 1}]
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("sX", 0))) is None
+    assert game.side_quests == []
+    assert game.log[-1]["text"] == "Side quest 1 removed"
+
+
+def test_questing_progress_modal_remove_location_opens_prompt_without_clearing():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 4, "progress": 2}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("lX", None))) is None
+    assert m.loc_prompt == {"stage": "choose"}
+    assert game.active_location == {"points": 4, "progress": 2}   # untouched
+    m.draw(hw, game, pal)                                         # re-render the prompt
+    assert not any(b.id == ("close",) for b in m.buttons)         # header suppressed
+
+
+def test_questing_progress_modal_loc_prompt_cancel_leaves_location_untouched():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 4, "progress": 2}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("lX", None)))
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("lp_cancel",))) is None
+    assert m.loc_prompt is None
+    assert game.active_location == {"points": 4, "progress": 2}
+
+
+def test_questing_progress_modal_loc_prompt_discard_clears_and_logs():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 4, "progress": 2}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("lX", None)))
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("lp_discard",))) is None
+    assert game.active_location is None
+    assert m.loc_prompt is None
+    assert game.log[-1]["text"] == "Active location removed"
+
+
+def test_questing_progress_modal_loc_prompt_replaced_sets_new_location():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 4, "progress": 2}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("lX", None)))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("lp_replaced",)))
+    assert m.loc_prompt["stage"] == "pts"
+    m.draw(hw, game, pal)
+    for _ in range(3):
+        m.on_button(_find(m, ("lp_pts", 1)))
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("save",))) is None
+    assert game.active_location == {"points": 6, "progress": 0}
+    assert m.loc_prompt is None
+    assert any("Changed active location" in e["text"] for e in game.log)
+
+
+def test_questing_progress_modal_loc_prompt_pts_cancel_returns_to_choose():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 4, "progress": 1}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("lX", None)))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("lp_replaced",)))
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("cancel",))) is None
+    assert m.loc_prompt == {"stage": "choose"}
+    assert game.active_location == {"points": 4, "progress": 1}   # untouched
+
+
+def test_questing_progress_modal_loc_prompt_to_staging_adds_threat_and_clears():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 4, "progress": 2}
+    game.staging = 5
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("lX", None)))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("lp_staging",)))
+    assert m.loc_prompt["stage"] == "contrib"
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("lp_ctr", 1)))
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("save",))) is None
+    assert game.staging == 8      # 5 + (default 2 + 1 tap)
+    assert game.active_location is None
+    assert m.loc_prompt is None
+    assert any("Active location to staging (+3 threat)" in e["text"] for e in game.log)
+
+
+def test_questing_progress_modal_add_location_when_none():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = None
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("addloc",))) is None
+    assert game.active_location == {"points": 3, "progress": 0}
+    assert game.log[-1]["text"] == "Active location added (card effect)"
+
+
+def test_questing_progress_modal_add_location_then_close_does_not_double_log():
+    # Regression: _snap must refresh after any already-logged mutation, or
+    # the closing summary would also emit a spurious "set 0/3" line on top
+    # of the explicit "added" line.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = None
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("addloc",)))
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("close",))) == "close"
+    loc_logs = [e["text"] for e in game.log if "Active location" in e["text"]]
+    assert loc_logs == ["Active location added (card effect)"]
+
+
+def test_questing_progress_modal_heading_radio_sets_heading_and_logs():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.sailing = True
+    game.heading = 0
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("hd_set", 2))) is None
+    assert game.heading == 2
+    assert any("Sailing: heading" in e["text"] for e in game.log)
+    n_before = len(game.log)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("hd_set", 2))) is None   # already active - no-op
+    assert len(game.log) == n_before
+
+
+def test_questing_progress_modal_chart_shows_heading_row_when_sailing():
+    # Spec: the by-round chart's WHEEL/heading row only appears when sailing.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.sailing = True
+    game.resolve_quest(14, 10)
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "willpower / staging / result / heading" in texts
+
+
+def test_questing_progress_modal_chart_hides_heading_row_when_not_sailing():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.sailing = False
+    game.resolve_quest(14, 10)
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "willpower / staging / result" in texts
+    assert "willpower / staging / result / heading" not in texts
+    assert not any(b.id[0] == "hd_set" for b in m.buttons)

@@ -133,18 +133,6 @@ def _reminders_modal():
     return hw, m
 
 
-def _questing_for():
-    from ui.modals import QuestingForModal
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    g = _game()
-    for i, c in enumerate((3, 4, 2, 2)):
-        g.set_commit(i, c)
-    m = QuestingForModal(g)
-    m.draw(hw, g, pal)
-    return hw, m
-
-
 def _counter():
     from ui.modal_counter import CounterModal
     hw = FakeHardware()
@@ -165,9 +153,41 @@ def _sailing_on(g):
     g.heading = 2
 
 
+def _many_side_sailing(g):
+    g.sailing = True
+    g.heading = 1
+    g.side_quests = [{"points": 4, "progress": 1} for _ in range(8)]
+
+
 def _resolution_fail(g):
     g.quest_outcome = "fail"
     g.quest_outcome_n = 3
+
+
+def _players_detail_modal():
+    from ui.modals import PlayersDetailModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    for i, c in enumerate((3, 4, 2, 2)):
+        g.set_commit(i, c)
+    m = PlayersDetailModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _players_detail_edit_modal():
+    # Inline +-5 pad sub-state (nested modals aren't supported - see
+    # PlayersDetailModal's docstring), reached by tapping a token.
+    from ui.modals import PlayersDetailModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    m = PlayersDetailModal(g)
+    m._open_edit(1, "willpower")
+    m.edit[2].tap(5)
+    m.draw(hw, g, pal)
+    return hw, m
 
 
 def _questing_progress_modal():
@@ -176,8 +196,67 @@ def _questing_progress_modal():
     pal = Palette(hw.display)
     g = _game()
     g.sailing = True
-    g.heading = 2
+    g.heading = 1
+    g.side_quests = [{"points": 5, "progress": 2}]
+    for wp, st in [(16, 12), (14, 14), (22, 11)]:
+        g.resolve_quest(wp, st)
     m = QuestingProgressModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _questing_progress_modal_no_location():
+    # No active location and no history yet: "+ Add location" row-slot and
+    # the chart's empty-state placeholder (guards the div-by-zero column
+    # math when quest_history is empty).
+    from ui.modals import QuestingProgressModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = None
+    g.side_quests = []
+    g.sailing = False
+    m = QuestingProgressModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _questing_progress_modal_loc_choose():
+    # In-modal location-remove prompt: the 3-way "choose" stage. Set the
+    # state before the (single) draw - FakeDisplay.calls accumulates across
+    # draw() calls, so drawing the normal view first would leave stale text
+    # in hw.display.calls and produce false-positive collisions.
+    from ui.modals import QuestingProgressModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    m = QuestingProgressModal(g)
+    m.loc_prompt = {"stage": "choose"}
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _questing_progress_modal_loc_pts():
+    # Location-remove prompt: "Replaced" -> new quest-points sub-stage.
+    from ui.modals import QuestingProgressModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    m = QuestingProgressModal(g)
+    m.loc_prompt = {"stage": "pts", "pts": 3}
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _questing_progress_modal_loc_contrib():
+    # Location-remove prompt: "To staging" -> threat-contribution sub-stage.
+    from ui.modals import QuestingProgressModal
+    from ui.counter import CounterState
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    m = QuestingProgressModal(g)
+    m.loc_prompt = {"stage": "contrib", "state": CounterState(2, 0, 9)}
     m.draw(hw, g, pal)
     return hw, m
 
@@ -254,6 +333,7 @@ SCENES = {
     "play_quest_sailing": _play("quest_sailing", mutate=_sailing_on),
     "play_quest_commit": _play("quest_commit"),
     "play_quest_commit_sailing": _play("quest_commit", mutate=_sailing_on),
+    "play_quest_commit_manyside": _play("quest_commit", mutate=_many_side_sailing),
     "play_quest_staging": _play("quest_staging"),
     "play_quest_resolution": _play("quest_resolution"),
     "play_quest_resolution_fail": _play("quest_resolution", mutate=_resolution_fail),
@@ -271,10 +351,15 @@ SCENES = {
     "counter": _counter,
     "elim_modal": _elim_modal,
     "commit_modal": _commit_modal,
-    "questing_for_modal": _questing_for,
+    "players_detail_modal": _players_detail_modal,
+    "players_detail_edit_modal": _players_detail_edit_modal,
     "reminders_modal": _reminders_modal,
     "led_modal": _led_modal,
     "questing_progress_modal": _questing_progress_modal,
+    "questing_progress_modal_no_location": _questing_progress_modal_no_location,
+    "questing_progress_modal_loc_choose": _questing_progress_modal_loc_choose,
+    "questing_progress_modal_loc_pts": _questing_progress_modal_loc_pts,
+    "questing_progress_modal_loc_contrib": _questing_progress_modal_loc_contrib,
     "sailing_modal": _sailing_modal,
     "stage_complete_modal": _stage_complete_modal,
     "quest_config_modal": _quest_config_modal,

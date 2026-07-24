@@ -15,7 +15,10 @@ export const pal = {
   red: rgb(206, 84, 52), btn: rgb(52, 42, 26), btn_ok: rgb(40, 50, 26),
   ok_fg: rgb(158, 196, 104), btn_no: rgb(56, 26, 18), no_fg: rgb(224, 112, 80),
   tab_active: rgb(30, 24, 15), bevel_l: rgb(96, 86, 54), bevel_d: rgb(7, 5, 3),
+  shadow: rgb(34, 30, 24),
   purple: rgb(166, 122, 196), outline: rgb(0, 0, 0), well: rgb(24, 20, 12),
+  value: rgb(214, 180, 110), brown: rgb(104, 70, 34),
+  row_stripe: rgb(66, 60, 42),
   threatPen(t) { return t >= 35 ? this.red : t >= 20 ? this.amber : this.green; },
 };
 
@@ -64,7 +67,7 @@ function drawGlyphs(ctx, s, x, y, scale, color) {
 export function textLeft(ctx, s, x, y, scale, color, shadow = true) {
   if (shadow) {
     const off = scale === 1 ? 1 : 2;
-    drawGlyphs(ctx, s, x + off, y + off, scale, pal.bevel_d);
+    drawGlyphs(ctx, s, x + off, y + off, scale, pal.shadow);
   }
   drawGlyphs(ctx, s, x, y, scale, color);
 }
@@ -179,6 +182,89 @@ export function drawFlag(ctx, x, y, h, color) {
   ctx.lineTo(x + h * 0.14, y + h * 0.4);
   ctx.closePath();
   ctx.fill();
+}
+
+// Circle/arc drawing primitives — the device has no circle/arc primitive, so
+// discs and rings are emitted as per-scanline fillRect runs (angle 0deg=top,
+// clockwise), the same pipeline every rect/tri call here already uses. This
+// is what makes token()/ring() port device-faithfully to PicoGraphics.
+export function disc(ctx, cx, cy, rad, pen) {
+  ctx.fillStyle = pen;
+  for (let py = Math.floor(cy - rad); py <= Math.ceil(cy + rad); py++) {
+    const h2 = rad * rad - (py - cy) ** 2;
+    if (h2 < 0) continue;
+    const hx = Math.floor(Math.sqrt(h2));
+    ctx.fillRect(Math.floor(cx - hx), py, 2 * hx + 1, 1);
+  }
+}
+
+export function arcRuns(ctx, cx, cy, R, r, a0, a1, pen) {
+  // Ring/arc band between radii r..R and angles a0..a1 (0deg=top, cw).
+  ctx.fillStyle = pen;
+  for (let py = Math.floor(cy - R); py <= Math.ceil(cy + R); py++) {
+    let run = false, x0 = 0;
+    for (let px = Math.floor(cx - R); px <= Math.ceil(cx + R) + 1; px++) {
+      const dx = px - cx, dy = py - cy;
+      const dd = Math.hypot(dx, dy);
+      let on = r <= dd && dd <= R;
+      if (on && a1 !== null) {
+        const ang = ((Math.atan2(dx, -dy) * 180 / Math.PI) % 360 + 360) % 360;
+        on = a0 <= ang && ang <= a1;
+      }
+      if (on && !run) { run = true; x0 = px; }
+      else if (!on && run) { ctx.fillRect(x0, py, px - x0, 1); run = false; }
+    }
+  }
+}
+
+export function ring(ctx, cx, cy, R, w, frac, fill, track) {
+  // Thin ring of width w at radius R: full track pen + a frac-of-360 fill
+  // arc clockwise from the top (0deg).
+  arcRuns(ctx, cx, cy, R, R - w, 0, 360, track);
+  if (frac > 0) arcRuns(ctx, cx, cy, R, R - w, 0, frac * 360, fill);
+}
+
+export function token(ctx, cx, cy, R, w, value, vpen, frac, fill, track, vscale = 2) {
+  // Circular stat widget: inset well disc + progress ring + centred value.
+  disc(ctx, cx, cy, R, pal.well);
+  ring(ctx, cx, cy, R, w, frac, fill, track);
+  if (value !== null && value !== undefined)
+    textCenter(ctx, String(value), cx, Math.floor(cy - 4 * vscale), vscale, vpen);
+}
+
+export function wxSmall(ctx, idx, cx, cy, r, pen = null) {
+  // Tiny weather glyph from rect/tri/disc (the 24px icon masks are too big
+  // for the small heading tokens). idx 0 sun / 1 cloud / 2 rain / 3 storm.
+  // `pen` forces one colour (e.g. dim for an inactive radio); null = natural.
+  if (idx === 0) {
+    disc(ctx, cx, cy, r, pen !== null ? pen : pal.amber);
+    disc(ctx, cx - 1, cy - 1, Math.max(1, Math.floor(r / 2)), pen !== null ? pen : pal.gold);
+    ctx.fillStyle = pen !== null ? pen : pal.amber;
+    for (const [dx, dy] of [[0, -r - 3], [0, r + 1], [-r - 3, 0], [r + 1, 0]]) {
+      ctx.fillRect(cx + dx, cy + dy, 2, 2);
+    }
+    return;
+  }
+  const cloud = pen !== null ? pen : pal.muted;
+  disc(ctx, cx - 3, cy, r - 1, cloud);
+  disc(ctx, cx + 3, cy - 1, r - 2, cloud);
+  disc(ctx, cx, cy - 2, r - 1, cloud);
+  ctx.fillStyle = cloud;
+  ctx.fillRect(cx - 6, cy, 12, r - 1);
+  if (idx === 2) {
+    ctx.fillStyle = pen !== null ? pen : pal.dim;
+    for (const k of [-3, 1, 5]) {
+      ctx.fillRect(cx + k, cy + r - 1, 1, 3);
+    }
+  } else if (idx === 3) {
+    ctx.fillStyle = pen !== null ? pen : pal.gold;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + r - 2);
+    ctx.lineTo(cx - 3, cy + r + 3);
+    ctx.lineTo(cx + 2, cy + r);
+    ctx.closePath();
+    ctx.fill();
+  }
 }
 
 // Detailed, coloured weather glyph for the heading facings (canvas

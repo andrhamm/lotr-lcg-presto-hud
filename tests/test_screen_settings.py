@@ -21,7 +21,8 @@ def test_header_shows_settings_title_and_close():
     hw, s = _draw()
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert "Settings" in texts
-    assert "X" in texts
+    assert "DONE" in texts
+    assert "X" not in texts
     assert "Set." not in texts
 
 
@@ -29,6 +30,8 @@ def test_close_is_the_only_nav_target():
     hw, s = _draw()
     navs = [b.id for b in s.buttons if b.id[0] == "nav"]
     assert navs == [("nav", "close")]
+    close = [b for b in s.buttons if b.id == ("nav", "close")][0]
+    assert (close.x, close.y, close.w, close.h) == (408, 4, 64, 32)
 
 
 def test_close_returns_goto_close():

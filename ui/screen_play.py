@@ -7,24 +7,20 @@ travel -> encounter -> combat -> refresh (end round). The header navigates.
 Mirror of docs/js/screen_play.js - keep the two in lockstep.
 """
 
-from gamestate import VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS
+from gamestate import VIEW_ORDER, VIEW_LABELS, SETUP_TIP
 from ui.header import draw_header, HEADER_H
 from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
-                        note_panel, wrap_text, truncate_text, draw_weather,
-                        draw_heart, draw_flag)
+                        note_panel, wrap_text, truncate_text, draw_heart,
+                        draw_flag, disc, arc_runs, token, wx_small)
 from ui.modal_counter import CounterModal
 from ui.modals import LocationPickModal
 from ui import icons
 
 MARGIN = 8
-STRIP_Y = HEADER_H + 10
-CHIP_H = 56
-PROG_Y = STRIP_Y + CHIP_H + 8          # progress row: immediately under threat
-PROG_H = 72                            # progress row is taller (heading card)
-CONTENT_Y = PROG_Y + PROG_H + 8        # everything else starts here
+ZONE_TOP = HEADER_H + 6                # top of the players/progress zones
+CONTENT_Y = 150                        # zones end ~136; tips start below
 CTA_Y = 410
 CTA_H = 58
-GUTTER = MARGIN + 40
 
 
 def draw_notif_pie(d, pal, cx, cy, r, frac, color="amber"):
@@ -57,107 +53,71 @@ class ScreenPlay:
         self.toast = None         # [(icon, text, color)] picked up by the main loop
 
     # -- shared pieces -----------------------------------------------------
-    def _chip_w(self, game):
-        n = len(game.players)
-        return (480 - GUTTER - MARGIN - (n - 1) * MARGIN) // n
-
-    def _chips(self, d, pal, game):
-        """Player threat chips behind the helm gutter icon. First player gets
-        a book-ribbon marker; a 2px bar shows threat / elimination level."""
-        chip_w = self._chip_w(game)
-        icons.draw(d, icons.THREAT, MARGIN + 4, STRIP_Y + 18, pal.red)
+    def _players_zone(self, d, pal, game):
+        """Flipped 3-row players matrix: P# header / threat token / willpower
+        token, one shared tap target over the whole zone (columns are fixed -
+        up to MAX_PLAYERS - not width-sized off the live player count like the
+        old chips)."""
+        pcx = [50, 82, 114, 146]
+        threat_cy, will_cy = ZONE_TOP + 40, ZONE_TOP + 72
+        text_center(d, pal, "P", 18, ZONE_TOP + 2, 2, pal.muted)
+        # player threat helm keeps its red identity (charcoal dropshadow)
+        icons.draw(d, icons.THREAT, 8, threat_cy - 9, pal.bevel_d)
+        icons.draw(d, icons.THREAT, 7, threat_cy - 10, pal.red)
+        icons.draw(d, icons.WILLPOWER, 7, will_cy - 10, pal.gold)
         for i, p in enumerate(game.players):
-            x = GUTTER + i * (chip_w + MARGIN)
-            panel(d, pal, x, STRIP_Y, chip_w, CHIP_H, fill=pal.card)
-            text_center(d, pal, "P%d" % (i + 1), x + chip_w / 2, STRIP_Y + 5, 2, pal.tan)
-            val = "OUT" if p.eliminated else str(p.threat)
-            text_center(d, pal, val, x + chip_w / 2, STRIP_Y + 26, 3,
-                        pal.red if p.eliminated else pal.threat_pen(p.threat))
+            cx = pcx[i]
             if i == game.first_player:
-                ribbon(d, pal, x + chip_w - 20, STRIP_Y + 1)
-            tfrac = 1 if p.eliminated else (p.threat / p.elimination if p.elimination > 0 else 0)
-            self._bottom_bar(d, pal, x, chip_w, STRIP_Y + CHIP_H, tfrac,
-                             pal.red if p.eliminated else pal.threat_pen(p.threat))
-            self.buttons.append(Button(("thr", i), x, STRIP_Y, chip_w, CHIP_H))
-
-    def _commit_row(self, d, pal, game, y):
-        """Per-player willpower commit cards (sunburst gutter), chip-aligned."""
-        chip_w = self._chip_w(game)
-        icons.draw(d, icons.WILLPOWER, MARGIN + 4, y + 18, pal.gold)
-        for i, p in enumerate(game.players):
-            x = GUTTER + i * (chip_w + MARGIN)
-            panel(d, pal, x, y, chip_w, 52, fill=pal.card_hi)
-            text_center(d, pal, str(p.commit), x + chip_w / 2, y + 14, 3, pal.green)
-            self.buttons.append(Button(("commit", i), x, y, chip_w, 52))
-
-    def _progress_row(self, d, pal, game, allow_add=False, show_heading=False):
-        """Quest/location/side-quest progress cards. Tapping any card (or the
-        trail gutter) opens the Questing Progress view. The quest card carries
-        the last resolution's heart; a 2px bar shows progress / quest points.
-        When sailing, a HEADING card joins the row."""
-        y = PROG_Y
-        icons.draw(d, icons.TRAIL, MARGIN + 4, y + 24, pal.gold)   # taps -> progress view
-        self.buttons.append(Button(("prog_view",), 0, y, GUTTER, PROG_H))
-
-        def frac(prog, pts):
-            return prog / pts if pts > 0 else 0
-
-        cards = [("Q%d%s" % (game.quest["stage_n"], game.quest["side"]),
-                  "%d/%d" % (game.quest["progress"], game.quest["points"]),
-                  pal.gold, ("prog_view",),
-                  frac(game.quest["progress"], game.quest["points"]))]
-        if game.active_location is not None:
-            cards.append(("LOC", "%d/%d" % (game.active_location["progress"],
-                                            game.active_location["points"]),
-                          pal.gold, ("prog_view",),
-                          frac(game.active_location["progress"], game.active_location["points"])))
-        for i, sq in enumerate(game.side_quests):
-            cards.append(("SQ%d" % (i + 1), "%d/%d" % (sq["progress"], sq["points"]),
-                          pal.gold, ("prog_view",), frac(sq["progress"], sq["points"])))
-        heading = show_heading and game.sailing
-        n = len(cards) + (1 if heading else 0)
-        cw = min(self._chip_w(game),
-                 (480 - GUTTER - MARGIN - (n - 1) * MARGIN) // n)
-        for i, (label, val, pen, bid, cfrac) in enumerate(cards):
-            x = GUTTER + i * (cw + MARGIN)
-            panel(d, pal, x, y, cw, PROG_H, fill=pal.card)
-            if val:
-                text_center(d, pal, label, x + cw / 2, y + 8, 2, pal.tan)
-                text_center(d, pal, val, x + cw / 2, y + 34, 3, pen)
+                d.set_pen(pal.gold)
+                d.rectangle(cx - 12, ZONE_TOP - 2, 24, 19)
+                text_center(d, pal, str(i + 1), cx, ZONE_TOP + 1, 2, pal.bg, shadow=False)
             else:
-                text_center(d, pal, label, x + cw / 2, y + 26, 2, pen)
-            if i == 0 and game.quest_outcome:
-                ok = game.quest_outcome == "success"
-                draw_heart(d, pal, x + cw - 15, y + 15, 7, not ok,
-                           pal.green if ok else pal.red)
-            if val:
-                self._bottom_bar(d, pal, x, cw, y + PROG_H, cfrac, pal.gold)
-            if bid:
-                self.buttons.append(Button(bid, x, y, cw, PROG_H))
-        if heading:
-            self._heading_progress_card(d, pal, game,
-                                        GUTTER + len(cards) * (cw + MARGIN), y, cw)
+                text_center(d, pal, str(i + 1), cx, ZONE_TOP + 1, 2, pal.tan)
+            danger = p.threat >= p.elimination - 10
+            tfrac = p.threat / p.elimination if p.elimination > 0 else 0
+            token(d, pal, cx, threat_cy, 14, 2,
+                  "OUT" if p.eliminated else str(p.threat),
+                  pal.red if p.eliminated else pal.value, tfrac,
+                  pal.red if danger else pal.gold, pal.dim)
+            if game.view == "quest_commit":
+                wp_fill = pal.gold if p.commit_touched else pal.dim
+            else:
+                wp_fill = pal.gold
+            token(d, pal, cx, will_cy, 14, 2, p.commit, pal.value, 1.0, wp_fill, pal.dim)
+        self.buttons.append(Button(("players_detail",), 8, ZONE_TOP - 2, 156, 90))
 
-    def _heading_pen(self, pal, h):
-        return pal.gold if h == 0 else (pal.red if h == 3 else pal.amber)
-
-    def _heading_progress_card(self, d, pal, game, x, y, cw):
-        """The heading is just another progress card: HEADING label, the weather
-        glyph next to its facing name, and "off-course" beneath (nothing extra
-        when on-course / sunny). Tap to log a sailing test."""
-        pen = self._heading_pen(pal, game.heading)
-        panel(d, pal, x, y, cw, PROG_H, fill=pal.card)
-        text_center(d, pal, "HEADING", x + cw / 2, y + 8, 2, pal.tan)
-        name = HEADINGS[game.heading][2]
-        nw = d.measure_text(name, 2)
-        gx = x + (cw - (24 + 4 + nw)) // 2
-        draw_weather(d, pal, game.heading, gx + 12, y + 38, 12)
-        text_left(d, pal, name, gx + 28, y + 32, 2, pen)
-        if game.heading != 0:
-            s = 2 if d.measure_text("off-course", 2) <= cw - 6 else 1
-            text_center(d, pal, "off-course", x + cw / 2, y + (54 if s == 2 else 56),
-                        s, pal.muted)
-        self.buttons.append(Button(("sail_modal",), x, y, cw, PROG_H))
+    def _progress_zone(self, d, pal, game):
+        """Flipped progress header + one circle row: Q / L / S1..Sn / sailing,
+        one shared tap target over the whole zone. Columns are capped to what
+        fits; overflow drops the newest side quests (Q, L, the oldest sides,
+        and sailing always stay)."""
+        d.set_pen(pal.border)
+        d.rectangle(168, ZONE_TOP, 1, 90)
+        cols = [("Q", game.quest["progress"], game.quest["points"])]
+        if game.active_location is not None:
+            cols.append(("L", game.active_location["progress"], game.active_location["points"]))
+        side_cols = [("S%d" % (i + 1), sq["progress"], sq["points"])
+                     for i, sq in enumerate(game.side_quests)]
+        max_cols = (472 - 174) // 32
+        fixed = len(cols) + (1 if game.sailing else 0)
+        side_budget = max(0, max_cols - fixed)
+        all_cols = cols + side_cols[:side_budget]
+        for i, (label, prog, pts) in enumerate(all_cols):
+            cx = 190 + i * 32
+            text_center(d, pal, label, cx, ZONE_TOP + 2, 2, pal.tan)
+            rem = max(0, pts - prog)
+            frac = prog / pts if pts > 0 else 0
+            token(d, pal, cx, ZONE_TOP + 40, 14, 2, rem, pal.value, frac, pal.gold, pal.dim)
+        if game.sailing:
+            scx = 190 + len(all_cols) * 32
+            icons.draw(d, icons.WHEEL_SM, scx - 8, ZONE_TOP, pal.gold)
+            disc(d, scx, ZONE_TOP + 40, 14, pal.well)
+            for rank, (a0, a1) in enumerate([(272, 360), (0, 88), (92, 178), (182, 268)]):
+                arc_runs(d, scx, ZONE_TOP + 40, 14, 11, a0, a1,
+                         pal.dim if rank < game.heading else pal.gold)
+            wx_small(d, pal, game.heading, scx, ZONE_TOP + 40, 6)
+        text_left(d, pal, "quest points remaining", 174, ZONE_TOP + 66, 1, pal.dim)
+        self.buttons.append(Button(("progress_detail",), 174, ZONE_TOP - 2, 298, 90))
 
     def _cta(self, d, pal, label, id, fill=None, fg=None):
         b = Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H)
@@ -178,7 +138,7 @@ class ScreenPlay:
     def _totals_row(self, d, pal, game, y, with_steppers=False, tappable=()):
         half = (480 - 3 * MARGIN) // 2
         for idx, (label, val, pen, key, icon, ipen, shadow) in enumerate((
-                ("Questing for", game.willpower, pal.gold, "wp",
+                ("Questing for", game.willpower, pal.value, "wp",
                  icons.WILLPOWER_MD, pal.gold, True),
                 ("Staging area", game.staging, pal.outline, "stg",
                  icons.THREAT_MD, pal.outline, False))):
@@ -201,10 +161,21 @@ class ScreenPlay:
                 if key == "wp":
                     self.buttons.append(Button(("wp",), x + 64, y, half - 128, 84))
             elif key in tappable:
-                self.buttons.append(Button((key,), x, y, half, 84))
                 if key == "stg":
-                    text_center(d, pal, "reveal up to +%d" % game.staging_reveal_estimate(),
+                    # thin inset dividers + tan ± glyphs (matches the mock — no
+                    # button chrome). Left/right strips tap ±; centre = big editor.
+                    d.set_pen(pal.border)
+                    d.rectangle(x + 36, y + 8, 1, 56)
+                    d.rectangle(x + half - 36, y + 8, 1, 56)
+                    text_center(d, pal, "-", x + 18, y + 32, 3, pal.tan)
+                    text_center(d, pal, "+", x + half - 18, y + 32, 3, pal.tan)
+                    self.buttons.append(Button(("stg-",), x, y, 36, 84))
+                    self.buttons.append(Button(("stg",), x + 36, y, half - 72, 84))
+                    self.buttons.append(Button(("stg+",), x + half - 36, y, 36, 84))
+                    text_center(d, pal, "+%d reveal estimate" % game.staging_reveal_estimate(),
                                 x + half / 2, y + 64, 2, pal.dim)
+                else:
+                    self.buttons.append(Button((key,), x, y, half, 84))
 
     # -- draw --------------------------------------------------------------
     def draw(self, hw, game, pal):
@@ -236,21 +207,18 @@ class ScreenPlay:
             self.buttons.append(sb)
             self._cta(d, pal, "Begin Round 1", ("advance",))
         elif view == "resource_planning":
-            self._chips(d, pal, game)
-            self._progress_row(d, pal, game, allow_add=True)
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
             note_panel(d, pal, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                        ["Collect resources.", "Draw cards.",
                         "Play allies and attachments."])
             nxt = "quest_sailing" if game.sailing else "quest_commit"
             self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS[nxt], ("advance",))
         elif view == "quest_commit":
-            self._chips(d, pal, game)
-            self._progress_row(d, pal, game, show_heading=True)
-            # per-player willpower row is redundant with a single player
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
+            # willpower now lives in the players matrix; note/totals start at CONTENT_Y
             ty = CONTENT_Y
-            if len(game.players) > 1:
-                self._commit_row(d, pal, game, CONTENT_Y)
-                ty += 60
             th = note_panel(d, pal, MARGIN, ty, 480 - 2 * MARGIN,
                             "Commit characters to the quest.")
             self.buttons.append(Button(("commit_tip",), MARGIN, ty, 480 - 2 * MARGIN, th))
@@ -263,19 +231,19 @@ class ScreenPlay:
         elif view == "quest_resolution":
             self._draw_resolution(d, pal, game)
         elif view == "travel":
-            self._chips(d, pal, game)
-            self._progress_row(d, pal, game)
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
             self._draw_travel(d, pal, game)
         elif view == "refresh":
-            self._chips(d, pal, game)
-            self._progress_row(d, pal, game)
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
             note_panel(d, pal, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                        ["Ready all exhausted cards.",
                         "Threat increases (automatic).",
                         "Pass the first player token."])
             self._cta(d, pal, "End round (raise threat, pass token)", ("endround",))
         else:
-            self._chips(d, pal, game)
+            self._players_zone(d, pal, game)
             notes = {
                 "enc_optional": "Each player may engage one enemy in the staging area (optional).",
                 "enc_checks": "Engagement checks: enemies engage players whose threat >= their cost.",
@@ -289,7 +257,7 @@ class ScreenPlay:
             }
             flavor = {"combat_enemy": (icons.DEFENSE, pal.green),
                       "combat_player": (icons.ATTACK, pal.tan)}.get(view)
-            self._progress_row(d, pal, game)
+            self._progress_zone(d, pal, game)
             note_text = notes.get(view, "")
             if game.sailing and view in ship_notes:
                 note_text = [note_text, ship_notes[view]]
@@ -348,8 +316,8 @@ class ScreenPlay:
                                    480 - 2 * MARGIN, th))
 
     def _draw_sailing(self, d, pal, game):
-        self._chips(d, pal, game)
-        self._progress_row(d, pal, game, allow_add=True, show_heading=True)
+        self._players_zone(d, pal, game)
+        self._progress_zone(d, pal, game)
         if not game.sailing:
             note_panel(d, pal, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                        ["No Sailing keyword on this quest.",
@@ -383,11 +351,16 @@ class ScreenPlay:
         ly += lh
         icons.draw(d, icons.WHEEL_SM, tx, ly, pal.gold)
         text_left(d, pal, "found: move 1 step on-course.", tx + 22, ly, 2, pal.muted)
+        sb = Button(("sail_modal",), MARGIN, ty0 + th + 10, 480 - 2 * MARGIN, 52)
+        bevel(d, pal, sb.x, sb.y, sb.w, sb.h, pal.btn)
+        icons.draw(d, icons.WHEEL, 150, sb.y + 14, pal.gold)
+        text_center(d, pal, "Log sailing test", 262, sb.y + 16, 2, pal.tan)
+        self.buttons.append(sb)
         self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_commit"], ("advance",))
 
     def _draw_staging(self, d, pal, game):
-        self._chips(d, pal, game)
-        self._progress_row(d, pal, game, allow_add=True, show_heading=True)
+        self._players_zone(d, pal, game)
+        self._progress_zone(d, pal, game)
         tw, gutt, lh = 480 - 2 * MARGIN, 28 + 14, 26
         tx, usable = MARGIN + 12 + gutt, tw - 12 - gutt
         lines = wrap_text(
@@ -447,8 +420,8 @@ class ScreenPlay:
     def _draw_resolution(self, d, pal, game):
         if game.quest_outcome != "success":
             # fail / tie: no placement - just report the outcome and move on
-            self._chips(d, pal, game)
-            self._progress_row(d, pal, game)
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
             fail = game.quest_outcome == "fail"
             ty0, gutt, lh = CONTENT_Y + 6, 28 + 14, 26
             tx = MARGIN + 12 + gutt
@@ -563,26 +536,15 @@ class ScreenPlay:
         if k == "qp":
             game.quest["points"] = max(0, min(30, game.quest["points"] + btn.id[1]))
             return True
-        if k == "thr":
-            i = btn.id[1]
-
-            def commit(v, i=i, game=game):
-                before = game.players[i].threat
-                game.adjust_threat(i, v - before)
-                if game.players[i].threat != before:
-                    game.log_event("P%d threat %d -> %d" % (i + 1, before, game.players[i].threat))
-            return ("modal", CounterModal("P%d threat" % (i + 1), game.players[i].threat,
-                                          on_commit=commit, icon="threat",
-                                          subtext="Elimination at %d" % game.players[i].elimination))
-        if k == "commit":
-            from ui.modals import CommitModal
-            return ("modal", CommitModal(game, btn.id[1]))
+        if k == "players_detail":
+            from ui.modals import PlayersDetailModal
+            return ("modal", PlayersDetailModal(game))
         if k == "commit_tip":
             from ui.modals import CommitModal
             return ("modal", CommitModal(game, 0))
         if k == "wp":
-            from ui.modals import QuestingForModal
-            return ("modal", QuestingForModal(game))
+            from ui.modals import PlayersDetailModal
+            return ("modal", PlayersDetailModal(game))
         if k == "enc_rem":
             from ui.modals import RemindersModal
             return ("modal", RemindersModal(game))
@@ -603,7 +565,8 @@ class ScreenPlay:
         if k == "stg+":
             game.staging += 1
             return True
-        if k == "prog_view":
+        if k == "progress_detail":
+            # Task 10 reworks the modal this opens.
             from ui.modals import QuestingProgressModal
             return ("modal", QuestingProgressModal(game))
         if k == "stage_advance":

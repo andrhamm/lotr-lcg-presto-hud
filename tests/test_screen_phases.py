@@ -19,12 +19,14 @@ def _draw(step="3.3"):
     return hw, s, g
 
 
-def test_header_title_and_x_close():
+def test_header_title_and_done_close():
     hw, s, g = _draw()
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "Game Phases" in texts and "X" in texts
+    assert "Game Phases" in texts and "DONE" in texts and "X" not in texts
     navs = [b.id for b in s.buttons if b.id[0] == "nav"]
     assert navs == [("nav", "close")]
+    close = [b for b in s.buttons if b.id == ("nav", "close")][0]
+    assert (close.x, close.y, close.w, close.h) == (408, 4, 64, 32)
 
 
 def test_action_window_markers_and_combat_loop_note():

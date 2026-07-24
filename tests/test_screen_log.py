@@ -23,12 +23,14 @@ def test_header_shows_game_log_title():
     assert "Game Log" in texts
 
 
-def test_x_is_the_only_nav_and_round_is_not_a_link():
+def test_done_is_the_only_nav_and_round_is_not_a_link():
     hw, s = _draw()
     navs = [b.id for b in s.buttons if b.id[0] == "nav"]
-    assert navs == [("nav", "close")]      # X only — R# and Set. are not links
+    assert navs == [("nav", "close")]      # DONE only — R# and Set. are not links
     close = [b for b in s.buttons if b.id == ("nav", "close")][0]
-    assert close.x == 330                  # upper-right, like Settings
+    assert (close.x, close.y, close.w, close.h) == (408, 4, 64, 32)  # upper-right DONE button
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "DONE" in texts and "X" not in texts
 
 
 def test_close_returns_goto_close():

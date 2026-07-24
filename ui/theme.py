@@ -15,6 +15,8 @@ class Palette:
         self.gold = d.create_pen(214, 180, 110)
         self.tan = d.create_pen(200, 186, 144)
         self.muted = d.create_pen(146, 132, 96)
+        # stat-value ink (threat / willpower / progress) - one constant colour
+        self.value = self.gold
         self.dim = d.create_pen(100, 90, 62)
         # semantics
         self.green = d.create_pen(136, 168, 92)
@@ -23,6 +25,8 @@ class Palette:
         # weather (heading facing glyphs)
         self.cloud = d.create_pen(185, 188, 198)
         self.sky = d.create_pen(95, 168, 230)
+        # progress-token brown (dropshadow behind the green ranger/trail icon)
+        self.brown = d.create_pen(104, 70, 34)
         # controls
         self.btn = d.create_pen(52, 42, 26)
         self.btn_ok = d.create_pen(40, 50, 26)
@@ -33,12 +37,15 @@ class Palette:
         # bevels (video-game chrome: light top-left, dark bottom-right)
         self.bevel_l = d.create_pen(96, 86, 54)
         self.bevel_d = d.create_pen(7, 5, 3)
+        self.shadow = d.create_pen(34, 30, 24)
         # leadership purple (action-window notifications)
         self.purple = d.create_pen(166, 122, 196)
         # true black-ish ink (staging threat value/icon, shadows)
         self.outline = d.create_pen(0, 0, 0)
         # inset value well
         self.well = d.create_pen(24, 20, 12)
+        # lighter row-stripe background (by-round chart: makes black ink read)
+        self.row_stripe = d.create_pen(66, 60, 42)
 
     def threat_pen(self, threat):
         if threat >= 35:

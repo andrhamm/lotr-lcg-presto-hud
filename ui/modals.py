@@ -6,7 +6,9 @@ Each modal mutates the passed GameState directly on confirm. Protocol:
 """
 
 from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
-                        stepper, draw_weather)
+                        stepper, draw_weather, token, circ_btn, disc, arc_runs,
+                        ring, wx_small)
+from ui.counter import CounterState
 from ui import icons
 from gamestate import HEADINGS
 
@@ -262,76 +264,160 @@ class SideQuestsModal:
         return None
 
 
-class QuestingForModal:
-    """Per-player willpower commits in one view — player-settings layout with
-    willpower coloring and the sunburst as a currency mark. Save applies and
-    logs each change; Cancel discards."""
+class PlayersDetailModal:
+    """Every player's threat + willpower in one inline grid (Task 9) - the
+    unified target for the play screen's Players zone and the "Questing for"
+    card (replaces the QuestingProgressModal/QuestingForModal stubs there).
+    Edits are live: every tap commits immediately to the game + logs (no
+    save/cancel step). Tapping a token opens a small inline +-5 pad (nested
+    modals aren't supported - the main loop only holds one `modal` at a time)
+    that replaces the grid until OK/back, modeled on CounterModal."""
+
+    STEPS = ((-5, "-5"), (-1, "-1"), (1, "+1"), (5, "+5"))
 
     def __init__(self, game):
         self.game = game
-        self.vals = [p.commit for p in game.players]
         self.buttons = []
+        self.edit = None   # (i, stat, CounterState) while the inline pad is open
+
+    def _open_edit(self, i, stat):
+        game = self.game
+        cur = game.players[i].threat if stat == "threat" else game.players[i].commit
+        if stat == "willpower":
+            game.touch_commit(i)
+        # CounterState's default max (99) is a cosmetic pad ceiling, not a
+        # game rule - adjust_threat/set_commit have no upper bound. Widen it
+        # so opening the pad on an already-high value (e.g. a spammed-past-99
+        # threat) can never silently clamp the preview down on an untouched
+        # OK tap.
+        self.edit = (i, stat, CounterState(cur, 0, max(9999, cur)))
+
+    def _commit_edit(self):
+        i, stat, state = self.edit
+        before = state.value
+        state.confirm()
+        after = state.value
+        if after != before:
+            game = self.game
+            if stat == "threat":
+                game.adjust_threat(i, after - before)
+                game.log_event("P%d threat %d -> %d" % (i + 1, before, game.players[i].threat))
+            else:
+                game.set_commit(i, after)
+                game.log_event("P%d committed %d willpower" % (i + 1, after))
+        self.edit = None
+
+    def _editor_row(self, d, pal, i, key, cx, cy, value, frac, ring_fill):
+        circ_btn(d, pal, cx - 30, cy, 11, "-")
+        circ_btn(d, pal, cx + 30, cy, 11, "+")
+        token(d, pal, cx, cy, 14, 2, value, pal.value, frac, ring_fill, pal.dim)
+        self.buttons.append(Button((key, i, -1), cx - 30 - 12, cy - 12, 24, 24))
+        self.buttons.append(Button((key, i, "edit"), cx - 12, cy - 12, 24, 24))
+        self.buttons.append(Button((key, i, 1), cx + 30 - 12, cy - 12, 24, 24))
 
     def draw(self, hw, game, pal):
         d = hw.display
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "Questing for...", 240, 22, 3, pal.gold)
+        if self.edit:
+            self._draw_edit(d, pal)
+            return
+        from ui.header import modal_header
+        modal_header(d, pal, game, "Players", self.buttons)
+        threat_x, will_x, label_x = 150, 330, 32
+        text_center(d, pal, "Threat", threat_x, 46, 1, pal.dim)
+        text_center(d, pal, "Willpower", will_x, 46, 1, pal.dim)
+        for i, p in enumerate(game.players):
+            cy = 66 + i * 56
+            label = "P%d" % (i + 1)
+            if i == game.first_player:
+                d.set_pen(pal.gold)
+                d.rectangle(label_x - 18, cy - 11, 36, 22)
+                text_center(d, pal, label, label_x, cy - 8, 2, pal.bg, shadow=False)
+            else:
+                text_center(d, pal, label, label_x, cy - 8, 2, pal.tan)
+            danger = p.threat >= p.elimination - 10
+            tfrac = p.threat / p.elimination if p.elimination > 0 else 0
+            self._editor_row(d, pal, i, "t", threat_x, cy, p.threat, tfrac,
+                             pal.red if danger else pal.gold)
+            self._editor_row(d, pal, i, "w", will_x, cy, p.commit, 1.0, pal.gold)
 
-        y = 74
-        for i, p in enumerate(self.game.players):
-            if p.eliminated:
-                continue
-            text_left(d, pal, "P%d" % (i + 1), 30, y + 16, 3, pal.tan)
-            mn = Button(("wpm", i, -1), 108, y + 4, 52, 48)
-            pl = Button(("wpm", i, 1), 340, y + 4, 52, 48)
-            for b, s in ((mn, "-"), (pl, "+")):
-                bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-                text_center(d, pal, s, b.x + 26, b.y + 12, 3, pal.tan)
-                self.buttons.append(b)
-            v = str(self.vals[i])
-            vw = d.measure_text(v, 3)
-            gx = int(250 - (vw + 8 + 28) / 2)
-            text_left(d, pal, v, gx, y + 16, 3, pal.gold)
-            icons.draw(d, icons.WILLPOWER_MD, gx + vw + 8, y + 14, pal.gold)
-            y += 62
+    def _draw_edit(self, d, pal):
+        i, stat, state = self.edit
+        is_threat = stat == "threat"
+        title = "P%d %s" % (i + 1, "Threat" if is_threat else "Willpower")
+        mask = icons.THREAT if is_threat else icons.WILLPOWER
+        pen = pal.red if is_threat else pal.gold
+        w = d.measure_text(title, 3)
+        ix = int(240 - w / 2 - 30)
+        icons.draw(d, mask, ix, 30, pen)
+        text_center(d, pal, title, 240 + 12, 28, 3, pal.gold)
 
-        total = sum(self.vals[i] for i, p in enumerate(self.game.players)
-                    if not p.eliminated)
-        tv = str(total)
-        tw = d.measure_text("Total  " + tv, 3)
-        text_left(d, pal, "Total", 30, y + 18, 2, pal.muted)
-        vw = d.measure_text(tv, 3)
-        gx = int(250 - (vw + 8 + 28) / 2)
-        text_left(d, pal, tv, gx, y + 14, 3, pal.gold)
-        icons.draw(d, icons.WILLPOWER_MD, gx + vw + 8, y + 12, pal.gold)
+        val = state.preview
+        text_center(d, pal, str(val), 240, 90, 9, pal.gold)
+        if state.pending:
+            dlt = state.delta
+            text_center(d, pal, "%d  ->  %d" % (state.value, val), 240, 190, 2, pal.muted)
+            text_center(d, pal, "%s%d" % ("+" if dlt >= 0 else "", dlt), 240, 216, 3,
+                        pal.green if dlt >= 0 else pal.red)
 
-        _footer(d, pal, self.buttons)
+        bw, bh, gap = 104, 76, 8
+        x0 = (480 - (4 * bw + 3 * gap)) // 2
+        for k, (step, label) in enumerate(self.STEPS):
+            b = Button(("step", step), x0 + k * (bw + gap), 250, bw, bh)
+            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn, t=3)
+            text_center(d, pal, label, b.x + b.w / 2, b.y + 26, 3, pal.tan)
+            self.buttons.append(b)
+
+        no = Button(("back",), 24, 360, 200, 92)
+        ok = Button(("ok",), 256, 360, 200, 92)
+        bevel(d, pal, no.x, no.y, no.w, no.h, pal.btn_no, t=3)
+        text_center(d, pal, "X", no.x + no.w / 2, no.y + 28, 4, pal.no_fg)
+        bevel(d, pal, ok.x, ok.y, ok.w, ok.h, pal.btn_ok, t=3)
+        text_center(d, pal, "OK", ok.x + ok.w / 2, ok.y + 28, 4, pal.ok_fg)
+        self.buttons.append(no)
+        self.buttons.append(ok)
 
     def on_button(self, btn):
         k = btn.id[0]
-        if k == "wpm":
-            i, delta = btn.id[1], btn.id[2]
-            self.vals[i] = max(0, min(99, self.vals[i] + delta))
+        if self.edit:
+            if k == "step":
+                self.edit[2].tap(btn.id[1])
+                return None
+            if k == "ok":
+                self._commit_edit()
+                return None
+            if k == "back":
+                self.edit = None
+                return None
             return None
-        if k == "save":
-            for i, p in enumerate(self.game.players):
-                if p.eliminated:
-                    continue
-                before = p.commit
-                if self.vals[i] != before:
-                    self.game.set_commit(i, self.vals[i])
-                    self.game.log_event("P%d committed %d willpower"
-                                        % (i + 1, self.vals[i]))
+        if k == "close":
             return "close"
-        if k == "cancel":
-            return "cancel"
+        if k in ("t", "w"):
+            i, action = btn.id[1], btn.id[2]
+            if action == "edit":
+                self._open_edit(i, "threat" if k == "t" else "willpower")
+                return None
+            if k == "t":
+                before = self.game.players[i].threat
+                self.game.adjust_threat(i, action)
+                after = self.game.players[i].threat
+                if after != before:
+                    self.game.log_event("P%d threat %d -> %d" % (i + 1, before, after))
+            else:
+                self.game.touch_commit(i)
+                before = self.game.players[i].commit
+                nxt = max(0, before + action)
+                if nxt != before:
+                    self.game.set_commit(i, nxt)
+                    self.game.log_event("P%d committed %d willpower" % (i + 1, nxt))
+            return None
         return None
 
 
 class RemindersModal:
-    """Encounter reminders — log-style header (R# left, X right). Checkboxes
+    """Encounter reminders — modal header (R# left, DONE right). Checkboxes
     enable a timed toast at the start of the matching phase view."""
 
     def __init__(self, game):
@@ -340,17 +426,12 @@ class RemindersModal:
 
     def draw(self, hw, game, pal):
         from gamestate import REMINDER_DEFS
+        from ui.header import modal_header
         d = hw.display
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_left(d, pal, "R%d %s" % (self.game.round, self.game.step), 10, 12, 2, pal.muted)
-        text_center(d, pal, "Encounter Reminders", 240, 12, 2, pal.gold)
-        w = d.measure_text("X", 3)
-        text_left(d, pal, "X", 480 - 16 - w, 8, 3, pal.no_fg)
-        self.buttons.append(Button(("close",), 330, 0, 150, 40))
-        d.set_pen(pal.border)
-        d.rectangle(0, 40, 480, 1)
+        modal_header(d, pal, self.game, "Encounter Reminders", self.buttons)
 
         y = 56
         for key, label, view, _toast, _icon in REMINDER_DEFS:
@@ -796,13 +877,23 @@ class AllocationModal:
 
 
 class QuestingProgressModal:
-    """All questing progress in one place: main quest, active location and each
-    side quest (progress + quest-points editable), add/remove side quests, and
-    the heading shift when sailing. Value edits are logged on close."""
+    """All questing progress in one place: main quest, active location (or a
+    slot to add one) and each side quest, each as Current (live progress
+    ring) | Target (dim, no fill) circular editors. Non-main rows add
+    complete/remove icon buttons; removing the Location opens an in-modal
+    prompt (Replaced / To staging / Discard - a modal cannot open another,
+    so this is state on self, not a nested modal). Weather radios replace
+    the old heading stepper when sailing. A bottom-anchored chart summarizes
+    quest_history by round. Silent progress/points edits are batched into
+    one summary log line per field on close."""
+
+    ROWS_Y0 = 62
+    ROW_H = 38
 
     def __init__(self, game):
         self.game = game
         self.buttons = []
+        self.loc_prompt = None   # {"stage": "choose"|"pts"|"contrib", ...} or None
         self._snap = self._snapshot()
 
     def _snapshot(self):
@@ -817,83 +908,206 @@ class QuestingProgressModal:
 
     def _items(self):
         g = self.game
-        items = [{"kind": "q", "name": "Quest %s" % g.quest_label()}]
-        if g.active_location:
-            items.append({"kind": "l", "name": "Location", "removable": True})
+        items = [{"kind": "q", "name": "Quest %s" % g.quest_label(), "removable": False}]
+        items.append({"kind": "l", "name": "Location", "removable": True}
+                     if g.active_location else {"kind": "l_add"})
         for i, s in enumerate(g.side_quests):
-            items.append({"kind": "s", "idx": i, "name": "Side Quest %d" % (i + 1),
-                          "sub": s.get("since"), "removable": True})
+            items.append({"kind": "s", "idx": i, "name": "Side Quest %d" % (i + 1), "removable": True})
         return items
+
+    def _val_editor2(self, d, pal, cx, cy, value, frac, progress_ring, id_minus, id_plus):
+        """Circular -/+ flanking a value token: Current shows a live progress
+        ring (token()); Target is dim-only (well + full dim ring, no fill)."""
+        circ_btn(d, pal, cx - 30, cy, 10, "-")
+        if progress_ring:
+            token(d, pal, cx, cy, 13, 2, value, pal.gold, frac, pal.gold, pal.dim)
+        else:
+            disc(d, cx, cy, 13, pal.well)
+            arc_runs(d, cx, cy, 13, 11, 0, 360, pal.dim)
+            text_center(d, pal, str(value), cx, int(cy - 8), 2, pal.gold)
+        circ_btn(d, pal, cx + 30, cy, 10, "+")
+        self.buttons.append(Button(id_minus, cx - 30 - 12, cy - 12, 24, 24))
+        self.buttons.append(Button(id_plus, cx + 30 - 12, cy - 12, 24, 24))
+
+    def _icon_btn(self, d, pal, cx, cy, r, kind, id):
+        """Small circular action: 'x' = remove (red X, reuses circ_btn),
+        'done' = mark complete (green pennant flag)."""
+        if kind == "x":
+            circ_btn(d, pal, cx, cy, r, "X", pal.red)
+        else:
+            disc(d, cx, cy, r, pal.btn)
+            arc_runs(d, cx, cy, r, r - 2, 0, 360, pal.bevel_l)
+            d.set_pen(pal.green)
+            d.rectangle(cx - 4, cy - 5, 1, 10)
+            d.triangle(cx - 3, cy - 5, cx + 4, cy - 3, cx - 3, cy - 1)
+        self.buttons.append(Button(id, cx - 12, cy - 12, 24, 24))
 
     def _row(self, d, pal, it, y):
         g = self.game
+        cy = y + 8
+        if it["kind"] == "l_add":
+            b = Button(("addloc",), 12, y + 7, 140, 24)
+            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
+            text_center(d, pal, "+ Add location", b.x + b.w / 2, b.y + 5, 2, pal.tan)
+            self.buttons.append(b)
+            return
         if it["kind"] == "q":
-            prog, pts, pfx = g.quest["progress"], g.quest["points"], "q"
+            prog, pts, pfx, idx = g.quest["progress"], g.quest["points"], "q", None
         elif it["kind"] == "l":
-            prog, pts, pfx = g.active_location["progress"], g.active_location["points"], "l"
+            prog, pts, pfx, idx = (g.active_location["progress"], g.active_location["points"],
+                                   "l", None)
         else:
             s = g.side_quests[it["idx"]]
-            prog, pts, pfx = s["progress"], s["points"], "s"
-        panel(d, pal, 12, y, 456, 58)
-        text_left(d, pal, it["name"], 22, y + 8, 2, pal.tan)
-        if it.get("sub"):
-            text_left(d, pal, "since %s" % it["sub"], 22, y + 32, 1, pal.dim)
-        idx = it.get("idx")
-        text_left(d, pal, "current", 166, y + 2, 1, pal.muted)
-        stepper(d, pal, self.buttons, (pfx + "P-", idx), (pfx + "P+", idx), 164, y + 12, str(prog), 130, 42)
-        text_left(d, pal, "points", 304, y + 2, 1, pal.muted)
-        stepper(d, pal, self.buttons, (pfx + "T-", idx), (pfx + "T+", idx), 300, y + 12, str(pts), 130, 42)
+            prog, pts, pfx, idx = s["progress"], s["points"], "s", it["idx"]
+        text_left(d, pal, it["name"], 12, y, 2, pal.tan)
+        self._val_editor2(d, pal, 178, cy, prog, (prog / pts if pts else 0), True,
+                          (pfx + "P-", idx), (pfx + "P+", idx))
+        self._val_editor2(d, pal, 300, cy, pts, 0, False,
+                          (pfx + "T-", idx), (pfx + "T+", idx))
         if it.get("removable"):
-            rm = Button((pfx + "X", idx), 436, y + 15, 36, 36)
-            bevel(d, pal, rm.x, rm.y, rm.w, rm.h, pal.btn_no)
-            text_center(d, pal, "x", rm.x + 18, rm.y + 10, 2, pal.no_fg)
-            self.buttons.append(rm)
+            self._icon_btn(d, pal, 400, cy, 11, "done", (pfx + "done", idx))
+            self._icon_btn(d, pal, 436, cy, 11, "x", (pfx + "X", idx))
 
     def draw(self, hw, game, pal):
+        from ui.header import modal_header
         d = hw.display
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_left(d, pal, "R%d %s" % (self.game.round, self.game.step), 10, 12, 2, pal.muted)
-        text_center(d, pal, "Questing Progress", 240, 12, 2, pal.gold)
-        text_left(d, pal, "X", 480 - 16 - d.measure_text("X", 3), 8, 3, pal.no_fg)
-        self.buttons.append(Button(("close",), 330, 0, 150, 40))
-        d.set_pen(pal.border)
-        d.rectangle(0, 40, 480, 1)
-        y = 48
-        for it in self._items():
-            self._row(d, pal, it, y)
-            y += 62
-        add = Button(("add",), 12, y, 456, 38)
+        if self.loc_prompt:
+            self._draw_loc_prompt(d, pal)
+            return
+        modal_header(d, pal, game, "Progress", self.buttons)
+
+        text_left(d, pal, "Quest points", 12, 48, 1, pal.muted)
+        text_center(d, pal, "Current", 178, 48, 1, pal.dim)
+        text_center(d, pal, "Target", 300, 48, 1, pal.dim)
+
+        items = self._items()
+        for i, it in enumerate(items):
+            self._row(d, pal, it, self.ROWS_Y0 + i * self.ROW_H)
+        n = len(items)
+
+        add_y = self.ROWS_Y0 + n * self.ROW_H - 4
+        add = Button(("add",), 12, add_y, 120, 24)
         bevel(d, pal, add.x, add.y, add.w, add.h, pal.btn)
-        text_center(d, pal, "+ Add side quest", 240, y + 11, 2, pal.tan)
+        text_center(d, pal, "+ Side quest", add.x + add.w / 2, add.y + 5, 2, pal.tan)
         self.buttons.append(add)
-        y += 46
+
         if self.game.sailing:
-            h = self.game.heading
-            pen = pal.gold if h == 0 else (pal.red if h == 3 else pal.amber)
-            panel(d, pal, 12, y, 456, 52)
-            text_left(d, pal, "Heading", 22, y + 18, 2, pal.tan)
-            draw_weather(d, pal, h, 176, y + 26, 12)
-            text_left(d, pal, HEADINGS[h][2], 196, y + 18, 2, pen)
-            mn = Button(("hd", -1), 320, y + 10, 60, 32)
-            pl = Button(("hd", 1), 388, y + 10, 60, 32)
-            button(d, pal, mn, "-", 3)
-            button(d, pal, pl, "+", 3)
-            self.buttons.append(mn)
-            self.buttons.append(pl)
-        done = Button(("close",), 12, 430, 456, 42)
-        bevel(d, pal, done.x, done.y, done.w, done.h, pal.btn_ok, t=3)
-        text_center(d, pal, "Done", 240, 442, 2, pal.ok_fg)
-        self.buttons.append(done)
+            heading_y = self.ROWS_Y0 + n * self.ROW_H + 34
+            text_left(d, pal, "Heading", 12, heading_y, 2, pal.tan)
+            cy = heading_y + 4
+            for i in range(4):
+                cx = 150 + i * 40
+                disc(d, cx, cy, 14, pal.well)
+                active = i == self.game.heading
+                if active:
+                    ring(d, cx, cy, 14, 2, 1.0, pal.gold, pal.gold)
+                wx_small(d, pal, i, cx, cy, 7, None if active else pal.dim)
+                self.buttons.append(Button(("hd_set", i), cx - 14, cy - 14, 28, 28))
+
+        self._draw_chart(d, pal)
+
+    def _draw_chart(self, d, pal):
+        """Absolutely positioned near the bottom regardless of how many rows
+        are above (quest/location/side-quest count varies) - never moves."""
+        cy0 = 344
+        d.set_pen(pal.border)
+        d.rectangle(8, cy0 - 12, 464, 1)
+        text_left(d, pal, "THIS GAME - BY ROUND", 12, cy0 - 9, 1, pal.muted)
+        cols = self.game.quest_history[-8:]
+        if not cols:
+            text_center(d, pal, "No rounds resolved yet", 240, cy0 + 14, 1, pal.dim)
+            return
+        x0 = 52
+        stride = (472 - x0) // len(cols)
+        for i, r in enumerate(cols):
+            text_center(d, pal, "R%d" % r["round"], x0 + i * stride + stride // 2, cy0, 1, pal.dim)
+        hdg_pen = [pal.gold, pal.amber, pal.amber, pal.red]
+
+        def _result_cell(r):
+            signed = -r["n"] if r["outcome"] == "fail" else r["n"]
+            s = ("+%d" % signed) if signed > 0 else str(signed)
+            return s, (pal.green if signed > 0 else pal.red)
+
+        rows = [
+            (icons.WILLPOWER, pal.gold, False, lambda r: (str(r["willpower"]), pal.gold)),
+            (icons.THREAT, pal.outline, True, lambda r: (str(r["staging"]), pal.outline)),
+            (icons.TRAIL, pal.green, False, _result_cell),
+        ]
+        if self.game.sailing:
+            rows.append((icons.WHEEL, pal.gold, False,
+                         lambda r: (str(r["heading"]), hdg_pen[r["heading"]])))
+        ry = cy0 + 14
+        for mask, ipen, stripe, cell in rows:
+            if stripe:
+                d.set_pen(pal.row_stripe)
+                d.rectangle(8, ry - 4, 464, 24)
+            icons.draw(d, mask, 12, ry - 2, ipen)
+            for i, r in enumerate(cols):
+                s, pen = cell(r)
+                text_center(d, pal, s, x0 + i * stride + stride // 2, ry, 2, pen)
+            ry += 26
+        caption = "willpower / staging / result" + (" / heading" if self.game.sailing else "")
+        text_center(d, pal, caption, 240, ry + 4, 1, pal.dim)
+
+    def _draw_loc_prompt(self, d, pal):
+        lp = self.loc_prompt
+        if lp["stage"] == "choose":
+            self._draw_loc_choose(d, pal)
+        elif lp["stage"] == "pts":
+            self._draw_loc_pts(d, pal)
+        else:
+            self._draw_loc_contrib(d, pal)
+
+    def _draw_loc_choose(self, d, pal):
+        loc = self.game.active_location
+        text_center(d, pal, "Location removed", 240, 30, 3, pal.gold)
+        text_center(d, pal, "What happened to it?", 240, 70, 2, pal.tan)
+        text_center(d, pal, "%d/%d progress will be discarded" % (loc["progress"], loc["points"]),
+                    240, 94, 1, pal.dim)
+
+        def opt(y, id, label, sub):
+            b = Button((id,), 24, y, 432, 64)
+            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn, t=3)
+            text_center(d, pal, label, 240, y + 14, 3, pal.tan)
+            text_center(d, pal, sub, 240, y + 44, 1, pal.dim)
+            self.buttons.append(b)
+
+        opt(120, "lp_replaced", "Replaced", "enter the new location's quest points")
+        opt(196, "lp_staging", "To staging", "its threat returns to the staging area")
+        opt(272, "lp_discard", "Discard", "no replacement")
+        cancel = Button(("lp_cancel",), 24, 356, 432, 56)
+        bevel(d, pal, cancel.x, cancel.y, cancel.w, cancel.h, pal.btn_no, t=3)
+        text_center(d, pal, "Cancel", 240, cancel.y + 18, 2, pal.no_fg)
+        self.buttons.append(cancel)
+
+    def _draw_loc_pts(self, d, pal):
+        text_center(d, pal, "Replace location", 240, 30, 3, pal.gold)
+        text_left(d, pal, "Quest points", 60, 216, 2, pal.tan)
+        stepper(d, pal, self.buttons, ("lp_pts", -1), ("lp_pts", 1), 250, 200,
+               str(self.loc_prompt["pts"]), 170, 60)
+        _footer(d, pal, self.buttons, save_label="Confirm")
+
+    def _draw_loc_contrib(self, d, pal):
+        text_center(d, pal, "Location to staging", 240, 30, 3, pal.gold)
+        icons.draw(d, icons.THREAT, 60, 208, pal.red)
+        text_left(d, pal, "Contribution", 88, 216, 2, pal.tan)
+        stepper(d, pal, self.buttons, ("lp_ctr", -1), ("lp_ctr", 1), 250, 200,
+               str(self.loc_prompt["state"].preview), 170, 60)
+        text_left(d, pal, "added to the staging area", 60, 270, 1, pal.dim)
+        _footer(d, pal, self.buttons, save_label="Confirm")
 
     def _clamp_adj(self, cur, delta):
         return max(0, min(99, cur + delta))
 
     def on_button(self, btn):
+        g = self.game
+        if self.loc_prompt:
+            return self._on_loc_prompt_button(btn)
         k = btn.id[0]
         a = btn.id[1] if len(btn.id) > 1 else None
-        g = self.game
         up = k.endswith("+")
         if k in ("qP-", "qP+"):
             g.quest["progress"] = self._clamp_adj(g.quest["progress"], 1 if up else -1)
@@ -908,9 +1122,13 @@ class QuestingProgressModal:
         if k in ("lT-", "lT+"):
             g.active_location["points"] = self._clamp_adj(g.active_location["points"], 1 if up else -1)
             return None
-        if k == "lX":
+        if k == "ldone":
+            g.log_event("Active location Explored")
             g.active_location = None
-            g.log_event("Active location cleared (progress view)")
+            self._snap = self._snapshot()
+            return None
+        if k == "lX":
+            self.loc_prompt = {"stage": "choose"}
             return None
         if k in ("sP-", "sP+"):
             s = g.side_quests[a]
@@ -920,21 +1138,79 @@ class QuestingProgressModal:
             s = g.side_quests[a]
             s["points"] = self._clamp_adj(s["points"], 1 if up else -1)
             return None
-        if k == "sX":
+        if k == "sdone":
+            g.log_event("Side quest %d completed" % (a + 1))
             g.side_quests.pop(a)
-            g.log_event("Side quest %d removed (progress view)" % (a + 1))
+            self._snap = self._snapshot()
+            return None
+        if k == "sX":
+            g.log_event("Side quest %d removed" % (a + 1))
+            g.side_quests.pop(a)
+            self._snap = self._snapshot()
             return None
         if k == "add":
-            g.side_quests.append({"points": 4, "progress": 0,
-                                  "since": "R%d %s" % (g.round, g.step)})
+            g.side_quests.append({"points": 4, "progress": 0})
             g.log_event("Side quest %d added (progress view)" % len(g.side_quests))
+            self._snap = self._snapshot()
             return None
-        if k == "hd":
-            g.shift_heading(a, "progress view")
+        if k == "addloc":
+            g.active_location = {"points": 3, "progress": 0}
+            g.log_event("Active location added (card effect)")
+            self._snap = self._snapshot()
+            return None
+        if k == "hd_set":
+            if a != g.heading:
+                g.shift_heading(a - g.heading, "progress view")
             return None
         if k == "close":
             self._log_changes()
             return "close"
+        return None
+
+    def _on_loc_prompt_button(self, btn):
+        from ui.counter import CounterState
+        g = self.game
+        k = btn.id[0]
+        lp = self.loc_prompt
+        if lp["stage"] == "choose":
+            if k == "lp_replaced":
+                self.loc_prompt = {"stage": "pts", "pts": 3}
+                return None
+            if k == "lp_staging":
+                self.loc_prompt = {"stage": "contrib", "state": CounterState(2, 0, 9)}
+                return None
+            if k == "lp_discard":
+                g.log_event("Active location removed")
+                g.active_location = None
+                self._snap = self._snapshot()
+                self.loc_prompt = None
+                return None
+            if k == "lp_cancel":
+                self.loc_prompt = None
+                return None
+            return None
+        # pts / contrib sub-stages share the generic _footer() ids
+        if k == "cancel":
+            self.loc_prompt = {"stage": "choose"}
+            return None
+        if k == "save":
+            if lp["stage"] == "pts":
+                g.change_location(lp["pts"], 0)
+            else:
+                lp["state"].confirm()
+                v = lp["state"].value
+                g.staging += v
+                g.active_location = None
+                g.log_event("Active location to staging (+%d threat)" % v)
+            self._snap = self._snapshot()
+            self.loc_prompt = None
+            return None
+        if k == "lp_pts":
+            lp["pts"] = max(1, min(30, lp["pts"] + btn.id[1]))
+            return None
+        if k == "lp_ctr":
+            lp["state"].tap(btn.id[1])
+            return None
         return None
 
     def _log_changes(self):
@@ -977,16 +1253,12 @@ class SailingModal:
         text_left(d, pal, label, x0 + 32, cy + (2 if scale == 2 else 0), scale, pen)
 
     def draw(self, hw, game, pal):
+        from ui.header import modal_header
         d = hw.display
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_left(d, pal, "R%d %s" % (self.game.round, self.game.step), 10, 12, 2, pal.muted)
-        text_center(d, pal, "Sailing test", 240, 12, 2, pal.gold)
-        text_left(d, pal, "X", 480 - 16 - d.measure_text("X", 3), 8, 3, pal.no_fg)
-        self.buttons.append(Button(("cancel",), 330, 0, 150, 40))
-        d.set_pen(pal.border)
-        d.rectangle(0, 40, 480, 1)
+        modal_header(d, pal, self.game, "Sailing test", self.buttons)
 
         text_center(d, pal, "Current heading", 240, 54, 1, pal.dim)
         self._heading(d, pal, self.game.heading, 74, 2)
@@ -1043,7 +1315,9 @@ class SailingModal:
                     why = "card effect"
                 self.game.shift_heading(-self.v, why)
             return "close"
-        if k == "cancel":
+        # Footer Cancel and the header DONE button both dismiss without
+        # applying the pending wheel delta — only Apply commits the shift.
+        if k in ("cancel", "close"):
             return "cancel"
         return None
 

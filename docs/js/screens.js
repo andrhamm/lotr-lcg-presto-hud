@@ -2,7 +2,8 @@
 // Structure mirrors the Python: every screen/modal draws into ctx, rebuilds
 // .buttons, and handles taps in onButton returning the same protocol values.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
-         stepper, wrapText, truncateText, ribbon, notePanel, drawWeather } from "./ui.js";
+         stepper, wrapText, truncateText, ribbon, notePanel, drawWeather,
+         disc, arcRuns, ring, token, wxSmall } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, REMINDER_DEFS, HEADINGS,
@@ -19,6 +20,13 @@ const CTA_Y = 410;
 const CTA_H = 58;
 const GUTTER = MARGIN + 40;
 
+// Upper-right DONE bevel button: the universal "commit and dismiss" affordance
+// shared by drawHeader's close case and modalHeader (same geometry, same pens).
+function doneButton(ctx) {
+  bevel(ctx, 408, 4, 64, 32, pal.btn_ok);
+  textCenter(ctx, "DONE", 440, 12, 2, pal.ok_fg);
+}
+
 export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
                                                  close = false, closeLeft = false } = {}) {
   const roundLbl = `R${game.round} ${game.step}`;
@@ -28,14 +36,14 @@ export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
   const scale = center.length > 12 ? 2 : 3;
   textCenter(ctx, center, 240, scale === 2 ? 12 : 8, scale, pal.gold);
   if (close) {
-    textLeft(ctx, "X", 480 - 16 - measureText("X", 3), 8, 3, pal.no_fg);
+    doneButton(ctx);
   } else {
     textLeft(ctx, "Set.", 480 - 10 - measureText("Set.", 2), 12, 2,
              highlight === "settings" ? pal.gold : pal.muted);
   }
   rect(ctx, 0, HEADER_H, 480, 1, pal.border);
   if (close) {
-    buttons.push(new Button(["nav", "close"], 330, 0, 150, HEADER_H));
+    buttons.push(new Button(["nav", "close"], 408, 4, 64, 32));
   } else if (closeLeft) {
     buttons.push(new Button(["nav", "close"], 0, 0, 150, HEADER_H));
     buttons.push(new Button(["nav", "settings"], 330, 0, 150, HEADER_H));
@@ -44,6 +52,27 @@ export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
     buttons.push(new Button(["nav", "phases"], 150, 0, 180, HEADER_H));
     buttons.push(new Button(["nav", "settings"], 330, 0, 150, HEADER_H));
   }
+}
+
+// Shared header for full-screen modals: round id upper-left, centred title,
+// and a DONE button upper-right that pushes id ["close"] (each modal's
+// onButton maps "close" to its own commit-and-dismiss / dismiss semantics).
+export function modalHeader(ctx, game, title, buttons) {
+  const roundLbl = `R${game.round} ${game.step}`;
+  textLeft(ctx, roundLbl, 10, 12, 2, pal.muted);
+  textCenter(ctx, title, 240, 12, 2, pal.gold);
+  rect(ctx, 0, HEADER_H, 480, 1, pal.border);
+  doneButton(ctx);
+  buttons.push(new Button(["close"], 408, 4, 64, 32));
+}
+
+// Circular -/+ (or similar single-glyph) button: btn disc + light affordance
+// ring + centred glyph. The drawn circle is small (r~10-11); callers push a
+// >=24px Button separately for the actual tap target, centred on (cx, cy).
+export function circBtn(ctx, cx, cy, r, glyph, pen = pal.tan) {
+  disc(ctx, cx, cy, r, pal.btn);
+  arcRuns(ctx, cx, cy, r, r - 2, 0, 360, pal.bevel_l);
+  textCenter(ctx, glyph, cx, Math.round(cy - 8), 2, pen);
 }
 
 export function drawNotifPie(ctx, cx, cy, r, frac, color = "amber") {
@@ -284,60 +313,147 @@ export class LocationPickModal {
   }
 }
 
-export class QuestingForModal {
+// Every player's threat + willpower in one inline grid (Task 9) - the
+// unified target for the play screen's Players zone and the "Questing for"
+// card (replaces the QuestingProgressModal/QuestingForModal stubs there).
+// Edits are live: every tap commits immediately to the game + logs (no
+// save/cancel step). Tapping a token opens a small inline +-5 pad (nested
+// modals aren't supported - the main loop only holds one `modal` at a time)
+// that replaces the grid until OK/back, modeled on CounterModal.
+export class PlayersDetailModal {
   constructor(game) {
     this.game = game;
-    this.vals = game.players.map(p => p.commit);
     this.buttons = [];
+    this.edit = null;   // { i, stat, state: CounterState } while the inline pad is open
   }
-  draw(ctx) {
+
+  _openEdit(i, stat) {
+    const game = this.game;
+    const cur = stat === "threat" ? game.players[i].threat : game.players[i].commit;
+    if (stat === "willpower") game.touchCommit(i);
+    // CounterState's default max (99) is a cosmetic pad ceiling, not a game
+    // rule - adjustThreat/setCommit have no upper bound. Widen it so opening
+    // the pad on an already-high value (e.g. a spammed-past-99 threat) can
+    // never silently clamp the preview down on an untouched OK tap.
+    this.edit = { i, stat, state: new CounterState(cur, 0, Math.max(9999, cur)) };
+  }
+
+  _commitEdit() {
+    const { i, stat, state } = this.edit;
+    const before = state.value;
+    state.confirm();
+    const after = state.value;
+    if (after !== before) {
+      const game = this.game;
+      if (stat === "threat") {
+        game.adjustThreat(i, after - before);
+        game.logEvent(`P${i + 1} threat ${before} -> ${game.players[i].threat}`);
+      } else {
+        game.setCommit(i, after);
+        game.logEvent(`P${i + 1} committed ${after} willpower`);
+      }
+    }
+    this.edit = null;
+  }
+
+  _editorRow(ctx, i, key, cx, cy, value, frac, ringFill) {
+    circBtn(ctx, cx - 30, cy, 11, "-");
+    circBtn(ctx, cx + 30, cy, 11, "+");
+    token(ctx, cx, cy, 14, 2, value, pal.value, frac, ringFill, pal.dim);
+    this.buttons.push(
+      new Button([key, i, -1], cx - 30 - 12, cy - 12, 24, 24),
+      new Button([key, i, "edit"], cx - 12, cy - 12, 24, 24),
+      new Button([key, i, 1], cx + 30 - 12, cy - 12, 24, 24),
+    );
+  }
+
+  draw(ctx, game) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, "Questing for...", 240, 22, 3, pal.gold);
-    let y = 74;
-    this.game.players.forEach((p, i) => {
-      if (p.eliminated) return;
-      textLeft(ctx, `P${i + 1}`, 30, y + 16, 3, pal.tan);
-      const mn = new Button(["wpm", i, -1], 108, y + 4, 52, 48);
-      const pl = new Button(["wpm", i, 1], 340, y + 4, 52, 48);
-      button(ctx, this.buttons, mn, "-", 3);
-      button(ctx, this.buttons, pl, "+", 3);
-      this.buttons.push(mn, pl);
-      const v = String(this.vals[i]);
-      const vw = measureText(v, 3);
-      const gx = Math.floor(250 - (vw + 8 + 28) / 2);
-      textLeft(ctx, v, gx, y + 16, 3, pal.gold);
-      icons.drawIcon(ctx, icons.WILLPOWER_MD, gx + vw + 8, y + 14, pal.gold);
-      y += 62;
+    if (this.edit) { this._drawEdit(ctx); return; }
+    modalHeader(ctx, game, "Players", this.buttons);
+    const threatX = 150, willX = 330, labelX = 32;
+    textCenter(ctx, "Threat", threatX, 46, 1, pal.dim);
+    textCenter(ctx, "Willpower", willX, 46, 1, pal.dim);
+    game.players.forEach((p, i) => {
+      const cy = 66 + i * 56;
+      const label = `P${i + 1}`;
+      if (i === game.first_player) {
+        rect(ctx, labelX - 18, cy - 11, 36, 22, pal.gold);
+        textCenter(ctx, label, labelX, cy - 8, 2, pal.bg, false);
+      } else {
+        textCenter(ctx, label, labelX, cy - 8, 2, pal.tan);
+      }
+      const danger = p.threat >= p.elimination - 10;
+      const tfrac = p.elimination > 0 ? p.threat / p.elimination : 0;
+      this._editorRow(ctx, i, "t", threatX, cy, p.threat, tfrac, danger ? pal.red : pal.gold);
+      this._editorRow(ctx, i, "w", willX, cy, p.commit, 1.0, pal.gold);
     });
-    const total = this.game.players.reduce(
-      (a, p, i) => a + (p.eliminated ? 0 : this.vals[i]), 0);
-    textLeft(ctx, "Total", 30, y + 18, 2, pal.muted);
-    const tv = String(total);
-    const vw = measureText(tv, 3);
-    const gx = Math.floor(250 - (vw + 8 + 28) / 2);
-    textLeft(ctx, tv, gx, y + 14, 3, pal.gold);
-    icons.drawIcon(ctx, icons.WILLPOWER_MD, gx + vw + 8, y + 12, pal.gold);
-    footer(ctx, this.buttons);
   }
+
+  _drawEdit(ctx) {
+    const { i, stat, state } = this.edit;
+    const isThreat = stat === "threat";
+    const title = `P${i + 1} ${isThreat ? "Threat" : "Willpower"}`;
+    const [maskName, penName] = isThreat ? ["THREAT", "red"] : ["WILLPOWER", "gold"];
+    const w = measureText(title, 3);
+    const ix = Math.floor(240 - w / 2 - 30);
+    icons.drawIcon(ctx, icons[maskName], ix, 30, pal[penName]);
+    textCenter(ctx, title, 240 + 12, 28, 3, pal.gold);
+
+    const val = state.preview;
+    textCenter(ctx, String(val), 240, 90, 9, pal.gold);
+    if (state.pending) {
+      const dlt = state.delta;
+      textCenter(ctx, `${state.value}  ->  ${val}`, 240, 190, 2, pal.muted);
+      textCenter(ctx, `${dlt >= 0 ? "+" : ""}${dlt}`, 240, 216, 3,
+                 dlt >= 0 ? pal.green : pal.red);
+    }
+    const bw = 104, bh = 76, gap = 8;
+    const x0 = (480 - (4 * bw + 3 * gap)) / 2;
+    [[-5, "-5"], [-1, "-1"], [1, "+1"], [5, "+5"]].forEach(([step, lbl], k) => {
+      const b = new Button(["step", step], x0 + k * (bw + gap), 250, bw, bh);
+      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn, false, 3);
+      textCenter(ctx, lbl, b.x + bw / 2, b.y + 26, 3, pal.tan);
+      this.buttons.push(b);
+    });
+    const no = new Button(["back"], 24, 360, 200, 92);
+    const ok = new Button(["ok"], 256, 360, 200, 92);
+    bevel(ctx, no.x, no.y, no.w, no.h, pal.btn_no, false, 3);
+    textCenter(ctx, "X", no.x + 100, no.y + 28, 4, pal.no_fg);
+    bevel(ctx, ok.x, ok.y, ok.w, ok.h, pal.btn_ok, false, 3);
+    textCenter(ctx, "OK", ok.x + 100, ok.y + 28, 4, pal.ok_fg);
+    this.buttons.push(no, ok);
+  }
+
   onButton(btn) {
     const k = btn.id[0];
-    if (k === "wpm") {
-      const [_, i, d] = btn.id;
-      this.vals[i] = Math.max(0, Math.min(99, this.vals[i] + d));
+    if (this.edit) {
+      if (k === "step") { this.edit.state.tap(btn.id[1]); return null; }
+      if (k === "ok") { this._commitEdit(); return null; }
+      if (k === "back") { this.edit = null; return null; }
       return null;
     }
-    if (k === "save") {
-      this.game.players.forEach((p, i) => {
-        if (p.eliminated) return;
-        if (this.vals[i] !== p.commit) {
-          this.game.setCommit(i, this.vals[i]);
-          this.game.logEvent(`P${i + 1} committed ${this.vals[i]} willpower`);
+    if (k === "close") return "close";
+    if (k === "t" || k === "w") {
+      const [, i, action] = btn.id;
+      if (action === "edit") { this._openEdit(i, k === "t" ? "threat" : "willpower"); return null; }
+      if (k === "t") {
+        const before = this.game.players[i].threat;
+        this.game.adjustThreat(i, action);
+        const after = this.game.players[i].threat;
+        if (after !== before) this.game.logEvent(`P${i + 1} threat ${before} -> ${after}`);
+      } else {
+        this.game.touchCommit(i);
+        const before = this.game.players[i].commit;
+        const next = Math.max(0, before + action);
+        if (next !== before) {
+          this.game.setCommit(i, next);
+          this.game.logEvent(`P${i + 1} committed ${next} willpower`);
         }
-      });
-      return "close";
+      }
+      return null;
     }
-    if (k === "cancel") return "cancel";
     return null;
   }
 }
@@ -347,11 +463,7 @@ export class RemindersModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textLeft(ctx, `R${this.game.round} ${this.game.step}`, 10, 12, 2, pal.muted);
-    textCenter(ctx, "Encounter Reminders", 240, 12, 2, pal.gold);
-    textLeft(ctx, "X", 480 - 16 - measureText("X", 3), 8, 3, pal.no_fg);
-    this.buttons.push(new Button(["close"], 330, 0, 150, 40));
-    rect(ctx, 0, 40, 480, 1, pal.border);
+    modalHeader(ctx, this.game, "Encounter Reminders", this.buttons);
     let y = 56;
     for (const [key, label, view] of REMINDER_DEFS) {
       const on = this.game.reminders[key];
@@ -528,14 +640,25 @@ export class EliminationModal {
 }
 
 export class QuestingProgressModal {
-  // All questing progress in one place: main quest, active location and each
-  // side quest, with progress + quest-points editable; add/remove side
-  // quests; shift the heading. Value edits are logged on close.
+  // All questing progress in one place: main quest, active location (or a
+  // slot to add one) and each side quest, each as Current (live progress
+  // ring) | Target (dim, no fill) circular editors. Non-main rows add
+  // complete/remove icon buttons; removing the Location opens an in-modal
+  // prompt (Replaced / To staging / Discard - a modal cannot open another,
+  // so this is state on `this`, not a nested modal). Weather radios replace
+  // the old heading stepper when sailing. A bottom-anchored chart summarizes
+  // quest_history by round. Silent progress/points edits are batched into
+  // one summary log line per field on close.
+  static ROWS_Y0 = 62;
+  static ROW_H = 38;
+
   constructor(game) {
     this.game = game;
     this.buttons = [];
+    this.locPrompt = null;   // { stage: "choose"|"pts"|"contrib", ... } or null
     this._snap = this._snapshot();
   }
+
   _snapshot() {
     const g = this.game;
     return {
@@ -545,71 +668,209 @@ export class QuestingProgressModal {
       sq: g.side_quests.map(s => ({ p: s.progress, t: s.points })),
     };
   }
+
   _items() {
     const g = this.game;
-    const items = [{ kind: "q", name: `Quest ${g.questLabel()}` }];
-    if (g.active_location) items.push({ kind: "l", name: "Location", removable: true });
+    const items = [{ kind: "q", name: `Quest ${g.questLabel()}`, removable: false }];
+    items.push(g.active_location
+      ? { kind: "l", name: "Location", removable: true }
+      : { kind: "l_add" });
     g.side_quests.forEach((s, i) =>
-      items.push({ kind: "s", idx: i, name: `Side Quest ${i + 1}`, sub: s.since || null, removable: true }));
+      items.push({ kind: "s", idx: i, name: `Side Quest ${i + 1}`, removable: true }));
     return items;
   }
+
+  // Circular -/+ flanking a value token: Current shows a live progress ring
+  // (token()); Target is dim-only (well + full dim ring, no fill) so the two
+  // columns read at a glance without a progress bar implying a "target".
+  _valEditor2(ctx, cx, cy, value, frac, progressRing, idMinus, idPlus) {
+    circBtn(ctx, cx - 30, cy, 10, "-");
+    if (progressRing) {
+      token(ctx, cx, cy, 13, 2, value, pal.gold, frac, pal.gold, pal.dim);
+    } else {
+      disc(ctx, cx, cy, 13, pal.well);
+      arcRuns(ctx, cx, cy, 13, 11, 0, 360, pal.dim);
+      textCenter(ctx, String(value), cx, Math.round(cy - 8), 2, pal.gold);
+    }
+    circBtn(ctx, cx + 30, cy, 10, "+");
+    this.buttons.push(
+      new Button(idMinus, cx - 30 - 12, cy - 12, 24, 24),
+      new Button(idPlus, cx + 30 - 12, cy - 12, 24, 24),
+    );
+  }
+
+  // Small circular action: "x" = remove (red X, reuses circBtn), "done" =
+  // mark complete (green pennant flag - a target reached its max).
+  _iconBtn(ctx, cx, cy, r, kind, id) {
+    if (kind === "x") {
+      circBtn(ctx, cx, cy, r, "X", pal.red);
+    } else {
+      disc(ctx, cx, cy, r, pal.btn);
+      arcRuns(ctx, cx, cy, r, r - 2, 0, 360, pal.bevel_l);
+      rect(ctx, cx - 4, cy - 5, 1, 10, pal.green);
+      ctx.fillStyle = pal.green;
+      ctx.beginPath();
+      ctx.moveTo(cx - 3, cy - 5);
+      ctx.lineTo(cx + 4, cy - 3);
+      ctx.lineTo(cx - 3, cy - 1);
+      ctx.closePath();
+      ctx.fill();
+    }
+    this.buttons.push(new Button(id, cx - 12, cy - 12, 24, 24));
+  }
+
   _row(ctx, it, y) {
     const g = this.game;
-    let prog, pts, pfx;
-    if (it.kind === "q") { prog = g.quest.progress; pts = g.quest.points; pfx = "q"; }
-    else if (it.kind === "l") { prog = g.active_location.progress; pts = g.active_location.points; pfx = "l"; }
-    else { prog = g.side_quests[it.idx].progress; pts = g.side_quests[it.idx].points; pfx = "s"; }
-    panel(ctx, 12, y, 456, 58);
-    textLeft(ctx, it.name, 22, y + 8, 2, pal.tan);
-    if (it.sub) textLeft(ctx, `since ${it.sub}`, 22, y + 32, 1, pal.dim);
-    const idx = it.idx ?? null;
-    textLeft(ctx, "current", 166, y + 2, 1, pal.muted);
-    stepper(ctx, this.buttons, [pfx + "P-", idx], [pfx + "P+", idx], 164, y + 12, String(prog), 130, 42);
-    textLeft(ctx, "points", 304, y + 2, 1, pal.muted);
-    stepper(ctx, this.buttons, [pfx + "T-", idx], [pfx + "T+", idx], 300, y + 12, String(pts), 130, 42);
+    const cy = y + 8;
+    if (it.kind === "l_add") {
+      const b = new Button(["addloc"], 12, y + 7, 140, 24);
+      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+      textCenter(ctx, "+ Add location", b.x + b.w / 2, b.y + 5, 2, pal.tan);
+      this.buttons.push(b);
+      return;
+    }
+    let prog, pts, pfx, idx;
+    if (it.kind === "q") { prog = g.quest.progress; pts = g.quest.points; pfx = "q"; idx = null; }
+    else if (it.kind === "l") { prog = g.active_location.progress; pts = g.active_location.points; pfx = "l"; idx = null; }
+    else { const s = g.side_quests[it.idx]; prog = s.progress; pts = s.points; pfx = "s"; idx = it.idx; }
+    textLeft(ctx, it.name, 12, y, 2, pal.tan);
+    this._valEditor2(ctx, 178, cy, prog, pts ? prog / pts : 0, true, [pfx + "P-", idx], [pfx + "P+", idx]);
+    this._valEditor2(ctx, 300, cy, pts, 0, false, [pfx + "T-", idx], [pfx + "T+", idx]);
     if (it.removable) {
-      const rm = new Button([pfx + "X", idx], 436, y + 15, 36, 36);
-      bevel(ctx, rm.x, rm.y, rm.w, rm.h, pal.btn_no);
-      textCenter(ctx, "x", rm.x + 18, rm.y + 10, 2, pal.no_fg);
-      this.buttons.push(rm);
+      this._iconBtn(ctx, 400, cy, 11, "done", [pfx + "done", idx]);
+      this._iconBtn(ctx, 436, cy, 11, "x", [pfx + "X", idx]);
     }
   }
+
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textLeft(ctx, `R${this.game.round} ${this.game.step}`, 10, 12, 2, pal.muted);
-    textCenter(ctx, "Questing Progress", 240, 12, 2, pal.gold);
-    textLeft(ctx, "X", 480 - 16 - measureText("X", 3), 8, 3, pal.no_fg);
-    this.buttons.push(new Button(["close"], 330, 0, 150, 40));
-    rect(ctx, 0, 40, 480, 1, pal.border);
-    let y = 48;
-    for (const it of this._items()) { this._row(ctx, it, y); y += 62; }
-    const add = new Button(["add"], 12, y, 456, 38);
+    if (this.locPrompt) { this._drawLocPrompt(ctx); return; }
+    modalHeader(ctx, this.game, "Progress", this.buttons);
+
+    textLeft(ctx, "Quest points", 12, 48, 1, pal.muted);
+    textCenter(ctx, "Current", 178, 48, 1, pal.dim);
+    textCenter(ctx, "Target", 300, 48, 1, pal.dim);
+
+    const items = this._items();
+    items.forEach((it, i) => this._row(ctx, it, QuestingProgressModal.ROWS_Y0 + i * QuestingProgressModal.ROW_H));
+    const n = items.length;
+
+    const addY = QuestingProgressModal.ROWS_Y0 + n * QuestingProgressModal.ROW_H - 4;
+    const add = new Button(["add"], 12, addY, 120, 24);
     bevel(ctx, add.x, add.y, add.w, add.h, pal.btn);
-    textCenter(ctx, "+ Add side quest", 240, y + 11, 2, pal.tan);
+    textCenter(ctx, "+ Side quest", add.x + add.w / 2, add.y + 5, 2, pal.tan);
     this.buttons.push(add);
-    y += 46;
+
     if (this.game.sailing) {
-      const pen = this.game.heading === 0 ? pal.gold : this.game.heading === 3 ? pal.red : pal.amber;
-      panel(ctx, 12, y, 456, 52);
-      textLeft(ctx, "Heading", 22, y + 18, 2, pal.tan);
-      drawWeather(ctx, this.game.heading, 176, y + 26, 12);
-      textLeft(ctx, HEADINGS[this.game.heading][2], 196, y + 18, 2, pen);
-      const mn = new Button(["hd", -1], 320, y + 10, 60, 32);
-      const pl = new Button(["hd", 1], 388, y + 10, 60, 32);
-      button(ctx, this.buttons, mn, "-", 3);
-      button(ctx, this.buttons, pl, "+", 3);
-      this.buttons.push(mn, pl);
+      const headingY = QuestingProgressModal.ROWS_Y0 + n * QuestingProgressModal.ROW_H + 34;
+      textLeft(ctx, "Heading", 12, headingY, 2, pal.tan);
+      const cy = headingY + 4;
+      for (let i = 0; i < 4; i++) {
+        const cx = 150 + i * 40;
+        disc(ctx, cx, cy, 14, pal.well);
+        const active = i === this.game.heading;
+        if (active) ring(ctx, cx, cy, 14, 2, 1.0, pal.gold, pal.gold);
+        wxSmall(ctx, i, cx, cy, 7, active ? null : pal.dim);
+        this.buttons.push(new Button(["hd_set", i], cx - 14, cy - 14, 28, 28));
+      }
     }
-    const done = new Button(["close"], 12, 430, 456, 42);
-    bevel(ctx, done.x, done.y, done.w, done.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Done", 240, 442, 2, pal.ok_fg);
-    this.buttons.push(done);
+
+    this._drawChart(ctx);
   }
+
+  // Absolutely positioned near the bottom regardless of how many rows are
+  // above (quest/location/side-quest count varies) - it never moves.
+  _drawChart(ctx) {
+    const cy0 = 344;
+    rect(ctx, 8, cy0 - 12, 464, 1, pal.border);
+    textLeft(ctx, "THIS GAME - BY ROUND", 12, cy0 - 9, 1, pal.muted);
+    const cols = this.game.quest_history.slice(-8);
+    if (!cols.length) {
+      textCenter(ctx, "No rounds resolved yet", 240, cy0 + 14, 1, pal.dim);
+      return;
+    }
+    const x0 = 52;
+    const stride = Math.floor((472 - x0) / cols.length);
+    cols.forEach((r, i) =>
+      textCenter(ctx, `R${r.round}`, x0 + i * stride + Math.floor(stride / 2), cy0, 1, pal.dim));
+    const HDG_PEN = [pal.gold, pal.amber, pal.amber, pal.red];
+    const rows = [
+      [icons.WILLPOWER, pal.gold, false, r => [String(r.willpower), pal.gold]],
+      [icons.THREAT, pal.outline, true, r => [String(r.staging), pal.outline]],
+      [icons.TRAIL, pal.green, false, r => {
+        const signed = r.outcome === "fail" ? -r.n : r.n;
+        return [signed > 0 ? `+${signed}` : String(signed), signed > 0 ? pal.green : pal.red];
+      }],
+    ];
+    if (this.game.sailing) {
+      rows.push([icons.WHEEL, pal.gold, false, r => [String(r.heading), HDG_PEN[r.heading]]]);
+    }
+    let ry = cy0 + 14;
+    for (const [mask, ipen, stripe, cell] of rows) {
+      if (stripe) rect(ctx, 8, ry - 4, 464, 24, pal.row_stripe);
+      icons.drawIcon(ctx, mask, 12, ry - 2, ipen);
+      cols.forEach((r, i) => {
+        const [s, pen] = cell(r);
+        textCenter(ctx, s, x0 + i * stride + Math.floor(stride / 2), ry, 2, pen);
+      });
+      ry += 26;
+    }
+    const caption = "willpower / staging / result" + (this.game.sailing ? " / heading" : "");
+    textCenter(ctx, caption, 240, ry + 4, 1, pal.dim);
+  }
+
+  _drawLocPrompt(ctx) {
+    const lp = this.locPrompt;
+    if (lp.stage === "choose") { this._drawLocChoose(ctx); return; }
+    if (lp.stage === "pts") { this._drawLocPts(ctx); return; }
+    this._drawLocContrib(ctx);
+  }
+
+  _drawLocChoose(ctx) {
+    const loc = this.game.active_location;
+    textCenter(ctx, "Location removed", 240, 30, 3, pal.gold);
+    textCenter(ctx, "What happened to it?", 240, 70, 2, pal.tan);
+    textCenter(ctx, `${loc.progress}/${loc.points} progress will be discarded`, 240, 94, 1, pal.dim);
+    const opt = (y, id, label, sub) => {
+      const b = new Button([id], 24, y, 432, 64);
+      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn, false, 3);
+      textCenter(ctx, label, 240, y + 14, 3, pal.tan);
+      textCenter(ctx, sub, 240, y + 44, 1, pal.dim);
+      this.buttons.push(b);
+    };
+    opt(120, "lp_replaced", "Replaced", "enter the new location's quest points");
+    opt(196, "lp_staging", "To staging", "its threat returns to the staging area");
+    opt(272, "lp_discard", "Discard", "no replacement");
+    const cancel = new Button(["lp_cancel"], 24, 356, 432, 56);
+    bevel(ctx, cancel.x, cancel.y, cancel.w, cancel.h, pal.btn_no, false, 3);
+    textCenter(ctx, "Cancel", 240, cancel.y + 18, 2, pal.no_fg);
+    this.buttons.push(cancel);
+  }
+
+  _drawLocPts(ctx) {
+    textCenter(ctx, "Replace location", 240, 30, 3, pal.gold);
+    textLeft(ctx, "Quest points", 60, 216, 2, pal.tan);
+    stepper(ctx, this.buttons, ["lp_pts", -1], ["lp_pts", 1], 250, 200, String(this.locPrompt.pts), 170, 60);
+    footer(ctx, this.buttons, "Confirm");
+  }
+
+  _drawLocContrib(ctx) {
+    textCenter(ctx, "Location to staging", 240, 30, 3, pal.gold);
+    icons.drawIcon(ctx, icons.THREAT, 60, 208, pal.red);
+    textLeft(ctx, "Contribution", 88, 216, 2, pal.tan);
+    stepper(ctx, this.buttons, ["lp_ctr", -1], ["lp_ctr", 1], 250, 200,
+            String(this.locPrompt.state.preview), 170, 60);
+    textLeft(ctx, "added to the staging area", 60, 270, 1, pal.dim);
+    footer(ctx, this.buttons, "Confirm");
+  }
+
   _clampAdj(cur, d) { return Math.max(0, Math.min(99, cur + d)); }
+
   onButton(btn) {
-    const [k, a, b] = btn.id;
     const g = this.game;
+    if (this.locPrompt) return this._onLocPromptButton(btn);
+    const [k, a] = btn.id;
     if (k === "qP-" || k === "qP+") { g.quest.progress = this._clampAdj(g.quest.progress, k.endsWith("+") ? 1 : -1); return null; }
     if (k === "qT-" || k === "qT+") { g.quest.points = this._clampAdj(g.quest.points, k.endsWith("+") ? 1 : -1); return null; }
     if (k === "lP-" || k === "lP+") {
@@ -618,19 +879,85 @@ export class QuestingProgressModal {
       return null;
     }
     if (k === "lT-" || k === "lT+") { g.active_location.points = this._clampAdj(g.active_location.points, k.endsWith("+") ? 1 : -1); return null; }
-    if (k === "lX") { g.active_location = null; g.logEvent("Active location cleared (progress view)"); return null; }
-    if (k === "sP-" || k === "sP+") { const s = g.side_quests[a]; s.progress = this._clampAdj(s.progress, k.endsWith("+") ? 1 : -1); return null; }
-    if (k === "sT-" || k === "sT+") { const s = g.side_quests[a]; s.points = this._clampAdj(s.points, k.endsWith("+") ? 1 : -1); return null; }
-    if (k === "sX") { g.side_quests.splice(a, 1); g.logEvent(`Side quest ${a + 1} removed (progress view)`); return null; }
-    if (k === "add") {
-      g.side_quests.push({ points: 4, progress: 0, since: `R${g.round} ${g.step}` });
-      g.logEvent(`Side quest ${g.side_quests.length} added (progress view)`);
+    if (k === "ldone") {
+      g.logEvent("Active location Explored");
+      g.active_location = null;
+      this._snap = this._snapshot();
       return null;
     }
-    if (k === "hd") { g.shiftHeading(a, "progress view"); return null; }
+    if (k === "lX") { this.locPrompt = { stage: "choose" }; return null; }
+    if (k === "sP-" || k === "sP+") { const s = g.side_quests[a]; s.progress = this._clampAdj(s.progress, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "sT-" || k === "sT+") { const s = g.side_quests[a]; s.points = this._clampAdj(s.points, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "sdone") {
+      g.logEvent(`Side quest ${a + 1} completed`);
+      g.side_quests.splice(a, 1);
+      this._snap = this._snapshot();
+      return null;
+    }
+    if (k === "sX") {
+      g.logEvent(`Side quest ${a + 1} removed`);
+      g.side_quests.splice(a, 1);
+      this._snap = this._snapshot();
+      return null;
+    }
+    if (k === "add") {
+      g.side_quests.push({ points: 4, progress: 0 });
+      g.logEvent(`Side quest ${g.side_quests.length} added (progress view)`);
+      this._snap = this._snapshot();
+      return null;
+    }
+    if (k === "addloc") {
+      g.active_location = { points: 3, progress: 0 };
+      g.logEvent("Active location added (card effect)");
+      this._snap = this._snapshot();
+      return null;
+    }
+    if (k === "hd_set") {
+      if (a !== g.heading) g.shiftHeading(a - g.heading, "progress view");
+      return null;
+    }
     if (k === "close") { this._logChanges(); return "close"; }
     return null;
   }
+
+  _onLocPromptButton(btn) {
+    const g = this.game;
+    const k = btn.id[0];
+    const lp = this.locPrompt;
+    if (lp.stage === "choose") {
+      if (k === "lp_replaced") { this.locPrompt = { stage: "pts", pts: 3 }; return null; }
+      if (k === "lp_staging") { this.locPrompt = { stage: "contrib", state: new CounterState(2, 0, 9) }; return null; }
+      if (k === "lp_discard") {
+        g.logEvent("Active location removed");
+        g.active_location = null;
+        this._snap = this._snapshot();
+        this.locPrompt = null;
+        return null;
+      }
+      if (k === "lp_cancel") { this.locPrompt = null; return null; }
+      return null;
+    }
+    // pts / contrib sub-stages share the generic footer() ids
+    if (k === "cancel") { this.locPrompt = { stage: "choose" }; return null; }
+    if (k === "save") {
+      if (lp.stage === "pts") {
+        g.changeLocation(lp.pts, 0);
+      } else {
+        lp.state.confirm();
+        const v = lp.state.value;
+        g.staging += v;
+        g.active_location = null;
+        g.logEvent(`Active location to staging (+${v} threat)`);
+      }
+      this._snap = this._snapshot();
+      this.locPrompt = null;
+      return null;
+    }
+    if (k === "lp_pts") { lp.pts = Math.max(1, Math.min(30, lp.pts + btn.id[1])); return null; }
+    if (k === "lp_ctr") { lp.state.tap(btn.id[1]); return null; }
+    return null;
+  }
+
   _logChanges() {
     const s = this._snap, g = this.game;
     if (g.quest.progress !== s.q.p || g.quest.points !== s.q.t)
@@ -655,11 +982,7 @@ export class SailingModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textLeft(ctx, `R${this.game.round} ${this.game.step}`, 10, 12, 2, pal.muted);
-    textCenter(ctx, "Sailing test", 240, 12, 2, pal.gold);
-    textLeft(ctx, "X", 480 - 16 - measureText("X", 3), 8, 3, pal.no_fg);
-    this.buttons.push(new Button(["cancel"], 330, 0, 150, 40));
-    rect(ctx, 0, 40, 480, 1, pal.border);
+    modalHeader(ctx, this.game, "Sailing test", this.buttons);
 
     const heading = (h, cy, scale) => {
       const [term, , facing] = HEADINGS[h];
@@ -720,7 +1043,9 @@ export class SailingModal {
       }
       return "close";
     }
-    if (k === "cancel") return "cancel";
+    // Footer Cancel and the header DONE button both dismiss without
+    // applying the pending wheel delta — only Apply commits the shift.
+    if (k === "cancel" || k === "close") return "cancel";
     return null;
   }
 }

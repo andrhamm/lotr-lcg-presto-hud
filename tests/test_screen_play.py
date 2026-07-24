@@ -34,20 +34,27 @@ def test_resource_planning_advances_to_commit():
     assert game.view == "quest_commit"
 
 
-def test_commit_view_has_per_player_willpower_cards():
+def test_commit_view_shows_willpower_tokens_in_players_matrix():
+    # Willpower now lives inside the flipped players zone (one shared tap
+    # target) rather than a per-player row of "commit" buttons.
     hw, pal, game, screen = _setup("quest_commit")
+    for i, c in enumerate((7, 8, 5, 6)):
+        game.set_commit(i, c)
     screen.draw(hw, game, pal)
-    assert _ids(screen).count("commit") == 4
+    ids = _ids(screen)
+    assert ids.count("players_detail") == 1
+    assert "commit" not in ids
+    texts = _texts(hw)
+    for c in (7, 8, 5, 6):
+        assert str(c) in texts
 
 
-def test_commit_tap_opens_cycling_commit_modal():
-    from ui.modals import CommitModal
+def test_players_detail_tap_opens_players_detail_modal():
+    from ui.modals import PlayersDetailModal
     hw, pal, game, screen = _setup("quest_commit")
     screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("commit", 1)), game)
-    modal = result[1]
-    assert isinstance(modal, CommitModal)
-    assert modal.idx == 1
+    result = screen.on_button(_find(screen, ("players_detail",)), game)
+    assert isinstance(result[1], PlayersDetailModal)
 
 
 def test_staging_view_has_direct_steppers():
@@ -93,13 +100,44 @@ def test_banner_does_not_leak_to_other_views():
     assert not any("failed" in str(t) for t in texts)
 
 
-def test_commit_view_wp_and_stg_cards_tappable_no_steppers():
+def test_commit_view_wp_tappable_stg_has_inline_thirds():
     hw, pal, game, screen = _setup("quest_commit")
     screen.draw(hw, game, pal)
     ids = [b.id[0] for b in screen.buttons]
-    assert "wp" in ids                # opens the Questing for modal
-    assert "stg" in ids               # staging editable via counter modal
-    assert "wp-" not in ids and "stg+" not in ids
+    assert "wp" in ids                          # opens the Questing for modal
+    assert "wp-" not in ids and "wp+" not in ids  # wp stays a single tap target
+    assert "stg" in ids                         # centre third -> counter modal
+    assert "stg-" in ids and "stg+" in ids       # left/right thirds adjust inline
+
+
+def test_commit_staging_thirds_geometry_flanks_centre():
+    hw, pal, game, screen = _setup("quest_commit")
+    screen.draw(hw, game, pal)
+    minus = _find(screen, ("stg-",))
+    centre = _find(screen, ("stg",))
+    plus = _find(screen, ("stg+",))
+    for b in (minus, centre, plus):
+        assert b.h == 84 and b.w >= 24           # layout linter's MIN_TARGET
+    assert minus.x < centre.x < plus.x           # left / centre / right order
+    assert minus.x + minus.w == centre.x         # thirds tile with no gaps
+    assert centre.x + centre.w == plus.x
+    assert minus.w == plus.w                     # outer thirds are symmetric
+
+
+def test_commit_staging_thirds_step_and_floor_at_zero():
+    hw, pal, game, screen = _setup("quest_commit")
+    game.staging = 0
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("stg-",)), game)
+    assert game.staging == 0                     # floored, never negative
+    screen.on_button(_find(screen, ("stg+",)), game)
+    assert game.staging == 1
+
+
+def test_commit_staging_caption_reads_reveal_estimate():
+    hw, pal, game, screen = _setup("quest_commit")
+    screen.draw(hw, game, pal)
+    assert ("+%d reveal estimate" % game.staging_reveal_estimate()) in _texts(hw)
 
 
 def test_commit_staging_tap_opens_counter():
@@ -150,18 +188,20 @@ def _texts(hw):
     return [str(c[1]) for c in hw.display.calls if c[0] == "text"]
 
 
-def test_progress_row_shows_quest_loc_sq_labels():
+def test_progress_zone_shows_quest_loc_side_labels_and_remaining_values():
     hw, pal, game, screen = _setup("enc_optional")
-    game.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 6}
-    game.active_location = {"points": 3, "progress": 2}
-    game.side_quests = [{"points": 5, "progress": 1}]
+    game.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 1}
+    game.active_location = {"points": 9, "progress": 4}
+    game.side_quests = [{"points": 9, "progress": 3}]
     screen.draw(hw, game, pal)
     texts = _texts(hw)
-    for t in ("Q2B", "LOC", "SQ1", "6/8", "2/3", "1/5"):
+    for t in ("Q", "L", "S1"):                       # flipped zone: short headers
         assert t in texts
+    for remaining in ("7", "5", "6"):                # points - progress each
+        assert remaining in texts
 
 
-def test_progress_view_tap_present_and_sq_add_card_dropped():
+def test_progress_zone_tap_present_and_sq_add_card_dropped():
     # The +SQ placeholder card is gone; every play view routes progress edits
     # (incl. adding side quests) through the Questing Progress view.
     for view in ("resource_planning", "quest_commit", "quest_staging",
@@ -169,41 +209,71 @@ def test_progress_view_tap_present_and_sq_add_card_dropped():
         hw, pal, game, screen = _setup(view)
         screen.draw(hw, game, pal)
         ids = [b.id[0] for b in screen.buttons]
-        assert "prog_view" in ids, view
+        assert "progress_detail" in ids, view
         assert "sq_add" not in ids, view
 
 
-def test_prog_view_opens_questing_progress_modal():
+def test_progress_detail_opens_questing_progress_modal():
     from ui.modals import QuestingProgressModal
     hw, pal, game, screen = _setup("resource_planning")
     screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("prog_view",)), game)
+    result = screen.on_button(_find(screen, ("progress_detail",)), game)
     assert isinstance(result[1], QuestingProgressModal)
 
 
-def test_commit_view_stacks_threat_progress_then_willpower():
-    from ui.screen_play import STRIP_Y, PROG_Y, CONTENT_Y
+def test_commit_view_shows_zones_then_note_at_content_y():
+    from ui.screen_play import ZONE_TOP, CONTENT_Y
     hw, pal, game, screen = _setup("quest_commit")
     screen.draw(hw, game, pal)
-    assert "Q1A" in _texts(hw)                      # progress row present
-    thr = _find(screen, ("thr", 0))
-    commit = _find(screen, ("commit", 0))
-    assert thr.y == STRIP_Y
-    assert PROG_Y == STRIP_Y + 56 + 8               # immediately under threat
-    assert commit.y == CONTENT_Y                    # willpower right after progress
-    assert commit.w == thr.w                        # same card sizing/columns
+    assert "Q" in _texts(hw)                         # progress zone quest column
+    players = _find(screen, ("players_detail",))
+    progress = _find(screen, ("progress_detail",))
+    assert players.y == ZONE_TOP - 2 and progress.y == ZONE_TOP - 2
+    assert players.x == 8 and progress.x == 174
+    commit_tip = _find(screen, ("commit_tip",))
+    # willpower now lives in the matrix -> no commit row -> note starts right
+    # after the zones, at CONTENT_Y (not offset further down)
+    assert commit_tip.y == CONTENT_Y
 
 
-def test_progress_cards_match_threat_card_width():
-    from ui.screen_play import PROG_Y
+def test_zone_geometry_is_fixed_regardless_of_content():
+    from ui.screen_play import ZONE_TOP
     hw, pal, game, screen = _setup("refresh")
     game.active_location = None
     game.side_quests = []
     screen.draw(hw, game, pal)
-    thr = _find(screen, ("thr", 0))
-    # single Q card at chip width, chip column x
-    rects = [c for c in hw.display.calls if c[0] == "rect" and c[2] == PROG_Y]
-    assert any(r[1] == thr.x and r[3] == thr.w for r in rects)
+    players = _find(screen, ("players_detail",))
+    progress = _find(screen, ("progress_detail",))
+    assert (players.x, players.y, players.w, players.h) == (8, ZONE_TOP - 2, 156, 90)
+    assert (progress.x, progress.y, progress.w, progress.h) == (174, ZONE_TOP - 2, 298, 90)
+
+
+def test_progress_zone_caps_columns_keeping_oldest_side_quests_and_sailing():
+    hw, pal, game, screen = _setup("resource_planning")
+    game.active_location = {"points": 5, "progress": 0}
+    game.sailing = True
+    game.side_quests = [{"points": 5, "progress": 0} for _ in range(10)]
+    screen.draw(hw, game, pal)
+    texts = _texts(hw)
+    # maxCols = (472-174)//32 = 9; fixed = Q + L + sailing = 3 -> 6 sides kept
+    for lab in ("Q", "L", "S1", "S2", "S3", "S4", "S5", "S6"):
+        assert lab in texts
+    for lab in ("S7", "S8", "S9", "S10"):
+        assert lab not in texts                      # newest sides dropped
+
+
+def test_progress_zone_shows_sailing_column_regardless_of_view():
+    # Old behaviour gated the heading card to specific views via a
+    # show_heading flag; the flipped zone shows it whenever game.sailing is
+    # true, on every view - this scene never rendered a heading card before.
+    from ui.screen_play import ZONE_TOP
+    hw, pal, game, screen = _setup("travel")
+    game.sailing = True
+    game.heading = 2
+    screen.draw(hw, game, pal)
+    scx = 190 + 32                                   # Q is the only other column
+    well_disc_row = ("rect", scx - 14, ZONE_TOP + 40, 29, 1, pal.well)
+    assert well_disc_row in hw.display.calls
 
 
 def test_refresh_end_round_resets_view():
@@ -313,12 +383,12 @@ def test_setup_view_tip_and_quest_points_then_begin():
     assert any("needs 8" in e["text"] for e in game.log)
 
 
-def test_prog_view_edits_quest_and_logs_on_close():
+def test_progress_detail_edits_quest_and_logs_on_close():
     hw, pal, game, screen = _setup("travel")
     game.active_location = {"points": 3, "progress": 1}
     game.side_quests = [{"points": 5, "progress": 2}]
     screen.draw(hw, game, pal)
-    m = screen.on_button(_find(screen, ("prog_view",)), game)[1]
+    m = screen.on_button(_find(screen, ("progress_detail",)), game)[1]
     m.draw(hw, game, pal)
     # bump quest progress via its stepper, bump the side quest, then close
     m.on_button([b for b in m.buttons if b.id == ("qP+", None)][0])
@@ -330,9 +400,9 @@ def test_prog_view_edits_quest_and_logs_on_close():
 
 
 def test_questing_for_card_taps_open_modal_on_both_views():
-    from ui.modals import QuestingForModal
+    from ui.modals import PlayersDetailModal
     for view in ("quest_commit", "quest_staging"):
         hw, pal, game, screen = _setup(view)
         screen.draw(hw, game, pal)
         result = screen.on_button(_find(screen, ("wp",)), game)
-        assert isinstance(result[1], QuestingForModal), view
+        assert isinstance(result[1], PlayersDetailModal), view

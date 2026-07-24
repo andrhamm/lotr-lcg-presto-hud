@@ -1,23 +1,20 @@
 // Port of ui/screen_play.py — the guided round.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
-         truncateText, ribbon, notePanel, drawWeather, drawHeart, drawFlag } from "./ui.js";
+         truncateText, ribbon, notePanel, drawHeart, drawFlag,
+         disc, arcRuns, wxSmall, token } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
-import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS } from "./gamestate.js";
+import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP } from "./gamestate.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal, CommitModal,
-         QuestingForModal, RemindersModal, LocationPickModal, SideQuestsModal,
+         PlayersDetailModal, RemindersModal, LocationPickModal, SideQuestsModal,
          QuestConfigModal, StageCompleteModal, SailingModal,
          QuestingProgressModal } from "./screens.js";
 
 const MARGIN = 8;
-const STRIP_Y = HEADER_H + 10;
-const CHIP_H = 56;
-const PROG_Y = STRIP_Y + CHIP_H + 8;
-const PROG_H = 72;                        // progress row is taller (heading card)
-const CONTENT_Y = PROG_Y + PROG_H + 8;
+const ZONE_TOP = HEADER_H + 6;            // top of the players/progress zones
+const CONTENT_Y = 150;                    // zones end ~136; tips start below
 const CTA_Y = 410;
 const CTA_H = 58;
-const GUTTER = MARGIN + 40;
 
 export class ScreenPlay {
   constructor() {
@@ -31,101 +28,71 @@ export class ScreenPlay {
     this.toast = null;       // [[icon, text, color]] picked up by the main loop
   }
 
-  _chipW(game) {
-    const n = game.players.length;
-    return Math.floor((480 - GUTTER - MARGIN - (n - 1) * MARGIN) / n);
-  }
-
-  _chips(ctx, game) {
-    const chipW = this._chipW(game);
-    icons.drawIcon(ctx, icons.THREAT, MARGIN + 4, STRIP_Y + 18, pal.red);
+  // Flipped 3-row players matrix: P# header / threat token / willpower token,
+  // one shared tap target over the whole zone (columns are fixed - up to
+  // MAX_PLAYERS - not width-sized off the live player count like the old chips).
+  _playersZone(ctx, game) {
+    const pcx = [50, 82, 114, 146];
+    const threatCy = ZONE_TOP + 40, willCy = ZONE_TOP + 72;
+    textCenter(ctx, "P", 18, ZONE_TOP + 2, 2, pal.muted);
+    // player threat helm keeps its red identity (charcoal dropshadow)
+    icons.drawIcon(ctx, icons.THREAT, 8, threatCy - 9, pal.bevel_d);
+    icons.drawIcon(ctx, icons.THREAT, 7, threatCy - 10, pal.red);
+    icons.drawIcon(ctx, icons.WILLPOWER, 7, willCy - 10, pal.gold);
     game.players.forEach((p, i) => {
-      const x = GUTTER + i * (chipW + MARGIN);
-      panel(ctx, x, STRIP_Y, chipW, CHIP_H);
-      textCenter(ctx, `P${i + 1}`, x + chipW / 2, STRIP_Y + 5, 2, pal.tan);
-      const val = p.eliminated ? "OUT" : String(p.threat);
-      textCenter(ctx, val, x + chipW / 2, STRIP_Y + 26, 3,
-                 p.eliminated ? pal.red : pal.threatPen(p.threat));
-      if (i === game.first_player) ribbon(ctx, x + chipW - 20, STRIP_Y + 1);
-      const tfrac = p.eliminated ? 1 : (p.elimination > 0 ? p.threat / p.elimination : 0);
-      this._bottomBar(ctx, x, chipW, STRIP_Y + CHIP_H, tfrac,
-                      p.eliminated ? pal.red : pal.threatPen(p.threat));
-      this.buttons.push(new Button(["thr", i], x, STRIP_Y, chipW, CHIP_H));
-    });
-  }
-
-  _commitRow(ctx, game, y) {
-    const chipW = this._chipW(game);
-    icons.drawIcon(ctx, icons.WILLPOWER, MARGIN + 4, y + 18, pal.gold);
-    game.players.forEach((p, i) => {
-      const x = GUTTER + i * (chipW + MARGIN);
-      panel(ctx, x, y, chipW, 52, pal.card_hi);
-      textCenter(ctx, String(p.commit), x + chipW / 2, y + 14, 3, pal.green);
-      this.buttons.push(new Button(["commit", i], x, y, chipW, 52));
-    });
-  }
-
-  _progressRow(ctx, game, allowAdd = false, showHeading = false) {
-    const y = PROG_Y;
-    icons.drawIcon(ctx, icons.TRAIL, MARGIN + 4, y + 24, pal.gold);   // taps -> progress view
-    this.buttons.push(new Button(["prog_view"], 0, y, GUTTER, PROG_H));
-    const frac = (prog, pts) => (pts > 0 ? prog / pts : 0);
-    const cards = [[`Q${game.quest.stage_n}${game.quest.side}`,
-                    `${game.quest.progress}/${game.quest.points}`, pal.gold, ["prog_view"],
-                    frac(game.quest.progress, game.quest.points)]];
-    if (game.active_location) {
-      cards.push(["LOC", `${game.active_location.progress}/${game.active_location.points}`,
-                  pal.gold, ["prog_view"],
-                  frac(game.active_location.progress, game.active_location.points)]);
-    }
-    game.side_quests.forEach((sq, i) => {
-      cards.push([`SQ${i + 1}`, `${sq.progress}/${sq.points}`, pal.gold, ["prog_view"],
-                  frac(sq.progress, sq.points)]);
-    });
-    const heading = showHeading && game.sailing;
-    const n = cards.length + (heading ? 1 : 0);
-    const cw = Math.min(this._chipW(game),
-                        Math.floor((480 - GUTTER - MARGIN - (n - 1) * MARGIN) / n));
-    cards.forEach(([label, val, pen, bid, cfrac], i) => {
-      const x = GUTTER + i * (cw + MARGIN);
-      panel(ctx, x, y, cw, PROG_H);
-      if (val) {
-        textCenter(ctx, label, x + cw / 2, y + 8, 2, pal.tan);
-        textCenter(ctx, val, x + cw / 2, y + 34, 3, pen);
+      const cx = pcx[i];
+      if (i === game.first_player) {
+        rect(ctx, cx - 12, ZONE_TOP - 2, 24, 19, pal.gold);
+        textCenter(ctx, String(i + 1), cx, ZONE_TOP + 1, 2, pal.bg, false);
       } else {
-        textCenter(ctx, label, x + cw / 2, y + 26, 2, pen);
+        textCenter(ctx, String(i + 1), cx, ZONE_TOP + 1, 2, pal.tan);
       }
-      // quest card carries the last resolution's heart (whole/broken), like
-      // the first-player ribbon but on the main quest
-      if (i === 0 && game.quest_outcome) {
-        const ok = game.quest_outcome === "success";
-        drawHeart(ctx, x + cw - 15, y + 15, 7, !ok, ok ? pal.green : pal.red);
-      }
-      if (val) this._bottomBar(ctx, x, cw, y + PROG_H, cfrac ?? 0, pal.gold);
-      if (bid) this.buttons.push(new Button(bid, x, y, cw, PROG_H));
+      const danger = p.threat >= p.elimination - 10;
+      const tfrac = p.elimination > 0 ? p.threat / p.elimination : 0;
+      token(ctx, cx, threatCy, 14, 2, p.eliminated ? "OUT" : String(p.threat),
+            p.eliminated ? pal.red : pal.value, tfrac,
+            danger ? pal.red : pal.gold, pal.dim);
+      const wpFill = game.view === "quest_commit"
+        ? (p.commit_touched ? pal.gold : pal.dim) : pal.gold;
+      token(ctx, cx, willCy, 14, 2, p.commit, pal.value, 1.0, wpFill, pal.dim);
     });
-    if (heading) this._headingProgressCard(ctx, game, GUTTER + cards.length * (cw + MARGIN), y, cw);
+    this.buttons.push(new Button(["players_detail"], 8, ZONE_TOP - 2, 156, 90));
   }
 
-  _headingPen(h) { return h === 0 ? pal.gold : h === 3 ? pal.red : pal.amber; }
-
-  // The heading is just another progress card: HEADING label, the current
-  // weather glyph next to its facing name, and "off-course" beneath (nothing
-  // extra when on-course / sunny). Tap to log a sailing test.
-  _headingProgressCard(ctx, game, x, y, cw) {
-    const pen = this._headingPen(game.heading);
-    panel(ctx, x, y, cw, PROG_H);
-    textCenter(ctx, "HEADING", x + cw / 2, y + 8, 2, pal.tan);
-    const name = HEADINGS[game.heading][2];
-    const nw = measureText(name, 2);
-    const gx = x + Math.floor((cw - (24 + 4 + nw)) / 2);
-    drawWeather(ctx, game.heading, gx + 12, y + 38, 12);
-    textLeft(ctx, name, gx + 28, y + 32, 2, pen);
-    if (game.heading !== 0) {
-      const s = measureText("off-course", 2) <= cw - 6 ? 2 : 1;   // readable when it fits
-      textCenter(ctx, "off-course", x + cw / 2, y + (s === 2 ? 54 : 56), s, pal.muted);
+  // Flipped progress header + one circle row: Q / L / S1..Sn / sailing, one
+  // shared tap target over the whole zone. Columns are capped to what fits;
+  // overflow drops the newest side quests (Q, L, the oldest sides, and
+  // sailing always stay).
+  _progressZone(ctx, game) {
+    rect(ctx, 168, ZONE_TOP, 1, 90, pal.border);
+    const cols = [["Q", game.quest.progress, game.quest.points]];
+    if (game.active_location) {
+      cols.push(["L", game.active_location.progress, game.active_location.points]);
     }
-    this.buttons.push(new Button(["sail_modal"], x, y, cw, PROG_H));
+    const sideCols = game.side_quests.map((sq, i) => [`S${i + 1}`, sq.progress, sq.points]);
+    const maxCols = Math.floor((472 - 174) / 32);
+    const fixed = cols.length + (game.sailing ? 1 : 0);
+    const sideBudget = Math.max(0, maxCols - fixed);
+    const allCols = cols.concat(sideCols.slice(0, sideBudget));
+    allCols.forEach(([label, prog, pts], i) => {
+      const cx = 190 + i * 32;
+      textCenter(ctx, label, cx, ZONE_TOP + 2, 2, pal.tan);
+      const rem = Math.max(0, pts - prog);
+      const frac = pts > 0 ? prog / pts : 0;
+      token(ctx, cx, ZONE_TOP + 40, 14, 2, rem, pal.value, frac, pal.gold, pal.dim);
+    });
+    if (game.sailing) {
+      const scx = 190 + allCols.length * 32;
+      icons.drawIcon(ctx, icons.WHEEL_SM, scx - 8, ZONE_TOP, pal.gold);
+      disc(ctx, scx, ZONE_TOP + 40, 14, pal.well);
+      [[272, 360], [0, 88], [92, 178], [182, 268]].forEach(([a0, a1], rank) => {
+        arcRuns(ctx, scx, ZONE_TOP + 40, 14, 11, a0, a1,
+                rank < game.heading ? pal.dim : pal.gold);
+      });
+      wxSmall(ctx, game.heading, scx, ZONE_TOP + 40, 6);
+    }
+    textLeft(ctx, "quest points remaining", 174, ZONE_TOP + 66, 1, pal.dim);
+    this.buttons.push(new Button(["progress_detail"], 174, ZONE_TOP - 2, 298, 90));
   }
 
   _cta(ctx, label, id, fill = pal.btn_ok, fg = pal.gold) {
@@ -146,7 +113,7 @@ export class ScreenPlay {
   _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
     const half = Math.floor((480 - 3 * MARGIN) / 2);
     const defs = [
-      ["Questing for", game.willpower, pal.gold, "wp", icons.WILLPOWER_MD, pal.gold, true],
+      ["Questing for", game.willpower, pal.value, "wp", icons.WILLPOWER_MD, pal.gold, true],
       ["Staging area", game.staging, pal.outline, "stg", icons.THREAT_MD, pal.outline, false],
     ];
     defs.forEach(([label, val, pen, key, icon, ipen, shadow], idx) => {
@@ -168,10 +135,20 @@ export class ScreenPlay {
         if (key === "stg") this.buttons.push(new Button(["enc_rem"], x + 64, y, half - 128, 84));
         if (key === "wp") this.buttons.push(new Button(["wp"], x + 64, y, half - 128, 84));
       } else if (tappable.includes(key)) {
-        this.buttons.push(new Button([key], x, y, half, 84));
         if (key === "stg") {
-          textCenter(ctx, `reveal up to +${game.stagingRevealEstimate()}`,
+          // thin inset dividers + tan ± glyphs (matches the mock — no button
+          // chrome). Left/right strips tap ±; the centre taps the big editor.
+          rect(ctx, x + 36, y + 8, 1, 56, pal.border);
+          rect(ctx, x + half - 36, y + 8, 1, 56, pal.border);
+          textCenter(ctx, "-", x + 18, y + 32, 3, pal.tan);
+          textCenter(ctx, "+", x + half - 18, y + 32, 3, pal.tan);
+          this.buttons.push(new Button(["stg-"], x, y, 36, 84));
+          this.buttons.push(new Button(["stg"], x + 36, y, half - 72, 84));
+          this.buttons.push(new Button(["stg+"], x + half - 36, y, 36, 84));
+          textCenter(ctx, `+${game.stagingRevealEstimate()} reveal estimate`,
                      x + half / 2, y + 64, 2, pal.dim);
+        } else {
+          this.buttons.push(new Button([key], x, y, half, 84));
         }
       }
     });
@@ -206,24 +183,23 @@ export class ScreenPlay {
       this.buttons.push(sb);
       this._cta(ctx, "Begin Round 1", ["advance"]);
     } else if (view === "resource_planning") {
-      this._chips(ctx, game);
-      this._progressRow(ctx, game, true);
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
       notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                 ["Collect resources.", "Draw cards.", "Play allies and attachments."]);
       this._cta(ctx, `Next Phase: ${VIEW_LABELS[game.sailing ? "quest_sailing" : "quest_commit"]}`, ["advance"]);
     } else if (view === "quest_commit") {
-      this._chips(ctx, game);
-      this._progressRow(ctx, game, false, true);
-      // per-player willpower row is redundant with a single player
-      let ty = CONTENT_Y;
-      if (game.players.length > 1) { this._commitRow(ctx, game, CONTENT_Y); ty += 60; }
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
+      // willpower now lives in the players matrix; note/totals start at CONTENT_Y
+      const ty = CONTENT_Y;
       const th = notePanel(ctx, MARGIN, ty, 480 - 2 * MARGIN, "Commit characters to the quest.");
       this.buttons.push(new Button(["commit_tip"], MARGIN, ty, 480 - 2 * MARGIN, th));
       this._totalsRow(ctx, game, ty + 48, false, ["wp", "stg"]);
       this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_staging}`, ["advance"]);
     } else if (view === "quest_sailing") {
-      this._chips(ctx, game);
-      this._progressRow(ctx, game, true, true);
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
       if (!game.sailing) {
         notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                   ["No Sailing keyword on this quest.", "Enable it if the stage says Sailing."]);
@@ -254,11 +230,16 @@ export class ScreenPlay {
         ly += lh;
         icons.drawIcon(ctx, icons.WHEEL_SM, tx, ly, pal.gold);
         textLeft(ctx, "found: move 1 step on-course.", tx + 22, ly, 2, pal.muted);
+        const sb = new Button(["sail_modal"], MARGIN, ty0 + th + 10, 480 - 2 * MARGIN, 52);
+        bevel(ctx, sb.x, sb.y, sb.w, sb.h, pal.btn);
+        icons.drawIcon(ctx, icons.WHEEL, 150, sb.y + 14, pal.gold);
+        textCenter(ctx, "Log sailing test", 262, sb.y + 16, 2, pal.tan);
+        this.buttons.push(sb);
         this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       }
     } else if (view === "quest_staging") {
-      this._chips(ctx, game);
-      this._progressRow(ctx, game, true, true);
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
       // tip: reveal reminder, then a live preview of the resolution outcome
       const tw = 480 - 2 * MARGIN, gutt = 28 + 14, lh = 26;
       const tx = MARGIN + 12 + gutt, usable = tw - 12 - gutt;
@@ -288,18 +269,18 @@ export class ScreenPlay {
     } else if (view === "quest_resolution") {
       this._drawResolution(ctx, game);
     } else if (view === "travel") {
-      this._chips(ctx, game);
-      this._progressRow(ctx, game);
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
       this._drawTravel(ctx, game);
     } else if (view === "refresh") {
-      this._chips(ctx, game);
-      this._progressRow(ctx, game);
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
       notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
                 ["Ready all exhausted cards.", "Threat increases (automatic).",
                  "Pass the first player token."]);
       this._cta(ctx, "End round (raise threat, pass token)", ["endround"]);
     } else {
-      this._chips(ctx, game);
+      this._playersZone(ctx, game);
       const notes = {
         enc_optional: "Each player may engage one enemy in the staging area (optional).",
         enc_checks: "Engagement checks: enemies engage players whose threat >= their cost.",
@@ -309,7 +290,7 @@ export class ScreenPlay {
       };
       const flavor = { combat_enemy: [icons.DEFENSE, pal.green],
                        combat_player: [icons.ATTACK, pal.tan] }[view];
-      this._progressRow(ctx, game);
+      this._progressZone(ctx, game);
       const shipNotes = {
         combat_enemy: "Ships: only a ship can defend a ship-enemy. Undefended ship attacks must damage a ship you control.",
         combat_player: "Ships: your ships attack only ship-enemies - but any character may attack a ship-enemy.",
@@ -402,8 +383,8 @@ export class ScreenPlay {
   _drawResolution(ctx, game) {
     if (game.quest_outcome !== "success") {
       // fail / tie: no placement - just report the outcome and move on
-      this._chips(ctx, game);
-      this._progressRow(ctx, game);
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
       const fail = game.quest_outcome === "fail";
       const ty0 = CONTENT_Y + 6, gutt = 28 + 14, tx = MARGIN + 12 + gutt, lh = 26;
       const th = 2 * lh + 16;
@@ -523,20 +504,9 @@ export class ScreenPlay {
       return true;
     }
     if (k === "setup" ) return null;
-    if (k === "thr") {
-      const i = btn.id[1];
-      return ["modal", new CounterModal(`P${i + 1} threat`, game.players[i].threat,
-        v => {
-          const before = game.players[i].threat;
-          game.adjustThreat(i, v - before);
-          if (game.players[i].threat !== before) {
-            game.logEvent(`P${i + 1} threat ${before} -> ${game.players[i].threat}`);
-          }
-        }, "threat", `Elimination at ${game.players[i].elimination}`)];
-    }
-    if (k === "commit") return ["modal", new CommitModal(game, btn.id[1])];
+    if (k === "players_detail") return ["modal", new PlayersDetailModal(game)];
     if (k === "commit_tip") return ["modal", new CommitModal(game, 0)];
-    if (k === "wp") return ["modal", new QuestingForModal(game)];
+    if (k === "wp") return ["modal", new PlayersDetailModal(game)];
     if (k === "enc_rem") return ["modal", new RemindersModal(game)];
     if (k === "stg") {
       return ["modal", new CounterModal("Staging area threat", game.staging,
@@ -546,7 +516,8 @@ export class ScreenPlay {
     if (k === "wp+") { game.willpower += 1; return true; }
     if (k === "stg-") { game.staging = Math.max(0, game.staging - 1); return true; }
     if (k === "stg+") { game.staging += 1; return true; }
-    if (k === "prog_view") return ["modal", new QuestingProgressModal(game)];
+    // Task 10 reworks the modal this opens.
+    if (k === "progress_detail") return ["modal", new QuestingProgressModal(game)];
     if (k === "stage_advance") {
       if (!game.quest_resolved) {
         const res = game.resolveQuest(game.willpower, game.staging);

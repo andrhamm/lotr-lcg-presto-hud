@@ -4,6 +4,7 @@ NOWRAP: PicoGraphics text() word-wraps at its wordwrap argument — passing 0
 stacks every word vertically. All text here is pre-wrapped by wrap_text, so
 every draw passes NOWRAP (a width no string can reach) to disable it.
 """
+import math
 
 NOWRAP = 10000
 
@@ -48,7 +49,7 @@ def bevel(d, pal, x, y, w, h, fill, pressed=False, t=2):
 def text_left(d, pal, s, x, y, scale, pen, shadow=True):
     if shadow:
         off = 1 if scale == 1 else 2
-        d.set_pen(pal.bevel_d)
+        d.set_pen(pal.shadow)
         d.text(s, x + off, y + off, NOWRAP, scale)
     d.set_pen(pen)
     d.text(s, x, y, NOWRAP, scale)
@@ -59,7 +60,7 @@ def text_center(d, pal, s, cx, y, scale, pen, shadow=True):
     x = int(cx - w / 2)
     if shadow:
         off = 1 if scale == 1 else 2
-        d.set_pen(pal.bevel_d)
+        d.set_pen(pal.shadow)
         d.text(s, x + off, y + off, NOWRAP, scale)
     d.set_pen(pen)
     d.text(s, x, y, NOWRAP, scale)
@@ -194,6 +195,89 @@ def draw_heart(d, pal, cx, cy, r, broken, pen):
         d.set_pen(pal.bg)
         d.rectangle(cx - w // 2, top, w, lobe_h + 2)                    # upper crack
         d.rectangle(int(cx - r * 0.35), int(cy - r * 0.1), w, int(r * 0.7))  # lower (offset)
+
+
+def disc(d, cx, cy, rad, pen):
+    """Filled circle via per-scanline rect runs (device has no circle prim)."""
+    d.set_pen(pen)
+    for py in range(int(cy - rad), int(cy + rad) + 1):
+        h2 = rad * rad - (py - cy) ** 2
+        if h2 < 0:
+            continue
+        hx = int(math.sqrt(h2))
+        d.rectangle(int(cx - hx), py, 2 * hx + 1, 1)
+
+
+def arc_runs(d, cx, cy, R, r, a0, a1, pen):
+    """Ring/arc band between radii r..R and angles a0..a1 (0deg=top, cw)."""
+    d.set_pen(pen)
+    for py in range(int(cy - R), int(cy + R) + 1):
+        run = False
+        x0 = 0
+        for px in range(int(cx - R), int(cx + R) + 2):
+            dx, dy = px - cx, py - cy
+            dd = math.sqrt(dx * dx + dy * dy)
+            on = r <= dd <= R
+            if on and a1 is not None:
+                ang = math.degrees(math.atan2(dx, -dy)) % 360.0
+                on = a0 <= ang <= a1
+            if on and not run:
+                run, x0 = True, px
+            elif not on and run:
+                d.rectangle(x0, py, px - x0, 1)
+                run = False
+
+
+def ring(d, cx, cy, R, w, frac, fill, track):
+    """Thin ring of width w at radius R: full track pen + a frac-of-360 fill
+    arc clockwise from the top (0deg)."""
+    arc_runs(d, cx, cy, R, R - w, 0, 360, track)
+    if frac > 0:
+        arc_runs(d, cx, cy, R, R - w, 0, frac * 360.0, fill)
+
+
+def token(d, pal, cx, cy, R, w, value, vpen, frac, fill, track, vscale=2):
+    """Circular stat widget: inset well disc + progress ring + centred value."""
+    disc(d, cx, cy, R, pal.well)
+    ring(d, cx, cy, R, w, frac, fill, track)
+    if value is not None:
+        text_center(d, pal, str(value), cx, int(cy - 4 * vscale), vscale, vpen)
+
+
+def circ_btn(d, pal, cx, cy, r, glyph, pen=None):
+    """Circular -/+ (or similar single-glyph) button: btn disc + light
+    affordance ring + centred glyph. The drawn circle is small (r~10-11);
+    callers push a >=24px Button separately for the actual tap target,
+    centred on the same (cx, cy)."""
+    disc(d, cx, cy, r, pal.btn)
+    arc_runs(d, cx, cy, r, r - 2, 0, 360, pal.bevel_l)
+    text_center(d, pal, glyph, cx, int(cy - 8), 2, pen if pen is not None else pal.tan)
+
+
+def wx_small(d, pal, idx, cx, cy, r, pen=None):
+    """Tiny weather glyph from rect/tri/disc (the 24px icon masks are too big
+    for the small heading tokens). idx 0 sun / 1 cloud / 2 rain / 3 storm.
+    `pen` forces one colour (e.g. dim for an inactive radio); None = natural."""
+    if idx == 0:
+        disc(d, cx, cy, r, pen if pen is not None else pal.amber)
+        disc(d, cx - 1, cy - 1, max(1, r // 2), pen if pen is not None else pal.gold)
+        d.set_pen(pen if pen is not None else pal.amber)
+        for dx, dy in ((0, -r - 3), (0, r + 1), (-r - 3, 0), (r + 1, 0)):
+            d.rectangle(cx + dx, cy + dy, 2, 2)
+        return
+    cloud = pen if pen is not None else pal.muted
+    disc(d, cx - 3, cy, r - 1, cloud)
+    disc(d, cx + 3, cy - 1, r - 2, cloud)
+    disc(d, cx, cy - 2, r - 1, cloud)
+    d.set_pen(cloud)
+    d.rectangle(cx - 6, cy, 12, r - 1)
+    if idx == 2:
+        d.set_pen(pen if pen is not None else pal.dim)
+        for k in (-3, 1, 5):
+            d.rectangle(cx + k, cy + r - 1, 1, 3)
+    elif idx == 3:
+        d.set_pen(pen if pen is not None else pal.gold)
+        d.triangle(cx, cy + r - 2, cx - 3, cy + r + 3, cx + 2, cy + r)
 
 
 # heading facing -> (icon mask name, pen attr). Masks live in ui/icons.py.

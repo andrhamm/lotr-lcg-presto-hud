@@ -135,6 +135,7 @@ class Player:
         self.eliminated = False
         self.elimination = DEFAULT_ELIMINATION
         self.commit = 0  # willpower committed; persists as next round's default
+        self.commit_touched = False  # willpower ring state: committed this round?
 
 
 class GameState:
@@ -162,6 +163,7 @@ class GameState:
         self.quest_resolved = False  # quest resolved this round
         self.quest_outcome = None    # "success" | "fail" | "tie" - last resolution
         self.quest_outcome_n = 0     # progress gained / threat taken
+        self.quest_history = []      # by-round chart data, capped at last 20
         self.sailing = False         # Dream-chaser Sailing test active
         self.heading = 0             # index into HEADINGS (0 = on-course)
         self.game_over = None        # or {"result", "round", "duration"}
@@ -227,7 +229,12 @@ class GameState:
     def set_commit(self, index, value):
         """Set a player's committed willpower; total willpower = sum of commits."""
         self.players[index].commit = max(0, value)
+        self.players[index].commit_touched = True
         self.willpower = sum(p.commit for p in self.players)
+
+    def touch_commit(self, index):
+        """Mark a player's commit as touched this round (willpower ring visual)."""
+        self.players[index].commit_touched = True
 
     # -- view flow ---------------------------------------------------------
     def _total_progress(self):
@@ -257,6 +264,8 @@ class GameState:
             self.log_event("Setup complete - round 1 begins (quest %s needs %d)"
                            % (self.quest_label(), self.quest["points"]))
             self.enter_view(VIEW_ORDER[0])
+            for p in self.players:
+                p.commit_touched = False
             self._snapshot_round()
             return
         if self.view == "quest_sailing":
@@ -372,6 +381,8 @@ class GameState:
         for p in self.players:
             if not p.eliminated:
                 self.adjust_threat(self.players.index(p), p.threat_per_round)
+        for p in self.players:
+            p.commit_touched = False
         # round stats: duration + per-player threat deltas + progress gained
         snap = self._round_snap
         if snap:
@@ -469,22 +480,28 @@ class GameState:
         diff = willpower - staging
         self.quest_resolved = True
         if diff > 0:
-            self.quest_outcome = "success"
-            self.quest_outcome_n = diff
-            return {"outcome": "success", "budget": diff}
-        if diff < 0:
+            outcome, n = "success", diff
+            result = {"outcome": outcome, "budget": n}
+        elif diff < 0:
             shortfall = -diff
             for i, p in enumerate(self.players):
                 if not p.eliminated:
                     self.adjust_threat(i, shortfall)
             self.log_event("Quest failed. +%d threat to all" % shortfall)
-            self.quest_outcome = "fail"
-            self.quest_outcome_n = shortfall
-            return {"outcome": "fail", "threat": shortfall}
-        self.log_event("Quest unsuccessful - tie, no change")
-        self.quest_outcome = "tie"
-        self.quest_outcome_n = 0
-        return {"outcome": "tie"}
+            outcome, n = "fail", shortfall
+            result = {"outcome": outcome, "threat": n}
+        else:
+            self.log_event("Quest unsuccessful - tie, no change")
+            outcome, n = "tie", 0
+            result = {"outcome": outcome}
+        self.quest_outcome = outcome
+        self.quest_outcome_n = n
+        self.quest_history.append({
+            "round": self.round, "willpower": willpower, "staging": staging,
+            "outcome": outcome, "n": n, "heading": self.heading})
+        if len(self.quest_history) > 20:
+            self.quest_history = self.quest_history[-20:]
+        return result
 
     # -- persistence -------------------------------------------------------
     def to_dict(self):
@@ -494,7 +511,8 @@ class GameState:
                          "threat_per_round": p.threat_per_round,
                          "eliminated": p.eliminated,
                          "elimination": p.elimination,
-                         "commit": p.commit} for p in self.players],
+                         "commit": p.commit,
+                         "commit_touched": p.commit_touched} for p in self.players],
             "view": self.view,
             "round": self.round,
             "first_player": self.first_player,
@@ -510,6 +528,7 @@ class GameState:
             "quest_resolved": self.quest_resolved,
             "quest_outcome": self.quest_outcome,
             "quest_outcome_n": self.quest_outcome_n,
+            "quest_history": [dict(e) for e in self.quest_history],
             "sailing": self.sailing,
             "heading": self.heading,
             "game_over": dict(self.game_over) if self.game_over else None,
@@ -532,6 +551,7 @@ class GameState:
             p.eliminated = pd["eliminated"]
             p.elimination = pd.get("elimination", DEFAULT_ELIMINATION)
             p.commit = pd.get("commit", 0)
+            p.commit_touched = pd.get("commit_touched", False)
             g.players.append(p)
         g.view = d.get("view", VIEW_ORDER[0])
         g.round = d["round"]
@@ -552,6 +572,7 @@ class GameState:
         g.quest_resolved = d.get("quest_resolved", False)
         g.quest_outcome = d.get("quest_outcome", None)
         g.quest_outcome_n = d.get("quest_outcome_n", 0)
+        g.quest_history = [dict(e) for e in d.get("quest_history", [])]
         g.sailing = d.get("sailing", False)
         g.heading = d.get("heading", 0)
         go = d.get("game_over", None)

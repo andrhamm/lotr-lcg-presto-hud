@@ -143,3 +143,45 @@ def test_current_step_action_window_flag():
     assert g.action_window_open() is True
     g.step = "6.2"  # Deal shadow cards — no window
     assert g.action_window_open() is False
+
+
+def test_commit_touched_lifecycle():
+    from gamestate import GameState
+    g = GameState()
+    assert g.players[0].commit_touched is False
+    g.set_commit(0, 5)
+    assert g.players[0].commit_touched is True
+    g.touch_commit(1)
+    assert g.players[1].commit_touched is True
+    g.end_round()
+    assert all(p.commit_touched is False for p in g.players)
+
+
+def test_commit_touched_round_trips():
+    from gamestate import GameState
+    g = GameState()
+    g.set_commit(0, 3)
+    g2 = GameState.from_dict(g.to_dict())
+    assert g2.players[0].commit_touched is True
+
+
+def test_quest_history_records_each_resolution():
+    from gamestate import GameState
+    g = GameState()
+    g.heading = 1
+    g.resolve_quest(10, 4)          # success +6
+    g.resolve_quest(3, 7)           # fail +4 threat
+    g.resolve_quest(5, 5)           # tie 0
+    h = g.quest_history
+    assert [e["outcome"] for e in h] == ["success", "fail", "tie"]
+    assert h[0]["willpower"] == 10 and h[0]["staging"] == 4 and h[0]["n"] == 6
+    assert h[1]["n"] == 4 and h[2]["n"] == 0
+    assert h[0]["heading"] == 1
+
+
+def test_quest_history_caps_at_20():
+    from gamestate import GameState
+    g = GameState()
+    for _ in range(25):
+        g.resolve_quest(5, 3)
+    assert len(g.quest_history) == 20
