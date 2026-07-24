@@ -1,0 +1,25 @@
+databaseId	name	imageUrl	cardBack	type	packName	deckbuilderQuantity	setUuid	numberInPack	encounterSet	unique	sphere	traits	keywords	cost	side	engagementCost	threat	willpower	attack	defense	hitPoints	questPoints	victoryPoints	cornerText	text	shadow	tags
+p-9119	Flies and Spiders			Quest	Core Set			119	Passage Through Mirkwood					1	A										Setup: Search the encounter deck for 1 copy of the Forest Spider...		
+p-9119	Flies and Spiders			Quest	Core Set			119	Passage Through Mirkwood					1	B							8					
+p-9120	A Fork in the Road			Quest	Core Set			120	Passage Through Mirkwood					2	A												
+p-9120	A Fork in the Road			Quest	Core Set			120	Passage Through Mirkwood					2	B							2			Forced: When you defeat this stage, proceed to one of the 2 'A Chosen Path' stages, at random.		
+p-9123	A Chosen Path			Quest	Core Set			123	Passage Through Mirkwood					3	A												
+p-9123	Don't Leave the Path!			Quest	Core Set			123	Passage Through Mirkwood					3	B							0			When Revealed: ... find and defeat Ungoliant's Spawn to win the game.		
+p-9125	A Chosen Path			Quest	Core Set			125	Passage Through Mirkwood					3	A												
+p-9125	Beorn's Path			Quest	Core Set			125	Passage Through Mirkwood					3	B							10			Players cannot defeat this stage while Ungoliant's Spawn is in play.		
+p-bad	Broken Stage			Quest	Core Set			999	Passage Through Mirkwood					X	A												
+e-spawn	Ungoliant's Spawn			Enemy	Core Set			34	Passage Through Mirkwood	false		Creature. Spider.				32	3		5	2	9				When Revealed: Each player must choose...		
+e-ofr	Old Forest Road			Location	Core Set			96	Passage Through Mirkwood								1					1			Travel: ready a character.		
+e-reach	The Necromancer's Reach			Treachery	Core Set			103	Passage Through Mirkwood																When Revealed: Deal 1 damage to each exhausted character.		
+f-1	The Chase Begins			Quest	The Flight of the Stormcaller			1	Flight of the Stormcaller				Sailing.	1	A												
+f-1	The Chase Begins			Quest	The Flight of the Stormcaller			1	Flight of the Stormcaller				Sailing.	1	B							8					
+nm-1	Flies and Spiders (Nightmare)			Nightmare	Passage Through Mirkwood Nightmare Deck			1	Passage Through Mirkwood - Nightmare																Nightmare setup...		
+mode-easy	Easy Mode			Campaign	The Dread Realm			1	The Hunt for the Dreadnaught																Setup: ... Each player draws 1 additional card.		
+camp-1	The Old Forest			Campaign	The Old Forest			1	The Old Forest																You are playing Campaign Mode. Setup: ...		
+hero-aragorn	Aragorn			Hero	Core Set			1		true	Leadership	Dúnedain. Noble. Ranger.		12			12	2	3	2	5						
+ally-gandalf	Gandalf			Ally	Core Set			73		true	Neutral			5				4	4	4	4				At the end of the round, discard Gandalf.		
+rules-1	Questing			Rules	Core Set			1																	Compare total willpower to total threat in the staging area.		
+obj-ally-1	Test Sailor			Objective Ally	Test Pack			1	Test Objective Set																An objective ally in an encounter set.
+dup-a	Dup Wolf			Enemy	Dup Pack			1	Casing Test	false		Creature.				2	2		2	1	3
+dup-b	Dup Spider			Enemy	Dup Pack			2	Casing test	false		Creature.				1	1		1	1	2
+col-test	Column Probe		encounter	Objective	Core Set	3	uuid-xyz	50	Passage Through Mirkwood																		

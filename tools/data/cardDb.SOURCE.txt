@@ -1,0 +1,2 @@
+url=https://raw.githubusercontent.com/seastan/dragncards-lotrlcg-plugin/{sha}/tsvs/cardDb.tsv
+sha=1d212010aceed68ed96c70535282839468a4db2c

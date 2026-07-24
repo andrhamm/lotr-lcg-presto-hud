@@ -9,3 +9,5 @@ assets/srcart/
 assets/icons/
 assets/gameicons_svg/
 assets/gameicons/
+# generated card DB (compiled from DragnCards; never committed — see tools/build_card_data.py)
+docs/data/

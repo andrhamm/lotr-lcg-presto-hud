@@ -21,6 +21,16 @@ implementations:
 4. Rules claims about the game get verified against the rulebook/FAQ before
    they ship in UI text.
 
+## Card data (generated, never committed)
+
+`tools/build_card_data.py` compiles the full DragnCards card DB into
+`docs/data/` (index + per-scenario + player DB + rules). The source of truth is
+the pinned TSV (`tools/data/cardDb.SOURCE.txt`); the output is **gitignored** and
+regenerated — never hand-edit `docs/data/`. Refresh the pin with
+`python3 tools/build_card_data.py --refresh`. Web Pages builds it in CI
+(`.github/workflows/pages.yml`); the device gets it at deploy:
+`python3 tools/build_card_data.py && mpremote cp -r docs/data/ :/data/`.
+
 ## The TODO board (TODO.md)
 
 `TODO.md` is an Obsidian Kanban board (also plain markdown). Columns:
