@@ -12,6 +12,114 @@ HEADER = ["databaseId","name","imageUrl","cardBack","type","packName",
 _INT_FIELDS = ("cost","engagementCost","threat","willpower","attack","defense",
                "hitPoints","questPoints","victoryPoints")
 
+# Curated pack -> {cycle, source, date} metadata, keyed by the scenario's
+# `packName` exactly as it appears in the DragnCards TSV. Every pack that
+# currently produces a scenario in docs/data/index.json must have an entry
+# here; PACK_META.get(pack, {}) falls back to cycle "Other" / source
+# "official" for anything not yet catalogued (new packs upstream).
+#
+# Cycle + source verified 2026-07-24 against Hall of Beorn's product-by-cycle
+# listing (https://hallofbeorn.com/LotR/Products), Wikipedia's "The Lord of
+# the Rings: The Card Game" article, and Fantasy Flight's own product pages;
+# ALeP (A Long-extended Party, https://alongextendedparty.com/) membership
+# checked against alongextendedparty.com/available-content/. See
+# .superpowers/sdd/task-2-report.md for the full citation trail — notably,
+# "The Dark of Mirkwood" is an OFFICIAL FFG scenario pack (MEC102, part of
+# the 2022-23 "Revised Content" relaunch, re-releasing the two quests from
+# the "Two-Player Limited Edition Starter"), not ALeP as originally assumed.
+# No ALeP scenario currently appears in the upstream TSV, so no pack below
+# is "alep" yet; ALeP's real product names (for future reference) are
+# Children of Eorl / The Aldburg Plot / Fire on the Eastemnet / The Gap of
+# Rohan / The Glittering Caves / Mustering of the Rohirrim / Blood in the
+# Isen (Oaths of the Rohirrim cycle), The Shire's Reckoning / Strange News
+# in Bree / Fangs in the Dark / The Brandywine Pursuit (Fell Summer cycle),
+# and the standalone The Scouring of the Shire / The Nine are Abroad / The
+# Siege of Erebor / The Hobbit / The Mirror of Galadriel.
+#
+# `date` (release YYYY-MM) is intentionally left None everywhere: precise
+# per-pack release months were not verified to the confidence bar this
+# pipeline needs, so we do not guess them here (B-data fills these in).
+def _official(cycle, packs):
+    return {p: {"cycle": cycle, "source": "official", "date": None} for p in packs}
+
+PACK_META = {}
+PACK_META.update(_official("Core Set", [
+    "Core Set", "Core Set - Nightmare", "Revised Core Set",
+]))
+PACK_META.update(_official("Shadows of Mirkwood", [
+    "Shadows of Mirkwood - Nightmare",
+    "The Hunt for Gollum", "Conflict at the Carrock", "A Journey to Rhosgobel",
+    "The Hills of Emyn Muil", "The Dead Marshes", "Return to Mirkwood",
+]))
+PACK_META.update(_official("The Dwarrowdelf", [
+    "Dwarrowdelf - Nightmare",
+    "Khazad-dum", "Khazad-dum - Nightmare", "The Redhorn Gate",
+    "Road to Rivendell", "The Watcher in the Water", "The Long Dark",
+    "Foundations of Stone", "Shadow and Flame",
+]))
+PACK_META.update(_official("Against the Shadow", [
+    "Against the Shadow - Nightmare",
+    "Heirs of Numenor", "Heirs of Numenor - Nightmare", "The Stewards Fear",
+    "The Druadan Forest", "Encounter at Amon Din", "Assault on Osgiliath",
+    "The Blood of Gondor", "The Morgul Vale",
+]))
+PACK_META.update(_official("The Ring-maker", [
+    "Ringmaker - Nightmare",
+    "The Voice of Isengard", "The Voice of Isengard - Nightmare",
+    "The Dunland Trap", "The Three Trials", "Trouble in Tharbad",
+    "The Nin-in-Eilph", "Celebrimbor's Secret", "The Antlered Crown",
+]))
+PACK_META.update(_official("The Angmar Awakened", [
+    "Angmar Awakened - Nightmare",
+    "The Lost Realm", "The Lost Realm - Nightmare", "The Wastes of Eriador",
+    "Escape from Mount Gram", "Across the Ettenmoors",
+    "The Treachery of Rhudaur", "The Battle of Carn Dum", "The Dread Realm",
+]))
+PACK_META.update(_official("The Dream-chaser", [
+    "Dreamchaser - Nightmare",
+    "The Grey Havens", "The Grey Havens - Nightmare", "Flight of the Stormcaller",
+    "The Thing in the Depths", "Temple of the Deceived", "The Drowned Ruins",
+    "A Storm on Cobas Haven", "The City of Corsairs",
+]))
+PACK_META.update(_official("The Haradrim", [
+    "The Sands of Harad", "The Mumakil", "Race Across Harad",
+    "Beneath the Sands", "The Black Serpent", "The Dungeons of Cirith Gurat",
+    "The Crossings of Poros",
+]))
+PACK_META.update(_official("Ered Mithrin", [
+    "The Wilds of Rhovanion", "The Withered Heath", "Roam Across Rhovanion",
+    "Fire in the Night", "The Ghost of Framsburg", "Mount Gundabad",
+    "The Fate of Wilderland",
+]))
+PACK_META.update(_official("The Vengeance of Mordor", [
+    "A Shadow in the East", "Wrath and Ruin", "The City of Ulfast",
+    "Challenge of the Wainriders", "Under the Ash Mountains",
+    "The Land of Sorrow", "The Fortress of Nurn",
+]))
+PACK_META.update(_official("Hobbit Saga", [
+    "The Hobbit - Over Hill and Under Hill",
+    "The Hobbit - Over Hill and Under Hill - Nightmare",
+    "The Hobbit - On the Doorstep", "The Hobbit - On the Doorstep - Nightmare",
+]))
+PACK_META.update(_official("LotR Saga", [
+    "The Black Riders", "The Black Riders - Nightmare",
+    "The Road Darkens", "The Road Darkens - Nightmare",
+    "The Treason of Saruman", "The Treason of Saruman - Nightmare",
+    "The Land of Shadow", "The Land of Shadow - Nightmare",
+    "The Flame of the West", "The Mountain of Fire",
+]))
+PACK_META.update(_official("Standalone/PoD", [
+    # Gen Con / Fellowship / custom-scenario-kit PoD releases, plus the two
+    # standalone starter/scenario-pack products (same two quests, two
+    # printings — see note above).
+    "The Massing at Osgiliath", "The Battle of Lake-Town", "The Stone of Erech",
+    "The Old Forest", "The Ruins of Belegost", "Fog on the Barrow-downs",
+    "Murder at the Prancing Pony", "The Siege of Annuminas",
+    "Attack on Dol Guldur", "The Wizard's Quest", "The Woodland Realm",
+    "The Mines of Moria", "Escape from Khazad-dum", "The Hunt for the Dreadnaught",
+    "Two-Player Limited Edition Starter", "Dark of Mirkwood",
+]))
+
 def parse_int(s):
     s = (s or "").strip()
     if not s:
@@ -189,6 +297,7 @@ def build_outputs(stream, meta=None):
             "kind": _scenario_kind(group), "sailing": sailing,
             "quest": quest, "encounter": encounter, "modes": modes, "campaign": campaign,
         }
+        pack_meta = PACK_META.get(group[0]["pack"], {})
         index_scn.append({
             "slug": slug, "name": enc, "pack": group[0]["pack"],
             "kind": scenarios[slug]["kind"],
@@ -197,6 +306,9 @@ def build_outputs(stream, meta=None):
             "hasNightmare": slugify(enc + " - Nightmare") in enc_groups,
             "modes": [m["name"] for m in modes],
             "counts": {k: len(v) for k, v in encounter.items()},
+            "cycle": pack_meta.get("cycle", "Other"),
+            "source": pack_meta.get("source", "official"),
+            "releaseDate": pack_meta.get("date"),
         })
 
     packs, players_index = {}, []
