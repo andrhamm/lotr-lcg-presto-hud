@@ -511,6 +511,9 @@ def test_build_writes_expected_shape_with_faked_network(tmp_path, monkeypatch):
     assert entry["attribution"]["url"] == article_url
     assert entry["general"]
     assert all(len(t) <= 140 for t in entry["general"])
+    # A scraped tip survived, so the file credits the scrape.
+    assert build_tips.SOURCE_NAME in data["source"]
+    assert "summarized, not reproduced" in data["source"]
 
 
 def test_build_caches_so_a_second_run_makes_no_network_calls(tmp_path, monkeypatch):
@@ -620,6 +623,13 @@ def test_build_prefers_project_notes_over_scraped_material(tmp_path, monkeypatch
     # The scraped fixture's own tip must NOT be present - notes replace,
     # not merge with, the scraped source for a scenario covered by both.
     assert not any("hummerhorns" in t.lower() for t in entry["general"])
+    # ...and with nothing scraped surviving, the file must not credit the
+    # scrape for what are entirely our own words. This is the real shape of
+    # the committed docs/data/tips.json today (every entry comes from
+    # quests/*.md), so an unconditional citation would be a false one.
+    assert build_tips.SOURCE_NAME not in data["source"].replace(
+        "no %s material" % build_tips.SOURCE_NAME, "")
+    assert "quests/*.md" in data["source"]
 
 
 def test_tips_are_ascii_only_for_the_device_font():

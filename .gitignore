@@ -9,13 +9,22 @@ assets/srcart/
 assets/icons/
 assets/gameicons_svg/
 assets/gameicons/
-# generated card DB (compiled from DragnCards; never committed — see tools/build_card_data.py)
-docs/data/
-# Hall of Beorn sets-to-gather enrichment cache + output (third-party card
-# data; never committed — see tools/build_hob_enrichment.py)
+# docs/data/ is a mixed directory — see CLAUDE.md's "What may be committed"
+# (the line is verbatim vs derived, not third-party vs ours). Default is
+# ignore-everything (the compiled card DB is verbatim printed card text:
+# index.json, scenarios/, players/, rules.json — plus the rasterized icon
+# masks in icons.json), with an explicit allow-list of derived files below.
+docs/data/*
+# ...except our own summarized stage tips (tools/build_tips.py writes only
+# text this project wrote itself; nothing is reproduced verbatim). Committed
+# so the Pages build doesn't re-scrape a third-party site on every deploy.
+!docs/data/tips.json
+# Hall of Beorn raw per-scenario API responses (verbatim third-party card
+# data) — never committed. The *aggregated* output built from them,
+# tools/data/enrichment.json, is just a per-scenario list of encounter-set
+# names and IS committed — see tools/build_hob_enrichment.py.
 tools/data/hob_cache/
-tools/data/enrichment.json
-# Vision of the Palantir strategy-tip HTML cache (third-party page content;
-# never committed — see tools/build_tips.py). docs/data/ above already
-# covers the tips.json output.
+# Vision of the Palantir strategy-tip HTML cache (verbatim third-party page
+# content; never committed — see tools/build_tips.py). Its summarized
+# output, docs/data/tips.json, is allow-listed above.
 tools/data/tips_cache/

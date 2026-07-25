@@ -497,6 +497,21 @@ def _load_enrichment(path):
     except Exception:
         return None
 
+def needs_refresh(out_path, refresh):
+    """False when `out_path` already exists and `refresh` wasn't asked for.
+    The shared guard both derived-data fetchers (tools/build_hob_enrichment.py,
+    tools/build_tips.py) consult before touching the network at all.
+
+    Their outputs — tools/data/enrichment.json and docs/data/tips.json — are
+    COMMITTED derived data (aggregated set lists / our own summaries; see
+    CLAUDE.md's "What may be committed"), unlike this module's own verbatim
+    card DB. So the normal case — a clean checkout, a Pages build — must be a
+    no-op rather than a slow re-scrape of a third-party site; regenerating is
+    an explicit, local, occasional act (`--refresh`). Lives here, next to the
+    build that merges the enrichment, so the policy has one home. Pure,
+    host-tested."""
+    return bool(refresh) or not os.path.exists(out_path)
+
 def _dump(obj, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
