@@ -34,18 +34,19 @@ Web and firmware stay in lockstep. See [[design-review]] and [[stat-system]].
    warnings; **quest appendix** (tips/FAQ/campaign-cards from blog+forums);
    optional chase track. *Done when* picking Passage Through Mirkwood preloads
    8/2/10, lists its sets, and warnings go live.
-   **Status: SUBSTANTIALLY DONE.** Shipped: the full DragnCards card-data
+   **Status: DONE.** Shipped: the full DragnCards card-data
    pipeline (M4-A, generated-only), the Setup-phase quest picker + R0 Quest
    Setup view with the pre-round-1 A→B flip (B-core), the quest-card modal
    (B-modal), the player side-quest picker (B-sidequest), set/scenario icons
    at 97% coverage (B-icons), Hall-of-Beorn sets-to-gather + release dates
    (B-data), and per-stage tips (B-tips). Picking Passage preloads **8 / 2 /
    {0,10}** and lists its three encounter sets with icons.
-   **Remaining:** **B-resolve** — the guided, correctly-ordered progress
-   resolution (location→explore→overflow→advance+flip) incl. conditional
-   advancement; planned in `docs/superpowers/plans/2026-07-24-quest-picker-bresolve.md`,
-   deliberately sequenced last. Per-quest threat warnings and the chase track
-   also remain.
+   and **B-resolve** — the guided, correctly-ordered progress resolution
+   (location→explore→overflow→quest→advance: reveal side A→flip to side B),
+   with branch selection and player-confirmed advancement for the ~137
+   conditional (0-quest-point) stage cards.
+   **Remaining in this theme:** per-quest threat warnings and the optional
+   chase track (neither planned yet).
 5. **M5 · Beta hardening** — first-run guidance + a legend for HUD conventions;
    copy/tone pass (incl. the Sailing "discarded" fix); accessibility + touch;
    full tests + on-device soak.

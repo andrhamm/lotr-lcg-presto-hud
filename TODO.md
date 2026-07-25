@@ -42,8 +42,9 @@ across columns, and surface blockers here.
 
 - [x] **M4 · Quest awareness** — full DragnCards card-data pipeline (generated-only, gitignored) + the Setup-phase quest picker (Scenario Source → Pick Cycle → Choose Scenario → Scenario Options → Quest Setup R0 view → flip to side B → round 1), quest-card modal, player side-quest picker, set/scenario icons, Hall-of-Beorn sets-to-gather + release dates, and per-stage tips
   - notes: spec `docs/superpowers/specs/2026-07-24-card-data-pipeline-design.md` + `...-quest-picker-bcore-design.md`; plans for each piece under `docs/superpowers/plans/`. Picking Passage preloads 8 / 2 / {0,10} and lists its three sets with icons. ~594 host tests green; every flow verified in the browser.
+  - notes(cont): **B-resolve** also shipped — guided resolution walks location→explore→overflow→quest→advance (reveal side A, flip to side B), incl. branch choice and player-confirmed advance for conditional stages. 660 host tests green.
   - done: on `feat/quest-picker` (local, **unsigned** commits — sign before pushing)
-  - follow-ups: **B-resolve** (guided progress resolution) is planned but deliberately last; deploy `docs/data/` + firmware to the Presto; push + Pages deploy
+  - follow-ups: deploy `docs/data/` + firmware to the Presto and soak; push + Pages deploy; per-quest threat warnings + chase track still unplanned
 - [x] **Stats redesign** — two flipped compact zones (Players matrix + Progress zone), circular arc/token primitives, Players + Progress detail views, DONE header convention, staging inline ±, `commit_touched` + `quest_history`
   - notes: spec [[stats-redesign]], plan `design/stats-redesign-plan.md`; web-first + firmware lockstep; 378 host tests green; verified device-faithful via `tools/preview.py`
   - done: squash-merged to `main` locally (one commit)
