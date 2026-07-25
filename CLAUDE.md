@@ -18,8 +18,63 @@ implementations:
    change. Never hand-edit `docs/js/{phases,icons,metrics}.js`.
 3. `python3 -m pytest tests/` must stay green (includes the layout linter
    over every screen scene). Add scenes for new screens/modals.
-4. Rules claims about the game get verified against the rulebook/FAQ before
-   they ship in UI text.
+4. **Never ship an unverified rules claim.** Every statement the UI makes
+   about how the game works — tip copy, button labels, captions, anything a
+   player could act on — must be checked before it ships. This rule has been
+   broken before and it shipped wrong advice to the screen, so treat it as
+   hard:
+
+   **Check in this order, and stop at the first source that answers it:**
+   1. **The compiled card data** (`docs/data/`) — it already knows which
+      scenarios print which cards, every stage's quest points, every card's
+      printed text. Query it before generalizing about "some quests" or
+      "a few scenarios"; the answer is usually one `python3 -c` away.
+   2. **The rulebook** (`pdftotext` the PDF) and the FAQ.
+   3. **This repo's own notes** (`quests/*.md`) — already summarized, already
+      checked, and the house voice to match.
+
+   **Then:**
+   - **Prefer the card's own printed text over a paraphrase.** If a mode or
+     stage has real text in the catalog, show that. A paraphrase is a chance
+     to be subtly wrong.
+   - **Never generalize what the data can tell you exactly.** "Only a few
+     quests ship a Hard Mode card" was wrong-by-vagueness: exactly one of 349
+     does, and the catalog says so. If a feature applies to some scenarios,
+     gate it on the data, don't hedge in the copy.
+   - **Placeholder rules text is not allowed to ship.** If you cannot verify a
+     claim, do not write it and flag it later — either leave the element out,
+     or surface the uncertainty to the user *before* it lands. "Author-supplied,
+     flagged for review" is how wrong copy reaches the screen.
+   - **Cite the source** in the commit body or a code comment, so the next
+     person can re-check it without redoing the research.
+
+## Verified game mechanics (checked — don't re-derive or contradict)
+
+Facts already confirmed against the rulebook or the compiled catalog. Cite
+these rather than re-researching; correct them only with a better citation.
+
+- **Quest cards are two-sided.** Side A is story/setup; you resolve it, then
+  **flip to side B**, which carries the quest points. This flip happens at
+  **every** stage advance, and stage 1A→1B happens **before round 1**
+  (rulebook setup step 7).
+- **Quest overflow does NOT carry forward.** Excess progress beyond a stage's
+  quest points is discarded on advance, not applied to the next stage
+  (p.22). Location overflow *does* flow on to the quest card (p.15).
+- **Progress order:** active location first → explored/discarded at its quest
+  points → remainder to the quest card.
+- **"Victory X" is a scoring keyword**, not an alternate win condition (p.24).
+  Never treat a card's `victory` field as an auto-win trigger.
+- **Easy mode is general:** remove every encounter card whose set icon carries
+  the gold difficulty ring. It applies to any scenario.
+- **Hard / Epic Multiplayer are NOT general difficulties** — they are printed
+  Mode cards that only a few scenarios ship (exactly 1 of 349 prints Hard;
+  3 print Epic Multiplayer). Gate them on the catalog's per-scenario `modes`.
+- **Nightmare** is a separately sold encounter deck per scenario, not a
+  difficulty toggle.
+- **~137 of ~400 stage cards have 0 quest points** — they advance by a
+  condition (defeat/explore/objective), not by placing progress.
+- **Side quests are not a Core Set mechanic**; the rulebook says nothing about
+  excess progress on one. Don't assert a rule there.
 
 ## Card data (generated, never committed)
 
