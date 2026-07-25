@@ -319,6 +319,34 @@ def test_commit_tip_opens_commit_modal_from_p1():
     assert result[1].idx == 0
 
 
+def test_commit_view_window_only_no_framework_block():
+    hw, pal, game, screen = _setup("quest_commit")
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "YOUR WINDOW" in texts
+    assert "FRAMEWORK" not in texts
+
+
+def test_commit_tip_button_still_opens_commit_modal_at_new_geometry():
+    from ui.modals import CommitModal
+    hw, pal, game, screen = _setup("quest_commit")
+    screen.draw(hw, game, pal)
+    tip = _find(screen, ("commit_tip",))
+    assert tip.w >= 24 and tip.h >= 24
+    result = screen.on_button(tip, game)
+    assert isinstance(result[1], CommitModal)
+
+
+def test_commit_totals_row_moves_with_tip_height():
+    hw, pal, game, screen = _setup("quest_commit")
+    screen.draw(hw, game, pal)
+    tip = _find(screen, ("commit_tip",))
+    ids = _ids(screen)
+    assert "wp" in ids and "stg" in ids
+    wp_button = _find(screen, ("wp",))
+    assert wp_button.y >= tip.y + tip.h   # totals row starts at/after the tip's bottom
+
+
 def test_notification_overlay_draws_with_pie_and_dismiss():
     hw, pal, game, screen = _setup("combat_shadow")
     screen.notif = ["Archery: deal damage now"]

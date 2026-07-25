@@ -201,11 +201,10 @@ export class ScreenPlay {
     } else if (view === "quest_commit") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
-      // willpower now lives in the players matrix; note/totals start at CONTENT_Y
-      const ty = CONTENT_Y;
-      const th = notePanel(ctx, MARGIN, ty, 480 - 2 * MARGIN, "Commit characters to the quest.");
-      this.buttons.push(new Button(["commit_tip"], MARGIN, ty, 480 - 2 * MARGIN, th));
-      this._totalsRow(ctx, game, ty + 48, false, ["wp", "stg"]);
+      const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+        [{ kind: "window", text: "Commit characters to the quest - exhaust them to add their willpower." }]);
+      this.buttons.push(new Button(["commit_tip"], MARGIN, CONTENT_Y, 480 - 2 * MARGIN, bh));
+      this._totalsRow(ctx, game, CONTENT_Y + bh + 8, false, ["wp", "stg"]);
       this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_staging}`, ["advance"]);
     } else if (view === "quest_sailing") {
       this._playersZone(ctx, game);

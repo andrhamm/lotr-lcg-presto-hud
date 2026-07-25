@@ -225,12 +225,10 @@ class ScreenPlay:
         elif view == "quest_commit":
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
-            # willpower now lives in the players matrix; note/totals start at CONTENT_Y
-            ty = CONTENT_Y
-            th = note_panel(d, pal, MARGIN, ty, 480 - 2 * MARGIN,
-                            "Commit characters to the quest.")
-            self.buttons.append(Button(("commit_tip",), MARGIN, ty, 480 - 2 * MARGIN, th))
-            self._totals_row(d, pal, game, ty + 48, tappable=("wp", "stg"))
+            bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+                             [("window", "Commit characters to the quest - exhaust them to add their willpower.")])
+            self.buttons.append(Button(("commit_tip",), MARGIN, CONTENT_Y, 480 - 2 * MARGIN, bh))
+            self._totals_row(d, pal, game, CONTENT_Y + bh + 8, tappable=("wp", "stg"))
             self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_staging"], ("advance",))
         elif view == "quest_sailing":
             self._draw_sailing(d, pal, game)
