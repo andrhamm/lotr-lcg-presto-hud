@@ -120,6 +120,9 @@ DEFAULT_OUT = os.path.join("docs", "data", "tips.json")
 DEFAULT_CACHE = os.path.join("tools", "data", "tips_cache")
 DEFAULT_NOTES = os.path.join("quests")
 DEFAULT_DELAY = 1.0  # seconds after each real network fetch (politeness)
+# The distilled strategy tips - COMMITTED derived data, this build's primary
+# source. See load_distillation() and the module docstring's Sources.
+DEFAULT_DISTILLED = os.path.join("tools", "data", "tips_distilled.json")
 
 
 # -- catalog scenario selection ----------------------------------------------
@@ -522,6 +525,141 @@ def is_useful_tip(text, max_len=MAX_LEN):
     return has_digit or has_keyword or has_proper_noun
 
 
+# -- the distilled tips: load + validate -------------------------------------
+#
+# tools/data/tips_distilled.json is this build's PRIMARY source: per-scenario
+# strategy tips written by this project after reading the Vision of the
+# Palantir quest spotlights, with every factual claim re-checked against the
+# compiled card data in docs/data/. It is committed derived data (our own
+# words - see CLAUDE.md's "What may be committed"), so a build never fetches
+# anything to produce it.
+#
+# Why it exists at all: the mechanical summarize() path below can only emit a
+# sentence matching a hardcoded fact-pattern, so in practice it emitted almost
+# nothing, and what did ship was stat restatement rather than strategy. The
+# distillation replaces that, and summarize() is kept only for the notes path.
+
+_PRONOUN = re.compile(r"\b(?:them|him|her|it|they)\b", re.I)
+_CAPITALISED = re.compile(r"\b[A-Z][a-zA-Z'\-]{2,}\b")
+
+# Capitalised only because they begin a sentence - not names, so they can
+# never be a pronoun's antecedent. Anything capitalised and NOT in here is
+# taken to be a card/enemy/location name.
+_SENTENCE_STARTERS = {
+    "the", "you", "your", "bring", "keep", "under", "over", "send", "stay",
+    "take", "defend", "play", "most", "only", "four", "five", "three", "two",
+    "one", "end", "at", "on", "in", "don", "do", "never", "always", "use",
+    "expect", "push", "clear", "each", "every", "if", "when", "while",
+    "after", "before", "this", "that", "go", "leave", "hold", "start",
+    "begin", "commit", "quest", "stage", "first", "second", "advance",
+    "block", "kill", "damage", "progress", "threat", "travel", "for", "no",
+    "make", "failing", "nothing", "capture", "chump", "camp", "off",
+}
+
+
+def _has_antecedent(text):
+    """True if `text`'s first risky pronoun has something to refer to WITHIN
+    the tip - a card/enemy name, or a game keyword, appearing before it.
+
+    is_useful_tip()'s _RISKY_PRONOUNS bans these pronouns outright, which is
+    right for a SCRAPED sentence: it was lifted out of an article, so its
+    antecedent stayed behind and "avoid them" means nothing on its own. A
+    distilled tip is authored as a standalone sentence, so ordinary anaphora
+    ("Caradhras cannot be travelled to, so pre-load it") is both correct and
+    shorter than repeating the name - and brevity is the whole point on a
+    small screen. What must still be rejected is a genuinely dangling
+    reference, i.e. a tip that opens with a bare "It ..." naming nothing.
+
+    Pure, host-tested."""
+    m = _PRONOUN.search(text or "")
+    if not m:
+        return True
+    head = text[:m.start()]
+    for word in _CAPITALISED.findall(head):
+        if word.lower() not in _SENTENCE_STARTERS:
+            return True          # a real name precedes the pronoun
+    return any(w.lower() in _GAME_KEYWORDS
+               for w in _WORD_TOKEN.findall(head))
+
+
+def is_valid_distilled_tip(text, max_len=MAX_LEN):
+    """True if an authored, already-fact-checked tip is fit to ship.
+
+    Deliberately NOT is_useful_tip(): that gate is tuned for text extracted
+    from an article and rejects things that are perfectly fine in authored
+    prose - a complete sentence ending "... take the extra encounter card
+    instead." (its _DANGLING_TRAILERS rule), or one whose only proper noun
+    starts the sentence, e.g. "Counter-spell can cancel your event."
+    (its _PROPER_NOUN rule needs a lowercase word before the capital). Run
+    over the distillation, those two rejected roughly a third of a corpus
+    that had already been checked claim-by-claim against the card data.
+
+    So this keeps the checks that still mean something for authored text -
+    length, a real sentence, enough words, no talking about the app itself,
+    no dangling pronoun - and drops the ones that only made sense for
+    scraped fragments. The verbatim guard is applied separately by the
+    caller, which has the source article to compare against.
+
+    Pure, host-tested."""
+    if not text:
+        return False
+    text = text.strip()
+    if not text or len(text) > max_len:
+        return False
+    if not (text[0].isupper() or text[0].isdigit()):
+        return False
+    if text[-1] not in ".!?":
+        return False
+    if len(_WORD_TOKEN.findall(text)) < MIN_TIP_WORDS:
+        return False
+    if _META_REFERENCE.search(text):
+        return False
+    return _has_antecedent(text)
+
+
+def load_distillation(path=DEFAULT_DISTILLED):
+    """{slug: entry} from the committed distillation, or {} on ANY failure.
+
+    Absent-tolerant by design, matching _load_enrichment() in
+    build_card_data.py and quest_catalog.load_icons(): a missing or corrupt
+    file must degrade to "no distilled tips" (the notes path still runs)
+    rather than fail a build. Entries whose tips do not survive
+    is_valid_distilled_tip() are dropped tip-by-tip; a scenario left with no
+    tips at all is omitted entirely, so tips.json's keys keep meaning
+    "this scenario has tips" for the modal's enabled/disabled button."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        scenarios = data.get("scenarios")
+        if not isinstance(scenarios, dict):
+            return {}
+    except Exception:
+        return {}
+
+    out = {}
+    for slug, entry in scenarios.items():
+        if not isinstance(entry, dict):
+            continue
+        general = [t for t in (entry.get("general") or [])
+                   if is_valid_distilled_tip(t)]
+        stages = {}
+        for key, tips in (entry.get("stages") or {}).items():
+            kept = [t for t in (tips or []) if is_valid_distilled_tip(t)]
+            if kept:
+                stages[str(key)] = kept
+        if not general and not stages:
+            continue
+        out[slug] = {
+            "attribution": entry.get("attribution") or {},
+            "general": general,
+            "stages": stages,
+        }
+    return out
+
+
+
+
+
 def summarize(blocks, max_len=MAX_LEN, max_tips=MAX_TIPS):
     """Condense `blocks` (raw paragraph/list-item text, see extract_blocks)
     into at most `max_tips` short (<= max_len char) tips, each in our own
@@ -836,95 +974,78 @@ def fetch(url, cache_path, delay=DEFAULT_DELAY):
 
 # -- build: orchestrate the whole pipeline -----------------------------------
 
-def build(index_path, out_path, cache_dir, limit=None, delay=DEFAULT_DELAY,
+def build(index_path, out_path, distilled_path=DEFAULT_DISTILLED,
           notes_dir=DEFAULT_NOTES):
-    """For every pickable quest scenario in the catalog index at
-    `index_path` (see pickable_scenarios): if load_project_notes(notes_dir)
-    has tips for it, use those (first-party, preferred - see the module
-    docstring's Sources); otherwise resolve its VotP article URL
-    (match_article against the cached sitemap), fetch+cache the article,
-    and summarize it into at most MAX_TIPS short original-phrasing tips
-    (see summarize). Writes {"generated", "source", "scenarios": {slug:
-    build_entry(...)}} to `out_path` - a scenario is only included if at
-    least one tip survived (from either source), so the modal's "Tips
-    button enabled only where tips exist" contract (see docs/js/screens.js
-    / ui/modals.py's QuestCardModal) holds directly off this file's keys.
+    """Compile docs/data/tips.json from COMMITTED sources only. No network.
 
-    Never raises for a single scenario's failure, nor for the sitemap fetch
-    itself failing (both are optional/best-effort, matching tools/
-    build_hob_enrichment.py's posture) - only a missing/unreadable --index
-    catalog (nothing to build tips for) is the CLI's job to reject early
-    with a friendly SystemExit (see main()). `limit` caps how many pickable
-    scenarios are processed (for a quick --limit smoke run); `delay` is
-    passed through to fetch(); `notes_dir` is passed through to
-    load_project_notes() (a test may point it at an empty/fixture
-    directory to exercise the scraped pathway in isolation)."""
+    Two sources, in precedence order:
+
+    1. tools/data/tips_distilled.json (load_distillation) - per-scenario
+       strategy tips this project wrote after reading the Vision of the
+       Palantir spotlights, each claim re-checked against the compiled card
+       data. Carries both `general` and per-stage `stages`, and covers most
+       of the catalog.
+    2. quests/*.md callouts (load_project_notes) - this project's own
+       hand-authored notes, used ONLY for scenarios the distillation does
+       not cover.
+
+    Note the precedence: it is the reverse of what this build used to do.
+    Notes used to win outright, which is why tips.json shipped stat lines
+    ("Hummerhorns engage at 40 -> ...") instead of strategy - those notes are
+    reference tables, written to be read beside the cards, not advice to act
+    on mid-game. The distillation is the advice, so it goes first.
+
+    A scenario appears in the output only if at least one tip survived, so
+    the modal's "Tips button enabled only where tips exist" contract holds
+    directly off this file's keys (see ui/modals.py's QuestCardModal and
+    docs/js/screens.js). Only a missing/unreadable `index_path` is fatal -
+    an absent distillation or notes directory just means fewer tips."""
     with open(index_path, encoding="utf-8") as f:
         index = json.load(f)
     scenarios = pickable_scenarios(index)
-    if limit is not None:
-        scenarios = scenarios[:limit]
 
+    distilled = load_distillation(distilled_path)
     notes_tips = load_project_notes(notes_dir)
 
-    try:
-        sitemap_xml = fetch(SITEMAP_URL, os.path.join(cache_dir, "sitemap.xml"), delay=delay)
-        sitemap_slugs = parse_sitemap(sitemap_xml)
-    except Exception as e:
-        print("build_tips: sitemap fetch failed (%r) - no scenarios can be "
-              "matched this run" % (e,))
-        sitemap_slugs = {}
-
     out_scenarios = {}
-    resolved = no_url = no_tips = skipped = from_notes = 0
+    from_distilled = from_notes = no_tips = skipped = 0
     for scn in scenarios:
-        slug, name = scn.get("slug"), scn.get("name")
+        slug = scn.get("slug")
         if not slug:
             skipped += 1
+            continue
+
+        entry = distilled.get(slug)
+        if entry:
+            out_scenarios[slug] = build_entry(
+                slug, (entry["attribution"] or {}).get("url"),
+                entry["general"], stages=entry["stages"],
+                attribution=entry["attribution"] or None)
+            from_distilled += 1
             continue
 
         if slug in notes_tips:
             out_scenarios[slug] = build_entry(
                 slug, None, notes_tips[slug],
                 attribution={"name": PROJECT_SOURCE_NAME, "url": ""})
-            resolved += 1
             from_notes += 1
             continue
 
-        url = match_article(slug, sitemap_slugs)
-        if not url:
-            no_url += 1
-            continue
-        try:
-            article_html = fetch(url, os.path.join(cache_dir, "%s.html" % slug), delay=delay)
-        except Exception as e:
-            print("build_tips: fetch failed for %r (%s) - skipping" % (name, e))
-            skipped += 1
-            continue
-        tips = summarize(extract_blocks(article_html))
-        if not tips:
-            no_tips += 1
-            continue
-        out_scenarios[slug] = build_entry(slug, url, tips)
-        resolved += 1
+        no_tips += 1
 
-    # Provenance: only credit the scrape when a scraped tip actually survived
-    # the gate. Mirrors build_card_data.build_outputs()'s "only claim Hall of
-    # Beorn as a source when enrichment was really merged" rule, and it
-    # matters more here now that this file is COMMITTED: the gate is strict
-    # enough that a run can (and currently does) end up with every entry
-    # sourced from quests/*.md, in which case a hardcoded Vision of the
-    # Palantir credit would attribute our own words to a third party. Each
-    # entry's own "attribution" is authoritative either way; this string just
-    # summarizes them.
-    if resolved - from_notes > 0:
-        source = ("%s (%s) - summarized, not reproduced; some scenarios use "
-                   "this project's own quests/*.md notes instead"
-                   % (SOURCE_NAME, BASE_URL))
-    else:
-        source = ("this project's own quests/*.md notes - no %s material "
-                   "survived summarization this build; see each scenario's "
-                   "attribution" % SOURCE_NAME)
+    # Provenance: credit each source only when it actually contributed, the
+    # same rule build_card_data.build_outputs() uses for the Hall of Beorn
+    # enrichment. Each entry's own "attribution" stays authoritative; this
+    # string only summarizes them.
+    parts = []
+    if from_distilled:
+        parts.append("strategy tips written by this project from %s (%s) "
+                     "quest spotlights - summarized, never reproduced, and "
+                     "re-checked against the card data"
+                     % (SOURCE_NAME, BASE_URL))
+    if from_notes:
+        parts.append("this project's own quests/*.md notes")
+    source = "; ".join(parts) or "no tips available this build"
 
     out_dir = os.path.dirname(out_path)
     if out_dir:
@@ -936,51 +1057,53 @@ def build(index_path, out_path, cache_dir, limit=None, delay=DEFAULT_DELAY,
             "scenarios": out_scenarios,
         }, f, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    summary = {"resolved": resolved, "from_notes": from_notes, "no_url": no_url,
-               "no_tips": no_tips, "skipped": skipped, "total": len(scenarios)}
-    print("build_tips: resolved %d (%d from project notes), no_url %d, "
-          "no_tips %d, skipped %d (of %d pickable scenarios) -> %s"
-          % (resolved, from_notes, no_url, no_tips, skipped, len(scenarios), out_path))
+    summary = {"resolved": from_distilled + from_notes,
+               "from_distilled": from_distilled, "from_notes": from_notes,
+               "no_tips": no_tips, "skipped": skipped,
+               "total": len(scenarios)}
+    print("build_tips: %d scenarios with tips (%d distilled, %d from project "
+          "notes), %d without, %d skipped (of %d pickable) -> %s"
+          % (summary["resolved"], from_distilled, from_notes, no_tips,
+             skipped, len(scenarios), out_path))
     return summary
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="Fetch/summarize Vision of the Palantir strategy tips "
-                     "for the quest catalog.")
+        description="Compile docs/data/tips.json from the committed distilled "
+                     "strategy tips plus this project's quests/*.md notes. "
+                     "Reads only local files - never touches the network.")
     ap.add_argument("--index", default=DEFAULT_INDEX,
                      help="catalog index.json to read scenarios from "
                           "(default: %s - run tools/build_card_data.py first)"
                           % DEFAULT_INDEX)
     ap.add_argument("--out", default=DEFAULT_OUT)
-    ap.add_argument("--cache", default=DEFAULT_CACHE)
+    ap.add_argument("--distilled", default=DEFAULT_DISTILLED,
+                     help="committed distilled strategy tips (default: %s); "
+                          "a missing or corrupt file is skipped, leaving only "
+                          "the quests/*.md notes - see load_distillation()"
+                          % DEFAULT_DISTILLED)
     ap.add_argument("--notes", default=DEFAULT_NOTES,
                      help="directory of hand-authored quest notes "
-                          "(default: %s) - preferred over the scrape when "
-                          "a scenario has both, see load_project_notes()"
+                          "(default: %s) - used only for scenarios the "
+                          "distillation does not cover, see build()"
                           % DEFAULT_NOTES)
     ap.add_argument("--refresh", action="store_true",
-                     help="re-fetch and overwrite --out even though it already "
-                          "exists. Without this, an existing --out is left "
-                          "alone and nothing is fetched - see needs_refresh().")
-    ap.add_argument("--limit", type=int, default=None,
-                     help="only process the first N pickable scenarios "
-                          "(quick smoke run)")
-    ap.add_argument("--delay", type=float, default=DEFAULT_DELAY,
-                     help="seconds to sleep after each real network fetch "
-                          "(default %.1f; not applied on cache hits)" % DEFAULT_DELAY)
+                     help="rebuild --out even though it already exists. "
+                          "Without this an existing --out is left alone - it "
+                          "is committed derived data, see needs_refresh().")
     args = ap.parse_args(argv)
 
     if not needs_refresh(args.out, args.refresh):
         print("build_tips: %r already present (committed derived data - see "
-              "CLAUDE.md's Card data section); nothing fetched. Pass "
-              "--refresh to rebuild it." % args.out)
+              "CLAUDE.md's Card data section); nothing rebuilt. Pass "
+              "--refresh to regenerate it." % args.out)
         return 0
 
     if not os.path.exists(args.index):
         raise SystemExit("No catalog index at %r - run tools/build_card_data.py "
                           "first." % args.index)
-    build(args.index, args.out, args.cache, limit=args.limit, delay=args.delay,
+    build(args.index, args.out, distilled_path=args.distilled,
           notes_dir=args.notes)
     return 0
 

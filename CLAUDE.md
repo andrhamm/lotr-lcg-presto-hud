@@ -157,6 +157,47 @@ builds it in CI (`.github/workflows/pages.yml` — one pass, no fetch steps); th
 device gets it at deploy:
 `python3 tools/build_card_data.py && mpremote cp -r docs/data/ :/data/`.
 
+`tools/alep.py` adds the fan-made **A Long Extended Party** packs to that same
+build (~23 pickable scenarios, `source: "alep"` — the Scenario Source screen's
+Community option, which the UI has always had and which had no data until
+now). ALeP is **not** on the branch the card DB pins: upstream keeps official
+cards on `main`'s single `tsvs/cardDb.tsv` and ALeP on the repo's separate
+**`alep` branch** as ~31 UUID-named per-pack TSVs, merged at deploy by the
+repo's own `merge_alep.sh`. Same pinned-upstream pattern as everything else —
+`tools/data/alep.SOURCE.txt` holds the branch sha **plus the TSV file list**,
+so an ordinary build is deterministic and makes no GitHub API call;
+`--refresh` re-resolves both. `--no-alep` builds official cards only.
+
+Three things that pass are load-bearing, all verified against the data (see
+the module docstring, which cites each):
+
+- **Errata are applied, not shipped as a pack.** `ALeP - Errata Pack` holds
+  corrected reprints of cards that already exist elsewhere; surfacing it would
+  invent three phantom scenarios. The join key is
+  `(name, encounterSet, side, traits)` — `databaseId` does NOT work (every
+  erratum gets a fresh id), and **`traits` is required**: `Eastern Assault` is
+  a `multi_sided` card whose two faces are the Normal./Easy. difficulty
+  variants with an *empty* `side`, so without it the Easy face overwrites the
+  Normal one. `type=="Rules"` errata are dropped (multi-page inserts repeat a
+  name, so the key is ambiguous by construction).
+- **ALeP Nightmare decks are named `"<Scenario> Nightmare"`**, without the
+  `" - "` the official ones use, so the picker's name rule misses them and
+  they'd otherwise appear as pickable quests. `alep.is_nightmare_pack()`
+  marks them from the pack name instead.
+- **`hasNightmare` is same-source only.** `slugify` maps ALeP's
+  "The Withered Heath Nightmare" onto the identical slug the official
+  "The Withered Heath - Nightmare" would have, so without the source check an
+  official scenario advertises a Nightmare mode that silently loads community
+  cards.
+
+ALeP is **all-or-nothing and never fatal**: any failure (bad pin, network,
+partial fetch) drops it entirely with a printed warning and the build emits
+the official catalog, rather than failing CI or — worse — emitting a half
+catalog whose picker offers scenarios whose cards never arrived. Cycle names
+and order come from the plugin's own `jsons/zz-ALeP---*.menu.json`, mirrored
+into `CYCLE_ORDER` in **both** `quest_catalog.py` and
+`docs/js/quest_catalog.js`.
+
 `tools/build_icons.py` rasterizes the community SVG icon pack (encounter-set
 + expansion-symbol symbols) into `docs/data/icons.json` (24×24 1-bit masks,
 same gitignored/regenerated posture as the compiled card DB — never
@@ -201,32 +242,71 @@ A device deploy needs none of this: `docs/data/` gets the gather list from the
 plain `build_card_data.py` one-liner above, since the enrichment is in the
 checkout.
 
-`tools/build_tips.py` writes per-scenario strategy tips to `docs/data/tips.json`
-— **committed**, the single `!docs/data/tips.json` allow-list line in
-`.gitignore`. Everything in it is text this project wrote itself: tips come
-either from our own `quests/*.md` callouts or from a Vision of the Palantir
-article (the site `quests/*.md` already cites) run through a **summarize,
-never reproduce** pipeline — only sentences a small set of fact-pattern rules
-can restate in fixed original phrasing survive (≤140 chars, ≤4/scenario), with
-a mechanical `_too_verbatim` guard on top; everything else is dropped. See the
-module docstring's "Verified facts" and Copyright posture for the robots.txt
-check and the approach. The fetched article HTML (`tools/data/tips_cache/`) is
-verbatim third-party content and stays **gitignored**. In practice the gate is
-strict enough that *nothing scraped currently survives it*: as committed, every
-tip in `tips.json` comes from a `quests/*.md` callout we wrote, and the file's
-own `source` string says so (it only credits the scrape when a scraped tip
-actually made it in — same rule as `index.json`'s Hall of Beorn credit).
+`tools/build_tips.py` writes per-scenario **strategy** tips to
+`docs/data/tips.json` — **committed**, the single `!docs/data/tips.json`
+allow-list line in `.gitignore`. It compiles two committed local inputs and
+**never touches the network**:
+
+1. **`tools/data/tips_distilled.json`** (committed, primary) — 122 scenarios,
+   ~970 tips written by this project after *reading* the Vision of the
+   Palantir quest spotlights, with every factual claim re-checked against the
+   compiled card data. Carries `general` plus per-stage `stages`.
+2. **`quests/*.md` callouts** — used **only** where the distillation is
+   silent.
+
+That precedence is deliberate and is the reverse of the original design.
+Notes used to win outright, which is why tips.json once shipped stat lines
+("Hummerhorns engage at 40 → …") instead of advice: those notes are reference
+tables meant to be read beside the cards, not things to act on mid-game.
+
+**Two gates, and they are not interchangeable.** `is_useful_tip()` still
+guards the `quests/*.md` path — it is tuned for text *extracted* from prose
+and rejects dangling fragments, unresolved pronouns and filler.
+`is_valid_distilled_tip()` guards the distillation, because running the old
+gate over authored tips rejected ~1/3 of an already-fact-checked corpus for
+reasons that only make sense for scraped fragments: `_DANGLING_TRAILERS`
+rejects a complete sentence ending "…take the extra encounter card instead.",
+and `_PROPER_NOUN` cannot see a card name that *starts* the tip
+("Counter-spell can cancel your event."). The distilled gate keeps length, a
+real sentence, min-words and the no-talking-about-the-app rule, and swaps the
+blanket pronoun ban for `_has_antecedent()` — anaphora is fine when a name
+precedes it in the same tip ("Caradhras cannot be travelled to, so pre-load
+**it**"), dangling when nothing does ("**It** goes Underwater every quest
+phase").
+
+The article corpus the distillation was written from lives in
+`research/votp/` (vault-side, **gitignored**, built by
+`tools/build_votp_corpus.py` — see below); the fetched HTML in
+`tools/data/tips_cache/` is verbatim third-party content and also stays
+gitignored. Only our own words are committed.
 
 **Nothing fetches this in CI, and a plain run fetches nothing.** With
 `tips.json` present, `python3 tools/build_tips.py` prints a one-line no-op and
-exits 0; `--refresh` is the way to regenerate (then commit the result).
-Politeness on a refresh mirrors `build_hob_enrichment.py`: strictly serial with
-a delay, cache-first. `QuestCardModal` loads it via `quest_catalog.load_tips()`
+exits 0; `--refresh` regenerates it from the two local inputs (then commit the
+result). `QuestCardModal` loads it via `quest_catalog.load_tips()`
 / `docs/js/quest_catalog.js`'s `loadTips()` and enables its Tips button only
 where `tips_for()`/`tipsFor()` finds something — an absent or corrupt
 `tips.json` just leaves the button in its disabled state. A device deploy needs
 no extra step: the committed file rides along with
 `mpremote cp -r docs/data/ :/data/`.
+
+`tools/build_votp_corpus.py` turns the cached Vision of the Palantir article
+HTML into readable markdown in `research/votp/` — the research corpus the
+distillation is written from. **Gitignored**: it is verbatim article prose, so
+it never ships and is never committed; it lives vault-side (the repo root is
+an Obsidian vault) so it can be read in Obsidian next to `quests/` and
+`design/`. Extraction is narrowed by CSS selector to WordPress's single
+`div.entry-content` per page — which excludes header, nav, sidebar, comments
+and footer — located with a balanced-depth `HTMLParser` (a regex would
+truncate at the first nested `</div>`), then converted with `pandoc -f html -t
+gfm`. No new Python dependencies. `--fetch-extras` fetches an audited manifest
+of articles the plain slug match can't reach: **second-edition rewrites**
+(VotP redid the early cycles from 2020 on with a much fuller template, and the
+plain slug still points at the thin 2018 original), **slug fixes** (VotP
+prefixes a definite article the catalog omits; the Core Set's scenario 2 is
+titled after its *encounter set*), and background reading. Every entry is an
+observed URL, not a guess — and check what you match: `the-crossings-of-poros-2`
+is a Quest-of-the-Week *results* post, not a spotlight.
 
 ## The TODO board (TODO.md)
 

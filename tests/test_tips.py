@@ -455,181 +455,176 @@ def test_load_project_notes_real_quests_directory():
            "9 HP / 5 atk / 2 def boss." in result["passage-through-mirkwood"]
 
 
-# --- build(): end-to-end with a faked network (no real HTTP) ---------------
+# --- build(): end-to-end, local files only (the build never uses the network)
 
-class _FakeResponse:
-    def __init__(self, text):
-        self._text = text
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-    def read(self):
-        return self._text.encode("utf-8")
+def _index(*slugs):
+    return {"scenarios": [
+        {"slug": s, "name": s.replace("-", " ").title(), "kind": "quest",
+         "stageCount": 2} for s in slugs]}
 
 
-def test_build_writes_expected_shape_with_faked_network(tmp_path, monkeypatch):
-    index = {"scenarios": [
-        {"slug": "passage-through-mirkwood", "name": "Passage Through Mirkwood",
-         "kind": "quest", "stageCount": 3},
-        {"slug": "no-match-quest", "name": "No Match Quest",
-         "kind": "quest", "stageCount": 2},
-    ]}
-    index_path = tmp_path / "index.json"
-    index_path.write_text(json.dumps(index))
+def _distilled(**scenarios):
+    return {"generated": "2026-07-25", "source": "test",
+            "scenarios": scenarios}
 
-    article_url = "https://visionofthepalantir.com/2020/09/05/passage-through-mirkwood/"
-    article_html = open(FIXTURE, encoding="utf-8").read()
-    responses = {build_tips.SITEMAP_URL: SITEMAP_XML, article_url: article_html}
 
-    def _fake_urlopen(req, timeout=None):
-        url = req.full_url if hasattr(req, "full_url") else req
-        return _FakeResponse(responses[url])
+def _entry(general, stages=None, url="https://example.invalid/a"):
+    return {"attribution": {"name": build_tips.SOURCE_NAME, "url": url},
+            "general": list(general), "stages": dict(stages or {})}
 
-    monkeypatch.setattr(build_tips.urllib.request, "urlopen", _fake_urlopen)
 
+def _write(path, obj):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f)
+    return str(path)
+
+
+def test_build_writes_distilled_tips_with_stages(tmp_path):
+    index_path = _write(tmp_path / "index.json", _index("passage-through-mirkwood"))
+    dist_path = _write(tmp_path / "d.json", _distilled(**{
+        "passage-through-mirkwood": _entry(
+            ["Under 32 threat dodges Ungoliant's Spawn."],
+            {"1": ["Forest Spider starts in staging. Have a defender."]})}))
     out_path = tmp_path / "tips.json"
-    cache_dir = tmp_path / "cache"
-    # notes_dir points at an empty/nonexistent directory so this stays a
-    # pure scraped-pipeline test, isolated from the real quests/ notes
-    # (which DO cover "passage-through-mirkwood" - see test_build_prefers_
-    # project_notes_over_scraped_material for that precedence, tested
-    # separately).
-    summary = build_tips.build(str(index_path), str(out_path), str(cache_dir), delay=0,
-                                notes_dir=str(tmp_path / "no_notes"))
 
-    assert summary["resolved"] == 1
-    assert summary["no_url"] == 1
-    data = json.loads(out_path.read_text())
-    assert isinstance(data["generated"], str) and data["generated"]
-    assert "passage-through-mirkwood" in data["scenarios"]
-    assert "no-match-quest" not in data["scenarios"]
+    summary = build_tips.build(index_path, str(out_path),
+                                distilled_path=dist_path,
+                                notes_dir=str(tmp_path / "no-notes"))
+    assert summary["from_distilled"] == 1
+    assert summary["from_notes"] == 0
+
+    data = json.loads(out_path.read_text(encoding="utf-8"))
     entry = data["scenarios"]["passage-through-mirkwood"]
-    assert entry["attribution"]["url"] == article_url
-    assert entry["general"]
-    assert all(len(t) <= 140 for t in entry["general"])
-    # A scraped tip survived, so the file credits the scrape.
+    assert entry["general"] == ["Under 32 threat dodges Ungoliant's Spawn."]
+    assert entry["stages"] == {"1": ["Forest Spider starts in staging. Have a defender."]}
+    assert entry["attribution"]["name"] == build_tips.SOURCE_NAME
     assert build_tips.SOURCE_NAME in data["source"]
-    assert "summarized, not reproduced" in data["source"]
 
 
-def test_build_caches_so_a_second_run_makes_no_network_calls(tmp_path, monkeypatch):
-    index = {"scenarios": [{"slug": "passage-through-mirkwood",
-                             "name": "Passage Through Mirkwood",
-                             "kind": "quest", "stageCount": 3}]}
-    index_path = tmp_path / "index.json"
-    index_path.write_text(json.dumps(index))
-
-    article_url = "https://visionofthepalantir.com/2020/09/05/passage-through-mirkwood/"
-    article_html = open(FIXTURE, encoding="utf-8").read()
-    responses = {build_tips.SITEMAP_URL: SITEMAP_XML, article_url: article_html}
-    calls = []
-
-    def _fake_urlopen(req, timeout=None):
-        url = req.full_url if hasattr(req, "full_url") else req
-        calls.append(url)
-        return _FakeResponse(responses[url])
-
-    monkeypatch.setattr(build_tips.urllib.request, "urlopen", _fake_urlopen)
-    out_path = tmp_path / "tips.json"
-    cache_dir = tmp_path / "cache"
-    no_notes = str(tmp_path / "no_notes")   # isolate from real quests/ notes
-
-    build_tips.build(str(index_path), str(out_path), str(cache_dir), delay=0,
-                      notes_dir=no_notes)
-    assert len(calls) == 2   # sitemap + one article
-
-    def _boom(req, timeout=None):
-        raise AssertionError("should not hit the network on a cached run")
-    monkeypatch.setattr(build_tips.urllib.request, "urlopen", _boom)
-
-    summary = build_tips.build(str(index_path), str(out_path), str(cache_dir), delay=0,
-                                notes_dir=no_notes)
-    assert summary["resolved"] == 1
-
-
-def test_build_degrades_gracefully_when_sitemap_fetch_fails(tmp_path, monkeypatch, capsys):
-    index = {"scenarios": [{"slug": "passage-through-mirkwood",
-                             "name": "Passage Through Mirkwood",
-                             "kind": "quest", "stageCount": 3}]}
-    index_path = tmp_path / "index.json"
-    index_path.write_text(json.dumps(index))
-
-    import urllib.error
-
-    def _boom(req, timeout=None):
-        raise urllib.error.URLError("simulated network failure")
-    monkeypatch.setattr(build_tips.urllib.request, "urlopen", _boom)
-
-    out_path = tmp_path / "tips.json"
-    cache_dir = tmp_path / "cache"
-    summary = build_tips.build(str(index_path), str(out_path), str(cache_dir), delay=0,
-                                notes_dir=str(tmp_path / "no_notes"))
-
-    assert summary["resolved"] == 0
-    data = json.loads(out_path.read_text())
-    assert data["scenarios"] == {}
-    assert "sitemap" in capsys.readouterr().out.lower()
-
-
-def test_build_prefers_project_notes_over_scraped_material(tmp_path, monkeypatch):
-    # "passage-through-mirkwood" has both a VotP article match (faked
-    # network below) AND a quests/*.md note with real tip/warning
-    # callouts (synthetic fixture here) - the note must win, and the
-    # article must never even be fetched (see the module docstring's
-    # Sources preference order).
-    index = {"scenarios": [{"slug": "passage-through-mirkwood",
-                             "name": "Passage Through Mirkwood",
-                             "kind": "quest", "stageCount": 3}]}
-    index_path = tmp_path / "index.json"
-    index_path.write_text(json.dumps(index))
-
-    article_url = "https://visionofthepalantir.com/2020/09/05/passage-through-mirkwood/"
-    article_html = open(FIXTURE, encoding="utf-8").read()
-    responses = {build_tips.SITEMAP_URL: SITEMAP_XML, article_url: article_html}
-    calls = []
-
-    def _fake_urlopen(req, timeout=None):
-        url = req.full_url if hasattr(req, "full_url") else req
-        calls.append(url)
-        return _FakeResponse(responses[url])
-
-    monkeypatch.setattr(build_tips.urllib.request, "urlopen", _fake_urlopen)
-
+def test_build_prefers_the_distillation_over_project_notes(tmp_path):
+    """The reverse of the old precedence, and the point of the rewrite: the
+    quests/*.md callouts are reference tables (stat lines), the distillation
+    is the strategy advice. Notes must not shadow it."""
+    index_path = _write(tmp_path / "index.json", _index("passage-through-mirkwood"))
+    dist_path = _write(tmp_path / "d.json", _distilled(**{
+        "passage-through-mirkwood": _entry(["Distilled strategy tip here."])}))
     notes_dir = tmp_path / "notes"
     notes_dir.mkdir()
     _write_note(str(notes_dir), "passage-through-mirkwood.md", _QUEST_NOTE)
 
-    out_path = tmp_path / "tips.json"
-    cache_dir = tmp_path / "cache"
-    summary = build_tips.build(str(index_path), str(out_path), str(cache_dir), delay=0,
+    build_tips.build(index_path, str(tmp_path / "tips.json"),
+                     distilled_path=dist_path, notes_dir=str(notes_dir))
+    data = json.loads((tmp_path / "tips.json").read_text(encoding="utf-8"))
+    entry = data["scenarios"]["passage-through-mirkwood"]
+    assert entry["general"] == ["Distilled strategy tip here."]
+    assert entry["attribution"]["name"] == build_tips.SOURCE_NAME
+
+
+def test_build_falls_back_to_project_notes_where_the_distillation_is_silent(tmp_path):
+    index_path = _write(tmp_path / "index.json", _index("passage-through-mirkwood"))
+    dist_path = _write(tmp_path / "d.json", _distilled())      # covers nothing
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    _write_note(str(notes_dir), "passage-through-mirkwood.md", _QUEST_NOTE)
+
+    summary = build_tips.build(index_path, str(tmp_path / "tips.json"),
+                                distilled_path=dist_path,
                                 notes_dir=str(notes_dir))
-
-    assert summary["resolved"] == 1
-    assert summary["from_notes"] == 1
-    # The sitemap is still fetched unconditionally (build() doesn't know in
-    # advance which scenarios notes will cover), but the per-scenario
-    # ARTICLE fetch - the one that would return the scraped fixture - must
-    # never happen once a slug is satisfied by notes.
-    assert article_url not in calls
-
-    data = json.loads(out_path.read_text())
+    assert summary["from_distilled"] == 0 and summary["from_notes"] == 1
+    data = json.loads((tmp_path / "tips.json").read_text(encoding="utf-8"))
     entry = data["scenarios"]["passage-through-mirkwood"]
     assert entry["attribution"] == {"name": build_tips.PROJECT_SOURCE_NAME, "url": ""}
-    assert "Watcher engages at 30 and deals 3 damage to the engaged hero." in entry["general"]
-    # The scraped fixture's own tip must NOT be present - notes replace,
-    # not merge with, the scraped source for a scenario covered by both.
-    assert not any("hummerhorns" in t.lower() for t in entry["general"])
-    # ...and with nothing scraped surviving, the file must not credit the
-    # scrape for what are entirely our own words. This is the real shape of
-    # the committed docs/data/tips.json today (every entry comes from
-    # quests/*.md), so an unconditional citation would be a false one.
-    assert build_tips.SOURCE_NAME not in data["source"].replace(
-        "no %s material" % build_tips.SOURCE_NAME, "")
-    assert "quests/*.md" in data["source"]
+    assert build_tips.SOURCE_NAME not in data["source"]
+
+
+def test_build_omits_scenarios_with_no_tips_from_either_source(tmp_path):
+    """tips.json's keys are the modal's "Tips button enabled" contract, so a
+    scenario with nothing to say must not appear at all."""
+    index_path = _write(tmp_path / "index.json", _index("a-quest", "b-quest"))
+    dist_path = _write(tmp_path / "d.json", _distilled(**{
+        "a-quest": _entry(["Only this scenario has a tip."])}))
+
+    summary = build_tips.build(index_path, str(tmp_path / "tips.json"),
+                                distilled_path=dist_path,
+                                notes_dir=str(tmp_path / "no-notes"))
+    assert summary["no_tips"] == 1
+    data = json.loads((tmp_path / "tips.json").read_text(encoding="utf-8"))
+    assert set(data["scenarios"]) == {"a-quest"}
+
+
+def test_build_survives_a_missing_or_corrupt_distillation(tmp_path):
+    index_path = _write(tmp_path / "index.json", _index("a-quest"))
+    corrupt = tmp_path / "corrupt.json"
+    corrupt.write_text("{not json", encoding="utf-8")
+
+    for path in (str(tmp_path / "absent.json"), str(corrupt)):
+        summary = build_tips.build(index_path, str(tmp_path / "tips.json"),
+                                    distilled_path=path,
+                                    notes_dir=str(tmp_path / "no-notes"))
+        assert summary["from_distilled"] == 0
+        assert summary["no_tips"] == 1
+
+
+def test_build_drops_individual_invalid_tips_but_keeps_the_rest(tmp_path):
+    index_path = _write(tmp_path / "index.json", _index("a-quest"))
+    dist_path = _write(tmp_path / "d.json", _distilled(**{
+        "a-quest": _entry(
+            ["It dangles with no antecedent at all here.",   # dropped
+             "Ungoliant's Spawn engages at 32 threat."],     # kept
+            {"1": ["x" * 200],                               # dropped: too long
+             "2": ["Build the board before advancing here."]})}))
+
+    build_tips.build(index_path, str(tmp_path / "tips.json"),
+                     distilled_path=dist_path,
+                     notes_dir=str(tmp_path / "no-notes"))
+    entry = json.loads((tmp_path / "tips.json").read_text(
+        encoding="utf-8"))["scenarios"]["a-quest"]
+    assert entry["general"] == ["Ungoliant's Spawn engages at 32 threat."]
+    assert entry["stages"] == {"2": ["Build the board before advancing here."]}
+
+
+# --- is_valid_distilled_tip -------------------------------------------------
+
+def test_valid_distilled_tip_allows_a_pronoun_with_an_antecedent():
+    """Authored anaphora is fine and shorter than repeating the name; it is
+    is_useful_tip's blanket pronoun ban that does not fit authored prose."""
+    ok = "Caradhras cannot be travelled to, so pre-load it with location control."
+    assert build_tips.is_valid_distilled_tip(ok)
+    assert not build_tips.is_useful_tip(ok)      # the old gate rejects it
+
+
+def test_valid_distilled_tip_rejects_a_dangling_pronoun():
+    assert not build_tips.is_valid_distilled_tip(
+        "It goes Underwater every quest phase and costs 5 threat a round.")
+
+
+def test_valid_distilled_tip_accepts_a_sentence_initial_card_name():
+    """is_useful_tip's _PROPER_NOUN needs a lowercase word before the capital,
+    so it cannot see a name that opens the tip."""
+    assert build_tips.is_valid_distilled_tip(
+        "Counter-spell can cancel your event and dump your hand.")
+
+
+def test_valid_distilled_tip_accepts_a_complete_sentence_ending_in_instead():
+    """_DANGLING_TRAILERS is right about fragments, wrong about these."""
+    assert build_tips.is_valid_distilled_tip(
+        "Moria Orc speeds the timer up. Take the extra encounter card instead.")
+
+
+def test_valid_distilled_tip_still_rejects_the_obvious_junk():
+    for bad in ("", "   ", None,
+                "x" * 200,                       # too long
+                "lowercase start with no cap.",  # not a sentence
+                "No terminal punctuation here",
+                "Too short.",                    # under MIN_TIP_WORDS
+                "The quest picker could preload the stage points here."):
+        assert not build_tips.is_valid_distilled_tip(bad), bad
+
+
+def test_has_antecedent_is_pure_and_handles_no_pronoun():
+    assert build_tips._has_antecedent("Bring healing and condition removal.")
+    assert build_tips._has_antecedent("")
+
 
 
 def test_tips_are_ascii_only_for_the_device_font():

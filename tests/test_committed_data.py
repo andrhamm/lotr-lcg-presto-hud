@@ -109,10 +109,18 @@ def test_committed_enrichment_loads_and_merges_without_network():
 # --- docs/data/tips.json: our own words, already through the quality gate ---
 
 def test_committed_tips_pass_the_same_gate_as_a_fresh_build():
-    """Every tip actually in git must still satisfy is_useful_tip and the
-    length/count caps - the copyright + quality posture is enforced on the
-    committed artifact, not just on the build that produced it (the file
-    outlives the run, and a hand-edit would otherwise go unchecked)."""
+    """Every tip actually in git must still satisfy the gate its source was
+    held to, plus the length/count caps - the copyright + quality posture is
+    enforced on the committed artifact, not just on the build that produced
+    it (the file outlives the run, and a hand-edit would otherwise go
+    unchecked).
+
+    The gate is is_valid_distilled_tip, not is_useful_tip: everything shipped
+    today comes from the committed distillation, which is authored prose
+    rather than sentences lifted out of an article. is_useful_tip stays the
+    gate for the quests/*.md path (see build_tips.build) and is exercised by
+    its own tests - see is_valid_distilled_tip's docstring for why running it
+    over authored tips rejects a third of them for no good reason."""
     with open(TIPS, encoding="utf-8") as f:
         data = json.load(f)
     assert set(data) == {"generated", "source", "scenarios"}
@@ -126,7 +134,7 @@ def test_committed_tips_pass_the_same_gate_as_a_fresh_build():
         assert tips, slug
         assert len(entry["general"]) <= build_tips.MAX_TIPS, slug
         for tip in tips:
-            assert build_tips.is_useful_tip(tip), (slug, tip)
+            assert build_tips.is_valid_distilled_tip(tip), (slug, tip)
             assert len(tip) <= build_tips.MAX_LEN, (slug, tip)
             # The device's bitmap8 glyph table is printable ASCII only.
             assert all(32 <= ord(c) < 127 for c in tip), (slug, tip)

@@ -28,3 +28,10 @@ tools/data/hob_cache/
 # content; never committed — see tools/build_tips.py). Its summarized
 # output, docs/data/tips.json, is allow-listed above.
 tools/data/tips_cache/
+# The same articles converted to readable markdown by
+# tools/build_votp_corpus.py (narrowed to `div.entry-content`). Lives in the
+# vault (the repo root is an Obsidian vault) so it can be read alongside
+# quests/ and design/ — but it is still verbatim third-party prose, so it is
+# a local research corpus only: never committed, never shipped. Only text we
+# write ourselves from reading it reaches docs/data/tips.json.
+research/votp/
