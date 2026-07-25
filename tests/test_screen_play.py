@@ -693,3 +693,24 @@ def test_refresh_skips_eliminated_players_in_preview():
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert not any(t.startswith("P3 ") for t in texts)
+
+
+# --- the CTA earns DISPLAY by staying short --------------------------------
+# The primary CTA renders at DISPLAY, which only fits because its labels were
+# cut for it ("Next Phase:" -> "Next:", "End round (raise threat, pass token)"
+# -> "End Round"). A longer label would overflow the button silently, and the
+# design system forbids the obvious "fix" of shrinking it back down - so the
+# ceiling is asserted here instead.
+
+def test_every_cta_label_fits_the_button_at_display_size():
+    import gamestate
+    from ui.screen_play import CTA_H, MARGIN
+    from ui.theme import DISPLAY
+    hw = FakeHardware()
+    usable = 480 - 2 * MARGIN - 24          # button width minus padding
+    labels = ["Begin Round 1", "End Round", "Confirm all commits",
+              "Flip to Side B  ->  10 qp"]
+    labels += ["Next: %s" % v for v in gamestate.VIEW_LABELS.values()]
+    over = [(s, hw.display.measure_text(s, DISPLAY)) for s in labels
+            if hw.display.measure_text(s, DISPLAY) > usable]
+    assert not over, "CTA labels overflow %dpx at DISPLAY: %s" % (usable, over)

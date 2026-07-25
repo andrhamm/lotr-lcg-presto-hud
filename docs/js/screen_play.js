@@ -134,10 +134,12 @@ export class ScreenPlay {
   _cta(ctx, label, id, fill = pal.btn_ok, fg = pal.gold) {
     const b = new Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H);
     bevel(ctx, b.x, b.y, b.w, b.h, fill, false, 3);
-    // CTAs are BODY. Not a compromise: at 480px wide no phase CTA fits at
-    // DISPLAY - "Next Phase: Combat (Player Attacks)" measures 495px against
-    // 424px of usable button. The design-system spec says so.
-    textCenter(ctx, label, 240, CTA_Y + 20, BODY, fg);
+    // The primary CTA is DISPLAY - the biggest reading size, for the one
+    // control you tap every phase. It only fits because the labels were cut
+    // to earn it ("Next Phase:" -> "Next:", and "End round (raise threat,
+    // pass token)" -> "End Round"): the longest is now "Next: Combat (Player
+    // Attacks)" at 408px against 424px of usable button.
+    textCenter(ctx, label, 240, CTA_Y + 16, DISPLAY, fg);
     this.buttons.push(b);
   }
 
@@ -274,7 +276,7 @@ export class ScreenPlay {
         { kind: "framework", text: "Collect resources. Draw cards." },
         { kind: "window", text: "Play allies and attachments - your only window for permanents this round." },
       ]);
-      this._cta(ctx, `Next Phase: ${VIEW_LABELS[game.sailing ? "quest_sailing" : "quest_commit"]}`, ["advance"]);
+      this._cta(ctx, `Next: ${VIEW_LABELS[game.sailing ? "quest_sailing" : "quest_commit"]}`, ["advance"]);
     } else if (view === "quest_commit") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
@@ -282,7 +284,7 @@ export class ScreenPlay {
         [{ kind: "window", text: "Commit characters to the quest - exhaust them to add their willpower." }]);
       const cy = this._drawConfirmAll(ctx, game, CONTENT_Y + bh + 8);
       this._totalsRow(ctx, game, cy, false, ["wp", "stg"]);
-      this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_staging}`, ["advance"]);
+      this._cta(ctx, `Next: ${VIEW_LABELS.quest_staging}`, ["advance"]);
     } else if (view === "quest_sailing") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
@@ -295,7 +297,7 @@ export class ScreenPlay {
         icons.drawIcon(ctx, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold);
         textCenter(ctx, "Enable Sailing", 254, CONTENT_Y + 96 + 16, BODY, pal.tan);
         this.buttons.push(eb);
-        this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_commit}`, ["advance"]);
+        this._cta(ctx, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       } else {
         // tip (pipe medallion top-left; wheel glyph inline in the sentence)
         const tw = 480 - 2 * MARGIN, ty0 = CONTENT_Y + 6;
@@ -321,7 +323,7 @@ export class ScreenPlay {
         icons.drawIcon(ctx, icons.WHEEL, 150, sb.y + 14, pal.gold);
         textCenter(ctx, "Log sailing test", 262, sb.y + 16, BODY, pal.tan);
         this.buttons.push(sb);
-        this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_commit}`, ["advance"]);
+        this._cta(ctx, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       }
     } else if (view === "quest_staging") {
       this._playersZone(ctx, game);
@@ -333,7 +335,7 @@ export class ScreenPlay {
       const my = CONTENT_Y + bh + 8;
       const mh = willpowerStagingMeter(ctx, MARGIN, my, 480 - 2 * MARGIN, game.willpower, game.staging);
       this._totalsRow(ctx, game, my + mh + 8, true);
-      this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_resolution}`, ["stage_advance"]);
+      this._cta(ctx, `Next: ${VIEW_LABELS.quest_resolution}`, ["stage_advance"]);
     } else if (view === "quest_resolution") {
       this._drawResolution(ctx, game);
     } else if (view === "travel") {
@@ -383,7 +385,7 @@ export class ScreenPlay {
       }
       const i = VIEW_ORDER.indexOf(view);
       const nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
-      this._cta(ctx, `Next Phase: ${VIEW_LABELS[nxt] ?? nxt}`, ["advance"]);
+      this._cta(ctx, `Next: ${VIEW_LABELS[nxt] ?? nxt}`, ["advance"]);
     }
 
     if (this.notif) {
@@ -498,7 +500,7 @@ export class ScreenPlay {
       textCenter(ctx, "Replace location (card effect)", 240, y + 14, BODY, pal.muted);
       this.buttons.push(cb);
     }
-    this._cta(ctx, `Next Phase: ${VIEW_LABELS.enc_optional}`, ["advance"]);
+    this._cta(ctx, `Next: ${VIEW_LABELS.enc_optional}`, ["advance"]);
   }
 
   _outcomeToast(game) {
@@ -536,7 +538,7 @@ export class ScreenPlay {
       } else {
         textLeft(ctx, "No progress placed, no threat gained.", tx, y2, BODY, pal.muted);
       }
-      this._cta(ctx, `Next Phase: ${VIEW_LABELS.travel}`, ["advance"]);
+      this._cta(ctx, `Next: ${VIEW_LABELS.travel}`, ["advance"]);
       return;
     }
     if (this.alloc === null) {
@@ -627,7 +629,7 @@ export class ScreenPlay {
     textCenter(ctx, "Reset", 240, y + 12, BODY, pal.tan);
     this.buttons.push(rb);
 
-    this._cta(ctx, `Next Phase: ${VIEW_LABELS.travel}`, ["apply_alloc"]);
+    this._cta(ctx, `Next: ${VIEW_LABELS.travel}`, ["apply_alloc"]);
   }
 
   onButton(btn, game) {

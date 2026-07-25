@@ -161,10 +161,14 @@ class ScreenPlay:
         b = Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H)
         bevel(d, pal, b.x, b.y, b.w, b.h,
               fill if fill is not None else pal.btn_ok, t=3)
-        # CTAs are BODY. Not a compromise: at 480px wide no phase CTA fits at
-        # DISPLAY - "Next Phase: Combat (Player Attacks)" measures 495px
-        # against 424px of usable button. The design-system spec says so.
-        text_center(d, pal, label, 240, CTA_Y + 20, BODY,
+        # The primary CTA is DISPLAY - the biggest reading size, for the one
+        # control you tap every phase. It only fits because the labels were
+        # cut to earn it ("Next Phase:" -> "Next:", and "End round (raise
+        # threat, pass token)" -> "End Round"): the longest is now "Next:
+        # Combat (Player Attacks)" at 408px against 424px of usable button.
+        # tests/test_screen_play.py asserts that ceiling, so a longer label
+        # fails the suite instead of silently overflowing.
+        text_center(d, pal, label, 240, CTA_Y + 16, DISPLAY,
                     fg if fg is not None else pal.gold)
         self.buttons.append(b)
 
@@ -264,7 +268,7 @@ class ScreenPlay:
                 ("window", "Play allies and attachments - your only window for permanents this round."),
             ])
             nxt = "quest_sailing" if game.sailing else "quest_commit"
-            self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS[nxt], ("advance",))
+            self._cta(d, pal, "Next: %s" % VIEW_LABELS[nxt], ("advance",))
         elif view == "quest_commit":
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
@@ -272,7 +276,7 @@ class ScreenPlay:
                              [("window", "Commit characters to the quest - exhaust them to add their willpower.")])
             cy = self._draw_confirm_all(d, pal, game, CONTENT_Y + bh + 8)
             self._totals_row(d, pal, game, cy, tappable=("wp", "stg"))
-            self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_staging"], ("advance",))
+            self._cta(d, pal, "Next: %s" % VIEW_LABELS["quest_staging"], ("advance",))
         elif view == "quest_sailing":
             self._draw_sailing(d, pal, game)
         elif view == "quest_staging":
@@ -324,7 +328,7 @@ class ScreenPlay:
                     cy += 24
             i = VIEW_ORDER.index(view)
             nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
-            self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS.get(nxt, nxt), ("advance",))
+            self._cta(d, pal, "Next: %s" % VIEW_LABELS.get(nxt, nxt), ("advance",))
 
         self._draw_notif(d, pal)
 
@@ -383,7 +387,7 @@ class ScreenPlay:
             icons.draw(d, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold)
             text_center(d, pal, "Enable Sailing", 254, CONTENT_Y + 96 + 16, BODY, pal.tan)
             self.buttons.append(eb)
-            self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_commit"], ("advance",))
+            self._cta(d, pal, "Next: %s" % VIEW_LABELS["quest_commit"], ("advance",))
             return
         # tip: pipe medallion top-left; wheel glyph inline in the sentence
         tw, ty0 = 480 - 2 * MARGIN, CONTENT_Y + 6
@@ -412,7 +416,7 @@ class ScreenPlay:
         icons.draw(d, icons.WHEEL, 150, sb.y + 14, pal.gold)
         text_center(d, pal, "Log sailing test", 262, sb.y + 16, BODY, pal.tan)
         self.buttons.append(sb)
-        self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_commit"], ("advance",))
+        self._cta(d, pal, "Next: %s" % VIEW_LABELS["quest_commit"], ("advance",))
 
     def _draw_staging(self, d, pal, game):
         self._players_zone(d, pal, game)
@@ -425,7 +429,7 @@ class ScreenPlay:
         mh = willpower_staging_meter(d, pal, MARGIN, my, 480 - 2 * MARGIN,
                                      game.willpower, game.staging)
         self._totals_row(d, pal, game, my + mh + 8, with_steppers=True)
-        self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_resolution"],
+        self._cta(d, pal, "Next: %s" % VIEW_LABELS["quest_resolution"],
                   ("stage_advance",))
 
     def _draw_quest_setup(self, d, pal, game):
@@ -540,7 +544,7 @@ class ScreenPlay:
             panel(d, pal, cb.x, cb.y, cb.w, cb.h, fill=pal.card)
             text_center(d, pal, "Replace location (card effect)", 240, y + 14, BODY, pal.muted)
             self.buttons.append(cb)
-        self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["enc_optional"], ("advance",))
+        self._cta(d, pal, "Next: %s" % VIEW_LABELS["enc_optional"], ("advance",))
 
     def _outcome_toast(self, game):
         if game.quest_outcome == "success":
@@ -577,7 +581,7 @@ class ScreenPlay:
             else:
                 text_left(d, pal, "No progress placed, no threat gained.", tx, y2, BODY,
                           pal.muted)
-            self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["travel"], ("advance",))
+            self._cta(d, pal, "Next: %s" % VIEW_LABELS["travel"], ("advance",))
             return
 
         if self.alloc is None:
@@ -664,7 +668,7 @@ class ScreenPlay:
         text_center(d, pal, "Reset", 240, y + 12, BODY, pal.tan)
         self.buttons.append(rb)
 
-        self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["travel"], ("apply_alloc",))
+        self._cta(d, pal, "Next: %s" % VIEW_LABELS["travel"], ("apply_alloc",))
 
     # -- interaction -------------------------------------------------------
     def on_button(self, btn, game):
