@@ -156,6 +156,67 @@ export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon)
   return h;
 }
 
+const PHASE_CAPTIONS = { framework: "FRAMEWORK", window: "YOUR WINDOW" };
+
+// Framework(red)/window(green) phase-guidance panel - the semantic
+// sibling of notePanel(). `sections` is an ordered list of
+// {kind, text} ("framework"|"window"; text is a string or paragraph
+// array). A phase with no mandatory framework step just omits that
+// entry - nothing is drawn for it. Returns the panel height.
+export function phaseBlock(ctx, x, y, w, sections, reserveRight = 0) {
+  const usable = w - 16 - 12 - reserveRight;
+  const laid = sections.map(({ kind, text }) => {
+    const body = Array.isArray(text) ? text.join(" ") : text;
+    const lines = wrapText(body, 2, usable);
+    return { kind, lines, h: 14 + lines.length * 24 };
+  });
+  const h = 8 + laid.reduce((s, sec) => s + sec.h, 0);
+  rect(ctx, x, y, w, h, pal.card_hi);
+  let ty = y + 4;
+  for (const sec of laid) {
+    const accent = sec.kind === "framework" ? pal.red : pal.green;
+    rect(ctx, x, ty, 4, sec.h, accent);
+    textLeft(ctx, PHASE_CAPTIONS[sec.kind], x + 12, ty + 2, 1, accent);
+    let ly = ty + 16;
+    for (const s of sec.lines) { textLeft(ctx, s, x + 12, ly, 2, pal.muted); ly += 24; }
+    ty += sec.h;
+  }
+  return h;
+}
+
+// Live head-to-head bar: willpower (gold, left) vs staging threat (dark
+// pal.outline, right - never red, per design/stat-system.md). The
+// "willpower vs staging, live" stat from design/design-review.md's
+// Quest-Staging row. Reuses the existing outcome-sentence wording
+// verbatim. Fixed height: 64.
+export function willpowerStagingMeter(ctx, x, y, w, willpower, staging) {
+  icons.drawIcon(ctx, icons.WILLPOWER, x, y, pal.gold);
+  icons.drawIcon(ctx, icons.THREAT, x + w - icons.THREAT[0], y, pal.outline);
+  const bx = x + 26, bw = w - 52, barY = y + 5, barH = 10;
+  rect(ctx, bx, barY, bw, barH, pal.well);
+  const total = willpower + staging;
+  const leftW = total > 0 ? Math.round(bw * willpower / total) : Math.round(bw / 2);
+  if (leftW > 0) rect(ctx, bx, barY, leftW, barH, pal.gold);
+  if (bw - leftW > 0) rect(ctx, bx + leftW, barY, bw - leftW, barH, pal.outline);
+  rect(ctx, x + Math.round(w / 2) - 1, barY - 3, 2, barH + 6, pal.dim);
+  const ly = barY + barH + 14;
+  const diff = willpower - staging;
+  if (diff !== 0) {
+    const pre = `${diff > 0 ? "You" : "Each player"} will gain ${Math.abs(diff)} `;
+    const preW = measureText(pre, 2);
+    const ic = diff > 0 ? icons.TRAIL : icons.THREAT_SM;
+    const tail = "at resolution.";
+    const totalW = preW + ic[0] + 6 + measureText(tail, 2);
+    const lx = x + Math.round((w - totalW) / 2);
+    textLeft(ctx, pre, lx, ly, 2, pal.muted);
+    icons.drawIcon(ctx, ic, lx + preW, ly - 1, diff > 0 ? pal.gold : pal.red);
+    textLeft(ctx, tail, lx + preW + ic[0] + 6, ly, 2, pal.muted);
+  } else {
+    textCenter(ctx, "Tied - no change at resolution.", x + w / 2, ly, 2, pal.dim);
+  }
+  return 64;
+}
+
 // Small heart glyph (quest-outcome marker). `broken` splits it with a
 // jagged notch. Canvas primitives, so it ports to PicoGraphics.
 export function drawHeart(ctx, cx, cy, r, broken, color) {

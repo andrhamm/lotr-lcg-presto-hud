@@ -168,6 +168,83 @@ def note_panel(d, pal, x, y, w, text, scale=2, reserve_right=0, icon=None):
     return h
 
 
+_PHASE_CAPTIONS = {"framework": "FRAMEWORK", "window": "YOUR WINDOW"}
+
+
+def phase_block(d, pal, x, y, w, sections, reserve_right=0):
+    """Framework(red)/window(green) phase-guidance panel - the semantic
+    sibling of note_panel(). `sections` is an ordered list of
+    (kind, text) tuples (kind is "framework" or "window"; text is a
+    string or list of paragraphs). A phase with no mandatory framework
+    step just omits that entry - nothing is drawn for it. Distinguishes
+    "this happens automatically, no interrupts" from "you may act now"
+    per the rulebook's own turn-sequence colour code
+    (design/design-review.md). Returns the panel height."""
+    usable = w - 16 - 12 - reserve_right
+    laid = []
+    for kind, text in sections:
+        body = " ".join(text) if isinstance(text, (list, tuple)) else text
+        lines = wrap_text(body, 2, usable, d.measure_text)
+        laid.append((kind, lines, 14 + len(lines) * 24))
+    h = 8 + sum(sec_h for _, _, sec_h in laid)
+    d.set_pen(pal.card_hi)
+    d.rectangle(x, y, w, h)
+    ty = y + 4
+    for kind, lines, sec_h in laid:
+        accent = pal.red if kind == "framework" else pal.green
+        d.set_pen(accent)
+        d.rectangle(x, ty, 4, sec_h)
+        text_left(d, pal, _PHASE_CAPTIONS[kind], x + 12, ty + 2, 1, accent)
+        ly = ty + 16
+        for s in lines:
+            text_left(d, pal, s, x + 12, ly, 2, pal.muted)
+            ly += 24
+        ty += sec_h
+    return h
+
+
+def willpower_staging_meter(d, pal, x, y, w, willpower, staging):
+    """Live head-to-head bar: willpower (gold, left) vs staging threat
+    (dark pal.outline, right - staging threat is never red, per
+    design/stat-system.md's staging/enemy-threat rule) - the "willpower
+    vs staging, live" stat from design/design-review.md's Quest-Staging
+    row. Draws straight from the passed-in numbers, so it reflects every
+    -/+ stepper tap immediately, no separate commit step. Reuses the
+    existing outcome-sentence wording verbatim. Fixed height: 64."""
+    from ui import icons as _icons
+    icons_draw = _icons.draw
+    icons_draw(d, _icons.WILLPOWER, x, y, pal.gold)
+    icons_draw(d, _icons.THREAT, x + w - len(_icons.THREAT), y, pal.outline)
+    bx, bw, bar_y, bar_h = x + 26, w - 52, y + 5, 10
+    d.set_pen(pal.well)
+    d.rectangle(bx, bar_y, bw, bar_h)
+    total = willpower + staging
+    left_w = round(bw * willpower / total) if total > 0 else round(bw / 2)
+    if left_w > 0:
+        d.set_pen(pal.gold)
+        d.rectangle(bx, bar_y, left_w, bar_h)
+    if bw - left_w > 0:
+        d.set_pen(pal.outline)
+        d.rectangle(bx + left_w, bar_y, bw - left_w, bar_h)
+    d.set_pen(pal.dim)
+    d.rectangle(x + round(w / 2) - 1, bar_y - 3, 2, bar_h + 6)   # tie marker
+    ly = bar_y + bar_h + 14
+    diff = willpower - staging
+    if diff != 0:
+        pre = "%s will gain %d " % ("You" if diff > 0 else "Each player", abs(diff))
+        pre_w = d.measure_text(pre, 2)
+        ic = _icons.TRAIL if diff > 0 else _icons.THREAT_SM
+        tail = "at resolution."
+        total_w = pre_w + len(ic) + 6 + d.measure_text(tail, 2)
+        lx = x + round((w - total_w) / 2)
+        text_left(d, pal, pre, lx, ly, 2, pal.muted)
+        icons_draw(d, ic, lx + pre_w, ly - 1, pal.gold if diff > 0 else pal.red)
+        text_left(d, pal, tail, lx + pre_w + len(ic) + 6, ly, 2, pal.muted)
+    else:
+        text_center(d, pal, "Tied - no change at resolution.", x + w / 2, ly, 2, pal.dim)
+    return 64
+
+
 def draw_flag(d, x, y, h, pen):
     """Small pennant flag (a target reached its max). rect pole + triangle."""
     d.set_pen(pen)
