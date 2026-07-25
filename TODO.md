@@ -17,8 +17,6 @@ across columns, and surface blockers here.
 
 ## Ideas
 
-* Data-driven location picker — Travel and "+ Add location" both guess (3 quest points, 2 threat) when the catalog knows the real values. Plan written: `docs/superpowers/plans/2026-07-25-location-picker.md`. Needs a union across `includedSets` (a scenario's own file only holds its own set); resolves Passage to 6 real locations, median 6 catalog-wide. Manual entry stays — ~290 quest scenarios have no gather list yet.
-
 * not in love with the placement or design of the tips... the stats redesign is much more compact than the initial design so the tips can be revamped to use the recovered space more effectively
 * side quests modal for adding, not clear that we're setting the quest points.. and since the progress is readonly on this screen, its a bit confusing...
 * Choose an appropriate license, fully open source but with care regarding the copyrighted IP
@@ -41,6 +39,11 @@ across columns, and surface blockers here.
 ## Blocked
 
 ## Done
+
+- [x] Data-driven location picker
+  - notes: plan `docs/superpowers/plans/2026-07-25-location-picker.md` (status: done, records how the three open questions were answered). Travel and "+ Add location" used to guess 3 quest points / 2 threat; both now pick from the scenario's own cards, with the printed quest points AND threat filled in from the card. Needs a union across `includedSets` — a scenario's own file only holds its own encounter set, so Passage's own file has 2 of its 6 locations.
+  - notes(cont): flat list + pager (median 5, max 14, only 10 scenarios exceed one page); Manual is the old stepper and stays load-bearing (3 of 154 quest scenarios gather no locations). 1019 host tests green, six new scenes through the layout linter, both twins verified in lockstep, full browser walkthrough.
+  - done: 3b23a2a
 
 - [x] Commit derived enrichment instead of fetching it in CI
   - done: merged to main 2026-07-25 (enrichment.json + tips.json now tracked; HoB/tips fetch steps dropped from CI)
