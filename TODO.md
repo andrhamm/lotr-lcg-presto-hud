@@ -36,16 +36,16 @@ across columns, and surface blockers here.
 
 ## In Progress
 
-- [ ] Commit derived enrichment instead of fetching it in CI
-  - claim: bg-worker 2026-07-25
+## Blocked
+
+## Done
+
+- [x] Commit derived enrichment instead of fetching it in CI
+  - done: merged to main 2026-07-25 (enrichment.json + tips.json now tracked; HoB/tips fetch steps dropped from CI)
   - notes: the Pages deploy went from ~30s to 9min+ once `main` gained the Hall of Beorn sets-to-gather step, because a cold run fetches ~123 scenarios at ~20s each (40+ min worst case). It's `continue-on-error` so it can't fail the deploy, and `actions/cache` covers warm runs, but a cold cache is painful.
   - policy (user, 2026-07-25): **derived insights, summaries and aggregated metadata from HoB / Vision of the Palantir CAN be committed** — they are not verbatim copies. Verbatim card text stays generated-only.
   - so: un-gitignore `tools/data/enrichment.json` (aggregated set lists) and `docs/data/tips.json` (our own summaries), commit them, and drop the fetch step from CI — the build just merges what's already in the repo. Keep `tools/data/hob_cache/` (raw third-party responses) ignored.
   - also revisit: `docs/data/` is currently ignored wholesale, which sweeps up tips.json; that needs splitting so the verbatim card DB stays generated but derived files can live in git.
-
-## Blocked
-
-## Done
 
 - [x] **M4 · Quest awareness** — full DragnCards card-data pipeline (generated-only, gitignored) + the Setup-phase quest picker (Scenario Source → Pick Cycle → Choose Scenario → Scenario Options → Quest Setup R0 view → flip to side B → round 1), quest-card modal, player side-quest picker, set/scenario icons, Hall-of-Beorn sets-to-gather + release dates, and per-stage tips
   - notes: spec `docs/superpowers/specs/2026-07-24-card-data-pipeline-design.md` + `...-quest-picker-bcore-design.md`; plans for each piece under `docs/superpowers/plans/`. Picking Passage preloads 8 / 2 / {0,10} and lists its three sets with icons. ~594 host tests green; every flow verified in the browser.
