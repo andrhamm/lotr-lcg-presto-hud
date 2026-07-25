@@ -728,24 +728,153 @@ class EliminationModal:
 
 
 class LocationPickModal:
-    """Travel: choose the quest points of the location traveled to.
+    """Travel / "+ Add location": pick the location off the scenario's own
+    cards, or enter its numbers by hand.
 
     mode 'new'    -> travel when there is no active location
     mode 'change' -> replace the current active location (old is discarded)
-    """
 
-    def __init__(self, game, mode="new"):
+    Two steps, and which one it opens on is decided entirely by the data:
+
+    - **list** - a flat, name-sorted radio list of every location the
+      scenario can put into play (quest_catalog.locations_for's union across
+      its "sets to gather"), each row carrying the printed quest points and
+      threat. Picking one fills in BOTH numbers this flow used to make a
+      player guess: a location's threat leaves the staging area when you
+      travel to it, which is exactly the "contribution" the manual step asks
+      for.
+    - **manual** - the original two steppers, unchanged. This is where a
+      scenario with no catalog data lands, and it stays reachable from the
+      list for the cards a scenario never gathers - card effects put
+      locations into play from outside the encounter deck, and the enrichment
+      that supplies the gather list covers 108 scenarios (the rest fall back
+      to their own set; 3 quest scenarios gather no locations at all).
+
+    Flat, not the sphere-first drill SideQuestPickModal uses: a scenario's
+    union is 5 locations at the median and 14 at the worst, so a grouping
+    step would cost a tap on every travel to save paging on a handful of
+    scenarios. The encounter set is not on the row either - no scenario in
+    the catalog gathers two same-named locations from different sets, so the
+    name alone is unambiguous, and the player is holding the card anyway.
+
+    No row starts selected and Travel only appears once one is (hidden, not
+    disabled, like the pager arrows): in 'change' mode committing discards
+    the current location's progress, so a stray tap on a preselected first
+    row would be destructive.
+
+    `back` is where every exit returns you - "play" (the Travel-phase
+    buttons) or "progress" (the Progress modal's "+ Add location", reopened
+    via pending_progress_detail). Opened through game.pending_location_pick
+    (see main.py's loop) because the union is a catalog read that neither a
+    screen's nor a modal's on_button can do mid-tap.
+
+    Empty `entries` (no catalog data) opens straight on the manual step and
+    never shows a Locations back button - byte-identical to the pre-catalog
+    modal."""
+
+    PER_PAGE = 6
+    ROW_H = 44
+    ROW_STRIDE = 46
+    LIST_Y0 = 66
+    NAME_MAX_W = 292      # 52 -> 344, ahead of the threat block at 352
+    THREAT_X = 352
+    FOOTER_Y = 404
+    FOOTER_H = 64
+
+    def __init__(self, game, mode="new", entries=None, back="play"):
         self.game = game
         self.mode = mode
+        self.entries = entries or []
+        self.back = back
+        self.step = "list" if self.entries else "manual"
+        self.selected = None
+        self.page = 0
         self.pts = 3
         self.contrib = 2   # its threat leaves the staging area on travel
         self.buttons = []
 
+    def _pages(self):
+        return max(1, -(-len(self.entries) // self.PER_PAGE))
+
+    # -- draw ------------------------------------------------------------
     def draw(self, hw, game, pal):
         d = hw.display
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
+        if self.step == "list":
+            self._draw_list(d, pal)
+        else:
+            self._draw_manual(d, pal)
+
+    def _draw_list(self, d, pal):
+        from ui.header import modal_header
+        modal_header(d, pal, self.game,
+                     "Travel" if self.mode == "new" else "Change Location",
+                     self.buttons)
+        loc = self.game.active_location
+        if self.mode == "change" and loc:
+            sub = "Replaces the current location (%d/%d discarded)." % (
+                loc["progress"], loc["points"])
+            ink = pal.no_fg
+        else:
+            sub = "Pick the location - or enter it manually."
+            ink = pal.dim
+        text_left(d, pal, truncate_text(sub, BODY, 456, d.measure_text), 12, 46, BODY, ink)
+
+        pages = self._pages()
+        self.page = min(self.page, pages - 1)
+        chunk = self.entries[self.page * self.PER_PAGE:(self.page + 1) * self.PER_PAGE]
+        y = self.LIST_Y0
+        for e in chunk:
+            on = e["id"] == self.selected
+            if on:
+                d.set_pen(pal.card_hi)
+                d.rectangle(8, y, 456, self.ROW_H)
+            _pick_radio(d, pal, 30, y + 22, on)
+            name = truncate_text(e.get("name") or "", BODY, self.NAME_MAX_W, d.measure_text)
+            text_left(d, pal, name, 52, y + 13, BODY, pal.tan if on else pal.muted)
+            # Threat, then quest points - the same order the row's two
+            # steppers sit in on the manual step is reversed here on purpose:
+            # quest points are the number the player acts on, so they take
+            # the right edge where every other list in the app puts its
+            # headline figure.
+            icons.draw(d, icons.THREAT, self.THREAT_X, y + 10, pal.red)
+            text_left(d, pal, str(e.get("threat") or 0), self.THREAT_X + 26, y + 13,
+                      BODY, pal.tan if on else pal.muted)
+            qp_s = "%d qp" % (e.get("points") or 0)
+            qw = d.measure_text(qp_s, BODY)
+            text_left(d, pal, qp_s, 456 - qw, y + 13, BODY, pal.gold if on else pal.tan)
+            d.set_pen(pal.border)
+            d.rectangle(8, y + self.ROW_H, 456, 1)
+            self.buttons.append(Button(("row", e["id"]), 8, y, 456, self.ROW_H))
+            y += self.ROW_STRIDE
+        self._pager(d, pal, pages)
+
+        manual = Button(("manual",), 24, self.FOOTER_Y, 200, self.FOOTER_H)
+        bevel(d, pal, manual.x, manual.y, manual.w, manual.h, pal.btn, t=3)
+        text_center(d, pal, "Manual", manual.x + manual.w / 2, manual.y + 20, BODY, pal.tan)
+        self.buttons.append(manual)
+        if self.selected is not None:
+            go = Button(("travel",), 256, self.FOOTER_Y, 200, self.FOOTER_H)
+            bevel(d, pal, go.x, go.y, go.w, go.h, pal.btn_ok, t=3)
+            text_center(d, pal, "Travel", go.x + go.w / 2, go.y + 20, BODY, pal.ok_fg)
+            self.buttons.append(go)
+
+    def _pager(self, d, pal, pages):
+        if pages <= 1:
+            return
+        up = Button(("older",), 12, 352, 150, 46)
+        dn = Button(("newer",), 318, 352, 150, 46)
+        bevel(d, pal, up.x, up.y, up.w, up.h, pal.btn)
+        text_center(d, pal, "Up", up.x + 75, up.y + 14, BODY, pal.tan)
+        bevel(d, pal, dn.x, dn.y, dn.w, dn.h, pal.btn)
+        text_center(d, pal, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan)
+        text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 366, BODY, pal.muted)
+        self.buttons.append(up)
+        self.buttons.append(dn)
+
+    def _draw_manual(self, d, pal):
         title = "Travel to new location" if self.mode == "new" else "Change active location"
         text_center(d, pal, title, 240, 30, DISPLAY, pal.gold)
         loc = self.game.active_location
@@ -761,7 +890,26 @@ class LocationPickModal:
         stepper(d, pal, self.buttons, ("ctr", -1), ("ctr", 1), 250, 250,
                 str(self.contrib), 170, 60)
         text_left(d, pal, "subtracted from the staging area on travel", 60, 318, BODY, pal.dim)
+        if self.entries:
+            back = Button(("back",), 12, 348, 200, 44)
+            bevel(d, pal, back.x, back.y, back.w, back.h, pal.btn)
+            text_center(d, pal, "< Locations", back.x + back.w / 2, back.y + 14, BODY, pal.tan)
+            self.buttons.append(back)
         _footer(d, pal, self.buttons, save_label="Travel")
+
+    # -- input -----------------------------------------------------------
+    def _leave(self, result="close"):
+        """Every exit returns you where you came from: the Progress modal
+        reopens via the pending flag, the play screen just falls through."""
+        if self.back == "progress":
+            self.game.pending_progress_detail = True
+        return result
+
+    def _commit(self, points, contribution, name=None):
+        if self.mode == "new" and self.game.active_location is None:
+            self.game.travel_to(points, contribution, name)
+        else:
+            self.game.change_location(points, contribution, name)
 
     def on_button(self, btn):
         k = btn.id[0]
@@ -771,14 +919,33 @@ class LocationPickModal:
         if k == "ctr":
             self.contrib = max(0, min(9, self.contrib + btn.id[1]))
             return None
+        if k == "row":
+            self.selected = btn.id[1]
+            return "redraw"
+        if k == "older":
+            self.page = max(0, self.page - 1)
+            return "redraw"
+        if k == "newer":
+            self.page = min(self._pages() - 1, self.page + 1)
+            return "redraw"
+        if k == "manual":
+            self.step = "manual"
+            return "redraw"
+        if k == "back":
+            self.step = "list"
+            return "redraw"
+        if k == "travel":
+            e = next((x for x in self.entries if x["id"] == self.selected), None)
+            if e:
+                self._commit(e.get("points") or 0, e.get("threat") or 0, e.get("name"))
+            return self._leave()
         if k == "save":
-            if self.mode == "new" and self.game.active_location is None:
-                self.game.travel_to(self.pts, self.contrib)
-            else:
-                self.game.change_location(self.pts, self.contrib)
-            return "close"
+            self._commit(self.pts, self.contrib)
+            return self._leave()
+        if k == "close":
+            return self._leave()
         if k == "cancel":
-            return "cancel"
+            return self._leave("cancel")
         return None
 
 
@@ -921,7 +1088,11 @@ class QuestingProgressModal:
         g = self.game
         items = [{"kind": "q", "name": "Quest %s" % g.quest_label(), "removable": False,
                   "advanceable": bool(g.stages)}]
-        items.append({"kind": "l", "name": "Location", "removable": True}
+        # Prefer the catalog name (LocationPickModal's list step) when
+        # present; manual entries and old saves have no "name" key at all, so
+        # this stays "Location" for them - same rule as the side quests below.
+        items.append({"kind": "l", "removable": True,
+                      "name": (g.active_location.get("name") or "Location")}
                      if g.active_location else {"kind": "l_add"})
         for i, s in enumerate(g.side_quests):
             # Prefer the catalog name (SideQuestPickModal, M4-B sidequest
@@ -1212,10 +1383,13 @@ class QuestingProgressModal:
             self._log_changes()
             return "close"
         if k == "addloc":
-            g.active_location = {"points": 3, "progress": 0}
-            g.log_event("Active location added (card effect)")
-            self._snap = self._snapshot()
-            return None
+            # Was a blind append of a guessed 3 quest points. Now the same
+            # picker Travel uses, opened via the pending flag (the router
+            # holds one modal at a time) with back="progress" so every exit
+            # reopens this modal instead of dropping you on the play screen.
+            g.pending_location_pick = {"mode": "new", "back": "progress"}
+            self._log_changes()
+            return "close"
         if k == "hd_set":
             if a != g.heading:
                 g.shift_heading(a - g.heading, "progress view")
@@ -1522,7 +1696,9 @@ class ResolutionModal:
             return self._quest_step()      # finish an interrupted reveal/flip first
         loc = g.active_location
         if loc and loc["points"] > 0 and loc["progress"] >= loc["points"]:
-            return {"kind": "location", "progress": loc["progress"], "points": loc["points"]}
+            return {"kind": "location", "progress": loc["progress"],
+                    "points": loc["points"],
+                    "name": loc.get("name") or "Active location"}
         if (g.quest["points"] > 0 and g.quest["progress"] >= g.quest["points"]) or self.force_advance:
             return self._quest_step()
         for i, s in enumerate(g.side_quests):
@@ -1592,10 +1768,14 @@ class ResolutionModal:
 
     def _draw_location(self, d, pal, st):
         text_center(d, pal, "Location Explored", 240, 90, DISPLAY, pal.gold)
-        text_center(d, pal, "%d/%d progress" % (st["progress"], st["points"]), 240, 130, BODY, pal.tan)
+        # The card's own name when the player picked it from the catalog,
+        # else the generic "Active location" _step() falls back to.
+        text_center(d, pal, truncate_text(st["name"], BODY, 432, d.measure_text),
+                    240, 126, BODY, pal.muted)
+        text_center(d, pal, "%d/%d progress" % (st["progress"], st["points"]), 240, 152, BODY, pal.tan)
         excess = st["progress"] - st["points"]
         if excess:
-            text_center(d, pal, "%d excess -> quest card" % excess, 240, 160, BODY, pal.amber)
+            text_center(d, pal, "%d excess -> quest card" % excess, 240, 178, BODY, pal.amber)
         self._cta(d, pal, "Continue", ("resolve_location",))
 
     # Branch rows quote the alternative stages' own printed text, so the
@@ -2009,13 +2189,14 @@ class QuestCardModal:
 
 
 
-def _sq_radio(d, pal, cx, cy, on):
+def _pick_radio(d, pal, cx, cy, on):
     """Radio-button glyph: ring, filled when selected. Duplicates
     ui/screen_quest.py's _radio (this codebase's screen/modal helpers are
     per-file, not cross-imported - e.g. _footer/footer and circ_btn/circBtn
-    already exist independently in this file vs. the web twin) so
-    SideQuestPickModal can "feel like the same family" as ChooseScenarioScreen
-    without a new cross-module dependency."""
+    already exist independently in this file vs. the web twin) so the pickers
+    in this file can "feel like the same family" as ChooseScenarioScreen
+    without a new cross-module dependency. Shared by SideQuestPickModal and
+    LocationPickModal."""
     arc_runs(d, cx, cy, 10, 8, 0, 360, pal.gold if on else pal.dim)
     if on:
         disc(d, cx, cy, 5, pal.gold)
@@ -2170,7 +2351,7 @@ class SideQuestPickModal:
             if on:
                 d.set_pen(pal.card_hi)
                 d.rectangle(8, y, 456, self.ROW_H)
-            _sq_radio(d, pal, 30, y + 22, on)
+            _pick_radio(d, pal, 30, y + 22, on)
             name = truncate_text(e.get("name") or "", BODY, self.NAME_MAX_W, d.measure_text)
             text_left(d, pal, name, 52, y + 13, BODY, pal.tan if on else pal.muted)
             pts_s = "%d pts" % (e.get("points") or 0)

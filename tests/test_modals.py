@@ -531,33 +531,20 @@ def test_questing_progress_modal_loc_prompt_to_staging_adds_threat_and_clears():
     assert any("Active location to staging (+3 threat)" in e["text"] for e in game.log)
 
 
-def test_questing_progress_modal_add_location_when_none():
+def test_questing_progress_modal_add_location_opens_the_picker():
+    # Was a blind append of a guessed 3 quest points. Now it closes and flags
+    # the picker (the router holds one modal at a time), with back="progress"
+    # so the picker's exit reopens this modal.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
     game.active_location = None
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("addloc",))) is None
-    assert game.active_location == {"points": 3, "progress": 0}
-    assert game.log[-1]["text"] == "Active location added (card effect)"
-
-
-def test_questing_progress_modal_add_location_then_close_does_not_double_log():
-    # Regression: _snap must refresh after any already-logged mutation, or
-    # the closing summary would also emit a spurious "set 0/3" line on top
-    # of the explicit "added" line.
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    game.active_location = None
-    m = modals.QuestingProgressModal(game)
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("addloc",)))
-    m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("close",))) == "close"
-    loc_logs = [e["text"] for e in game.log if "Active location" in e["text"]]
-    assert loc_logs == ["Active location added (card effect)"]
+    assert m.on_button(_find(m, ("addloc",))) == "close"
+    assert game.pending_location_pick == {"mode": "new", "back": "progress"}
+    assert game.active_location is None      # nothing seated until you pick
+    assert not [e for e in game.log if "location" in e["text"]]
 
 
 def test_questing_progress_modal_heading_radio_sets_heading_and_logs():
@@ -873,3 +860,181 @@ def test_easy_tip_states_both_halves_of_the_rule():
     tip = s._tip_messages()[0].lower()
     assert "resource" in tip and "hero" in tip, "missing the +1 resource step"
     assert "gold" in tip and "border" in tip, "missing the card-removal step"
+
+
+# -- LocationPickModal: the catalog-backed list step ------------------------
+#
+# Entries are the real compiled values for Passage Through Mirkwood's six
+# locations (docs/data, verified 2026-07-25) - see test_quest_catalog.py's
+# gate test, which proves quest_catalog.locations_for() produces exactly
+# this from the scenario's gather list.
+PASSAGE_LOCS = [
+    {"id": "a", "name": "Enchanted Stream", "points": 2, "threat": 2, "set": "Dol Guldur Orcs"},
+    {"id": "b", "name": "Forest Gate", "points": 4, "threat": 2, "set": "Passage Through Mirkwood"},
+    {"id": "c", "name": "Great Forest Web", "points": 2, "threat": 2, "set": "Spiders of Mirkwood"},
+    {"id": "d", "name": "Mountains of Mirkwood", "points": 3, "threat": 2, "set": "Spiders of Mirkwood"},
+    {"id": "e", "name": "Necromancer's Pass", "points": 2, "threat": 3, "set": "Dol Guldur Orcs"},
+    {"id": "f", "name": "Old Forest Road", "points": 3, "threat": 1, "set": "Passage Through Mirkwood"},
+]
+
+
+def _pick(entries=PASSAGE_LOCS, mode="new", back="play", game=None):
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = game or GameState()
+    m = modals.LocationPickModal(game, mode=mode, entries=entries, back=back)
+    m.draw(hw, game, pal)
+    return hw, pal, game, m
+
+
+def _texts(hw):
+    return [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+
+
+def test_location_pick_lists_the_catalog_with_both_numbers():
+    hw, pal, game, m = _pick()
+    assert m.step == "list"
+    joined = " ".join(_texts(hw))
+    assert "Old Forest Road" in joined
+    assert "3 qp" in joined      # its printed quest points
+    assert "1" in joined         # its printed threat
+
+
+def test_location_pick_travel_commits_the_card_numbers_and_name():
+    # THE point of the feature: no hand-entered guesses. Old Forest Road is
+    # 3 quest points / 1 threat, and travelling removes that threat from the
+    # staging area.
+    hw, pal, game, m = _pick()
+    game.staging = 6
+    m.on_button(_find(m, ("row", "f")))
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("travel",))) == "close"
+    assert game.active_location == {"points": 3, "progress": 0, "name": "Old Forest Road"}
+    assert game.staging == 5
+    assert "Traveled to Old Forest Road" in game.log[-2]["text"]
+
+
+def test_location_pick_hides_travel_until_a_row_is_picked():
+    # Hidden, not disabled (the pager arrows set the precedent) - in "change"
+    # mode a stray tap on a preselected row would discard real progress.
+    hw, pal, game, m = _pick()
+    assert m.selected is None
+    assert not [b for b in m.buttons if b.id == ("travel",)]
+    m.on_button(_find(m, ("row", "a")))
+    m.draw(hw, game, pal)
+    assert [b for b in m.buttons if b.id == ("travel",)]
+
+
+def test_location_pick_manual_step_is_the_old_stepper_and_can_return():
+    hw, pal, game, m = _pick()
+    assert m.on_button(_find(m, ("manual",))) == "redraw"
+    m.draw(hw, game, pal)
+    assert m.step == "manual"
+    assert [b for b in m.buttons if b.id == ("pts", 1)]
+    assert [b for b in m.buttons if b.id == ("ctr", 1)]
+    assert m.on_button(_find(m, ("back",))) == "redraw"
+    assert m.step == "list"
+
+
+def test_location_pick_without_catalog_opens_straight_on_the_stepper():
+    # ~290 quest scenarios have no gather list, 3 gather no locations at all,
+    # and a manual game has no scenario - all land here, byte-identical to
+    # the pre-catalog modal (no Locations back button to return to).
+    hw, pal, game, m = _pick(entries=[])
+    assert m.step == "manual"
+    assert not [b for b in m.buttons if b.id == ("back",)]
+    m.on_button(_find(m, ("save",)))
+    assert game.active_location == {"points": 3, "progress": 0}
+    assert "Traveled to new location" in game.log[-1]["text"]
+
+
+def test_location_pick_manual_save_carries_no_name():
+    hw, pal, game, m = _pick()
+    m.on_button(_find(m, ("manual",)))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("save",)))
+    assert "name" not in game.active_location
+
+
+def test_location_pick_change_mode_replaces_and_warns():
+    game = GameState()
+    game.active_location = {"points": 5, "progress": 2}
+    hw, pal, game, m = _pick(mode="change", game=game)
+    assert "Replaces the current location (2/5 discarded)." in " ".join(_texts(hw))
+    m.on_button(_find(m, ("row", "b")))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("travel",)))
+    assert game.active_location == {"points": 4, "progress": 0, "name": "Forest Gate"}
+
+
+def test_location_pick_pages_a_long_union():
+    # Mount Gundabad gathers 14 locations, the catalog's worst case.
+    entries = [{"id": str(i), "name": "Loc %d" % i, "points": 2, "threat": 1, "set": "S"}
+               for i in range(14)]
+    hw, pal, game, m = _pick(entries=entries)
+    assert m._pages() == 3
+    assert len([b for b in m.buttons if b.id[0] == "row"]) == 6
+    m.on_button(_find(m, ("newer",)))
+    m.on_button(_find(m, ("newer",)))
+    m.draw(hw, game, pal)
+    assert m.page == 2
+    assert len([b for b in m.buttons if b.id[0] == "row"]) == 2
+
+
+def test_location_pick_every_exit_returns_to_the_progress_modal():
+    # back="progress" is how "+ Add location" gets you back where you were;
+    # Travel, manual Save, the header's DONE and Cancel must all honour it.
+    hw, pal, game, m = _pick(back="progress")
+    m.on_button(_find(m, ("close",)))          # header DONE, from the list
+    assert game.pending_progress_detail is True
+
+    hw, pal, game, m = _pick(back="progress")
+    m.on_button(_find(m, ("manual",)))
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("cancel",))) == "cancel"
+    assert game.pending_progress_detail is True
+
+    hw, pal, game, m = _pick(back="progress")
+    m.on_button(_find(m, ("row", "a")))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("travel",)))
+    assert game.pending_progress_detail is True
+
+    hw, pal, game, m = _pick(back="progress")
+    m.on_button(_find(m, ("manual",)))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("save",)))
+    assert game.pending_progress_detail is True
+
+
+def test_location_pick_from_travel_does_not_reopen_the_progress_modal():
+    hw, pal, game, m = _pick(back="play")
+    m.on_button(_find(m, ("row", "a")))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("travel",)))
+    assert game.pending_progress_detail is False
+
+
+def test_progress_modal_row_shows_the_picked_location_name():
+    # The row's title column is capped at 118px (the Current editor's hit-box
+    # starts at x=136), so most real names truncate - same cap the catalog
+    # side-quest names already live with. Assert the card, not the pixels.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 3, "progress": 0, "name": "Old Forest Road"}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    texts = _texts(hw)
+    assert any(t.startswith("Old Forest") for t in texts)
+    assert "Location" not in texts
+
+
+def test_progress_modal_row_falls_back_to_location_without_a_name():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 3, "progress": 0}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert "Location" in _texts(hw)

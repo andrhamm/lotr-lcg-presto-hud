@@ -167,6 +167,11 @@ def main():
                             # built, so a resumed game that skipped the picker this
                             # session still gets tips - see the two "if catalog_tips
                             # is None" sites below)
+    catalog_locations = None   # cached quest_catalog.load_locations() result for
+                               # the picked scenario (never raises either). Loaded
+                               # on the first Travel / "+ Add location" tap and kept
+                               # for the game - the picked scenario cannot change
+                               # mid-game, and a cold union is several file reads.
 
     tick = 0
     torch_t = 0
@@ -277,9 +282,32 @@ def main():
             dirty = True
             continue
 
-        # Coming back from the side-quest picker: reopen the Progress modal
-        # you tapped "+ Side quest" from, rather than dropping you on the
-        # play screen. Same pending-flag pattern as the two above.
+        # Travel, or the Progress modal's "+ Add location" (LocationPickModal
+        # entry points): same pending-flag pattern as pending_side_quest_pick
+        # above - the picker needs the scenario's gather-list union read out
+        # of flash, which neither ScreenPlay.on_button nor a modal's can do
+        # mid-tap. The read is cached for the whole game: the picked scenario
+        # cannot change mid-game, and a cold union is several file reads.
+        # An empty list (manual game, no /data/ deploy, a quest that gathers
+        # no locations) is NOT a fallback here - the modal itself opens
+        # straight on its manual stepper, exactly today's behavior.
+        if modal is None and active == "play" and game.pending_location_pick:
+            req = game.pending_location_pick
+            game.pending_location_pick = None
+            if catalog_locations is None:
+                catalog_locations = quest_catalog.load_locations(
+                    (game.scenario or {}).get("slug"))
+            from ui.modals import LocationPickModal
+            modal = LocationPickModal(game, mode=req.get("mode", "new"),
+                                      entries=catalog_locations,
+                                      back=req.get("back", "play"))
+            dirty = True
+            continue
+
+        # Coming back from the side-quest picker or the location picker:
+        # reopen the Progress modal you tapped "+ Side quest" / "+ Add
+        # location" from, rather than dropping you on the play screen. Same
+        # pending-flag pattern as the two above.
         if modal is None and active == "play" and game.pending_progress_detail:
             game.pending_progress_detail = False
             from ui.modals import QuestingProgressModal

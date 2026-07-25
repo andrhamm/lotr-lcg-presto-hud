@@ -256,11 +256,19 @@ def test_resolution_apply_places_and_goes_to_travel():
     assert game.pending_budget == 0
 
 
-def test_travel_buttons_open_location_pick():
+def test_travel_buttons_flag_the_location_picker():
+    # The picker needs the scenario's gather-list union read out of the
+    # catalog first, so the screen raises a flag and main.py's loop builds
+    # the modal - it no longer returns one directly.
     hw, pal, game, screen = _setup("travel")
     screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("travel_new",)), game)
-    assert isinstance(result[1], LocationPickModal)
+    screen.on_button(_find(screen, ("travel_new",)), game)
+    assert game.pending_location_pick == {"mode": "new", "back": "play"}
+
+    game.active_location = {"points": 3, "progress": 1}
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("travel_change",)), game)
+    assert game.pending_location_pick == {"mode": "change", "back": "play"}
 
 
 def test_travel_new_logs_precisely():
@@ -493,7 +501,10 @@ def test_travel_modal_passes_contribution():
     game.active_location = None
     game.staging = 6
     screen.draw(hw, game, pal)
-    m = screen.on_button(_find(screen, ("travel_new",)), game)[1]
+    screen.on_button(_find(screen, ("travel_new",)), game)
+    # main.py's loop builds the modal from the flag; with no catalog entries
+    # it opens straight on the manual stepper, exactly as before.
+    m = LocationPickModal(game, mode=game.pending_location_pick["mode"])
     m.draw(hw, game, pal)
     ctr_plus = [b for b in m.buttons if b.id == ("ctr", 1)][0]
     m.on_button(ctr_plus)   # 2 -> 3

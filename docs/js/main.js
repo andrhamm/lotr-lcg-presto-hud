@@ -9,10 +9,10 @@ import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
          PickCycleScreen, ChooseScenarioScreen,
          ScenarioOptionsScreen, FirstRunScreen, LegendScreen } from "./screens_other.js";
 import { EliminationModal, QuestCardModal, SideQuestPickModal,
-         StageCompleteModal, ResolutionModal,
+         StageCompleteModal, ResolutionModal, LocationPickModal,
          QuestingProgressModal } from "./screens.js";
 import { loadIndex, loadScenario, cyclesFor, groupByCycle, loadPlayerSideQuests,
-         loadIcons, loadTips } from "./quest_catalog.js";
+         loadIcons, loadTips, loadLocations } from "./quest_catalog.js";
 
 const STATE_KEY = "lotr-hud-state";
 const PREFS_KEY = "lotr-hud-prefs";
@@ -139,6 +139,11 @@ function main() {
                               // resumed game that skipped the picker this session
                               // still gets tips - see the two "if (!tipsCache)" sites
                               // below)
+  let locationsCache = null; // cached loadLocations() result for the picked
+                              // scenario (never rejects either). Fetched on the
+                              // first Travel / "+ Add location" tap and kept for
+                              // the game - the picked scenario cannot change
+                              // mid-game, and a cold union is several fetches.
 
   function draw() {
     if (modal) modal.draw(ctx, game);
@@ -419,9 +424,34 @@ function main() {
         dirty = true;
       });
     }
-    // Coming back from the side-quest picker: reopen the Progress modal you
-    // tapped "+ Side quest" from, rather than dropping you on the play
-    // screen. Same pending-flag pattern as the one above.
+    // Travel, or the Progress modal's "+ Add location" (LocationPickModal
+    // entry points): same pending-flag pattern as pending_side_quest_pick
+    // above - the picker needs the scenario's gather-list union fetched from
+    // the catalog, which neither ScreenPlay.onButton nor a modal's can await
+    // mid-tap. pending_location_pick is cleared synchronously so a later tick
+    // can't re-enter this block while the fetch is in flight, and the result
+    // is cached for the whole game. An empty list (manual game, data/ not
+    // built, a quest that gathers no locations) is NOT a fallback here - the
+    // modal itself opens straight on its manual stepper, exactly today's
+    // behavior.
+    if (!modal && active === "play" && game.pending_location_pick) {
+      const req = game.pending_location_pick;
+      game.pending_location_pick = null;
+      modalPending += 1;
+      (locationsCache
+        ? Promise.resolve(locationsCache)
+        : loadLocations(game.scenario?.slug)).then(entries => {
+        locationsCache = entries;
+        modal = new LocationPickModal(game, req.mode ?? "new", entries,
+                                      req.back ?? "play");
+        modalPending -= 1;
+        dirty = true;
+      });
+    }
+    // Coming back from the side-quest picker or the location picker: reopen
+    // the Progress modal you tapped "+ Side quest" / "+ Add location" from,
+    // rather than dropping you on the play screen. Same pending-flag pattern
+    // as the one above.
     if (!modal && active === "play" && game.pending_progress_detail) {
       game.pending_progress_detail = false;
       modal = new QuestingProgressModal(game);

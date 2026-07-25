@@ -826,10 +826,14 @@ class ScreenPlay:
                 from ui.modals import ResolutionModal
                 return ("modal", ResolutionModal(game, force_advance=forced))
             return True
-        if k == "travel_new":
-            return ("modal", LocationPickModal(game, mode="new"))
-        if k == "travel_change":
-            return ("modal", LocationPickModal(game, mode="change"))
+        # Travel opens the location picker, which needs the scenario's
+        # gather-list union read out of the catalog first - flash I/O a
+        # screen's on_button can't do mid-tap (and a fetch the web twin
+        # can't await there at all). Flag it and let main.py's loop build
+        # the modal, same pending-flag pattern as pending_side_quest_pick.
+        if k in ("travel_new", "travel_change"):
+            game.pending_location_pick = {"mode": k[len("travel_"):], "back": "play"}
+            return True
         if k == "sail_modal":
             from ui.modals import SailingModal
             return ("modal", SailingModal(game))

@@ -182,6 +182,98 @@ def load_player_side_quests():
         return []
 
 
+def location_set_slugs(scenario):
+    """The scenarios/<slug>.json files that between them hold every location
+    this scenario can put into play: its "sets to gather" (the committed Hall
+    of Beorn enrichment's `includedSets`, slugified), or its own slug alone
+    when it has no gather list.
+
+    The fallback is not a rare path - the enrichment covers 108 scenarios and
+    the rest fall back here, which is exactly why the picker keeps its manual
+    stepper (see LocationPickModal)."""
+    scn = scenario or {}
+    sets = scn.get("includedSets") or []
+    if sets:
+        return [slugify(name) for name in sets]
+    return [scn["slug"]] if scn.get("slug") else []
+
+
+def locations_for(scenario, packs):
+    """Every location `scenario` can put into play, as a name-sorted list of
+    {"id","name","points","threat","set"} for the location picker.
+
+    The union is load-bearing. A scenario's own scenarios/<slug>.json carries
+    only cards whose encounterSet IS that scenario's set, so Passage Through
+    Mirkwood's own file holds 2 of its 6 locations - the other 4 live in the
+    Dol Guldur Orcs and Spiders of Mirkwood files it gathers. `packs` is a
+    dict of loaded scenario files keyed by slug; a gather-list name with no
+    file (14 of 309 catalog-wide) is skipped rather than raising, and packs
+    NOT in the gather list are ignored.
+
+    `points`/`threat` are the first non-null questPoints/threat across the
+    card's faces, else 0 - 15 catalog locations are variable or
+    condition-explored with a null questPoints on every face, and 21 are
+    multi-face. Same rule side_quests() uses for the variable "X" quests;
+    those show 0 and the player edits the real value at the table.
+
+    Deduped by (name, encounterSet): the same card can be reachable through
+    two gather entries. `quantity` is deliberately NOT carried - the HUD does
+    not model the encounter deck and must not imply it knows what is left in
+    it."""
+    packs = packs or {}
+    out = []
+    seen = {}
+    for slug in location_set_slugs(scenario):
+        pack = packs.get(slug)
+        if not pack:
+            continue
+        for card in (pack.get("encounter") or {}).get("location") or []:
+            key = (card.get("name"), card.get("encounterSet"))
+            if key in seen:
+                continue
+            seen[key] = True
+            points = 0
+            threat = 0
+            for face in card.get("faces") or []:
+                if not points and face.get("questPoints") is not None:
+                    points = face["questPoints"]
+                if not threat and face.get("threat") is not None:
+                    threat = face["threat"]
+            out.append({"id": card.get("id"), "name": card.get("name"),
+                        "points": points, "threat": threat,
+                        "set": card.get("encounterSet")})
+    out.sort(key=lambda l: l["name"] or "")
+    return out
+
+
+def load_locations(slug):
+    """Read scenario `slug`'s own card file plus every file on its gather
+    list from flash, and flatten via locations_for(). Thin flash-read
+    wrapper, not host-tested (see the module docstring) - on ANY failure (no
+    /data/ deploy yet, an unpicked or uncatalogued quest, a corrupt file,
+    ...) returns [] so LocationPickModal opens straight on its manual
+    stepper rather than erroring (per the plan's Global Constraints: catalog
+    data is optional at runtime). Individual missing set files are already
+    skipped by locations_for, so one absent set never costs the others."""
+    if not slug:
+        return []
+    try:
+        scenario = load_scenario(slug)
+    except Exception:
+        return []
+    packs = {}
+    for set_slug in location_set_slugs(scenario):
+        try:
+            with open(SCENARIO_PATH % set_slug) as f:
+                packs[set_slug] = json.load(f)
+        except Exception:
+            continue
+    try:
+        return locations_for(scenario, packs)
+    except Exception:
+        return []
+
+
 def normalize_icon_key(slug):
     """Fold a catalog encounterSet slug or a docs/data/icons.json key onto a
     common form so icon_for() can match across the small, mostly-cosmetic

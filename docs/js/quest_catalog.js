@@ -148,6 +148,92 @@ export async function loadPlayerSideQuests() {
   }
 }
 
+// The scenarios/<slug>.json files that between them hold every location this
+// scenario can put into play: its "sets to gather" (the committed Hall of
+// Beorn enrichment's includedSets, slugified), or its own slug alone when it
+// has no gather list. Mirrors quest_catalog.py's location_set_slugs().
+//
+// The fallback is not a rare path - the enrichment covers 108 scenarios and
+// the rest fall back here, which is exactly why the picker keeps its manual
+// stepper (see LocationPickModal).
+export function locationSetSlugs(scenario) {
+  const scn = scenario ?? {};
+  const sets = scn.includedSets ?? [];
+  if (sets.length) return sets.map(slugify);
+  return scn.slug ? [scn.slug] : [];
+}
+
+// Every location `scenario` can put into play, as a name-sorted array of
+// {id, name, points, threat, set} for the location picker. Mirrors
+// quest_catalog.py's locations_for() verbatim - keep the two in lockstep.
+//
+// The union is load-bearing. A scenario's own scenarios/<slug>.json carries
+// only cards whose encounterSet IS that scenario's set, so Passage Through
+// Mirkwood's own file holds 2 of its 6 locations - the other 4 live in the
+// Dol Guldur Orcs and Spiders of Mirkwood files it gathers. `packs` is an
+// object of loaded scenario files keyed by slug; a gather-list name with no
+// file (14 of 309 catalog-wide) is skipped rather than throwing, and packs
+// NOT in the gather list are ignored.
+//
+// points/threat are the first non-null questPoints/threat across the card's
+// faces, else 0 - 15 catalog locations are variable or condition-explored
+// with a null questPoints on every face, and 21 are multi-face. Same rule
+// sideQuests() uses for the variable "X" quests.
+//
+// Deduped by (name, encounterSet). `quantity` is deliberately NOT carried -
+// the HUD does not model the encounter deck and must not imply it knows
+// what is left in it.
+export function locationsFor(scenario, packs) {
+  const bySlug = packs ?? {};
+  const out = [];
+  const seen = new Set();
+  for (const slug of locationSetSlugs(scenario)) {
+    const pack = bySlug[slug];
+    if (!pack) continue;
+    for (const card of pack.encounter?.location ?? []) {
+      const key = `${card.name} ${card.encounterSet}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      let points = 0, threat = 0;
+      for (const face of card.faces ?? []) {
+        if (!points && face.questPoints !== null && face.questPoints !== undefined) {
+          points = face.questPoints;
+        }
+        if (!threat && face.threat !== null && face.threat !== undefined) {
+          threat = face.threat;
+        }
+      }
+      out.push({ id: card.id, name: card.name, points, threat, set: card.encounterSet });
+    }
+  }
+  return out.sort(byName);
+}
+
+// Fetch scenario `slug`'s own card file plus every file on its gather list,
+// and flatten via locationsFor(). Thin fetch wrapper, not host-tested - on
+// ANY failure (data/ not built yet, an unpicked or uncatalogued quest, a
+// corrupt file, ...) returns [] so LocationPickModal opens straight on its
+// manual stepper rather than erroring (per the plan's Global Constraints:
+// catalog data is optional at runtime). Individual missing set files resolve
+// to null and are skipped by locationsFor, so one absent set never costs the
+// others.
+export async function loadLocations(slug) {
+  if (!slug) return [];
+  try {
+    const scenario = await loadScenario(slug);
+    const packs = {};
+    await Promise.all(locationSetSlugs(scenario).map(setSlug =>
+      fetch("data/scenarios/" + setSlug + ".json")
+        .then(r => r.ok ? r.json() : null)
+        .then(pack => { if (pack) packs[setSlug] = pack; })
+        .catch(() => {})));
+    return locationsFor(scenario, packs);
+  } catch (e) {
+    console.error("quest catalog: loadLocations failed - falling back to manual entry", e);
+    return [];
+  }
+}
+
 // Icon matcher (M4-B icons, Task 2) - maps a catalog encounterSet slug to a
 // rasterized mask from docs/data/icons.json. Mirrors quest_catalog.py's
 // normalizeIconKey/iconFor verbatim (sanity-checked with a node one-liner,

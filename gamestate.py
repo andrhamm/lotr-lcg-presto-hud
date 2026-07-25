@@ -185,6 +185,14 @@ class GameState:
                                            # pending_quest_card above - the
                                            # picker also needs a catalog read
                                            # first, see main.py's loop)
+        # Travel / "+ Add location" wants LocationPickModal opened once the
+        # current screen or modal has let go. None, or
+        # {"mode": "new"|"change", "back": "play"|"progress"} - the picker
+        # needs a catalog read (the gather-list union, see
+        # quest_catalog.load_locations) that neither a screen's on_button nor
+        # a modal's can do mid-tap, and `back` is how it knows whether to
+        # return you to the play screen or reopen the Progress modal.
+        self.pending_location_pick = None
         self.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         self.quest_resolved = False  # quest resolved this round
         self.quest_outcome = None    # "success" | "fail" | "tie" - last resolution
@@ -369,20 +377,36 @@ class GameState:
             self.log_event("Staging area threat %d -> %d (traveled location)"
                            % (before, self.staging))
 
-    def travel_to(self, points, contribution=0):
-        self.active_location = {"points": points, "progress": 0}
-        self.log_event("Traveled to new location (%d quest points)" % points)
+    def _seat_location(self, points, name):
+        """The new active location. `name` is the catalog card name when the
+        player picked one (LocationPickModal's list step); manual entry
+        passes None and the dict keeps exactly the two keys it always had, so
+        old saves and hand-entered locations stay indistinguishable from
+        today's - every label site reads .get("name") with a generic
+        fallback."""
+        loc = {"points": points, "progress": 0}
+        if name:
+            loc["name"] = name
+        return loc
+
+    def travel_to(self, points, contribution=0, name=None):
+        self.active_location = self._seat_location(points, name)
+        self.log_event("Traveled to %s (%d quest points)"
+                       % (name or "new location", points))
         self._apply_travel_staging(contribution)
 
-    def change_location(self, points, contribution=0):
+    def change_location(self, points, contribution=0, name=None):
         old = self.active_location
-        self.active_location = {"points": points, "progress": 0}
+        self.active_location = self._seat_location(points, name)
+        new_label = name or "new"
         if old:
             self.log_event(
-                "Changed active location (old at %d/%d discarded) -> new (%d quest points)"
-                % (old["progress"], old["points"], points))
+                "Changed active location (%s at %d/%d discarded) -> %s (%d quest points)"
+                % (old.get("name") or "old", old["progress"], old["points"],
+                   new_label, points))
         else:
-            self.log_event("Changed active location -> new (%d quest points)" % points)
+            self.log_event("Changed active location -> %s (%d quest points)"
+                           % (new_label, points))
         self._apply_travel_staging(contribution)
 
     def explore_location_if_done(self):
@@ -651,6 +675,7 @@ class GameState:
             "pending_quest_card": self.pending_quest_card,
             "pending_side_quest_pick": self.pending_side_quest_pick,
             "pending_progress_detail": self.pending_progress_detail,
+            "pending_location_pick": self.pending_location_pick,
             "reminders": dict(self.reminders),
             "quest_resolved": self.quest_resolved,
             "quest_outcome": self.quest_outcome,
@@ -699,6 +724,7 @@ class GameState:
         g.pending_quest_card = d.get("pending_quest_card", False)
         g.pending_side_quest_pick = d.get("pending_side_quest_pick", False)
         g.pending_progress_detail = d.get("pending_progress_detail", False)
+        g.pending_location_pick = d.get("pending_location_pick", None)
         g.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         saved_rem = d.get("reminders", {})
         for k in g.reminders:

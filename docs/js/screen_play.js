@@ -758,8 +758,14 @@ export class ScreenPlay {
       }
       return true;
     }
-    if (k === "travel_new") return ["modal", new LocationPickModal(game, "new")];
-    if (k === "travel_change") return ["modal", new LocationPickModal(game, "change")];
+    // Travel opens the location picker, which needs the scenario's
+    // gather-list union fetched from the catalog first - which onButton
+    // cannot await mid-tap. Flag it and let main.js's loop build the modal,
+    // same pending-flag pattern as pending_side_quest_pick.
+    if (k === "travel_new" || k === "travel_change") {
+      game.pending_location_pick = { mode: k.slice("travel_".length), back: "play" };
+      return true;
+    }
     if (k === "sail_modal") return ["modal", new SailingModal(game)];
     if (k === "sail_toggle") {
       game.sailing = !game.sailing;

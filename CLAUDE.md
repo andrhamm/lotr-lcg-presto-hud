@@ -228,6 +228,19 @@ text. The raw per-scenario responses it aggregates (`tools/data/hob_cache/
 on each scenario, `gatherCount` on its index entry) — absent or corrupt
 enrichment is silently skipped, never a build failure.
 
+**`includedSets` is not decoration — it is the join you need to see a
+scenario's cards.** `scenarios/<slug>.json` is emitted per encounter *group*,
+so it holds only cards whose `encounterSet` **is** that group's set. Passage
+Through Mirkwood's own file has 2 of its 6 locations; the other 4 live in
+`dol-guldur-orcs.json` and `spiders-of-mirkwood.json`, the sets it gathers.
+Anything asking "what cards can this scenario put into play?" must union
+across `includedSets` via `quest_catalog.slugify` — see `locations_for()` /
+`locationsFor()`, which do exactly that for the location picker. Fall back to
+the scenario's own slug when it has no gather list: the enrichment covers 108
+scenarios and the rest land on the fallback, which is why the picker keeps a
+manual escape hatch. 14 of 309 gather names resolve to no card file at all
+and are skipped, never fatal.
+
 **Nothing fetches this in CI, and a plain run fetches nothing.** With
 `enrichment.json` present, `python3 tools/build_hob_enrichment.py` prints a
 one-line no-op and exits 0. To actually regenerate: `python3

@@ -135,6 +135,14 @@ export class GameState {
                                         // once the Progress-detail modal has
                                         // closed (same pending-flag pattern
                                         // as pending_quest_card above)
+    // Travel / "+ Add location" wants LocationPickModal opened once the
+    // current screen or modal has let go. null, or
+    // {mode: "new"|"change", back: "play"|"progress"} - the picker needs a
+    // catalog fetch (the gather-list union, see loadLocations) that neither a
+    // screen's onButton nor a modal's can await mid-tap, and `back` is how it
+    // knows whether to return you to the play screen or reopen the Progress
+    // modal.
+    this.pending_location_pick = null;
     this.reminders = Object.fromEntries(REMINDER_DEFS.map(d => [d[0], false]));
     this.quest_resolved = false;
     this.quest_outcome = null;      // "success" | "fail" | "tie" - last resolution
@@ -289,19 +297,31 @@ export class GameState {
     }
   }
 
-  travelTo(points, contribution = 0) {
-    this.active_location = { points, progress: 0 };
-    this.logEvent(`Traveled to new location (${points} quest points)`);
+  // The new active location. `name` is the catalog card name when the player
+  // picked one (LocationPickModal's list step); manual entry passes null and
+  // the object keeps exactly the two keys it always had, so old saves and
+  // hand-entered locations stay indistinguishable from today's - every label
+  // site reads .name with a generic fallback.
+  _seatLocation(points, name) {
+    const loc = { points, progress: 0 };
+    if (name) loc.name = name;
+    return loc;
+  }
+
+  travelTo(points, contribution = 0, name = null) {
+    this.active_location = this._seatLocation(points, name);
+    this.logEvent(`Traveled to ${name || "new location"} (${points} quest points)`);
     this._applyTravelStaging(contribution);
   }
 
-  changeLocation(points, contribution = 0) {
+  changeLocation(points, contribution = 0, name = null) {
     const old = this.active_location;
-    this.active_location = { points, progress: 0 };
+    this.active_location = this._seatLocation(points, name);
+    const newLabel = name || "new";
     if (old) {
-      this.logEvent(`Changed active location (old at ${old.progress}/${old.points} discarded) -> new (${points} quest points)`);
+      this.logEvent(`Changed active location (${old.name || "old"} at ${old.progress}/${old.points} discarded) -> ${newLabel} (${points} quest points)`);
     } else {
-      this.logEvent(`Changed active location -> new (${points} quest points)`);
+      this.logEvent(`Changed active location -> ${newLabel} (${points} quest points)`);
     }
     this._applyTravelStaging(contribution);
   }
@@ -534,6 +554,7 @@ export class GameState {
       pending_quest_card: this.pending_quest_card,
       pending_side_quest_pick: this.pending_side_quest_pick,
       pending_progress_detail: this.pending_progress_detail,
+      pending_location_pick: this.pending_location_pick,
       reminders: { ...this.reminders },
       elimination_threat: this.elimination_threat,
       quest_resolved: this.quest_resolved,
@@ -579,6 +600,7 @@ export class GameState {
     g.pending_quest_card = d.pending_quest_card ?? false;
     g.pending_side_quest_pick = d.pending_side_quest_pick ?? false;
     g.pending_progress_detail = d.pending_progress_detail ?? false;
+    g.pending_location_pick = d.pending_location_pick ?? null;
     g.reminders = Object.fromEntries(REMINDER_DEFS.map(dd => [dd[0], false]));
     for (const k of Object.keys(g.reminders)) {
       if (d.reminders && k in d.reminders) g.reminders[k] = d.reminders[k];

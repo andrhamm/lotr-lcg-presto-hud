@@ -750,6 +750,108 @@ def _side_quest_pick_empty():
     return hw, m
 
 
+# Location picker (LocationPickModal's list step). The real compiled values
+# for Passage Through Mirkwood's six locations - quest_catalog.locations_for()
+# resolves exactly these from the scenario's gather list (verified against
+# docs/data, 2026-07-25; see test_quest_catalog.py's gate test). Six is the
+# catalog's median union and exactly one page at PER_PAGE=6.
+_LOCATION_SAMPLE = [
+    {"id": "l1", "name": "Enchanted Stream", "points": 2, "threat": 2, "set": "Dol Guldur Orcs"},
+    {"id": "l2", "name": "Forest Gate", "points": 4, "threat": 2, "set": "Passage Through Mirkwood"},
+    {"id": "l3", "name": "Great Forest Web", "points": 2, "threat": 2, "set": "Spiders of Mirkwood"},
+    {"id": "l4", "name": "Mountains of Mirkwood", "points": 3, "threat": 2, "set": "Spiders of Mirkwood"},
+    {"id": "l5", "name": "Necromancer's Pass", "points": 2, "threat": 3, "set": "Dol Guldur Orcs"},
+    {"id": "l6", "name": "Old Forest Road", "points": 3, "threat": 1, "set": "Passage Through Mirkwood"},
+]
+
+
+def _location_pick():
+    # The list step as Travel opens it: nothing selected yet, so Manual is
+    # the only footer button (Travel is hidden, not disabled).
+    from ui.modals import LocationPickModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = None
+    m = LocationPickModal(g, mode="new", entries=list(_LOCATION_SAMPLE))
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _location_pick_selected():
+    # A row picked: highlight, gold quest points, and the Travel button now
+    # beside Manual. State is set directly rather than via on_button - a
+    # second draw() on the same FakeHardware would accumulate both frames'
+    # text calls into one collision check.
+    from ui.modals import LocationPickModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = None
+    m = LocationPickModal(g, mode="new", entries=list(_LOCATION_SAMPLE))
+    m.selected = "l4"      # the longest name in the sample
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _location_pick_change():
+    # "change" mode from the Travel view: the sub-line warns what a commit
+    # discards instead of offering the manual hint.
+    from ui.modals import LocationPickModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = {"points": 5, "progress": 2}
+    m = LocationPickModal(g, mode="change", entries=list(_LOCATION_SAMPLE))
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _location_pick_paged():
+    # Mount Gundabad's 14 locations, the catalog's worst union - the pager
+    # appears and the last page is a short one.
+    from ui.modals import LocationPickModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = None
+    entries = [{"id": "p%d" % i, "name": "Location Number %d" % i,
+                "points": 2 + i % 4, "threat": 1 + i % 3, "set": "S"}
+               for i in range(14)]
+    m = LocationPickModal(g, mode="new", entries=entries)
+    m.page = 2
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _location_pick_manual():
+    # The manual stepper reached from the list - identical to the
+    # pre-catalog modal plus a "< Locations" button back to the list.
+    from ui.modals import LocationPickModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = None
+    m = LocationPickModal(g, mode="new", entries=list(_LOCATION_SAMPLE))
+    m.step = "manual"
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _location_pick_no_catalog():
+    # No catalog data at all (a manual game, an uncatalogued quest, or a
+    # scenario that gathers no locations): opens straight on the stepper
+    # with no way back to a list that does not exist.
+    from ui.modals import LocationPickModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = None
+    m = LocationPickModal(g, mode="new", entries=[])
+    m.draw(hw, g, pal)
+    return hw, m
+
+
 def _quest_card_modal_tips():
     # Tips view open (M4-B tips): a stage-specific note ranked before the
     # scenario-wide general notes, attribution name + URL visible beneath -
@@ -1080,6 +1182,12 @@ SCENES = {
     "side_quest_pick": _side_quest_pick,
     "side_quest_pick_quests": _side_quest_pick_quests,
     "side_quest_pick_empty": _side_quest_pick_empty,
+    "location_pick": _location_pick,
+    "location_pick_selected": _location_pick_selected,
+    "location_pick_change": _location_pick_change,
+    "location_pick_paged": _location_pick_paged,
+    "location_pick_manual": _location_pick_manual,
+    "location_pick_no_catalog": _location_pick_no_catalog,
     "sailing_modal": _sailing_modal,
     "stage_complete_modal": _stage_complete_modal,
     "resolution_reveal": _resolution_reveal,

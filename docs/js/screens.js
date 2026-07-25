@@ -274,17 +274,131 @@ export class SideQuestsModal {
   }
 }
 
+// Travel / "+ Add location": pick the location off the scenario's own cards,
+// or enter its numbers by hand.
+//
+// mode "new"    -> travel when there is no active location
+// mode "change" -> replace the current active location (old is discarded)
+//
+// Two steps, and which one it opens on is decided entirely by the data:
+// "list" is a flat, name-sorted radio list of every location the scenario can
+// put into play (locationsFor's union across its "sets to gather"), each row
+// carrying the printed quest points and threat - picking one fills in BOTH
+// numbers this flow used to make a player guess, since a location's threat
+// leaves the staging area when you travel to it, which is exactly the
+// "contribution" the manual step asks for. "manual" is the original two
+// steppers, unchanged: where a scenario with no catalog data lands, and still
+// reachable from the list for cards a scenario never gathers.
+//
+// Flat, not the sphere-first drill SideQuestPickModal uses - a scenario's
+// union is 5 locations at the median and 14 at the worst. The encounter set
+// is not on the row either: no scenario in the catalog gathers two same-named
+// locations from different sets. No row starts selected and Travel only
+// appears once one is (hidden, not disabled, like the pager arrows), because
+// in "change" mode committing discards the current location's progress.
+//
+// `back` is where every exit returns you - "play" or "progress" (the Progress
+// modal, reopened via pending_progress_detail). Opened through
+// game.pending_location_pick (see main.js's loop) because the union is a
+// catalog fetch neither a screen's nor a modal's onButton can await mid-tap.
+// Mirror of ui/modals.py - keep the two in lockstep.
 export class LocationPickModal {
-  constructor(game, mode = "new") {
+  static PER_PAGE = 6;
+  static ROW_H = 44;
+  static ROW_STRIDE = 46;
+  static LIST_Y0 = 66;
+  static NAME_MAX_W = 292;    // 52 -> 344, ahead of the threat block at 352
+  static THREAT_X = 352;
+  static FOOTER_Y = 404;
+  static FOOTER_H = 64;
+
+  constructor(game, mode = "new", entries = null, back = "play") {
     this.game = game;
     this.mode = mode;
+    this.entries = entries ?? [];
+    this.back = back;
+    this.step = this.entries.length ? "list" : "manual";
+    this.selected = null;
+    this.page = 0;
     this.pts = 3;
-    this.contrib = 2;
+    this.contrib = 2;   // its threat leaves the staging area on travel
     this.buttons = [];
   }
-  draw(ctx) {
+
+  _pages() {
+    return Math.max(1, Math.ceil(this.entries.length / LocationPickModal.PER_PAGE));
+  }
+
+  draw(ctx, game) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
+    if (this.step === "list") this._drawList(ctx, game);
+    else this._drawManual(ctx);
+  }
+
+  _drawList(ctx, game) {
+    const S = LocationPickModal;
+    modalHeader(ctx, game, this.mode === "new" ? "Travel" : "Change Location",
+                this.buttons);
+    const loc = this.game.active_location;
+    let sub, ink;
+    if (this.mode === "change" && loc) {
+      sub = `Replaces the current location (${loc.progress}/${loc.points} discarded).`;
+      ink = pal.no_fg;
+    } else {
+      sub = "Pick the location - or enter it manually.";
+      ink = pal.dim;
+    }
+    textLeft(ctx, truncateText(sub, BODY, 456), 12, 46, BODY, ink);
+
+    const pages = this._pages();
+    this.page = Math.min(this.page, pages - 1);
+    const chunk = this.entries.slice(this.page * S.PER_PAGE, (this.page + 1) * S.PER_PAGE);
+    let y = S.LIST_Y0;
+    for (const e of chunk) {
+      const on = e.id === this.selected;
+      if (on) rect(ctx, 8, y, 456, S.ROW_H, pal.card_hi);
+      pickRadio(ctx, 30, y + 22, on);
+      textLeft(ctx, truncateText(e.name ?? "", BODY, S.NAME_MAX_W), 52, y + 13, BODY,
+               on ? pal.tan : pal.muted);
+      // Threat, then quest points - quest points take the right edge because
+      // they are the number the player acts on.
+      icons.drawIcon(ctx, icons.THREAT, S.THREAT_X, y + 10, pal.red);
+      textLeft(ctx, String(e.threat ?? 0), S.THREAT_X + 26, y + 13, BODY,
+               on ? pal.tan : pal.muted);
+      const qp = `${e.points ?? 0} qp`;
+      textLeft(ctx, qp, 456 - measureText(qp, BODY), y + 13, BODY, on ? pal.gold : pal.tan);
+      rect(ctx, 8, y + S.ROW_H, 456, 1, pal.border);
+      this.buttons.push(new Button(["row", e.id], 8, y, 456, S.ROW_H));
+      y += S.ROW_STRIDE;
+    }
+    this._pager(ctx, pages);
+
+    const manual = new Button(["manual"], 24, S.FOOTER_Y, 200, S.FOOTER_H);
+    bevel(ctx, manual.x, manual.y, manual.w, manual.h, pal.btn, false, 3);
+    textCenter(ctx, "Manual", manual.x + manual.w / 2, manual.y + 20, BODY, pal.tan);
+    this.buttons.push(manual);
+    if (this.selected !== null) {
+      const go = new Button(["travel"], 256, S.FOOTER_Y, 200, S.FOOTER_H);
+      bevel(ctx, go.x, go.y, go.w, go.h, pal.btn_ok, false, 3);
+      textCenter(ctx, "Travel", go.x + go.w / 2, go.y + 20, BODY, pal.ok_fg);
+      this.buttons.push(go);
+    }
+  }
+
+  _pager(ctx, pages) {
+    if (pages <= 1) return;
+    const up = new Button(["older"], 12, 352, 150, 46);
+    const dn = new Button(["newer"], 318, 352, 150, 46);
+    bevel(ctx, up.x, up.y, up.w, up.h, pal.btn);
+    textCenter(ctx, "Up", up.x + 75, up.y + 14, BODY, pal.tan);
+    bevel(ctx, dn.x, dn.y, dn.w, dn.h, pal.btn);
+    textCenter(ctx, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan);
+    textCenter(ctx, `${this.page + 1}/${pages}`, 240, 366, BODY, pal.muted);
+    this.buttons.push(up, dn);
+  }
+
+  _drawManual(ctx) {
     const title = this.mode === "new" ? "Travel to new location" : "Change active location";
     textCenter(ctx, title, 240, 30, DISPLAY, pal.gold);
     const loc = this.game.active_location;
@@ -297,21 +411,47 @@ export class LocationPickModal {
     textLeft(ctx, "Contribution", 88, 266, BODY, pal.tan);
     stepper(ctx, this.buttons, ["ctr", -1], ["ctr", 1], 250, 250, String(this.contrib), 170, 60);
     textLeft(ctx, "subtracted from the staging area on travel", 60, 318, BODY, pal.dim);
+    if (this.entries.length) {
+      const back = new Button(["back"], 12, 348, 200, 44);
+      bevel(ctx, back.x, back.y, back.w, back.h, pal.btn);
+      textCenter(ctx, "< Locations", back.x + back.w / 2, back.y + 14, BODY, pal.tan);
+      this.buttons.push(back);
+    }
     footer(ctx, this.buttons, "Travel");
   }
+
+  // Every exit returns you where you came from: the Progress modal reopens
+  // via the pending flag, the play screen just falls through.
+  _leave(result = "close") {
+    if (this.back === "progress") this.game.pending_progress_detail = true;
+    return result;
+  }
+
+  _commit(points, contribution, name = null) {
+    if (this.mode === "new" && !this.game.active_location) {
+      this.game.travelTo(points, contribution, name);
+    } else {
+      this.game.changeLocation(points, contribution, name);
+    }
+  }
+
   onButton(btn) {
     const k = btn.id[0];
     if (k === "pts") { this.pts = Math.max(1, Math.min(30, this.pts + btn.id[1])); return null; }
     if (k === "ctr") { this.contrib = Math.max(0, Math.min(9, this.contrib + btn.id[1])); return null; }
-    if (k === "save") {
-      if (this.mode === "new" && !this.game.active_location) {
-        this.game.travelTo(this.pts, this.contrib);
-      } else {
-        this.game.changeLocation(this.pts, this.contrib);
-      }
-      return "close";
+    if (k === "row") { this.selected = btn.id[1]; return "redraw"; }
+    if (k === "older") { this.page = Math.max(0, this.page - 1); return "redraw"; }
+    if (k === "newer") { this.page = Math.min(this._pages() - 1, this.page + 1); return "redraw"; }
+    if (k === "manual") { this.step = "manual"; return "redraw"; }
+    if (k === "back") { this.step = "list"; return "redraw"; }
+    if (k === "travel") {
+      const e = this.entries.find(x => x.id === this.selected);
+      if (e) this._commit(e.points ?? 0, e.threat ?? 0, e.name);
+      return this._leave();
     }
-    if (k === "cancel") return "cancel";
+    if (k === "save") { this._commit(this.pts, this.contrib); return this._leave(); }
+    if (k === "close") return this._leave();
+    if (k === "cancel") return this._leave("cancel");
     return null;
   }
 }
@@ -680,8 +820,11 @@ export class QuestingProgressModal {
     const g = this.game;
     const items = [{ kind: "q", name: `Quest ${g.questLabel()}`, removable: false,
       advanceable: g.stages.length > 0 }];
+    // Prefer the catalog name (LocationPickModal's list step) when present;
+    // manual entries and old saves have no "name" key at all, so this stays
+    // "Location" for them - same rule as the side quests below.
     items.push(g.active_location
-      ? { kind: "l", name: "Location", removable: true }
+      ? { kind: "l", name: g.active_location.name || "Location", removable: true }
       : { kind: "l_add" });
     // Prefer the catalog name (SideQuestPickModal, M4-B sidequest Task 2)
     // when present; old saves and manual entries have no "name" key at
@@ -965,10 +1108,13 @@ export class QuestingProgressModal {
       return "close";
     }
     if (k === "addloc") {
-      g.active_location = { points: 3, progress: 0 };
-      g.logEvent("Active location added (card effect)");
-      this._snap = this._snapshot();
-      return null;
+      // Was a blind append of a guessed 3 quest points. Now the same picker
+      // Travel uses, opened via the pending flag (the router holds one modal
+      // at a time) with back="progress" so every exit reopens this modal
+      // instead of dropping you on the play screen.
+      g.pending_location_pick = { mode: "new", back: "progress" };
+      this._logChanges();
+      return "close";
     }
     if (k === "hd_set") {
       if (a !== g.heading) g.shiftHeading(a - g.heading, "progress view");
@@ -1254,7 +1400,8 @@ export class ResolutionModal {
     }
     const loc = g.active_location;
     if (loc && loc.points > 0 && loc.progress >= loc.points) {
-      return { kind: "location", progress: loc.progress, points: loc.points };
+      return { kind: "location", progress: loc.progress, points: loc.points,
+               name: loc.name || "Active location" };
     }
     if ((g.quest.points > 0 && g.quest.progress >= g.quest.points) || this.forceAdvance) {
       return this._questStep();
@@ -1324,10 +1471,13 @@ export class ResolutionModal {
 
   _drawLocation(ctx, st) {
     textCenter(ctx, "Location Explored", 240, 90, DISPLAY, pal.gold);
-    textCenter(ctx, `${st.progress}/${st.points} progress`, 240, 130, BODY, pal.tan);
+    // The card's own name when the player picked it from the catalog, else
+    // the generic "Active location" _step() falls back to.
+    textCenter(ctx, truncateText(st.name, BODY, 432), 240, 126, BODY, pal.muted);
+    textCenter(ctx, `${st.progress}/${st.points} progress`, 240, 152, BODY, pal.tan);
     const excess = st.progress - st.points;
     if (excess) {
-      textCenter(ctx, `${excess} excess -> quest card`, 240, 160, BODY, pal.amber);
+      textCenter(ctx, `${excess} excess -> quest card`, 240, 178, BODY, pal.amber);
     }
     this._cta(ctx, "Continue", ["resolve_location"]);
   }
@@ -1815,7 +1965,7 @@ export class QuestCardModal {
 // Radio-button glyph: ring, filled when selected. Mirror of ui/modals.py's
 // _sq_radio - it was called below but never defined here, so the web twin
 // threw "sqRadio is not defined" on any non-empty side-quest catalog.
-function sqRadio(ctx, cx, cy, on) {
+function pickRadio(ctx, cx, cy, on) {
   arcRuns(ctx, cx, cy, 10, 8, 0, 360, on ? pal.gold : pal.dim);
   if (on) disc(ctx, cx, cy, 5, pal.gold);
 }
@@ -1948,7 +2098,7 @@ export class SideQuestPickModal {
     for (const e of chunk) {
       const on = e.id === this.selected;
       if (on) rect(ctx, 8, y, 456, S.ROW_H, pal.card_hi);
-      sqRadio(ctx, 30, y + 22, on);
+      pickRadio(ctx, 30, y + 22, on);
       textLeft(ctx, truncateText(e.name ?? "", BODY, S.NAME_MAX_W), 52, y + 13, BODY,
                on ? pal.tan : pal.muted);
       const pts = `${e.points ?? 0} pts`;

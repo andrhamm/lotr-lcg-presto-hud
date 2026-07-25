@@ -287,7 +287,7 @@ def test_firmware_resolves_pending_modals_before_the_draw():
     s = _src("main.py")
     draw_at = s.index("        if dirty:\n            if modal is not None:")
     for flag in ("pending_elim", "pending_quest_card", "pending_side_quest_pick",
-                 "pending_progress_detail"):
+                 "pending_location_pick", "pending_progress_detail"):
         at = s.index("game.%s" % flag)
         assert at < draw_at, (
             "%s is consumed after the draw - the screen underneath will flash"
@@ -296,8 +296,9 @@ def test_firmware_resolves_pending_modals_before_the_draw():
 
 def test_web_twin_holds_the_frame_while_a_modal_handoff_is_in_flight():
     s = _src("docs/js/main.js")
-    # The two async handoffs (both need a catalog fetch) must bracket
-    # themselves with modalPending, and the draw must honour it.
-    assert s.count("modalPending += 1") == 2
-    assert s.count("modalPending -= 1") == 2
+    # The three async handoffs (quest card, side-quest picker, location
+    # picker - each needs a catalog fetch) must bracket themselves with
+    # modalPending, and the draw must honour it.
+    assert s.count("modalPending += 1") == 3
+    assert s.count("modalPending -= 1") == 3
     assert "if (dirty && !(modalPending && !modal))" in s

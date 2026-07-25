@@ -282,3 +282,125 @@ def test_tips_for_returns_none_when_entry_has_no_content():
     tips = {"empty-quest": {"attribution": {"name": "X", "url": "http://x"},
                              "general": [], "stages": {}}}
     assert qc.tips_for("empty-quest", 1, tips) is None
+
+
+# Location picker - the union across a scenario's "sets to gather".
+#
+# A scenario's own scenarios/<slug>.json only carries cards whose
+# encounterSet IS that scenario's set, so its own file holds 2 of Passage
+# Through Mirkwood's 6 locations; the other 4 live in the two sets it
+# gathers. The fixture below is the REAL compiled data for those three sets
+# (docs/data/scenarios/{passage-through-mirkwood,dol-guldur-orcs,spiders-of-
+# mirkwood}.json, verified 2026-07-25), trimmed to the fields locations_for
+# reads - so the numbers this file asserts are the printed card values, not
+# invented ones.
+def _loc(name, qp, threat, encounter_set, card_id=None):
+    return {"id": card_id or qc.slugify(name), "name": name,
+            "encounterSet": encounter_set,
+            "faces": [{"name": name, "questPoints": qp, "threat": threat}]}
+
+
+PASSAGE = {"slug": "passage-through-mirkwood", "name": "Passage Through Mirkwood",
+           "includedSets": ["Dol Guldur Orcs", "Passage Through Mirkwood",
+                            "Spiders of Mirkwood"]}
+
+LOC_PACKS = {
+    "passage-through-mirkwood": {"encounter": {"location": [
+        _loc("Old Forest Road", 3, 1, "Passage Through Mirkwood"),
+        _loc("Forest Gate", 4, 2, "Passage Through Mirkwood"),
+    ]}},
+    "dol-guldur-orcs": {"encounter": {"location": [
+        _loc("Enchanted Stream", 2, 2, "Dol Guldur Orcs"),
+        _loc("Necromancer's Pass", 2, 3, "Dol Guldur Orcs"),
+    ]}},
+    "spiders-of-mirkwood": {"encounter": {"location": [
+        _loc("Great Forest Web", 2, 2, "Spiders of Mirkwood"),
+        _loc("Mountains of Mirkwood", 3, 2, "Spiders of Mirkwood"),
+    ]}},
+    # present in `packs` but NOT in Passage's gather list - must not leak in
+    "escape-from-dol-guldur": {"encounter": {"location": [
+        _loc("Dungeons of Dol Guldur", 3, 1, "Escape from Dol Guldur"),
+    ]}},
+}
+
+
+def test_location_set_slugs_is_the_gather_list_slugified():
+    assert qc.location_set_slugs(PASSAGE) == [
+        "dol-guldur-orcs", "passage-through-mirkwood", "spiders-of-mirkwood"]
+
+
+def test_location_set_slugs_falls_back_to_the_scenario_own_set():
+    # ~2/3 of quest scenarios have no gather list (the committed Hall of
+    # Beorn enrichment covers 108) - they still get their own set's cards.
+    assert qc.location_set_slugs({"slug": "some-quest"}) == ["some-quest"]
+    assert qc.location_set_slugs({"slug": "some-quest", "includedSets": []}) == ["some-quest"]
+
+
+def test_location_set_slugs_never_raises_on_junk():
+    assert qc.location_set_slugs(None) == []
+    assert qc.location_set_slugs({}) == []
+
+
+def test_locations_for_unions_across_the_gather_list():
+    # THE GATE for this feature: Passage resolves to its six real locations
+    # with the printed quest points and threat. A build regression that drops
+    # the union collapses this to the two cards in Passage's own file.
+    out = qc.locations_for(PASSAGE, LOC_PACKS)
+    assert [(l["name"], l["points"], l["threat"]) for l in out] == [
+        ("Enchanted Stream", 2, 2),
+        ("Forest Gate", 4, 2),
+        ("Great Forest Web", 2, 2),
+        ("Mountains of Mirkwood", 3, 2),
+        ("Necromancer's Pass", 2, 3),
+        ("Old Forest Road", 3, 1),
+    ]
+    assert out[0]["set"] == "Dol Guldur Orcs"
+
+
+def test_locations_for_ignores_packs_outside_the_gather_list():
+    names = [l["name"] for l in qc.locations_for(PASSAGE, LOC_PACKS)]
+    assert "Dungeons of Dol Guldur" not in names
+
+
+def test_locations_for_skips_gather_names_with_no_card_file():
+    # 14 of 309 gather-list entries resolve to no scenarios/<slug>.json -
+    # they drop out silently rather than raising or emitting a blank row.
+    scn = dict(PASSAGE, includedSets=PASSAGE["includedSets"] + ["No Such Set"])
+    assert len(qc.locations_for(scn, LOC_PACKS)) == 6
+
+
+def test_locations_for_dedupes_by_name_and_set():
+    packs = dict(LOC_PACKS)
+    packs["spiders-of-mirkwood"] = {"encounter": {"location": [
+        _loc("Great Forest Web", 2, 2, "Spiders of Mirkwood", card_id="a"),
+        _loc("Great Forest Web", 2, 2, "Spiders of Mirkwood", card_id="b"),
+    ]}}
+    names = [l["name"] for l in qc.locations_for(PASSAGE, packs)]
+    assert names.count("Great Forest Web") == 1
+
+
+def test_locations_for_defaults_null_points_and_threat_to_zero():
+    # 15 catalog locations carry a null questPoints on every face (variable
+    # or condition-explored cards) - they show 0 and the player edits it,
+    # same rule side_quests() uses for the variable "X" side quests.
+    packs = {"q": {"encounter": {"location": [_loc("Blind Alley", None, None, "Q")]}}}
+    out = qc.locations_for({"slug": "q"}, packs)
+    assert (out[0]["points"], out[0]["threat"]) == (0, 0)
+
+
+def test_locations_for_takes_the_first_non_null_face():
+    # 21 locations are multi-face; read the same way side_quests() does.
+    packs = {"q": {"encounter": {"location": [{
+        "id": "x", "name": "Two-sided", "encounterSet": "Q",
+        "faces": [{"questPoints": None, "threat": None},
+                  {"questPoints": 5, "threat": 4}]}]}}}
+    out = qc.locations_for({"slug": "q"}, packs)
+    assert (out[0]["points"], out[0]["threat"]) == (5, 4)
+
+
+def test_locations_for_returns_empty_when_there_are_no_locations():
+    # 3 of 154 quest scenarios gather no locations at all; the picker shows
+    # its manual stepper rather than an empty list.
+    assert qc.locations_for(PASSAGE, {}) == []
+    assert qc.locations_for({"slug": "q"}, {"q": {"encounter": {}}}) == []
+    assert qc.locations_for(None, LOC_PACKS) == []
