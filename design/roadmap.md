@@ -27,6 +27,12 @@ Web and firmware stay in lockstep. See [[design-review]] and [[stat-system]].
 2. **M2 · Phase clarity** — framework (red) / action-window (green) / stat model
    on every phase; threat-as-risk on Encounter & Combat; live willpower-vs-staging.
    *Done when* each phase answers: what happens, when can I act, what matters.
+   **Status: DONE.** A new `phase_block` primitive splits every phase view into a
+   red FRAMEWORK section (what happens automatically) and a green YOUR WINDOW
+   section (when you may act). Quest·Staging gained a live willpower-vs-staging
+   meter that names the resolution outcome; Encounter & Combat gained
+   threat-as-risk framing plus turn-order captions; Refresh projects each living
+   player's threat and flags a projection that crosses the danger threshold.
 3. **M3 · Speed** — inline threat −/+, direct willpower total, one-tap all-players;
    declutter commit. No tap-and-hold. *Done when* a common round hits a tap budget.
 4. **M4 · Quest awareness** — quest picker preloads stages/points + **encounter
@@ -81,6 +87,8 @@ Web and firmware stay in lockstep. See [[design-review]] and [[stat-system]].
   `docs/superpowers/specs/`.
 - **Pending ops:** push `feat/quest-picker` (local commits are unsigned — sign
   or re-sign before pushing), deploy `docs/data/` + firmware to the Presto, soak.
-- **Next milestone: M2 · Phase clarity** — framework (red) / action-window
-  (green) / stat model per phase; threat-as-risk on Encounter & Combat.
+- **Next milestone: M3 · Speed** — inline threat +/-, direct willpower total,
+  one-tap all-players, declutter commit. Planned in
+  `docs/superpowers/plans/2026-07-25-m3-speed.md`, which measures today's common
+  round at 29 taps and sets a 22-tap budget with an executable gate.
 - Mockups must be **device-faithful** (render via `tools/preview.py`), not HTML.
