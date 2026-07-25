@@ -33,11 +33,15 @@ Stage 3 is a **random split** (3A vs 3B) — coin toss.
 - No active location; nothing set aside. Does **not** scale with player count.
 
 > [!tip] Companion value — preload
-> Stage points are fixed: **1 = 8, 2 = 2, 3B = 10**. A quest picker could
+> Stage points: **1 = 8, 2 = 2**, and stage 3 depends on the branch —
+> **Beorn's Path = 10**, **"Don't Leave the Path!" = 0** (it is won by
+> defeating Ungoliant's Spawn, not by placing progress). A quest picker could
 > preload the stage/points so the player never types them. See [[quests|quest index]].
 
 > [!warning] Threat / engagement watch (the app tracks threat)
-> - **Hummerhorns** engage at **40** → deal 5 dmg to the engaged hero. Stay under 40.
+> - **Hummerhorns** engage at **40** → deal 5 dmg to **a single hero you
+>   control** (the attacker chooses — not necessarily the engaged one).
+>   Stay under 40.
 > - **Ungoliant's Spawn**: 32 eng, When Revealed −1 willpower; 9 HP / 5 atk / 2 def boss.
 > - **Chieftain Ufthak** (35 eng) snowballs +2 atk per resource token.
 
@@ -45,10 +49,10 @@ Stage 3 is a **random split** (3A vs 3B) — coin toss.
 | Enemy | Eng | Threat | Notes |
 |---|---|---|---|
 | Ungoliant's Spawn | 32 | 3 | boss; −1 wp When Revealed; 9/5/2 |
-| Hummerhorns | 40 | 2 | 5 dmg to engaged hero — avoid |
+| Hummerhorns | 40 | 1 | 5 dmg to a single hero you control (attacker picks) — avoid |
 | Chieftain Ufthak | 35 | 2 | +2 atk per resource, gains one each attack |
-| King Spider | 20 | 1 | exhausts a character When Revealed |
-| Forest Spider | 25 | 2 | +1 atk When Revealed |
+| King Spider | 20 | 2 | each player exhausts a character When Revealed |
+| Forest Spider | 25 | 2 | +1 atk after it engages (not When Revealed) |
 | Dol Guldur Orcs | 10 | 2 | 2 dmg to a questing character When Revealed |
 
 ## Locations
