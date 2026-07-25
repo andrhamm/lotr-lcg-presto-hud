@@ -7,7 +7,7 @@ import { ScreenPlay } from "./screen_play.js";
 import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
          LedModal, ScreenAbout, GameOverScreen, ScenarioSourceScreen,
          PickCycleScreen, ChooseScenarioScreen,
-         ScenarioOptionsScreen } from "./screens_other.js";
+         ScenarioOptionsScreen, FirstRunScreen, LegendScreen } from "./screens_other.js";
 import { EliminationModal, QuestCardModal, SideQuestPickModal,
          StageCompleteModal, ResolutionModal } from "./screens.js";
 import { loadIndex, loadScenario, cyclesFor, groupByCycle, loadPlayerSideQuests,
@@ -21,13 +21,13 @@ const clock = () => Math.floor(performance.now());
 // Pre-game screens with no live game to animate: LED/notification/elimination
 // per-tick housekeeping (below) is skipped while any of these is active.
 const PREGAME_ACTIVE = ["boot", "setup", "scenario_source", "pick_cycle",
-                        "choose_scenario", "scenario_options"];
+                        "choose_scenario", "scenario_options", "firstrun", "legend"];
 
 function loadPrefs() {
   try {
     const d = JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {};
     return { brightness: d.brightness ?? 100, scene: d.scene ?? "phase" };
-  } catch { return { brightness: 100, scene: "phase" }; }
+  } catch { return { brightness: 100, scene: "phase", seen_intro: false }; }
 }
 function savePrefs(prefs) { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }
 
@@ -100,13 +100,16 @@ function main() {
     boot: new BootScreen(savedMeta, bootImg),
     setup: new SetupScreen(),
     about: new ScreenAbout(),
+    firstrun: new FirstRunScreen(),
+    legend: new LegendScreen(),
+    legend: new LegendScreen(),
     gameover: new GameOverScreen(),
     scenario_source: new ScenarioSourceScreen(),
     pick_cycle: new PickCycleScreen("official", []),
     choose_scenario: new ChooseScenarioScreen("official", "", []),
     scenario_options: new ScenarioOptionsScreen({}, {}),
   };
-  let active = "boot";
+  let active = prefs.seen_intro ? "boot" : "firstrun";
   let navStack = [];
   let modal = null;
   let dirty = true;
@@ -176,7 +179,11 @@ function main() {
   async function handleResult(result) {
     if (Array.isArray(result)) {
       const kind = result[0];
-      if (kind === "goto") {
+      if (kind === "first_run_done") {
+        prefs.seen_intro = true;
+        savePrefs(prefs);
+        active = "boot";
+      } else if (kind === "goto") {
         let target = result[1];
         if (target === "close") target = navStack.pop() ?? "play";
         else if (["settings", "log", "phases", "about"].includes(target)) {

@@ -52,6 +52,11 @@ class ScreenSettings:
         y += 18
         self._app_tile(d, pal, 16, y, icons.LED, "LEDs", enabled=True)
         self.buttons.append(Button(("led",), 16, y, TILE, TILE))
+        hb = Button(("legend",), 16 + TILE + TILE_GAP, y, 232, TILE)
+        bevel(d, pal, hb.x, hb.y, hb.w, hb.h, pal.btn)
+        text_center(d, pal, "How to read this HUD", hb.x + 116, hb.y + TILE // 2 - 8,
+                    2, pal.tan)
+        self.buttons.append(hb)
 
         y += TILE + 24
         text_left(d, pal, "APPS  (coming soon)", 16, y, 1, pal.dim)
@@ -66,6 +71,9 @@ class ScreenSettings:
         if k == "nav":
             self.confirm_end = False
             return ("goto", btn.id[1])
+        if k == "legend":
+            self.confirm_end = False
+            return ("goto", "legend")
         if k == "led":
             from ui.modals import LedModal
             return ("modal", LedModal(self.prefs, game))

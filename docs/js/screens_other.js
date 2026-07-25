@@ -2,7 +2,7 @@
 // screen_boot.py, screen_setup.py, screen_quest.py + LedModal (virtual LED
 // strip on web).
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
-         stepper, truncateText, ribbon, disc, arcRuns, notePanel } from "./ui.js";
+         stepper, truncateText, ribbon, disc, arcRuns, notePanel, token } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { viewForStep, DEFAULT_START_THREAT, MAX_PLAYERS } from "./gamestate.js";
@@ -869,6 +869,103 @@ export class OptionListModal {
     const k = btn.id[0];
     if (k === "opt") { this.host[this.attr] = btn.id[1]; return "close"; }
     if (k === "done") return "close";
+    return null;
+  }
+}
+
+// --- M5 onboarding: first-run intro + HUD conventions legend ----------------
+// Mirror of ui/screen_firstrun.py - keep the two in lockstep. Each legend row
+// draws the actual primitive it explains, so the legend cannot drift from the UI.
+export const FIRSTRUN_PAGES = 3;
+
+export function drawLegendRows(ctx, y) {
+  const xIcon = 30, xText = 76;
+  icons.drawIcon(ctx, icons.THREAT, xIcon - 10, y - 10, pal.bevel_d);
+  icons.drawIcon(ctx, icons.THREAT, xIcon - 11, y - 11, pal.red);
+  textLeft(ctx, "your threat - enemies engage at/below it", xText, y - 8, 2, pal.tan);
+  y += 34;
+  icons.drawIcon(ctx, icons.THREAT, xIcon - 11, y - 11, pal.outline);
+  textLeft(ctx, "staging threat - what questing must beat", xText, y - 8, 2, pal.tan);
+  y += 34;
+  icons.drawIcon(ctx, icons.WILLPOWER, xIcon - 11, y - 11, pal.gold);
+  textLeft(ctx, "willpower committed to the quest", xText, y - 8, 2, pal.tan);
+  y += 34;
+  token(ctx, xIcon, y, 13, 2, 4, pal.value, 0.55, pal.gold, pal.dim);
+  textLeft(ctx, "ring = progress; number = points left", xText, y - 8, 2, pal.tan);
+  y += 34;
+  token(ctx, xIcon, y, 13, 2, 41, pal.value, 0.9, pal.red, pal.dim);
+  textLeft(ctx, "red ring = close to elimination", xText, y - 8, 2, pal.tan);
+  y += 34;
+  rect(ctx, xIcon - 12, y - 10, 4, 20, pal.red);
+  rect(ctx, xIcon + 2, y - 10, 4, 20, pal.green);
+  textLeft(ctx, "red = happens anyway; green = your window", xText, y - 8, 2, pal.tan);
+  return y + 30;
+}
+
+export class LegendScreen {
+  constructor() { this.buttons = []; }
+  draw(ctx, game) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    drawHeader(ctx, game, this.buttons, { title: "How to read this HUD", close: true });
+    drawLegendRows(ctx, HEADER_H + 34);
+  }
+  onButton(btn) {
+    if (btn.id[0] === "close" || btn.id[0] === "nav") return ["close"];
+    return null;
+  }
+}
+
+export class FirstRunScreen {
+  constructor() { this.page = 0; this.buttons = []; }
+  _body(ctx) {
+    let y = HEADER_H + 40;
+    const para = (title, lines) => {
+      textCenter(ctx, title, 240, y, 2, pal.gold);
+      y += 40;
+      for (const ln of lines) { textCenter(ctx, ln, 240, y, 2, pal.tan); y += 26; }
+    };
+    if (this.page === 0) {
+      para("A companion, not a rules engine",
+["This tracks threat, progress and the",
+         "turn sequence for you.", "",
+         "It never touches your cards - you still",
+         "play the game on the table."]);
+    } else if (this.page === 1) {
+      para("One screen per phase", ["Pick a quest, then follow the round.", "",
+         "The big button at the bottom always",
+         "moves you forward.", "",
+         "Tap the stats up top to edit them."]);
+    } else {
+      textCenter(ctx, "What the marks mean", 240, y, 2, pal.gold);
+      drawLegendRows(ctx, y + 36);
+    }
+  }
+  draw(ctx, game) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    drawHeader(ctx, game, this.buttons, { title: "Welcome", roundLabel: "R0" });
+    this._body(ctx);
+    if (this.page > 0) {
+      const b = new Button(["fr_back"], 12, 412, 140, 52);
+      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+      textCenter(ctx, "Back", b.x + 70, b.y + 16, 2, pal.tan);
+      this.buttons.push(b);
+    }
+    for (let i = 0; i < FIRSTRUN_PAGES; i++) {
+      disc(ctx, 240 + (i - 1) * 18, 438, 5, i === this.page ? pal.gold : pal.dim);
+    }
+    const last = this.page === FIRSTRUN_PAGES - 1;
+    const b = new Button([last ? "fr_done" : "fr_next"], 328, 412, 140, 52);
+    bevel(ctx, b.x, b.y, b.w, b.h, pal.btn_ok);
+    textCenter(ctx, last ? "Start" : "Next", b.x + 70, b.y + 16, 2, pal.ok_fg);
+    this.buttons.push(b);
+  }
+  onButton(btn) {
+    const k = btn.id[0];
+    if (k === "fr_next") { this.page = Math.min(FIRSTRUN_PAGES - 1, this.page + 1); return "redraw"; }
+    if (k === "fr_back") { this.page = Math.max(0, this.page - 1); return "redraw"; }
+    if (k === "fr_done") return ["first_run_done"];
     return null;
   }
 }

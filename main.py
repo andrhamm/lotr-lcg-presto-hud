@@ -22,18 +22,19 @@ from ui.screen_boot import BootScreen
 from ui.screen_setup import SetupScreen
 from ui.screen_gameover import GameOverScreen
 from ui.screen_about import ScreenAbout
+from ui.screen_firstrun import FirstRunScreen, LegendScreen
 from ui.screen_quest import (ScenarioSourceScreen, PickCycleScreen,
                               ChooseScenarioScreen, ScenarioOptionsScreen)
 import quest_catalog
 
 STATE_PATH = "/state.json"
 PREFS_PATH = "/device.json"
-DEFAULT_PREFS = {"brightness": 100, "scene": "phase"}
+DEFAULT_PREFS = {"brightness": 100, "scene": "phase", "seen_intro": False}
 
 # Pre-game screens with no live game to animate: LED/notification/elimination
 # per-tick housekeeping (below) is skipped while any of these is active.
 PREGAME_ACTIVE = ("boot", "setup", "scenario_source", "pick_cycle",
-                  "choose_scenario", "scenario_options")
+                  "choose_scenario", "scenario_options", "firstrun", "legend")
 
 
 def load_prefs():
@@ -41,7 +42,8 @@ def load_prefs():
         with open(PREFS_PATH) as f:
             d = json.load(f)
         return {"brightness": d.get("brightness", 100),
-                "scene": d.get("scene", "phase")}
+                "scene": d.get("scene", "phase"),
+                "seen_intro": d.get("seen_intro", False)}
     except Exception:
         return dict(DEFAULT_PREFS)
 
@@ -142,12 +144,14 @@ def main():
         "setup": SetupScreen(),
         "gameover": GameOverScreen(),
         "about": ScreenAbout(),
+        "firstrun": FirstRunScreen(),
+        "legend": LegendScreen(),
         "scenario_source": ScenarioSourceScreen(),
         "pick_cycle": PickCycleScreen("official", []),
         "choose_scenario": ChooseScenarioScreen("official", "", []),
         "scenario_options": ScenarioOptionsScreen({}, {}),
     }
-    active = "boot"
+    active = "firstrun" if not prefs.get("seen_intro") else "boot"
     nav_stack = []  # origins to return to when overlay screens (log/settings) close
     modal = None
     dirty = True
@@ -323,7 +327,11 @@ def main():
                     result = screens[active].on_button(b, game)
                     if isinstance(result, tuple):
                         kind = result[0]
-                        if kind == "goto":
+                        if kind == "first_run_done":
+                            prefs["seen_intro"] = True
+                            save_prefs(prefs)
+                            active = "boot"
+                        elif kind == "goto":
                             target = result[1]
                             if target == "close":
                                 target = nav_stack.pop() if nav_stack else "play"
