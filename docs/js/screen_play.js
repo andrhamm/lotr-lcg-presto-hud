@@ -1,7 +1,8 @@
 // Port of ui/screen_play.py — the guided round.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
          truncateText, ribbon, notePanel, phaseBlock, willpowerStagingMeter,
-         drawHeart, drawFlag, disc, arcRuns, wxSmall, token } from "./ui.js";
+         drawHeart, drawFlag, disc, arcRuns, wxSmall, token,
+         DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP } from "./gamestate.js";
@@ -63,7 +64,7 @@ export class ScreenPlay {
   _playersZone(ctx, game) {
     const pcx = [44, 92, 140, 188];
     const threatCy = ZONE_TOP + 40, willCy = ZONE_TOP + 72;
-    textCenter(ctx, "P", 18, ZONE_TOP + 2, 2, pal.muted);
+    textCenter(ctx, "P", 18, ZONE_TOP + 2, BODY, pal.muted);
     // player threat helm keeps its red identity (charcoal dropshadow)
     icons.drawIcon(ctx, icons.THREAT, 8, threatCy - 9, pal.bevel_d);
     icons.drawIcon(ctx, icons.THREAT, 7, threatCy - 10, pal.red);
@@ -72,9 +73,9 @@ export class ScreenPlay {
       const cx = pcx[i];
       if (i === game.first_player) {
         rect(ctx, cx - 12, ZONE_TOP - 2, 24, 19, pal.gold);
-        textCenter(ctx, String(i + 1), cx, ZONE_TOP + 1, 2, pal.bg, false);
+        textCenter(ctx, String(i + 1), cx, ZONE_TOP + 1, BODY, pal.bg, false);
       } else {
-        textCenter(ctx, String(i + 1), cx, ZONE_TOP + 1, 2, pal.tan);
+        textCenter(ctx, String(i + 1), cx, ZONE_TOP + 1, BODY, pal.tan);
       }
       const danger = p.threat >= p.elimination - 10;
       const tfrac = p.elimination > 0 ? p.threat / p.elimination : 0;
@@ -109,7 +110,7 @@ export class ScreenPlay {
     const allCols = cols.concat(sideCols.slice(0, sideBudget));
     allCols.forEach(([label, prog, pts], i) => {
       const cx = 230 + i * 32;
-      textCenter(ctx, label, cx, ZONE_TOP + 2, 2, pal.tan);
+      textCenter(ctx, label, cx, ZONE_TOP + 2, BODY, pal.tan);
       const rem = Math.max(0, pts - prog);
       const frac = pts > 0 ? prog / pts : 0;
       token(ctx, cx, ZONE_TOP + 40, 14, 2, rem, pal.value, frac, pal.gold, pal.dim);
@@ -124,14 +125,19 @@ export class ScreenPlay {
       });
       wxSmall(ctx, game.heading, scx, ZONE_TOP + 40, 6);
     }
-    textLeft(ctx, "quest points remaining", 214, ZONE_TOP + 66, 1, pal.dim);
+    // a rules caption (what the ring numeral means), not chrome - BODY.
+    // 210px at BODY inside the 258px zone, so it needs no re-layout.
+    textLeft(ctx, "quest points remaining", 214, ZONE_TOP + 66, BODY, pal.dim);
     this.buttons.push(new Button(["progress_detail"], 214, ZONE_TOP - 2, 258, 90));
   }
 
   _cta(ctx, label, id, fill = pal.btn_ok, fg = pal.gold) {
     const b = new Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H);
     bevel(ctx, b.x, b.y, b.w, b.h, fill, false, 3);
-    textCenter(ctx, label, 240, CTA_Y + 20, 2, fg);
+    // BODY, not DISPLAY: the longest label ("End round (raise threat, pass
+    // token)") measures 507px at DISPLAY against a 464px button, and the
+    // scale's own rule forbids shrinking prose to make it fit.
+    textCenter(ctx, label, 240, CTA_Y + 20, BODY, fg);
     this.buttons.push(b);
   }
 
@@ -155,7 +161,7 @@ export class ScreenPlay {
     bevel(ctx, b.x, b.y, b.w, b.h, allDone ? pal.card : pal.btn);
     const label = allDone ? "All players confirmed"
                           : `Confirm all commits (${done.length}/${living.length})`;
-    textCenter(ctx, label, 240, y + 12, 2, allDone ? pal.dim : pal.tan);
+    textCenter(ctx, label, 240, y + 12, BODY, allDone ? pal.dim : pal.tan);
     if (!allDone) this.buttons.push(b);
     return y + 48;
   }
@@ -163,20 +169,21 @@ export class ScreenPlay {
   // Live "current -> projected" threat per living player, flagged red when the
   // projected value crosses the same danger threshold _playersZone uses
   // (proj >= elimination - 10). Eliminated players are skipped: their threat is
-  // capped at their elimination level and does not keep rising. Height: 40.
+  // capped at their elimination level and does not keep rising. Height: 48
+  // (the caption is BODY, so the row below it sits 22px down, not 14px).
   _refreshThreatPreview(ctx, game, y) {
-    textLeft(ctx, "After +1 threat:", MARGIN + 4, y, 1, pal.dim);
+    textLeft(ctx, "After +1 threat:", MARGIN + 4, y, BODY, pal.dim);
     let x = MARGIN + 4;
-    const ly = y + 14;
+    const ly = y + 22;
     game.players.forEach((p, i) => {
       if (p.eliminated) return;
       const proj = p.threat + p.threat_per_round;
       const danger = proj >= p.elimination - 10;
       const seg = `P${i + 1} ${p.threat}->${proj}${danger ? "!" : ""}`;
-      textLeft(ctx, seg, x, ly, 2, danger ? pal.red : pal.value);
-      x += measureText(seg, 2) + 16;
+      textLeft(ctx, seg, x, ly, BODY, danger ? pal.red : pal.value);
+      x += measureText(seg, BODY) + 16;
     });
-    return 40;
+    return 48;
   }
 
   _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
@@ -188,7 +195,9 @@ export class ScreenPlay {
     defs.forEach(([label, val, pen, key, icon, ipen, shadow], idx) => {
       const x = MARGIN + idx * (half + MARGIN);
       panel(ctx, x, y, half, 84);
-      textCenter(ctx, label, x + half / 2, y + 6, 2, pal.muted);
+      textCenter(ctx, label, x + half / 2, y + 6, BODY, pal.muted);
+      // scale 4 is the numeral tier above DISPLAY - owned by this widget,
+      // never a reading size (docs/js/ui.js).
       const vw = measureText(String(val), 4);
       const gx = Math.floor(x + half / 2 - (vw + 8 + 28) / 2);
       textLeft(ctx, String(val), gx, y + 32, 4, pen, shadow);
@@ -198,7 +207,7 @@ export class ScreenPlay {
         const pl = new Button([key + "+"], x + half - 60, y + 30, 52, 44);
         for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
           bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-          textCenter(ctx, s, b.x + 26, b.y + 10, 3, pal.tan);
+          textCenter(ctx, s, b.x + 26, b.y + 10, DISPLAY, pal.tan);
           this.buttons.push(b);
         }
         if (key === "stg") this.buttons.push(new Button(["enc_rem"], x + 64, y, half - 128, 84));
@@ -209,14 +218,14 @@ export class ScreenPlay {
         // total entry for "wp", the staging counter for "stg").
         rect(ctx, x + 36, y + 8, 1, 56, pal.border);
         rect(ctx, x + half - 36, y + 8, 1, 56, pal.border);
-        textCenter(ctx, "-", x + 18, y + 32, 3, pal.tan);
-        textCenter(ctx, "+", x + half - 18, y + 32, 3, pal.tan);
+        textCenter(ctx, "-", x + 18, y + 32, DISPLAY, pal.tan);
+        textCenter(ctx, "+", x + half - 18, y + 32, DISPLAY, pal.tan);
         this.buttons.push(new Button([key + "-"], x, y, 36, 84));
         this.buttons.push(new Button([key], x + 36, y, half - 72, 84));
         this.buttons.push(new Button([key + "+"], x + half - 36, y, 36, 84));
         if (key === "stg") {
           textCenter(ctx, `+${game.stagingRevealEstimate()} reveal estimate`,
-                     x + half / 2, y + 64, 2, pal.dim);
+                     x + half / 2, y + 64, BODY, pal.dim);
         }
       }
     });
@@ -235,22 +244,22 @@ export class ScreenPlay {
     if (view === "setup_game") {
       const th = notePanel(ctx, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP);
       const y = 56 + th + 18;
-      textLeft(ctx, "Stage 1B quest points", MARGIN + 8, y + 16, 2, pal.tan);
+      textLeft(ctx, "Stage 1B quest points", MARGIN + 8, y + 16, BODY, pal.tan);
       const mn = new Button(["qp", -1], 300, y, 52, 48);
       const pl = new Button(["qp", 1], 412, y, 52, 48);
       for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
         bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-        textCenter(ctx, s, b.x + 26, b.y + 12, 3, pal.tan);
+        textCenter(ctx, s, b.x + 26, b.y + 12, DISPLAY, pal.tan);
         this.buttons.push(b);
       }
-      textCenter(ctx, String(game.quest.points), 382, y + 12, 3, pal.gold);
+      textCenter(ctx, String(game.quest.points), 382, y + 12, DISPLAY, pal.gold);
       const sy = y + 50;
-      textLeft(ctx, "Sailing quest", MARGIN + 8, sy + 11, 2, pal.tan);
+      textLeft(ctx, "Sailing quest", MARGIN + 8, sy + 11, BODY, pal.tan);
       icons.drawIcon(ctx, icons.WHEEL, 160, sy + 7,
                      game.sailing ? pal.gold : pal.dim);
       const sb = new Button(["sail_toggle"], 300, sy, 164, 38);
       panel(ctx, sb.x, sb.y, sb.w, sb.h, game.sailing ? pal.gold : pal.btn);
-      textCenter(ctx, game.sailing ? "On" : "Off", sb.x + 82, sb.y + 12, 2,
+      textCenter(ctx, game.sailing ? "On" : "Off", sb.x + 82, sb.y + 12, BODY,
                  game.sailing ? pal.bg : pal.tan, false);
       this.buttons.push(sb);
       this._cta(ctx, "Begin Round 1", ["advance"]);
@@ -284,7 +293,7 @@ export class ScreenPlay {
                               480 - 2 * MARGIN, 52);
         bevel(ctx, eb.x, eb.y, eb.w, eb.h, pal.btn);
         icons.drawIcon(ctx, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold);
-        textCenter(ctx, "Enable Sailing", 254, CONTENT_Y + 96 + 16, 2, pal.tan);
+        textCenter(ctx, "Enable Sailing", 254, CONTENT_Y + 96 + 16, BODY, pal.tan);
         this.buttons.push(eb);
         this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       } else {
@@ -297,20 +306,20 @@ export class ScreenPlay {
         const tx = MARGIN + 12 + gutt;
         let ly = ty0 + 8;
         const fp = `P${game.first_player + 1}`;
-        textLeft(ctx, fp, tx, ly, 2, pal.muted);
-        let sx0 = tx + measureText(fp, 2) + 6;
+        textLeft(ctx, fp, tx, ly, BODY, pal.muted);
+        let sx0 = tx + measureText(fp, BODY) + 6;
         ribbon(ctx, sx0, ly - 1, 10, 18);
         sx0 += 10 + 6;
-        textLeft(ctx, "exhausts characters (ships", sx0, ly, 2, pal.muted);
+        textLeft(ctx, "exhausts characters (ships", sx0, ly, BODY, pal.muted);
         ly += lh;
-        textLeft(ctx, "count), looks at and discards them.", tx, ly, 2, pal.muted);
+        textLeft(ctx, "count), looks at and discards them.", tx, ly, BODY, pal.muted);
         ly += lh;
         icons.drawIcon(ctx, icons.WHEEL_SM, tx, ly, pal.gold);
-        textLeft(ctx, "found: move 1 step on-course.", tx + 22, ly, 2, pal.muted);
+        textLeft(ctx, "found: move 1 step on-course.", tx + 22, ly, BODY, pal.muted);
         const sb = new Button(["sail_modal"], MARGIN, ty0 + th + 10, 480 - 2 * MARGIN, 52);
         bevel(ctx, sb.x, sb.y, sb.w, sb.h, pal.btn);
         icons.drawIcon(ctx, icons.WHEEL, 150, sb.y + 14, pal.gold);
-        textCenter(ctx, "Log sailing test", 262, sb.y + 16, 2, pal.tan);
+        textCenter(ctx, "Log sailing test", 262, sb.y + 16, BODY, pal.tan);
         this.buttons.push(sb);
         this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       }
@@ -363,7 +372,14 @@ export class ScreenPlay {
                        CONTENT_Y + Math.floor((bh - 20) / 2), flavor[1]);
       }
       if (PHASE_CAPTION[view]) {
-        textLeft(ctx, PHASE_CAPTION[view], MARGIN + 4, CONTENT_Y + bh + 10, 1, pal.dim);
+        // a rules caption: BODY, wrapped over as many lines as it needs
+        // (every one of these is 2 lines, ending by y=316).
+        const capW = 480 - 2 * (MARGIN + 4);
+        let cy = CONTENT_Y + bh + 10;
+        for (const ln of wrapText(PHASE_CAPTION[view], BODY, capW)) {
+          textLeft(ctx, ln, MARGIN + 4, cy, BODY, pal.dim);
+          cy += 24;
+        }
       }
       const i = VIEW_ORDER.indexOf(view);
       const nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
@@ -380,7 +396,7 @@ export class ScreenPlay {
       const usable = 480 - MARGIN - 48 - tx0;
       const lines = [];
       for (const [, s, c] of entries) {
-        for (const ln of wrapText(s, 2, usable)) lines.push([ln, c]);
+        for (const ln of wrapText(s, BODY, usable)) lines.push([ln, c]);
       }
       const th = Math.max(14 + 22 * lines.length, hasIcon ? 40 : 34);
       bevel(ctx, MARGIN, HEADER_H + 2, 480 - 2 * MARGIN, th, pal.card_hi, false, 2);
@@ -392,7 +408,7 @@ export class ScreenPlay {
       }
       let ty = HEADER_H + 9;
       for (const [s, c] of lines) {
-        textLeft(ctx, s, tx0, ty, 2, pal[c]);
+        textLeft(ctx, s, tx0, ty, BODY, pal[c]);
         ty += 22;
       }
       const cx = 480 - MARGIN - 22, cy = HEADER_H + 2 + Math.floor(th / 2), r = 11;
@@ -407,8 +423,8 @@ export class ScreenPlay {
     if (this.banner && this.banner[2] === view) {
       const [btextRaw, bkind] = this.banner;
       const bpen = { good: pal.green, bad: pal.red, mid: pal.amber }[bkind];
-      const btext = truncateText(btextRaw, 1, 480 - 2 * MARGIN);
-      textCenter(ctx, btext, 240, CTA_Y - 26, 1, bpen);
+      const btext = truncateText(btextRaw, BODY, 480 - 2 * MARGIN);
+      textCenter(ctx, btext, 240, CTA_Y - 26, BODY, bpen);
     }
   }
 
@@ -418,24 +434,27 @@ export class ScreenPlay {
     const card = game.stages[game.stage_idx].cards[game.card_idx];
     const aFace = card.faces.find(f => f.side === "A") ?? {};
     const stageLabel = `STAGE ${game.quest.stage_n}${game.quest.side}`;
-    textCenter(ctx, stageLabel, 240, CONTENT_Y, 2, pal.amber);
+    textCenter(ctx, stageLabel, 240, CONTENT_Y, BODY, pal.amber);
     const nameY = CONTENT_Y + 22;
-    const cardName = truncateText(aFace.name ?? "", 3, 480 - 2 * MARGIN);
-    textCenter(ctx, cardName, 240, nameY, 3, pal.gold);
+    const cardName = truncateText(aFace.name ?? "", DISPLAY, 480 - 2 * MARGIN);
+    textCenter(ctx, cardName, 240, nameY, DISPLAY, pal.gold);
 
     // Distinct scroll-style tip: a double gold frame + ribbon banner - UNLIKE
     // the standard notePanel() left-accent-bar style used elsewhere, since
     // this is the one moment that reads as "resolve this printed text now".
     const tipX = MARGIN, tipW = 480 - 2 * MARGIN, tipY = nameY + 30;
-    const ribbonH = 22, padTop = 10, lineH = 24, padBottom = 10, maxLines = 4;
+    // ribbonH is 28, not 22: its caption is BODY (16px tall) plus the 6px
+    // inset, and the banner has to hold the text rather than the text shrink
+    // to hold the banner.
+    const ribbonH = 28, padTop = 10, lineH = 24, padBottom = 10, maxLines = 4;
     const usable = tipW - 28;
     const raw = aFace.text;
     const body = (raw === null || raw === undefined || raw === "")
       ? "No setup instructions for this stage." : raw;
-    let lines = wrapText(body, 2, usable);
+    let lines = wrapText(body, BODY, usable);
     if (lines.length > maxLines) {
       lines = lines.slice(0, maxLines);
-      lines[maxLines - 1] = truncateText(`${lines[maxLines - 1]} ..`, 2, usable);
+      lines[maxLines - 1] = truncateText(`${lines[maxLines - 1]} ..`, BODY, usable);
     }
     const tipH = ribbonH + padTop + lines.length * lineH + padBottom;
     rect(ctx, tipX, tipY, tipW, tipH, pal.border_gold);
@@ -443,10 +462,10 @@ export class ScreenPlay {
     rect(ctx, tipX + 4, tipY + 4, tipW - 8, tipH - 8, pal.border_gold);
     rect(ctx, tipX + 6, tipY + 6, tipW - 12, tipH - 12, pal.scroll);
     rect(ctx, tipX, tipY, tipW, ribbonH, pal.border_gold);
-    textLeft(ctx, "QUEST SETUP - resolve now", tipX + 10, tipY + 6, 1, pal.bg, false);
+    textLeft(ctx, "QUEST SETUP - resolve now", tipX + 10, tipY + 6, BODY, pal.bg, false);
     let ly = tipY + ribbonH + padTop;
     for (const ln of lines) {
-      textLeft(ctx, ln, tipX + 14, ly, 2, pal.tan);
+      textLeft(ctx, ln, tipX + 14, ly, BODY, pal.tan);
       ly += lineH;
     }
 
@@ -454,7 +473,7 @@ export class ScreenPlay {
     // (no scenario loaded, nothing to show).
     const cardBtn = new Button(["open_card_modal"], MARGIN, 358, 480 - 2 * MARGIN, 44);
     bevel(ctx, cardBtn.x, cardBtn.y, cardBtn.w, cardBtn.h, pal.btn);
-    textCenter(ctx, "View quest card", 240, cardBtn.y + 14, 2, pal.tan);
+    textCenter(ctx, "View quest card", 240, cardBtn.y + 14, BODY, pal.tan);
     this.buttons.push(cardBtn);
 
     this._cta(ctx, `Flip to Side B  ->  ${card.questPoints} qp`, ["flip_to_b"]);
@@ -471,12 +490,12 @@ export class ScreenPlay {
     if (!loc) {
       const tb = new Button(["travel_new"], MARGIN, y, 480 - 2 * MARGIN, 56);
       bevel(ctx, tb.x, tb.y, tb.w, tb.h, pal.btn);
-      textCenter(ctx, "Travel to location", 240, y + 18, 2, pal.tan);
+      textCenter(ctx, "Travel to location", 240, y + 18, BODY, pal.tan);
       this.buttons.push(tb);
     } else {
       const cb = new Button(["travel_change"], MARGIN, y, 480 - 2 * MARGIN, 48);
       panel(ctx, cb.x, cb.y, cb.w, cb.h);
-      textCenter(ctx, "Replace location (card effect)", 240, y + 14, 2, pal.muted);
+      textCenter(ctx, "Replace location (card effect)", 240, y + 14, BODY, pal.muted);
       this.buttons.push(cb);
     }
     this._cta(ctx, `Next Phase: ${VIEW_LABELS.enc_optional}`, ["advance"]);
@@ -503,18 +522,19 @@ export class ScreenPlay {
       icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold);
       // line 1: outcome + a broken heart marking the failed quest
       const l1 = fail ? "Quest failed. " : "Quest unsuccessful - a tie. ";
-      textLeft(ctx, l1, tx, ty0 + 8, 2, pal.muted);
-      drawHeart(ctx, tx + measureText(l1, 2) + 8, ty0 + 8 + 8, 7, true, pal.red);
+      textLeft(ctx, l1, tx, ty0 + 8, BODY, pal.muted);
+      drawHeart(ctx, tx + measureText(l1, BODY) + 8, ty0 + 8 + 8, 7, true, pal.red);
       // line 2
       const y2 = ty0 + 8 + lh;
       if (fail) {
         const a = "Each player's ";
-        textLeft(ctx, a, tx, y2, 2, pal.muted);
-        const ax = tx + measureText(a, 2);
+        textLeft(ctx, a, tx, y2, BODY, pal.muted);
+        const ax = tx + measureText(a, BODY);
         icons.drawIcon(ctx, icons.THREAT_SM, ax, y2 - 1, pal.red);
-        textLeft(ctx, `rose by ${game.quest_outcome_n}.`, ax + icons.THREAT_SM[0] + 6, y2, 2, pal.muted);
+        textLeft(ctx, `rose by ${game.quest_outcome_n}.`, ax + icons.THREAT_SM[0] + 6, y2,
+                 BODY, pal.muted);
       } else {
-        textLeft(ctx, "No progress placed, no threat gained.", tx, y2, 2, pal.muted);
+        textLeft(ctx, "No progress placed, no threat gained.", tx, y2, BODY, pal.muted);
       }
       this._cta(ctx, `Next Phase: ${VIEW_LABELS.travel}`, ["advance"]);
       return;
@@ -532,7 +552,7 @@ export class ScreenPlay {
     const used = alloc.location + alloc.quest + alloc.side_quests.reduce((a, b) => a + b, 0);
     const discard = game.pending_budget - used;
 
-    textCenter(ctx, `Place ${game.pending_budget} progress`, 240, HEADER_H + 6, 3, pal.gold);
+    textCenter(ctx, `Place ${game.pending_budget} progress`, 240, HEADER_H + 6, DISPLAY, pal.gold);
 
     const rows = [];
     if (game.active_location) {
@@ -552,13 +572,18 @@ export class ScreenPlay {
 
     let hy = HEADER_H + 40;
     if (game.active_location) {
-      textCenter(ctx, "Location fills first, then the quest", 240, HEADER_H + 32, 1, pal.dim);
-      hy = HEADER_H + 50;
+      // rules caption -> BODY (334px of the 464 available). hy moves from +50
+      // to +56 to clear the taller line; the table below shifts 6px and still
+      // ends 38px clear of the CTA.
+      textCenter(ctx, "Location fills first, then the quest", 240, HEADER_H + 32,
+                 BODY, pal.dim);
+      hy = HEADER_H + 56;
     }
-    textLeft(ctx, "TARGET", 20, hy, 1, pal.dim);
-    textCenter(ctx, "WAS", cxWas, hy, 1, pal.dim);
-    textCenter(ctx, "PLACE", cxPlace, hy, 1, pal.dim);
-    textCenter(ctx, "GOAL", cxGoal, hy, 1, pal.dim);
+    // ALL-CAPS column heads over a dense table - LABEL is right here.
+    textLeft(ctx, "TARGET", 20, hy, LABEL, pal.dim);
+    textCenter(ctx, "WAS", cxWas, hy, LABEL, pal.dim);
+    textCenter(ctx, "PLACE", cxPlace, hy, LABEL, pal.dim);
+    textCenter(ctx, "GOAL", cxGoal, hy, LABEL, pal.dim);
 
     let y = hy + 12;
     for (const [key, idx, label, cur, pts] of rows) {
@@ -568,23 +593,23 @@ export class ScreenPlay {
       const locked = key === "location";                         // forced: fills first
       panel(ctx, MARGIN, y, rw, 52, done ? pal.card_hi : pal.card,
             done ? pal.border_gold : pal.border);
-      textLeft(ctx, label, 20, y + 16, 2, done ? pal.gold : pal.tan);
-      if (done) drawFlag(ctx, 20 + measureText(label, 2) + 8, y + 12, 20, pal.gold);
-      textCenter(ctx, String(cur), cxWas, y + 16, 2, pal.dim);   // WAS - read-only base
+      textLeft(ctx, label, 20, y + 16, BODY, done ? pal.gold : pal.tan);
+      if (done) drawFlag(ctx, 20 + measureText(label, BODY) + 8, y + 12, 20, pal.gold);
+      textCenter(ctx, String(cur), cxWas, y + 16, BODY, pal.dim);  // WAS - read-only base
       if (locked) {
         // display only: the location is filled first via the quest '+' cascade
-        textCenter(ctx, String(add), cxPlace, y + 10, 3, add > 0 ? pal.gold : pal.dim);
+        textCenter(ctx, String(add), cxPlace, y + 10, DISPLAY, add > 0 ? pal.gold : pal.dim);
       } else {
         const mn = new Button(["am", key, idx], mnX, y + 6, btnW, btnH);
         const pl = new Button(["ap", key, idx], plX, y + 6, btnW, btnH);
         for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
           bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-          textCenter(ctx, s, b.x + btnW / 2, b.y + 8, 3, pal.tan);
+          textCenter(ctx, s, b.x + btnW / 2, b.y + 8, DISPLAY, pal.tan);
           this.buttons.push(b);
         }
-        textCenter(ctx, String(add), cxPlace, y + 10, 3, add > 0 ? pal.gold : pal.dim);
+        textCenter(ctx, String(add), cxPlace, y + 10, DISPLAY, add > 0 ? pal.gold : pal.dim);
       }
-      textCenter(ctx, String(pts), cxGoal, y + 16, 2, pal.tan);  // GOAL - points needed
+      textCenter(ctx, String(pts), cxGoal, y + 16, BODY, pal.tan);  // GOAL - points needed
       // running total bar: (was + place) / goal
       this._bottomBar(ctx, MARGIN, rw, y + 52, pts > 0 ? result / pts : 0, pal.gold);
       y += 58;
@@ -592,14 +617,14 @@ export class ScreenPlay {
 
     if (discard > 0) {
       panel(ctx, MARGIN, y, rw, 44, pal.card);
-      textLeft(ctx, "Unplaced (discarded)", 20, y + 14, 2, pal.dim);
-      textCenter(ctx, String(discard), cxGoal, y + 8, 3, pal.red);
+      textLeft(ctx, "Unplaced (discarded)", 20, y + 14, BODY, pal.dim);
+      textCenter(ctx, String(discard), cxGoal, y + 8, DISPLAY, pal.red);
       y += 50;
     }
 
     const rb = new Button(["areset"], MARGIN, y + 2, rw, 38);
     bevel(ctx, rb.x, rb.y, rb.w, rb.h, pal.btn);
-    textCenter(ctx, "Reset", 240, y + 12, 2, pal.tan);
+    textCenter(ctx, "Reset", 240, y + 12, BODY, pal.tan);
     this.buttons.push(rb);
 
     this._cta(ctx, `Next Phase: ${VIEW_LABELS.travel}`, ["apply_alloc"]);

@@ -9,6 +9,7 @@ Mirror of docs/js/screen_play.js - keep the two in lockstep.
 
 from gamestate import VIEW_ORDER, VIEW_LABELS, SETUP_TIP
 from ui.header import draw_header, HEADER_H
+from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
                         note_panel, phase_block, willpower_staging_meter, wrap_text,
                         truncate_text, draw_heart, draw_flag, disc, arc_runs, token,
@@ -89,7 +90,7 @@ class ScreenPlay:
         halves win first (first-match-wins hit order)."""
         pcx = [44, 92, 140, 188]
         threat_cy, will_cy = ZONE_TOP + 40, ZONE_TOP + 72
-        text_center(d, pal, "P", 18, ZONE_TOP + 2, 2, pal.muted)
+        text_center(d, pal, "P", 18, ZONE_TOP + 2, BODY, pal.muted)
         # player threat helm keeps its red identity (charcoal dropshadow)
         icons.draw(d, icons.THREAT, 8, threat_cy - 9, pal.bevel_d)
         icons.draw(d, icons.THREAT, 7, threat_cy - 10, pal.red)
@@ -99,9 +100,9 @@ class ScreenPlay:
             if i == game.first_player:
                 d.set_pen(pal.gold)
                 d.rectangle(cx - 12, ZONE_TOP - 2, 24, 19)
-                text_center(d, pal, str(i + 1), cx, ZONE_TOP + 1, 2, pal.bg, shadow=False)
+                text_center(d, pal, str(i + 1), cx, ZONE_TOP + 1, BODY, pal.bg, shadow=False)
             else:
-                text_center(d, pal, str(i + 1), cx, ZONE_TOP + 1, 2, pal.tan)
+                text_center(d, pal, str(i + 1), cx, ZONE_TOP + 1, BODY, pal.tan)
             danger = p.threat >= p.elimination - 10
             tfrac = p.threat / p.elimination if p.elimination > 0 else 0
             token(d, pal, cx, threat_cy, 14, 2,
@@ -139,7 +140,7 @@ class ScreenPlay:
         all_cols = cols + side_cols[:side_budget]
         for i, (label, prog, pts) in enumerate(all_cols):
             cx = 230 + i * 32
-            text_center(d, pal, label, cx, ZONE_TOP + 2, 2, pal.tan)
+            text_center(d, pal, label, cx, ZONE_TOP + 2, BODY, pal.tan)
             rem = max(0, pts - prog)
             frac = prog / pts if pts > 0 else 0
             token(d, pal, cx, ZONE_TOP + 40, 14, 2, rem, pal.value, frac, pal.gold, pal.dim)
@@ -151,14 +152,20 @@ class ScreenPlay:
                 arc_runs(d, scx, ZONE_TOP + 40, 14, 11, a0, a1,
                          pal.dim if rank < game.heading else pal.gold)
             wx_small(d, pal, game.heading, scx, ZONE_TOP + 40, 6)
-        text_left(d, pal, "quest points remaining", 214, ZONE_TOP + 66, 1, pal.dim)
+        # a rules caption (what the ring numeral means), not chrome - BODY.
+        # 210px at BODY inside the 258px zone, so it needs no re-layout.
+        text_left(d, pal, "quest points remaining", 214, ZONE_TOP + 66, BODY, pal.dim)
         self.buttons.append(Button(("progress_detail",), 214, ZONE_TOP - 2, 258, 90))
 
     def _cta(self, d, pal, label, id, fill=None, fg=None):
         b = Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H)
         bevel(d, pal, b.x, b.y, b.w, b.h,
               fill if fill is not None else pal.btn_ok, t=3)
-        text_center(d, pal, label, 240, CTA_Y + 20, 2, fg if fg is not None else pal.gold)
+        # BODY, not DISPLAY: the longest label ("End round (raise threat, pass
+        # token)") measures 507px at DISPLAY against a 464px button, and the
+        # scale's own rule forbids shrinking prose to make it fit.
+        text_center(d, pal, label, 240, CTA_Y + 20, BODY,
+                    fg if fg is not None else pal.gold)
         self.buttons.append(b)
 
     def _bottom_bar(self, d, pal, x, w, bottom_y, frac, color):
@@ -179,7 +186,9 @@ class ScreenPlay:
                  icons.THREAT_MD, pal.outline, False))):
             x = MARGIN + idx * (half + MARGIN)
             panel(d, pal, x, y, half, 84, fill=pal.card)
-            text_center(d, pal, label, x + half / 2, y + 6, 2, pal.muted)
+            text_center(d, pal, label, x + half / 2, y + 6, BODY, pal.muted)
+            # scale 4 is the numeral tier above DISPLAY - owned by this widget,
+            # never a reading size (ui/theme.py).
             vw = d.measure_text(str(val), 4)
             gx = int(x + half / 2 - (vw + 8 + 28) / 2)
             text_left(d, pal, str(val), gx, y + 32, 4, pen, shadow=shadow)
@@ -189,7 +198,7 @@ class ScreenPlay:
                 pl = Button((key + "+",), x + half - 60, y + 30, 52, 44)
                 for b, s in ((mn, "-"), (pl, "+")):
                     bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-                    text_center(d, pal, s, b.x + 26, b.y + 10, 3, pal.tan)
+                    text_center(d, pal, s, b.x + 26, b.y + 10, DISPLAY, pal.tan)
                     self.buttons.append(b)
                 if key == "stg":
                     self.buttons.append(Button(("enc_rem",), x + 64, y, half - 128, 84))
@@ -202,14 +211,14 @@ class ScreenPlay:
                 d.set_pen(pal.border)
                 d.rectangle(x + 36, y + 8, 1, 56)
                 d.rectangle(x + half - 36, y + 8, 1, 56)
-                text_center(d, pal, "-", x + 18, y + 32, 3, pal.tan)
-                text_center(d, pal, "+", x + half - 18, y + 32, 3, pal.tan)
+                text_center(d, pal, "-", x + 18, y + 32, DISPLAY, pal.tan)
+                text_center(d, pal, "+", x + half - 18, y + 32, DISPLAY, pal.tan)
                 self.buttons.append(Button((key + "-",), x, y, 36, 84))
                 self.buttons.append(Button((key,), x + 36, y, half - 72, 84))
                 self.buttons.append(Button((key + "+",), x + half - 36, y, 36, 84))
                 if key == "stg":
                     text_center(d, pal, "+%d reveal estimate" % game.staging_reveal_estimate(),
-                                x + half / 2, y + 64, 2, pal.dim)
+                                x + half / 2, y + 64, BODY, pal.dim)
 
     # -- draw --------------------------------------------------------------
     def draw(self, hw, game, pal):
@@ -226,20 +235,20 @@ class ScreenPlay:
         if view == "setup_game":
             th = note_panel(d, pal, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP)
             y = 56 + th + 18
-            text_left(d, pal, "Stage 1B quest points", MARGIN + 8, y + 16, 2, pal.tan)
+            text_left(d, pal, "Stage 1B quest points", MARGIN + 8, y + 16, BODY, pal.tan)
             mn = Button(("qp", -1), 300, y, 52, 48)
             pl = Button(("qp", 1), 412, y, 52, 48)
             for b, s in ((mn, "-"), (pl, "+")):
                 bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-                text_center(d, pal, s, b.x + 26, b.y + 12, 3, pal.tan)
+                text_center(d, pal, s, b.x + 26, b.y + 12, DISPLAY, pal.tan)
                 self.buttons.append(b)
-            text_center(d, pal, str(game.quest["points"]), 382, y + 12, 3, pal.gold)
+            text_center(d, pal, str(game.quest["points"]), 382, y + 12, DISPLAY, pal.gold)
             sy = y + 50
-            text_left(d, pal, "Sailing quest", MARGIN + 8, sy + 11, 2, pal.tan)
+            text_left(d, pal, "Sailing quest", MARGIN + 8, sy + 11, BODY, pal.tan)
             icons.draw(d, icons.WHEEL, 160, sy + 7, pal.gold if game.sailing else pal.dim)
             sb = Button(("sail_toggle",), 300, sy, 164, 38)
             panel(d, pal, sb.x, sb.y, sb.w, sb.h, fill=pal.gold if game.sailing else pal.btn)
-            text_center(d, pal, "On" if game.sailing else "Off", sb.x + 82, sb.y + 12, 2,
+            text_center(d, pal, "On" if game.sailing else "Off", sb.x + 82, sb.y + 12, BODY,
                         pal.bg if game.sailing else pal.tan, shadow=False)
             self.buttons.append(sb)
             self._cta(d, pal, "Begin Round 1", ("advance",))
@@ -306,8 +315,13 @@ class ScreenPlay:
                 icons.draw(d, flavor[0], 480 - MARGIN - 34,
                            CONTENT_Y + (bh - 20) // 2, flavor[1])
             if PHASE_CAPTION.get(view):
-                text_left(d, pal, PHASE_CAPTION[view], MARGIN + 4,
-                          CONTENT_Y + bh + 10, 1, pal.dim)
+                # a rules caption: BODY, wrapped over as many lines as it needs
+                # (every one of these is 2 lines, ending by y=316).
+                cap_w = 480 - 2 * (MARGIN + 4)
+                cy = CONTENT_Y + bh + 10
+                for ln in wrap_text(PHASE_CAPTION[view], BODY, cap_w, d.measure_text):
+                    text_left(d, pal, ln, MARGIN + 4, cy, BODY, pal.dim)
+                    cy += 24
             i = VIEW_ORDER.index(view)
             nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
             self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS.get(nxt, nxt), ("advance",))
@@ -317,8 +331,8 @@ class ScreenPlay:
         if self.banner and self.banner[2] == view:
             btext, bkind = self.banner[0], self.banner[1]
             bpen = {"good": pal.green, "bad": pal.red, "mid": pal.amber}[bkind]
-            btext = truncate_text(btext, 1, 480 - 2 * MARGIN, d.measure_text)
-            text_center(d, pal, btext, 240, CTA_Y - 26, 1, bpen)
+            btext = truncate_text(btext, BODY, 480 - 2 * MARGIN, d.measure_text)
+            text_center(d, pal, btext, 240, CTA_Y - 26, BODY, bpen)
 
     def _draw_notif(self, d, pal):
         if not self.notif:
@@ -337,7 +351,7 @@ class ScreenPlay:
         usable = 480 - MARGIN - 48 - tx0
         lines = []
         for _ic, s, c in entries:
-            for ln in wrap_text(s, 2, usable, d.measure_text):
+            for ln in wrap_text(s, BODY, usable, d.measure_text):
                 lines.append((ln, c))
         th = max(14 + 22 * len(lines), 40 if has_icon else 34)
         bevel(d, pal, MARGIN, HEADER_H + 2, 480 - 2 * MARGIN, th, pal.card_hi, t=2)
@@ -349,7 +363,7 @@ class ScreenPlay:
                        HEADER_H + 2 + (th - 24) // 2, getattr(pal, first_c))
         ty = HEADER_H + 9
         for s, c in lines:
-            text_left(d, pal, s, tx0, ty, 2, getattr(pal, c))
+            text_left(d, pal, s, tx0, ty, BODY, getattr(pal, c))
             ty += 22
         cx, cy, r = 480 - MARGIN - 22, HEADER_H + 2 + th // 2, 11
         self.notif_pie = (cx, cy, r)
@@ -367,7 +381,7 @@ class ScreenPlay:
             eb = Button(("sail_toggle",), MARGIN, CONTENT_Y + 96, 480 - 2 * MARGIN, 52)
             bevel(d, pal, eb.x, eb.y, eb.w, eb.h, pal.btn)
             icons.draw(d, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold)
-            text_center(d, pal, "Enable Sailing", 254, CONTENT_Y + 96 + 16, 2, pal.tan)
+            text_center(d, pal, "Enable Sailing", 254, CONTENT_Y + 96 + 16, BODY, pal.tan)
             self.buttons.append(eb)
             self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_commit"], ("advance",))
             return
@@ -383,20 +397,20 @@ class ScreenPlay:
         tx = MARGIN + 12 + gutt
         ly = ty0 + 8
         fp = "P%d" % (game.first_player + 1)
-        text_left(d, pal, fp, tx, ly, 2, pal.muted)
-        sx0 = tx + d.measure_text(fp, 2) + 6
+        text_left(d, pal, fp, tx, ly, BODY, pal.muted)
+        sx0 = tx + d.measure_text(fp, BODY) + 6
         ribbon(d, pal, sx0, ly - 1, 10, 18)
         sx0 += 10 + 6
-        text_left(d, pal, "exhausts characters (ships", sx0, ly, 2, pal.muted)
+        text_left(d, pal, "exhausts characters (ships", sx0, ly, BODY, pal.muted)
         ly += lh
-        text_left(d, pal, "count), looks at and discards them.", tx, ly, 2, pal.muted)
+        text_left(d, pal, "count), looks at and discards them.", tx, ly, BODY, pal.muted)
         ly += lh
         icons.draw(d, icons.WHEEL_SM, tx, ly, pal.gold)
-        text_left(d, pal, "found: move 1 step on-course.", tx + 22, ly, 2, pal.muted)
+        text_left(d, pal, "found: move 1 step on-course.", tx + 22, ly, BODY, pal.muted)
         sb = Button(("sail_modal",), MARGIN, ty0 + th + 10, 480 - 2 * MARGIN, 52)
         bevel(d, pal, sb.x, sb.y, sb.w, sb.h, pal.btn)
         icons.draw(d, icons.WHEEL, 150, sb.y + 14, pal.gold)
-        text_center(d, pal, "Log sailing test", 262, sb.y + 16, 2, pal.tan)
+        text_center(d, pal, "Log sailing test", 262, sb.y + 16, BODY, pal.tan)
         self.buttons.append(sb)
         self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_commit"], ("advance",))
 
@@ -421,24 +435,28 @@ class ScreenPlay:
         card = game.stages[game.stage_idx]["cards"][game.card_idx]
         a_face = next((f for f in card["faces"] if f["side"] == "A"), {})
         stage_label = "STAGE %d%s" % (game.quest["stage_n"], game.quest["side"])
-        text_center(d, pal, stage_label, 240, CONTENT_Y, 2, pal.amber)
+        text_center(d, pal, stage_label, 240, CONTENT_Y, BODY, pal.amber)
         name_y = CONTENT_Y + 22
-        card_name = truncate_text(a_face.get("name") or "", 3, 480 - 2 * MARGIN, d.measure_text)
-        text_center(d, pal, card_name, 240, name_y, 3, pal.gold)
+        card_name = truncate_text(a_face.get("name") or "", DISPLAY, 480 - 2 * MARGIN,
+                                  d.measure_text)
+        text_center(d, pal, card_name, 240, name_y, DISPLAY, pal.gold)
 
         # Distinct scroll-style tip: a double gold frame + ribbon banner -
         # UNLIKE the standard note_panel() left-accent-bar style used
         # elsewhere, since this is the one moment that reads as "resolve
         # this printed text now".
         tip_x, tip_w, tip_y = MARGIN, 480 - 2 * MARGIN, name_y + 30
-        ribbon_h, pad_top, line_h, pad_bottom, max_lines = 22, 10, 24, 10, 4
+        # ribbon_h is 28, not 22: its caption is BODY (16px tall) plus the 6px
+        # inset, and the banner has to hold the text rather than the text
+        # shrink to hold the banner.
+        ribbon_h, pad_top, line_h, pad_bottom, max_lines = 28, 10, 24, 10, 4
         usable = tip_w - 28
         raw = a_face.get("text")
         body = raw if raw else "No setup instructions for this stage."
-        lines = wrap_text(body, 2, usable, measure=d.measure_text)
+        lines = wrap_text(body, BODY, usable, measure=d.measure_text)
         if len(lines) > max_lines:
             lines = lines[:max_lines]
-            lines[max_lines - 1] = truncate_text(lines[max_lines - 1] + " ..", 2, usable,
+            lines[max_lines - 1] = truncate_text(lines[max_lines - 1] + " ..", BODY, usable,
                                                  d.measure_text)
         tip_h = ribbon_h + pad_top + len(lines) * line_h + pad_bottom
         d.set_pen(pal.border_gold)
@@ -451,18 +469,18 @@ class ScreenPlay:
         d.rectangle(tip_x + 6, tip_y + 6, tip_w - 12, tip_h - 12)
         d.set_pen(pal.border_gold)
         d.rectangle(tip_x, tip_y, tip_w, ribbon_h)
-        text_left(d, pal, "QUEST SETUP - resolve now", tip_x + 10, tip_y + 6, 1, pal.bg,
+        text_left(d, pal, "QUEST SETUP - resolve now", tip_x + 10, tip_y + 6, BODY, pal.bg,
                   shadow=False)
         ly = tip_y + ribbon_h + pad_top
         for ln in lines:
-            text_left(d, pal, ln, tip_x + 14, ly, 2, pal.tan)
+            text_left(d, pal, ln, tip_x + 14, ly, BODY, pal.tan)
             ly += line_h
 
         # Read-only card modal (M4-B) - see on_button; null for custom games
         # (no scenario loaded, nothing to show).
         card_btn = Button(("open_card_modal",), MARGIN, 358, 480 - 2 * MARGIN, 44)
         bevel(d, pal, card_btn.x, card_btn.y, card_btn.w, card_btn.h, pal.btn)
-        text_center(d, pal, "View quest card", 240, card_btn.y + 14, 2, pal.tan)
+        text_center(d, pal, "View quest card", 240, card_btn.y + 14, BODY, pal.tan)
         self.buttons.append(card_btn)
 
         self._cta(d, pal, "Flip to Side B  ->  %d qp" % card["questPoints"], ("flip_to_b",))
@@ -479,7 +497,7 @@ class ScreenPlay:
         bevel(d, pal, b.x, b.y, b.w, b.h, pal.card if all_done else pal.btn)
         label = ("All players confirmed" if all_done else
                  "Confirm all commits (%d/%d)" % (len(done), len(living)))
-        text_center(d, pal, label, 240, y + 12, 2,
+        text_center(d, pal, label, 240, y + 12, BODY,
                     pal.dim if all_done else pal.tan)
         if not all_done:
             self.buttons.append(b)
@@ -490,19 +508,20 @@ class ScreenPlay:
         when the projected value crosses the same danger threshold
         _players_zone uses (proj >= elimination - 10). Eliminated players are
         skipped - their threat is capped at their elimination level and does
-        not keep rising. Fixed height: 40."""
-        text_left(d, pal, "After +1 threat:", MARGIN + 4, y, 1, pal.dim)
+        not keep rising. Fixed height: 48 (the caption is BODY, so the row
+        below it sits 22px down rather than 14px)."""
+        text_left(d, pal, "After +1 threat:", MARGIN + 4, y, BODY, pal.dim)
         x = MARGIN + 4
-        ly = y + 14
+        ly = y + 22
         for i, p in enumerate(game.players):
             if p.eliminated:
                 continue
             proj = p.threat + p.threat_per_round
             danger = proj >= p.elimination - 10
             seg = "P%d %d->%d%s" % (i + 1, p.threat, proj, "!" if danger else "")
-            text_left(d, pal, seg, x, ly, 2, pal.red if danger else pal.value)
-            x += d.measure_text(seg, 2) + 16
-        return 40
+            text_left(d, pal, seg, x, ly, BODY, pal.red if danger else pal.value)
+            x += d.measure_text(seg, BODY) + 16
+        return 48
 
     def _draw_travel(self, d, pal, game):
         loc = game.active_location
@@ -514,12 +533,12 @@ class ScreenPlay:
         if loc is None:
             tb = Button(("travel_new",), MARGIN, y, 480 - 2 * MARGIN, 56)
             bevel(d, pal, tb.x, tb.y, tb.w, tb.h, pal.btn)
-            text_center(d, pal, "Travel to location", 240, y + 18, 2, pal.tan)
+            text_center(d, pal, "Travel to location", 240, y + 18, BODY, pal.tan)
             self.buttons.append(tb)
         else:
             cb = Button(("travel_change",), MARGIN, y, 480 - 2 * MARGIN, 48)
             panel(d, pal, cb.x, cb.y, cb.w, cb.h, fill=pal.card)
-            text_center(d, pal, "Replace location (card effect)", 240, y + 14, 2, pal.muted)
+            text_center(d, pal, "Replace location (card effect)", 240, y + 14, BODY, pal.muted)
             self.buttons.append(cb)
         self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["enc_optional"], ("advance",))
 
@@ -545,18 +564,19 @@ class ScreenPlay:
             d.rectangle(MARGIN, ty0, 4, th)
             icons.draw(d, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold)
             l1 = "Quest failed. " if fail else "Quest unsuccessful - a tie. "
-            text_left(d, pal, l1, tx, ty0 + 8, 2, pal.muted)
-            draw_heart(d, pal, tx + d.measure_text(l1, 2) + 8, ty0 + 8 + 8, 7, True, pal.red)
+            text_left(d, pal, l1, tx, ty0 + 8, BODY, pal.muted)
+            draw_heart(d, pal, tx + d.measure_text(l1, BODY) + 8, ty0 + 8 + 8, 7, True, pal.red)
             y2 = ty0 + 8 + lh
             if fail:
                 a = "Each player's "
-                text_left(d, pal, a, tx, y2, 2, pal.muted)
-                ax = tx + d.measure_text(a, 2)
+                text_left(d, pal, a, tx, y2, BODY, pal.muted)
+                ax = tx + d.measure_text(a, BODY)
                 icons.draw(d, icons.THREAT_SM, ax, y2 - 1, pal.red)
                 text_left(d, pal, "rose by %d." % game.quest_outcome_n,
-                          ax + len(icons.THREAT_SM) + 6, y2, 2, pal.muted)
+                          ax + len(icons.THREAT_SM) + 6, y2, BODY, pal.muted)
             else:
-                text_left(d, pal, "No progress placed, no threat gained.", tx, y2, 2, pal.muted)
+                text_left(d, pal, "No progress placed, no threat gained.", tx, y2, BODY,
+                          pal.muted)
             self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["travel"], ("advance",))
             return
 
@@ -574,7 +594,8 @@ class ScreenPlay:
         used = alloc["location"] + alloc["quest"] + sum(alloc["side_quests"])
         discard = game.pending_budget - used
 
-        text_center(d, pal, "Place %d progress" % game.pending_budget, 240, HEADER_H + 6, 3, pal.gold)
+        text_center(d, pal, "Place %d progress" % game.pending_budget, 240, HEADER_H + 6,
+                    DISPLAY, pal.gold)
 
         rows = []
         if game.active_location is not None:
@@ -591,12 +612,17 @@ class ScreenPlay:
 
         hy = HEADER_H + 40
         if game.active_location is not None:
-            text_center(d, pal, "Location fills first, then the quest", 240, HEADER_H + 32, 1, pal.dim)
-            hy = HEADER_H + 50
-        text_left(d, pal, "TARGET", 20, hy, 1, pal.dim)
-        text_center(d, pal, "WAS", cx_was, hy, 1, pal.dim)
-        text_center(d, pal, "PLACE", cx_place, hy, 1, pal.dim)
-        text_center(d, pal, "GOAL", cx_goal, hy, 1, pal.dim)
+            # rules caption -> BODY (334px of the 464 available). hy moves from
+            # +50 to +56 to clear the taller line; the table below shifts 6px
+            # and still ends 38px clear of the CTA.
+            text_center(d, pal, "Location fills first, then the quest", 240, HEADER_H + 32,
+                        BODY, pal.dim)
+            hy = HEADER_H + 56
+        # ALL-CAPS column heads over a dense table - LABEL is right here.
+        text_left(d, pal, "TARGET", 20, hy, LABEL, pal.dim)
+        text_center(d, pal, "WAS", cx_was, hy, LABEL, pal.dim)
+        text_center(d, pal, "PLACE", cx_place, hy, LABEL, pal.dim)
+        text_center(d, pal, "GOAL", cx_goal, hy, LABEL, pal.dim)
 
         y = hy + 12
         for key, idx, label, cur, pts in rows:
@@ -607,33 +633,35 @@ class ScreenPlay:
             panel(d, pal, MARGIN, y, rw, 52,
                   fill=pal.card_hi if done else pal.card,
                   border=pal.border_gold if done else pal.border)
-            text_left(d, pal, label, 20, y + 16, 2, pal.gold if done else pal.tan)
+            text_left(d, pal, label, 20, y + 16, BODY, pal.gold if done else pal.tan)
             if done:
-                draw_flag(d, 20 + d.measure_text(label, 2) + 8, y + 12, 20, pal.gold)
-            text_center(d, pal, str(cur), cx_was, y + 16, 2, pal.dim)
+                draw_flag(d, 20 + d.measure_text(label, BODY) + 8, y + 12, 20, pal.gold)
+            text_center(d, pal, str(cur), cx_was, y + 16, BODY, pal.dim)
             if locked:
-                text_center(d, pal, str(add), cx_place, y + 10, 3, pal.gold if add > 0 else pal.dim)
+                text_center(d, pal, str(add), cx_place, y + 10, DISPLAY,
+                            pal.gold if add > 0 else pal.dim)
             else:
                 mn = Button(("am", key, idx), mn_x, y + 6, btn_w, btn_h)
                 pl = Button(("ap", key, idx), pl_x, y + 6, btn_w, btn_h)
                 for b, s in ((mn, "-"), (pl, "+")):
                     bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-                    text_center(d, pal, s, b.x + btn_w / 2, b.y + 8, 3, pal.tan)
+                    text_center(d, pal, s, b.x + btn_w / 2, b.y + 8, DISPLAY, pal.tan)
                     self.buttons.append(b)
-                text_center(d, pal, str(add), cx_place, y + 10, 3, pal.gold if add > 0 else pal.dim)
-            text_center(d, pal, str(pts), cx_goal, y + 16, 2, pal.tan)
+                text_center(d, pal, str(add), cx_place, y + 10, DISPLAY,
+                            pal.gold if add > 0 else pal.dim)
+            text_center(d, pal, str(pts), cx_goal, y + 16, BODY, pal.tan)
             self._bottom_bar(d, pal, MARGIN, rw, y + 52, result / pts if pts > 0 else 0, pal.gold)
             y += 58
 
         if discard > 0:
             panel(d, pal, MARGIN, y, rw, 44, fill=pal.card)
-            text_left(d, pal, "Unplaced (discarded)", 20, y + 14, 2, pal.dim)
-            text_center(d, pal, str(discard), cx_goal, y + 8, 3, pal.red)
+            text_left(d, pal, "Unplaced (discarded)", 20, y + 14, BODY, pal.dim)
+            text_center(d, pal, str(discard), cx_goal, y + 8, DISPLAY, pal.red)
             y += 50
 
         rb = Button(("areset",), MARGIN, y + 2, rw, 38)
         bevel(d, pal, rb.x, rb.y, rb.w, rb.h, pal.btn)
-        text_center(d, pal, "Reset", 240, y + 12, 2, pal.tan)
+        text_center(d, pal, "Reset", 240, y + 12, BODY, pal.tan)
         self.buttons.append(rb)
 
         self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["travel"], ("apply_alloc",))
