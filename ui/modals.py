@@ -24,9 +24,9 @@ def _footer(d, pal, buttons, save_label="Save"):
     no = Button(("cancel",), 24, CANCEL_Y, 200, BTN_H)
     ok = Button(("save",), 256, CANCEL_Y, 200, BTN_H)
     bevel(d, pal, no.x, no.y, no.w, no.h, pal.btn_no, t=3)
-    text_center(d, pal, "Cancel", no.x + no.w / 2, no.y + 20, 2, pal.no_fg)
+    text_center(d, pal, "Cancel", no.x + no.w / 2, no.y + 20, BODY, pal.no_fg)
     bevel(d, pal, ok.x, ok.y, ok.w, ok.h, pal.btn_ok, t=3)
-    text_center(d, pal, save_label, ok.x + ok.w / 2, ok.y + 20, 2, pal.ok_fg)
+    text_center(d, pal, save_label, ok.x + ok.w / 2, ok.y + 20, BODY, pal.ok_fg)
     buttons.append(no)
     buttons.append(ok)
 
@@ -46,20 +46,20 @@ class PlayerSettingsModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "P%d settings" % (self.i + 1), 240, 24, 3, pal.gold)
+        text_center(d, pal, "P%d settings" % (self.i + 1), 240, 24, DISPLAY, pal.gold)
 
         icons.draw(d, icons.THREAT, 30, 92, pal.red)
-        text_left(d, pal, "Starting threat", 58, 96, 2, pal.tan)
+        text_left(d, pal, "Starting threat", 58, 96, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("st", -1), ("st", 1), 260, 82, str(self.st), 190, 56)
 
         icons.draw(d, icons.THREAT, 30, 172, pal.red)
-        text_left(d, pal, "Threat / round", 58, 176, 2, pal.tan)
+        text_left(d, pal, "Threat / round", 58, 176, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("tpr", -1), ("tpr", 1), 260, 162, str(self.tpr), 190, 56)
 
         icons.draw(d, icons.THREAT, 30, 252, pal.red)
-        text_left(d, pal, "Elimination level", 58, 256, 2, pal.tan)
+        text_left(d, pal, "Elimination level", 58, 256, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("el", -1), ("el", 1), 260, 242, str(self.elim), 190, 56)
-        text_left(d, pal, "eliminated when threat reaches this (50 std)", 30, 306, 1, pal.dim)
+        text_left(d, pal, "eliminated when threat reaches this (50 std)", 30, 306, BODY, pal.dim)
 
         _footer(d, pal, self.buttons)
 
@@ -102,29 +102,29 @@ class QuestConfigModal:
         d.set_pen(pal.bg)
         d.clear()
         text_center(d, pal, "Quest  %d%s" % (self.q["stage_n"], self.q["side"]),
-                    240, 24, 3, pal.gold)
+                    240, 24, DISPLAY, pal.gold)
 
-        text_left(d, pal, "Stage number", 30, 84, 2, pal.tan)
+        text_left(d, pal, "Stage number", 30, 84, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("n", -1), ("n", 1), 300, 70, str(self.q["stage_n"]), 150, 52)
 
         # side cycles A-H (multi-variant quests go beyond A/B - DragnCards data)
-        text_left(d, pal, "Side", 30, 156, 2, pal.tan)
+        text_left(d, pal, "Side", 30, 156, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("side", -1), ("side", 1), 300, 142, self.q["side"], 150, 52)
 
-        text_left(d, pal, "Quest points", 30, 228, 2, pal.tan)
+        text_left(d, pal, "Quest points", 30, 228, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 300, 214, str(self.q["points"]), 150, 52)
 
-        text_left(d, pal, "Sailing quest", 30, 296, 2, pal.tan)
+        text_left(d, pal, "Sailing quest", 30, 296, BODY, pal.tan)
         icons.draw(d, icons.WHEEL, 176, 292, pal.gold if self.sail else pal.dim)
         sb = Button(("sail",), 300, 284, 150, 48)
         panel(d, pal, sb.x, sb.y, sb.w, sb.h, fill=pal.gold if self.sail else pal.btn)
-        text_center(d, pal, "On" if self.sail else "Off", sb.x + 75, sb.y + 14, 2,
+        text_center(d, pal, "On" if self.sail else "Off", sb.x + 75, sb.y + 14, BODY,
                     pal.bg if self.sail else pal.tan, shadow=False)
         self.buttons.append(sb)
 
         adv = Button(("adv",), 30, 344, 420, 48)
         bevel(d, pal, adv.x, adv.y, adv.w, adv.h, pal.btn)
-        text_center(d, pal, "Advance stage (progress -> 0)", adv.x + adv.w / 2, adv.y + 14, 2, pal.tan)
+        text_center(d, pal, "Advance stage (progress -> 0)", adv.x + adv.w / 2, adv.y + 14, BODY, pal.tan)
         self.buttons.append(adv)
 
         _footer(d, pal, self.buttons)
@@ -181,17 +181,17 @@ class LocationConfigModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "Active Location", 240, 24, 3, pal.gold)
+        text_center(d, pal, "Active Location", 240, 24, DISPLAY, pal.gold)
         state = "%d / %d" % (self.prog, self.pts) if self.has else "none"
-        text_center(d, pal, state, 240, 80, 3, pal.tan if self.has else pal.dim)
+        text_center(d, pal, state, 240, 80, DISPLAY, pal.tan if self.has else pal.dim)
 
-        text_left(d, pal, "Quest points", 30, 168, 2, pal.tan)
+        text_left(d, pal, "Quest points", 30, 168, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 260, 154, str(self.pts), 190, 56)
 
         none_b = Button(("none",), 30, 250, 420, 56)
         panel(d, pal, none_b.x, none_b.y, none_b.w, none_b.h, fill=pal.btn_no, border=pal.no_fg)
         text_center(d, pal, "Set none (no active location)", none_b.x + none_b.w / 2,
-                    none_b.y + 18, 2, pal.no_fg)
+                    none_b.y + 18, BODY, pal.no_fg)
         self.buttons.append(none_b)
 
         _footer(d, pal, self.buttons)
@@ -223,32 +223,32 @@ class SideQuestsModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "Side quests", 240, 22, 3, pal.gold)
+        text_center(d, pal, "Side quests", 240, 22, DISPLAY, pal.gold)
         sq = self.game.side_quests
         if not sq:
-            text_center(d, pal, "none", 240, 90, 3, pal.dim)
+            text_center(d, pal, "none", 240, 90, DISPLAY, pal.dim)
         y = 70
         for i, s in enumerate(sq):
             panel(d, pal, 24, y, 432, 56, fill=pal.card)
-            text_left(d, pal, "SQ%d  %d/%d" % (i + 1, s["progress"], s["points"]), 36, y + 18, 2, pal.tan)
+            text_left(d, pal, "SQ%d  %d/%d" % (i + 1, s["progress"], s["points"]), 36, y + 18, BODY, pal.tan)
             mn = Button(("pts", i, -1), 250, y + 6, 44, 44)
             pl = Button(("pts", i, 1), 302, y + 6, 44, 44)
             rm = Button(("rm", i), 400, y + 6, 44, 44)
-            button(d, pal, mn, "-", 3)
-            button(d, pal, pl, "+", 3)
+            button(d, pal, mn, "-", DISPLAY)
+            button(d, pal, pl, "+", DISPLAY)
             panel(d, pal, rm.x, rm.y, rm.w, rm.h, fill=pal.btn_no, border=pal.no_fg)
-            text_center(d, pal, "x", rm.x + rm.w / 2, rm.y + 10, 3, pal.no_fg)
+            text_center(d, pal, "x", rm.x + rm.w / 2, rm.y + 10, DISPLAY, pal.no_fg)
             self.buttons.extend([mn, pl, rm])
             y += 62
 
         add = Button(("add",), 24, min(y, 320), 432, 52)
         panel(d, pal, add.x, add.y, add.w, add.h, fill=pal.btn)
-        text_center(d, pal, "+ Add side quest", add.x + add.w / 2, add.y + 16, 2, pal.tan)
+        text_center(d, pal, "+ Add side quest", add.x + add.w / 2, add.y + 16, BODY, pal.tan)
         self.buttons.append(add)
 
         done = Button(("save",), 24, CANCEL_Y, 432, BTN_H)
         panel(d, pal, done.x, done.y, done.w, done.h, fill=pal.btn_ok, border=pal.ok_fg)
-        text_center(d, pal, "Done", done.x + done.w / 2, done.y + 20, 2, pal.ok_fg)
+        text_center(d, pal, "Done", done.x + done.w / 2, done.y + 20, BODY, pal.ok_fg)
         self.buttons.append(done)
 
     def on_button(self, btn):
@@ -330,17 +330,17 @@ class PlayersDetailModal:
         from ui.header import modal_header
         modal_header(d, pal, game, "Players", self.buttons)
         threat_x, will_x, label_x = 150, 330, 32
-        text_center(d, pal, "Threat", threat_x, 46, 1, pal.dim)
-        text_center(d, pal, "Willpower", will_x, 46, 1, pal.dim)
+        text_center(d, pal, "THREAT", threat_x, 46, LABEL, pal.dim)
+        text_center(d, pal, "WILLPOWER", will_x, 46, LABEL, pal.dim)
         for i, p in enumerate(game.players):
             cy = 66 + i * 56
             label = "P%d" % (i + 1)
             if i == game.first_player:
                 d.set_pen(pal.gold)
                 d.rectangle(label_x - 18, cy - 11, 36, 22)
-                text_center(d, pal, label, label_x, cy - 8, 2, pal.bg, shadow=False)
+                text_center(d, pal, label, label_x, cy - 8, BODY, pal.bg, shadow=False)
             else:
-                text_center(d, pal, label, label_x, cy - 8, 2, pal.tan)
+                text_center(d, pal, label, label_x, cy - 8, BODY, pal.tan)
             danger = p.threat >= p.elimination - 10
             tfrac = p.threat / p.elimination if p.elimination > 0 else 0
             self._editor_row(d, pal, i, "t", threat_x, cy, p.threat, tfrac,
@@ -353,17 +353,17 @@ class PlayersDetailModal:
         title = "P%d %s" % (i + 1, "Threat" if is_threat else "Willpower")
         mask = icons.THREAT if is_threat else icons.WILLPOWER
         pen = pal.red if is_threat else pal.gold
-        w = d.measure_text(title, 3)
+        w = d.measure_text(title, DISPLAY)
         ix = int(240 - w / 2 - 30)
         icons.draw(d, mask, ix, 30, pen)
-        text_center(d, pal, title, 240 + 12, 28, 3, pal.gold)
+        text_center(d, pal, title, 240 + 12, 28, DISPLAY, pal.gold)
 
         val = state.preview
         text_center(d, pal, str(val), 240, 90, 9, pal.gold)
         if state.pending:
             dlt = state.delta
-            text_center(d, pal, "%d  ->  %d" % (state.value, val), 240, 190, 2, pal.muted)
-            text_center(d, pal, "%s%d" % ("+" if dlt >= 0 else "", dlt), 240, 216, 3,
+            text_center(d, pal, "%d  ->  %d" % (state.value, val), 240, 190, BODY, pal.muted)
+            text_center(d, pal, "%s%d" % ("+" if dlt >= 0 else "", dlt), 240, 216, DISPLAY,
                         pal.green if dlt >= 0 else pal.red)
 
         bw, bh, gap = 104, 76, 8
@@ -371,7 +371,7 @@ class PlayersDetailModal:
         for k, (step, label) in enumerate(self.STEPS):
             b = Button(("step", step), x0 + k * (bw + gap), 250, bw, bh)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn, t=3)
-            text_center(d, pal, label, b.x + b.w / 2, b.y + 26, 3, pal.tan)
+            text_center(d, pal, label, b.x + b.w / 2, b.y + 26, DISPLAY, pal.tan)
             self.buttons.append(b)
 
         no = Button(("back",), 24, 360, 200, 92)
@@ -448,16 +448,20 @@ class RemindersModal:
             if on:
                 d.set_pen(pal.ok_fg)
                 d.rectangle(36, y + 23, 16, 16)
-            text_left(d, pal, label, 76, y + 12, 2, pal.tan if on else pal.muted)
+            text_left(d, pal, label, 76, y + 12, BODY, pal.tan if on else pal.muted)
             from ui.header import VIEW_LABEL
+            # "At <view>", not "Notifies at <view>": at BODY the archery row
+            # ("Combat (Shadow Cards)" plus the staging condition) runs 22px
+            # past the row at the longer wording. Shortening the copy is the
+            # fix; shrinking the caption is not (see the design system spec).
             if key == "archery":
-                part1 = "Notifies at %s if staging " % VIEW_LABEL.get(view, view)
-                w1 = d.measure_text(part1, 1)
-                text_left(d, pal, part1, 76, y + 38, 1, pal.dim)
-                icons.draw(d, icons.THREAT_SM, 76 + w1 + 2, y + 35, pal.dim)
-                text_left(d, pal, "> 0", 76 + w1 + 18, y + 38, 1, pal.dim)
+                part1 = "At %s if staging " % VIEW_LABEL.get(view, view)
+                w1 = d.measure_text(part1, BODY)
+                text_left(d, pal, part1, 76, y + 38, BODY, pal.dim)
+                icons.draw(d, icons.THREAT_SM, 76 + w1 + 2, y + 38, pal.dim)
+                text_left(d, pal, "> 0", 76 + w1 + 18, y + 38, BODY, pal.dim)
             else:
-                text_left(d, pal, "Notifies at %s" % VIEW_LABEL.get(view, view), 76, y + 38, 1, pal.dim)
+                text_left(d, pal, "At %s" % VIEW_LABEL.get(view, view), 76, y + 38, BODY, pal.dim)
             self.buttons.append(row)
             y += 70
 
@@ -515,7 +519,7 @@ class CommitModal:
         d.set_pen(pal.bg)
         d.clear()
 
-        text_center(d, pal, "P%d quests for..." % (self.idx + 1), 240, 28, 3, pal.gold)
+        text_center(d, pal, "P%d quests for..." % (self.idx + 1), 240, 28, DISPLAY, pal.gold)
 
         # big value + official willpower icon as a trailing currency symbol,
         # centered in the zone between the header and the step buttons
@@ -536,21 +540,21 @@ class CommitModal:
         for i, (step, label) in enumerate(self.STEPS):
             b = Button(("step", step), x0 + i * (bw + gap), 250, bw, bh)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn, t=3)
-            text_center(d, pal, label, b.x + bw / 2, b.y + 26, 3, pal.tan)
+            text_center(d, pal, label, b.x + bw / 2, b.y + 26, DISPLAY, pal.tan)
             self.buttons.append(b)
 
         done = Button(("done",), 24, 360, 200, 92)
         nxt = Button(("next",), 256, 360, 200, 92)
         if self.final:
             bevel(d, pal, done.x, done.y, done.w, done.h, pal.btn_ok, t=3)
-            text_center(d, pal, "Done", done.x + 100, done.y + 32, 3, pal.ok_fg)
+            text_center(d, pal, "Done", done.x + 100, done.y + 32, DISPLAY, pal.ok_fg)
             bevel(d, pal, nxt.x, nxt.y, nxt.w, nxt.h, pal.card, t=3)
-            text_center(d, pal, "Next", nxt.x + 100, nxt.y + 32, 3, pal.dim)
+            text_center(d, pal, "Next", nxt.x + 100, nxt.y + 32, DISPLAY, pal.dim)
         else:
             bevel(d, pal, done.x, done.y, done.w, done.h, pal.card, t=3)
-            text_center(d, pal, "Done", done.x + 100, done.y + 32, 3, pal.dim)
+            text_center(d, pal, "Done", done.x + 100, done.y + 32, DISPLAY, pal.dim)
             bevel(d, pal, nxt.x, nxt.y, nxt.w, nxt.h, pal.btn, t=3)
-            text_center(d, pal, "Next", nxt.x + 100, nxt.y + 32, 3, pal.gold)
+            text_center(d, pal, "Next", nxt.x + 100, nxt.y + 32, DISPLAY, pal.gold)
         self.buttons.append(done)
         self.buttons.append(nxt)
 
@@ -594,10 +598,10 @@ class LedModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "LED behavior", 240, 22, 3, pal.gold)
+        text_center(d, pal, "LED behavior", 240, 22, DISPLAY, pal.gold)
 
         # brightness slider (10 tap segments)
-        text_left(d, pal, "Brightness  %d%%" % self.prefs["brightness"], 24, 70, 2, pal.tan)
+        text_left(d, pal, "Brightness  %d%%" % self.prefs["brightness"], 24, 70, BODY, pal.tan)
         seg_w, seg_h, x0, y0 = 42, 52, 24, 100
         lit = self.prefs["brightness"] // 10
         for i in range(self.SEGMENTS):
@@ -609,7 +613,7 @@ class LedModal:
             self.buttons.append(Button(("bri", (i + 1) * 10), x, y0, seg_w, seg_h))
 
         # scenes (2x2 tiles)
-        text_left(d, pal, "Scene", 24, 182, 2, pal.tan)
+        text_left(d, pal, "Scene", 24, 182, BODY, pal.tan)
         half = (480 - 3 * 24) // 2
         for i, key in enumerate(leds.SCENES):
             x = 24 + (i % 2) * (half + 24)
@@ -619,13 +623,13 @@ class LedModal:
             panel(d, pal, b.x, b.y, b.w, b.h,
                   fill=pal.card_hi if on else pal.card,
                   border=pal.border_gold if on else pal.border)
-            text_center(d, pal, leds.SCENE_LABELS[key], x + half / 2, y + 20, 2,
+            text_center(d, pal, leds.SCENE_LABELS[key], x + half / 2, y + 20, BODY,
                         pal.gold if on else pal.muted)
             self.buttons.append(b)
 
         done = Button(("save",), 24, 396, 432, 62)
         panel(d, pal, done.x, done.y, done.w, done.h, fill=pal.btn_ok, border=pal.ok_fg)
-        text_center(d, pal, "Done", 240, done.y + 20, 2, pal.ok_fg)
+        text_center(d, pal, "Done", 240, done.y + 20, BODY, pal.ok_fg)
         self.buttons.append(done)
 
         # live preview
@@ -668,31 +672,31 @@ class EliminationModal:
         d.clear()
         p = self.game.players[self.i]
         title = "P%d eliminated?" % (self.i + 1)
-        tw = d.measure_text(title, 3)
+        tw = d.measure_text(title, DISPLAY)
         start = (480 - (20 + 8 + tw)) // 2
         icons.draw(d, icons.THREAT, start, 22, pal.red)
-        text_left(d, pal, title, start + 28, 20, 3, pal.red)
+        text_left(d, pal, title, start + 28, 20, DISPLAY, pal.red)
         text_center(d, pal, "threat %d reached elimination level %d"
-                    % (p.threat, p.elimination), 240, 62, 2, pal.tan)
+                    % (p.threat, p.elimination), 240, 62, BODY, pal.tan)
 
         eb = Button(("elim",), 24, 110, 432, 64)
         panel(d, pal, eb.x, eb.y, eb.w, eb.h, fill=pal.btn_no, border=pal.no_fg)
-        text_center(d, pal, "Yes - eliminated", 240, eb.y + 22, 2, pal.no_fg)
+        text_center(d, pal, "Yes - eliminated", 240, eb.y + 22, BODY, pal.no_fg)
         self.buttons.append(eb)
 
         ab = Button(("avert",), 24, 190, 432, 64)
         panel(d, pal, ab.x, ab.y, ab.w, ab.h, fill=pal.btn)
-        text_center(d, pal, "Averted by card effect", 240, ab.y + 12, 2, pal.tan)
+        text_center(d, pal, "Averted by card effect", 240, ab.y + 12, BODY, pal.tan)
         text_center(d, pal, "threat -> %d, stays in" % max(0, p.elimination - 5),
-                    240, ab.y + 38, 1, pal.dim)
+                    240, ab.y + 38, BODY, pal.dim)
         self.buttons.append(ab)
 
-        text_left(d, pal, "Elimination level changed?", 24, 286, 2, pal.tan)
+        text_left(d, pal, "Elimination level changed?", 24, 286, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("lvl", -1), ("lvl", 1), 24, 316,
                 str(self.new_level), 300, 56)
         sb = Button(("setlvl",), 340, 316, 116, 56)
         panel(d, pal, sb.x, sb.y, sb.w, sb.h, fill=pal.btn_ok, border=pal.ok_fg)
-        text_center(d, pal, "Set", sb.x + 58, sb.y + 18, 2, pal.ok_fg)
+        text_center(d, pal, "Set", sb.x + 58, sb.y + 18, BODY, pal.ok_fg)
         self.buttons.append(sb)
 
     def on_button(self, btn):
@@ -743,20 +747,20 @@ class LocationPickModal:
         d.set_pen(pal.bg)
         d.clear()
         title = "Travel to new location" if self.mode == "new" else "Change active location"
-        text_center(d, pal, title, 240, 30, 3, pal.gold)
+        text_center(d, pal, title, 240, 30, DISPLAY, pal.gold)
         loc = self.game.active_location
         if self.mode == "change" and loc:
             text_center(d, pal, "current %d/%d will be discarded"
-                        % (loc["progress"], loc["points"]), 240, 80, 2, pal.no_fg)
+                        % (loc["progress"], loc["points"]), 240, 80, BODY, pal.no_fg)
 
-        text_left(d, pal, "Quest points", 60, 190, 2, pal.tan)
+        text_left(d, pal, "Quest points", 60, 190, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 250, 174,
                 str(self.pts), 170, 60)
         icons.draw(d, icons.THREAT, 60, 262, pal.red)
-        text_left(d, pal, "Contribution", 88, 266, 2, pal.tan)
+        text_left(d, pal, "Contribution", 88, 266, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("ctr", -1), ("ctr", 1), 250, 250,
                 str(self.contrib), 170, 60)
-        text_left(d, pal, "subtracted from the staging area on travel", 60, 318, 1, pal.dim)
+        text_left(d, pal, "subtracted from the staging area on travel", 60, 318, BODY, pal.dim)
         _footer(d, pal, self.buttons, save_label="Travel")
 
     def on_button(self, btn):
@@ -804,14 +808,17 @@ class AllocationModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "Quested successfully", 240, 16, 3, pal.ok_fg)
+        text_center(d, pal, "Quested successfully", 240, 16, DISPLAY, pal.ok_fg)
         text_center(d, pal, "remaining %d / %d" % (self._remaining(), self.budget),
-                    240, 54, 2, pal.gold)
+                    240, 54, BODY, pal.gold)
 
-        # reminder
+        # reminder - two BODY lines; the second was one long sentence that
+        # only fitted at LABEL ("Side quest may take progress instead. Card
+        # effects override.", 570px at BODY against 438 of panel), so the copy
+        # was shortened rather than the type.
         panel(d, pal, 16, 78, 448, 52, fill=pal.card)
-        text_left(d, pal, "Fill Active Location first; overflow -> Quest.", 26, 86, 1, pal.muted)
-        text_left(d, pal, "Side quest may take progress instead. Card effects override.", 26, 104, 1, pal.muted)
+        text_left(d, pal, "Fill Active Location first; overflow -> Quest.", 26, 84, BODY, pal.muted)
+        text_left(d, pal, "Side quest may take it. Card effects override.", 26, 106, BODY, pal.muted)
 
         y = 142
         self._rows = []
@@ -826,22 +833,22 @@ class AllocationModal:
         for key, idx, label, cur, pts in self._rows:
             add = self.alloc["side_quests"][idx] if key == "side" else self.alloc[key]
             panel(d, pal, 16, y, 448, 50, fill=pal.card)
-            text_left(d, pal, label, 26, y + 6, 2, pal.tan)
-            text_left(d, pal, "%d + %d / %d" % (cur, add, pts), 26, y + 28, 1, pal.muted)
+            text_left(d, pal, label, 26, y + 6, BODY, pal.tan)
+            text_left(d, pal, "%d + %d / %d" % (cur, add, pts), 26, y + 28, LABEL, pal.muted)
             mn = Button(("m", key, idx), 300, y + 5, 44, 40)
             pl = Button(("p", key, idx), 410, y + 5, 44, 40)
-            button(d, pal, mn, "-", 3)
-            button(d, pal, pl, "+", 3)
-            text_center(d, pal, str(cur + add), 377, y + 12, 3, pal.gold)
+            button(d, pal, mn, "-", DISPLAY)
+            button(d, pal, pl, "+", DISPLAY)
+            text_center(d, pal, str(cur + add), 377, y + 12, DISPLAY, pal.gold)
             self.buttons.extend([mn, pl])
             y += 56
 
         auto = Button(("auto",), 16, 356, 300, 44)
         rst = Button(("reset",), 324, 356, 140, 44)
         panel(d, pal, auto.x, auto.y, auto.w, auto.h, fill=pal.btn)
-        text_center(d, pal, "Auto loc->quest", auto.x + auto.w / 2, auto.y + 12, 2, pal.tan)
+        text_center(d, pal, "Auto loc->quest", auto.x + auto.w / 2, auto.y + 12, BODY, pal.tan)
         panel(d, pal, rst.x, rst.y, rst.w, rst.h, fill=pal.btn)
-        text_center(d, pal, "Reset", rst.x + rst.w / 2, rst.y + 12, 2, pal.tan)
+        text_center(d, pal, "Reset", rst.x + rst.w / 2, rst.y + 12, BODY, pal.tan)
         self.buttons.extend([auto, rst])
 
         _footer(d, pal, self.buttons, save_label="Apply")
@@ -933,7 +940,7 @@ class QuestingProgressModal:
         else:
             disc(d, cx, cy, 13, pal.well)
             arc_runs(d, cx, cy, 13, 11, 0, 360, pal.dim)
-            text_center(d, pal, str(value), cx, int(cy - 8), 2, pal.gold)
+            text_center(d, pal, str(value), cx, int(cy - 8), BODY, pal.gold)
         circ_btn(d, pal, cx + 30, cy, 10, "+")
         self.buttons.append(Button(id_minus, cx - 30 - 12, cy - 12, 24, 24))
         self.buttons.append(Button(id_plus, cx + 30 - 12, cy - 12, 24, 24))
@@ -964,7 +971,7 @@ class QuestingProgressModal:
         if it["kind"] == "l_add":
             b = Button(("addloc",), 12, y + 7, 140, 24)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-            text_center(d, pal, "+ Add location", b.x + b.w / 2, b.y + 5, 2, pal.tan)
+            text_center(d, pal, "+ Add location", b.x + b.w / 2, b.y + 5, BODY, pal.tan)
             self.buttons.append(b)
             return
         if it["kind"] == "q":
@@ -989,8 +996,8 @@ class QuestingProgressModal:
         # x=136) - a real catalog side-quest name (up to ~20 chars) can
         # otherwise run into the Current/Target editors, unlike the old
         # always-short generic labels ("Quest 1A", "Location", "Side Quest 3").
-        name_s = truncate_text(it["name"], 2, 118, d.measure_text)
-        text_left(d, pal, name_s, 12, y, 2, pal.gold if quest_card_tappable else pal.tan)
+        name_s = truncate_text(it["name"], BODY, 118, d.measure_text)
+        text_left(d, pal, name_s, 12, y, BODY, pal.gold if quest_card_tappable else pal.tan)
         self._val_editor2(d, pal, 178, cy, prog, (prog / pts if pts else 0), True,
                           (pfx + "P-", idx), (pfx + "P+", idx))
         self._val_editor2(d, pal, 300, cy, pts, 0, False,
@@ -1014,9 +1021,9 @@ class QuestingProgressModal:
             return
         modal_header(d, pal, game, "Progress", self.buttons)
 
-        text_left(d, pal, "Quest points", 12, 48, 1, pal.muted)
-        text_center(d, pal, "Current", 178, 48, 1, pal.dim)
-        text_center(d, pal, "Target", 300, 48, 1, pal.dim)
+        text_left(d, pal, "QUEST POINTS", 12, 48, LABEL, pal.muted)
+        text_center(d, pal, "CURRENT", 178, 48, LABEL, pal.dim)
+        text_center(d, pal, "TARGET", 300, 48, LABEL, pal.dim)
 
         items = self._items()
         for i, it in enumerate(items):
@@ -1026,12 +1033,12 @@ class QuestingProgressModal:
         add_y = self.ROWS_Y0 + n * self.ROW_H - 4
         add = Button(("add",), 12, add_y, 120, 24)
         bevel(d, pal, add.x, add.y, add.w, add.h, pal.btn)
-        text_center(d, pal, "+ Side quest", add.x + add.w / 2, add.y + 5, 2, pal.tan)
+        text_center(d, pal, "+ Side quest", add.x + add.w / 2, add.y + 5, BODY, pal.tan)
         self.buttons.append(add)
 
         if self.game.sailing:
             heading_y = self.ROWS_Y0 + n * self.ROW_H + 34
-            text_left(d, pal, "Heading", 12, heading_y, 2, pal.tan)
+            text_left(d, pal, "Heading", 12, heading_y, BODY, pal.tan)
             cy = heading_y + 4
             for i in range(4):
                 cx = 150 + i * 40
@@ -1050,15 +1057,15 @@ class QuestingProgressModal:
         cy0 = 344
         d.set_pen(pal.border)
         d.rectangle(8, cy0 - 12, 464, 1)
-        text_left(d, pal, "THIS GAME - BY ROUND", 12, cy0 - 9, 1, pal.muted)
+        text_left(d, pal, "THIS GAME - BY ROUND", 12, cy0 - 9, LABEL, pal.muted)
         cols = self.game.quest_history[-8:]
         if not cols:
-            text_center(d, pal, "No rounds resolved yet", 240, cy0 + 14, 1, pal.dim)
+            text_center(d, pal, "No rounds resolved yet", 240, cy0 + 14, BODY, pal.dim)
             return
         x0 = 52
         stride = (472 - x0) // len(cols)
         for i, r in enumerate(cols):
-            text_center(d, pal, "R%d" % r["round"], x0 + i * stride + stride // 2, cy0, 1, pal.dim)
+            text_center(d, pal, "R%d" % r["round"], x0 + i * stride + stride // 2, cy0, LABEL, pal.dim)
         hdg_pen = [pal.gold, pal.amber, pal.amber, pal.red]
 
         def _result_cell(r):
@@ -1082,10 +1089,13 @@ class QuestingProgressModal:
             icons.draw(d, mask, 12, ry - 2, ipen)
             for i, r in enumerate(cols):
                 s, pen = cell(r)
-                text_center(d, pal, s, x0 + i * stride + stride // 2, ry, 2, pen)
+                text_center(d, pal, s, x0 + i * stride + stride // 2, ry, BODY, pen)
             ry += 26
-        caption = "willpower / staging / result" + (" / heading" if self.game.sailing else "")
-        text_center(d, pal, caption, 240, ry + 4, 1, pal.dim)
+        # The key for the icon column above it - chrome for a dense readout,
+        # scanned rather than read, so it stays LABEL and goes ALL CAPS to
+        # match "THIS GAME - BY ROUND" at the top of the same block.
+        caption = "WILLPOWER / STAGING / RESULT" + (" / HEADING" if self.game.sailing else "")
+        text_center(d, pal, caption, 240, ry + 4, LABEL, pal.dim)
 
     def _draw_loc_prompt(self, d, pal):
         lp = self.loc_prompt
@@ -1098,16 +1108,16 @@ class QuestingProgressModal:
 
     def _draw_loc_choose(self, d, pal):
         loc = self.game.active_location
-        text_center(d, pal, "Location removed", 240, 30, 3, pal.gold)
-        text_center(d, pal, "What happened to it?", 240, 70, 2, pal.tan)
+        text_center(d, pal, "Location removed", 240, 30, DISPLAY, pal.gold)
+        text_center(d, pal, "What happened to it?", 240, 70, BODY, pal.tan)
         text_center(d, pal, "%d/%d progress will be discarded" % (loc["progress"], loc["points"]),
-                    240, 94, 1, pal.dim)
+                    240, 94, BODY, pal.dim)
 
         def opt(y, id, label, sub):
             b = Button((id,), 24, y, 432, 64)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn, t=3)
-            text_center(d, pal, label, 240, y + 14, 3, pal.tan)
-            text_center(d, pal, sub, 240, y + 44, 1, pal.dim)
+            text_center(d, pal, label, 240, y + 12, DISPLAY, pal.tan)
+            text_center(d, pal, sub, 240, y + 42, BODY, pal.dim)
             self.buttons.append(b)
 
         opt(120, "lp_replaced", "Replaced", "enter the new location's quest points")
@@ -1115,23 +1125,23 @@ class QuestingProgressModal:
         opt(272, "lp_discard", "Discard", "no replacement")
         cancel = Button(("lp_cancel",), 24, 356, 432, 56)
         bevel(d, pal, cancel.x, cancel.y, cancel.w, cancel.h, pal.btn_no, t=3)
-        text_center(d, pal, "Cancel", 240, cancel.y + 18, 2, pal.no_fg)
+        text_center(d, pal, "Cancel", 240, cancel.y + 18, BODY, pal.no_fg)
         self.buttons.append(cancel)
 
     def _draw_loc_pts(self, d, pal):
-        text_center(d, pal, "Replace location", 240, 30, 3, pal.gold)
-        text_left(d, pal, "Quest points", 60, 216, 2, pal.tan)
+        text_center(d, pal, "Replace location", 240, 30, DISPLAY, pal.gold)
+        text_left(d, pal, "Quest points", 60, 216, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("lp_pts", -1), ("lp_pts", 1), 250, 200,
                str(self.loc_prompt["pts"]), 170, 60)
         _footer(d, pal, self.buttons, save_label="Confirm")
 
     def _draw_loc_contrib(self, d, pal):
-        text_center(d, pal, "Location to staging", 240, 30, 3, pal.gold)
+        text_center(d, pal, "Location to staging", 240, 30, DISPLAY, pal.gold)
         icons.draw(d, icons.THREAT, 60, 208, pal.red)
-        text_left(d, pal, "Contribution", 88, 216, 2, pal.tan)
+        text_left(d, pal, "Contribution", 88, 216, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("lp_ctr", -1), ("lp_ctr", 1), 250, 200,
                str(self.loc_prompt["state"].preview), 170, 60)
-        text_left(d, pal, "added to the staging area", 60, 270, 1, pal.dim)
+        text_left(d, pal, "added to the staging area", 60, 270, BODY, pal.dim)
         _footer(d, pal, self.buttons, save_label="Confirm")
 
     def _clamp_adj(self, cur, delta):
@@ -1332,7 +1342,7 @@ class SailingModal:
         total = 24 + 8 + lw
         x0 = int(240 - total / 2)
         draw_weather(d, pal, h, x0 + 12, cy + 10, 12)
-        text_left(d, pal, label, x0 + 32, cy + (2 if scale == 2 else 0), scale, pen)
+        text_left(d, pal, label, x0 + 32, cy + (2 if scale == BODY else 0), scale, pen)
 
     def draw(self, hw, game, pal):
         from ui.header import modal_header
@@ -1342,7 +1352,7 @@ class SailingModal:
         d.clear()
         modal_header(d, pal, self.game, "Sailing test", self.buttons)
 
-        text_center(d, pal, "Current heading", 240, 54, 1, pal.dim)
+        text_center(d, pal, "CURRENT HEADING", 240, 54, LABEL, pal.dim)
         self._heading(d, pal, self.game.heading, 74, 2)
 
         big = str(abs(self.v))
@@ -1361,7 +1371,7 @@ class SailingModal:
         else:
             sub = "no wheels found - heading stays"
             spen = pal.dim
-        text_center(d, pal, sub, 240, 200, 1, spen)
+        text_center(d, pal, sub, 240, 200, BODY, spen)
 
         mn = Button(("d", -1), 34, 128, 64, 60)
         pl = Button(("d", 1), 480 - 34 - 64, 128, 64, 60)
@@ -1372,15 +1382,15 @@ class SailingModal:
         self.buttons.append(mn)
         self.buttons.append(pl)
 
-        text_center(d, pal, "Result", 240, 240, 1, pal.dim)
+        text_center(d, pal, "RESULT", 240, 240, LABEL, pal.dim)
         self._heading(d, pal, self._result(), 262, 2)
 
         no = Button(("cancel",), 24, 404, 200, 64)
         ok = Button(("apply",), 256, 404, 200, 64)
         bevel(d, pal, no.x, no.y, no.w, no.h, pal.btn_no, t=3)
-        text_center(d, pal, "Cancel", no.x + 100, no.y + 20, 2, pal.no_fg)
+        text_center(d, pal, "Cancel", no.x + 100, no.y + 20, BODY, pal.no_fg)
         bevel(d, pal, ok.x, ok.y, ok.w, ok.h, pal.btn_ok, t=3)
-        text_center(d, pal, "Apply", ok.x + 100, ok.y + 20, 2, pal.ok_fg)
+        text_center(d, pal, "Apply", ok.x + 100, ok.y + 20, BODY, pal.ok_fg)
         self.buttons.append(no)
         self.buttons.append(ok)
 
@@ -1423,25 +1433,25 @@ class StageCompleteModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "Quest Stage %s cleared!" % self.cleared, 240, 26, 3, pal.gold)
+        text_center(d, pal, "Quest Stage %s cleared!" % self.cleared, 240, 26, DISPLAY, pal.gold)
         y = 74
-        text_center(d, pal, "Set up the next stage", 240, y, 2, pal.tan)
+        text_center(d, pal, "Set up the next stage", 240, y, BODY, pal.tan)
         y += 40
-        text_left(d, pal, "Stage", 30, y + 14, 2, pal.tan)
+        text_left(d, pal, "Stage", 30, y + 14, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("n", -1), ("n", 1), 160, y, str(self.n), 130, 52)
         stepper(d, pal, self.buttons, ("side", -1), ("side", 1), 316, y, self.side, 144, 52)
         y += 76
-        text_left(d, pal, "Quest points", 30, y + 14, 2, pal.tan)
+        text_left(d, pal, "Quest points", 30, y + 14, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 240, y, str(self.pts), 210, 52)
         y += 90
         go = Button(("go",), 30, y, 420, 60)
         bevel(d, pal, go.x, go.y, go.w, go.h, pal.btn_ok, t=3)
-        text_center(d, pal, "Continue to %d%s" % (self.n, self.side), 240, y + 20, 2, pal.ok_fg)
+        text_center(d, pal, "Continue to %d%s" % (self.n, self.side), 240, y + 20, BODY, pal.ok_fg)
         self.buttons.append(go)
         y += 74
         win = Button(("win",), 30, y, 420, 60)
         bevel(d, pal, win.x, win.y, win.w, win.h, pal.card_hi, t=3)
-        text_center(d, pal, "That was the final stage - Victory!", 240, y + 20, 2, pal.gold)
+        text_center(d, pal, "That was the final stage - Victory!", 240, y + 20, BODY, pal.gold)
         self.buttons.append(win)
 
     def on_button(self, btn):
@@ -1551,80 +1561,106 @@ class ResolutionModal:
     def _cta(self, d, pal, label, id_, y=404, h=56, ok=True):
         b = Button(id_, 24, y, 432, h)
         bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn_ok if ok else pal.btn_no, t=3)
-        text_center(d, pal, label, 240, y + h // 2 - 10, 2, pal.ok_fg if ok else pal.no_fg)
+        text_center(d, pal, label, 240, y + h // 2 - 10, BODY, pal.ok_fg if ok else pal.no_fg)
         self.buttons.append(b)
 
     def _draw_done(self, d, pal):
-        text_center(d, pal, "All resolved", 240, 200, 3, pal.gold)
+        text_center(d, pal, "All resolved", 240, 200, DISPLAY, pal.gold)
         self._cta(d, pal, "Continue", ("close",))
 
     def _draw_reveal(self, d, pal, st):
-        text_center(d, pal, "STAGE %d REVEALED" % st["stage_n"], 240, 64, 2, pal.amber)
-        name = truncate_text(st["face_a"].get("name") or "", 3, 432, d.measure_text)
-        text_center(d, pal, name, 240, 92, 3, pal.gold)
+        text_center(d, pal, "STAGE %d REVEALED" % st["stage_n"], 240, 64, BODY, pal.amber)
+        name = truncate_text(st["face_a"].get("name") or "", DISPLAY, 432, d.measure_text)
+        text_center(d, pal, name, 240, 92, DISPLAY, pal.gold)
         tip_x, tip_w, tip_y = 24, 432, 130
         ribbon_h, pad_top, line_h, pad_bottom, max_lines = 22, 10, 24, 10, 5
         raw = st["face_a"].get("text")
         body = raw if raw else "No setup instructions for this stage."
-        lines = wrap_text(body, 2, tip_w - 28, measure=d.measure_text)[:max_lines]
+        lines = wrap_text(body, BODY, tip_w - 28, measure=d.measure_text)[:max_lines]
         tip_h = ribbon_h + pad_top + len(lines) * line_h + pad_bottom
         d.set_pen(pal.border_gold); d.rectangle(tip_x, tip_y, tip_w, tip_h)
         d.set_pen(pal.bg); d.rectangle(tip_x + 2, tip_y + 2, tip_w - 4, tip_h - 4)
         d.set_pen(pal.border_gold); d.rectangle(tip_x + 4, tip_y + 4, tip_w - 8, tip_h - 8)
         d.set_pen(pal.scroll); d.rectangle(tip_x + 6, tip_y + 6, tip_w - 12, tip_h - 12)
         d.set_pen(pal.border_gold); d.rectangle(tip_x, tip_y, tip_w, ribbon_h)
-        text_left(d, pal, "STAGE ADVANCE - resolve now", tip_x + 10, tip_y + 6, 1, pal.bg, shadow=False)
+        text_left(d, pal, "STAGE ADVANCE - RESOLVE NOW", tip_x + 10, tip_y + 6, LABEL, pal.bg, shadow=False)
         ly = tip_y + ribbon_h + pad_top
         for ln in lines:
-            text_left(d, pal, ln, tip_x + 14, ly, 2, pal.tan)
+            text_left(d, pal, ln, tip_x + 14, ly, BODY, pal.tan)
             ly += line_h
         self._cta(d, pal, "Flip to Side B  ->  %d qp" % st["next_points"], ("do_flip",))
 
     def _draw_location(self, d, pal, st):
-        text_center(d, pal, "Location Explored", 240, 90, 3, pal.gold)
-        text_center(d, pal, "%d/%d progress" % (st["progress"], st["points"]), 240, 130, 2, pal.tan)
+        text_center(d, pal, "Location Explored", 240, 90, DISPLAY, pal.gold)
+        text_center(d, pal, "%d/%d progress" % (st["progress"], st["points"]), 240, 130, BODY, pal.tan)
         excess = st["progress"] - st["points"]
         if excess:
-            text_center(d, pal, "%d excess -> quest card" % excess, 240, 160, 2, pal.amber)
+            text_center(d, pal, "%d excess -> quest card" % excess, 240, 160, BODY, pal.amber)
         self._cta(d, pal, "Continue", ("resolve_location",))
 
+    # Branch rows quote the alternative stages' own printed text, so the
+    # preview is card text and gets BODY like every other quote. The rows grow
+    # to hold it (they were 64px with a one-line LABEL preview) instead of the
+    # type shrinking to fit them: the stride is whatever the space left below
+    # the header divides into, capped so a 2-way split does not sprawl, and
+    # the preview takes as many BODY lines as the resulting row height allows.
+    BRANCH_Y0 = 116
+    BRANCH_STRIDE_MAX = 106
+    BRANCH_LH = 24
+
     def _draw_branch(self, d, pal, st):
-        text_center(d, pal, "Choose a path", 240, 56, 3, pal.gold)
-        text_center(d, pal, "First player chooses" if st["mode"] != "random" else "Random",
-                   240, 86, 1, pal.dim)
-        y = 116
-        for i, card in enumerate(st["cards"]):
+        text_center(d, pal, "Choose a path", 240, 56, DISPLAY, pal.gold)
+        # ALL CAPS both ways: this slot names how the choice gets made and is
+        # read as chrome under the title, not as a sentence.
+        text_center(d, pal, "FIRST PLAYER CHOOSES" if st["mode"] != "random" else "RANDOM",
+                    240, 86, LABEL, pal.dim)
+        cards = st["cards"]
+        reserve = 50 if st["mode"] == "random" else 0    # the Randomize button
+        stride = min(self.BRANCH_STRIDE_MAX,
+                     (468 - self.BRANCH_Y0 - reserve) // max(1, len(cards)))
+        row_h = max(48, stride - 10)
+        max_lines = max(1, (row_h - 34) // self.BRANCH_LH)
+        usable = 432 - 28
+        y = self.BRANCH_Y0
+        for i, card in enumerate(cards):
             b_face = next((f for f in card["faces"] if f["side"] == "B"), {})
-            b = Button(("pick_branch", i), 24, y, 432, 64)
+            b = Button(("pick_branch", i), 24, y, 432, row_h)
             sel = self.branch_pick == i
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn_ok if sel else pal.btn, t=3)
-            text_left(d, pal, b_face.get("name") or "?", b.x + 14, y + 10, 2,
+            text_left(d, pal, b_face.get("name") or "?", b.x + 14, y + 10, BODY,
                       pal.ok_fg if sel else pal.tan)
-            preview = truncate_text(b_face.get("text") or "", 1, 400, d.measure_text)
-            text_left(d, pal, preview, b.x + 14, y + 38, 1, pal.dim)
+            lines = wrap_text(b_face.get("text") or "", BODY, usable, d.measure_text)
+            if len(lines) > max_lines:
+                lines = lines[:max_lines]
+                lines[-1] = truncate_text(lines[-1] + " ..", BODY, usable, d.measure_text)
+            ly = y + 38
+            for ln in lines:
+                if ln:
+                    text_left(d, pal, ln, b.x + 14, ly, BODY, pal.dim)
+                ly += self.BRANCH_LH
             self.buttons.append(b)
-            y += 74
+            y += stride
         if st["mode"] == "random":
             r = Button(("randomize_branch",), 24, y, 432, 40)
             bevel(d, pal, r.x, r.y, r.w, r.h, pal.card, t=2)
-            text_center(d, pal, "Randomize for me", 240, y + 10, 2, pal.tan)
+            text_center(d, pal, "Randomize for me", 240, y + 10, BODY, pal.tan)
             self.buttons.append(r)
 
     def _draw_advance(self, d, pal, st):
-        text_center(d, pal, "Quest %s cleared" % st["cleared"], 240, 90, 3, pal.gold)
+        text_center(d, pal, "Quest %s cleared" % st["cleared"], 240, 90, DISPLAY, pal.gold)
         if st["underfilled"]:
-            text_center(d, pal, "Progress hasn't reached target - confirm", 240, 130, 1, pal.red)
+            text_center(d, pal, "Progress hasn't reached target - confirm", 240, 130, BODY, pal.red)
         self._cta(d, pal, "Reveal Stage %d" % st["next_stage"], ("do_advance",))
 
     def _draw_victory(self, d, pal, st):
-        text_center(d, pal, "Quest %s cleared" % st["cleared"], 240, 70, 2, pal.tan)
-        text_center(d, pal, "That was the final stage!", 240, 110, 3, pal.gold)
+        text_center(d, pal, "Quest %s cleared" % st["cleared"], 240, 70, BODY, pal.tan)
+        text_center(d, pal, "That was the final stage!", 240, 110, DISPLAY, pal.gold)
         self._cta(d, pal, "Declare Victory", ("declare_victory",), y=340)
         self._cta(d, pal, "Not yet - keep playing", ("continue_without_victory",), y=404, ok=False)
 
     def _draw_side_quest(self, d, pal, st):
-        text_center(d, pal, st["name"], 240, 90, 3, pal.gold)
-        text_center(d, pal, "%d/%d" % (st["progress"], st["points"]), 240, 130, 2, pal.tan)
+        text_center(d, pal, st["name"], 240, 90, DISPLAY, pal.gold)
+        text_center(d, pal, "%d/%d" % (st["progress"], st["points"]), 240, 130, BODY, pal.tan)
         self._cta(d, pal, "Mark Complete", ("resolve_side_quest",), y=340)
         self._cta(d, pal, "Leave as-is", ("skip_side_quest",), y=404, ok=False)
 
@@ -1758,9 +1794,9 @@ class QuestCardModal:
         if len(lines) <= max_lines and not more:
             return lines, False
         keep = lines[:max_lines] or [""]
-        mw = d.measure_text(self.MORE, 2)
+        mw = d.measure_text(self.MORE, BODY)
         last = keep[-1]
-        while last and d.measure_text(last, 2) + mw > usable:
+        while last and d.measure_text(last, BODY) + mw > usable:
             last = last.rsplit(" ", 1)[0] if " " in last else last[:-1]
         keep[-1] = last + self.MORE
         return keep, True
@@ -1774,22 +1810,22 @@ class QuestCardModal:
             b = Button(("prev",), M, self.NAV_Y, half, self.NAV_H)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
             text_center(d, pal, truncate_text("< " + self._label(pages[self.page - 1]),
-                                              2, half - 16, d.measure_text),
-                        b.x + half // 2, b.y + 14, 2, pal.tan)
+                                              BODY, half - 16, d.measure_text),
+                        b.x + half // 2, b.y + 14, BODY, pal.tan)
             self.buttons.append(b)
         if self.page < len(pages) - 1:
             b = Button(("next",), M + half + 8, self.NAV_Y, half, self.NAV_H)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
             text_center(d, pal, truncate_text(self._label(pages[self.page + 1]) + " >",
-                                              2, half - 16, d.measure_text),
-                        b.x + half // 2, b.y + 14, 2, pal.tan)
+                                              BODY, half - 16, d.measure_text),
+                        b.x + half // 2, b.y + 14, BODY, pal.tan)
             self.buttons.append(b)
 
     def _detail_lines(self, d, usable):
         """The full content behind a "more" tap - at BODY, like everything
         else. It used to render at LABEL so it would fit on one page, which
         is exactly backwards: this view exists to give the text ROOM. When it
-        does not fit, it pages (see _detail_pages)."""
+        does not fit, it pages (see _detail_capacity)."""
         if self.detail == "tips":
             t = self._tips_data or {"tips": []}
             lines = []
@@ -1855,8 +1891,8 @@ class QuestCardModal:
 
         pages = self._pages()
         if not pages:
-            text_center(d, pal, "No quest loaded", 240, 200, 2, pal.dim)
-            text_center(d, pal, "Start a scenario to see stage cards.", 240, 226, 1, pal.dim)
+            text_center(d, pal, "No quest loaded", 240, 200, BODY, pal.dim)
+            text_center(d, pal, "Start a scenario to see stage cards.", 240, 226, BODY, pal.dim)
             return
 
         self.page = max(0, min(self.page, len(pages) - 1))
@@ -1877,30 +1913,33 @@ class QuestCardModal:
         # what it is worth. The quest points sit here (they used to own a
         # whole block-level row) - it is one number, it belongs in a corner.
         y = 48
-        text_left(d, pal, self._label(page), M, y, 2, pal.amber)
+        text_left(d, pal, self._label(page), M, y, BODY, pal.amber)
         pts = "%d pts" % card.get("questPoints", 0)
-        text_left(d, pal, pts, 480 - M - d.measure_text(pts, 2), y, 2, pal.gold)
+        text_left(d, pal, pts, 480 - M - d.measure_text(pts, BODY), y, BODY, pal.gold)
         if self.page == self._live_page():
-            pw = d.measure_text("CURRENT", 1) + 14
+            pw = d.measure_text("CURRENT", LABEL) + 14
             d.set_pen(pal.gold)
             d.rectangle(240 - pw // 2, y + 2, pw, 18)
-            text_center(d, pal, "CURRENT", 240, y + 6, 1, pal.bg, shadow=False)
+            text_center(d, pal, "CURRENT", 240, y + 6, LABEL, pal.bg, shadow=False)
         y += 26
 
         # Victory/sailing are rare, so they cost a row only when present.
+        # ALL CAPS: this is a keyword badge sitting beside the card name, read
+        # as chrome rather than as a sentence, so the casing carries the
+        # demotion instead of the size (design system, LABEL).
         extra = []
         if card.get("victory") is not None:
-            extra.append("Victory %d" % card["victory"])
+            extra.append("VICTORY %d" % card["victory"])
         if card.get("sailing"):
-            extra.append("Sailing")
+            extra.append("SAILING")
         if extra:
             s = "  ".join(extra)
-            text_left(d, pal, s, 480 - M - d.measure_text(s, 1), y, 1, pal.dim)
+            text_left(d, pal, s, 480 - M - d.measure_text(s, LABEL), y, LABEL, pal.dim)
 
-        text_left(d, pal, truncate_text(face.get("name") or "(unnamed)", 2, W, d.measure_text),
-                  M, y, 2, pal.gold)
+        text_left(d, pal, truncate_text(face.get("name") or "(unnamed)", BODY, W, d.measure_text),
+                  M, y, BODY, pal.gold)
         y += 28
-        text_left(d, pal, "SETUP / STORY" if side == "A" else "QUEST", M, y, 1, pal.amber)
+        text_left(d, pal, "SETUP / STORY" if side == "A" else "QUEST", M, y, LABEL, pal.amber)
 
         # -- body: the card's own text, at the same scale as everywhere else.
         # It gets every pixel between here and whatever sits below (the tips
@@ -1911,12 +1950,12 @@ class QuestCardModal:
         by = self.BODY_Y0
         usable = W - 20
         text = self._body_text(face)
-        lines = wrap_text(text or "no text", 2, usable, d.measure_text)
+        lines = wrap_text(text or "no text", BODY, usable, d.measure_text)
         lines, cut = self._fit(d, lines, max(1, (body_bottom - by) // self.LH), usable, False)
         panel(d, pal, M, by - 8, W, body_bottom - by + 8, fill=pal.card)
         ty = by
         for ln in lines:
-            text_left(d, pal, ln, M + 10, ty, 2, pal.tan if text else pal.dim)
+            text_left(d, pal, ln, M + 10, ty, BODY, pal.tan if text else pal.dim)
             ty += self.LH
         if cut:
             self.buttons.append(Button(("more_text",), M, by - 8, W, body_bottom - by + 8))
@@ -1924,13 +1963,13 @@ class QuestCardModal:
         # -- tips peek: the first lines inline, the rest behind a tap -------
         if has_tips:
             joined = "  ".join(self._tips_data["tips"])
-            tl = wrap_text(joined, 2, usable, d.measure_text)
+            tl = wrap_text(joined, BODY, usable, d.measure_text)
             tl, _ = self._fit(d, tl, self.TIPS_LINES, usable, len(tl) > self.TIPS_LINES)
             panel(d, pal, M, tips_y, W, self.TIPS_H, fill=pal.card)
-            text_left(d, pal, "TIPS", M + 10, tips_y + 6, 1, pal.amber)
+            text_left(d, pal, "TIPS", M + 10, tips_y + 6, LABEL, pal.amber)
             ty = tips_y + 22
             for ln in tl:
-                text_left(d, pal, ln, M + 10, ty, 2, pal.tan)
+                text_left(d, pal, ln, M + 10, ty, BODY, pal.tan)
                 ty += self.LH
             self.buttons.append(Button(("tips",), M, tips_y, W, self.TIPS_H))
 
@@ -2027,11 +2066,11 @@ class SideQuestPickModal:
         modal_header(d, pal, game, "Add Side Quest", self.buttons)
 
         if not self.entries:
-            text_center(d, pal, "No side-quest catalog data available.", 240, 140, 2, pal.dim)
-            text_center(d, pal, "Use Manual entry below.", 240, 168, 1, pal.dim)
+            text_center(d, pal, "No side-quest catalog data available.", 240, 140, BODY, pal.dim)
+            text_center(d, pal, "Use Manual entry below.", 240, 168, BODY, pal.dim)
         else:
             text_left(d, pal, "Pick a side quest, then Add - or enter manually.",
-                      12, 46, 1, pal.dim)
+                      12, 46, BODY, pal.dim)
             pages = self._pages()
             self.page = min(self.page, pages - 1)
             chunk = self.entries[self.page * self.PER_PAGE:(self.page + 1) * self.PER_PAGE]
@@ -2042,11 +2081,11 @@ class SideQuestPickModal:
                     d.set_pen(pal.card_hi)
                     d.rectangle(8, y, 456, self.ROW_H)
                 _sq_radio(d, pal, 30, y + 22, on)
-                name = truncate_text(e.get("name") or "", 2, self.NAME_MAX_W, d.measure_text)
-                text_left(d, pal, name, 52, y + 13, 2, pal.tan if on else pal.muted)
+                name = truncate_text(e.get("name") or "", BODY, self.NAME_MAX_W, d.measure_text)
+                text_left(d, pal, name, 52, y + 13, BODY, pal.tan if on else pal.muted)
                 pts_s = "%d pts" % (e.get("points") or 0)
-                pw = d.measure_text(pts_s, 2)
-                text_left(d, pal, pts_s, 456 - pw, y + 4, 2, pal.gold if on else pal.tan)
+                pw = d.measure_text(pts_s, BODY)
+                text_left(d, pal, pts_s, 456 - pw, y + 4, BODY, pal.gold if on else pal.tan)
                 # ASCII hyphen, not an em-dash - the device pins PicoGraphics'
                 # "bitmap8" font (hardware.py), which only covers the
                 # standard-ASCII glyphs verified in tests/fake_hardware.py's
@@ -2054,8 +2093,8 @@ class SideQuestPickModal:
                 # glyph on hardware even though it renders fine in this host
                 # preview (PIL/Menlo has full Unicode coverage, masking it).
                 sphere_s = e.get("sphere") or "-"
-                sw = d.measure_text(sphere_s, 1)
-                text_left(d, pal, sphere_s, 456 - sw, y + 26, 1, pal.dim)
+                sw = d.measure_text(sphere_s, BODY)
+                text_left(d, pal, sphere_s, 456 - sw, y + 26, BODY, pal.dim)
                 d.set_pen(pal.border)
                 d.rectangle(8, y + self.ROW_H, 456, 1)
                 self.buttons.append(Button(("row", e["id"]), 8, y, 456, self.ROW_H))
@@ -2065,22 +2104,22 @@ class SideQuestPickModal:
                 up = Button(("older",), 12, 352, 150, 46)
                 dn = Button(("newer",), 318, 352, 150, 46)
                 bevel(d, pal, up.x, up.y, up.w, up.h, pal.btn)
-                text_center(d, pal, "Up", up.x + 75, up.y + 14, 2, pal.tan)
+                text_center(d, pal, "Up", up.x + 75, up.y + 14, BODY, pal.tan)
                 bevel(d, pal, dn.x, dn.y, dn.w, dn.h, pal.btn)
-                text_center(d, pal, "Down", dn.x + 75, dn.y + 14, 2, pal.tan)
-                text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 366, 2, pal.muted)
+                text_center(d, pal, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan)
+                text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 366, BODY, pal.muted)
                 self.buttons.append(up)
                 self.buttons.append(dn)
 
         manual = Button(("manual",), 24, self.FOOTER_Y, 200, self.FOOTER_H)
         bevel(d, pal, manual.x, manual.y, manual.w, manual.h, pal.btn, t=3)
-        text_center(d, pal, "Manual", manual.x + manual.w / 2, manual.y + 20, 2, pal.tan)
+        text_center(d, pal, "Manual", manual.x + manual.w / 2, manual.y + 20, BODY, pal.tan)
         self.buttons.append(manual)
 
         if self.entries:
             add = Button(("add",), 256, self.FOOTER_Y, 200, self.FOOTER_H)
             bevel(d, pal, add.x, add.y, add.w, add.h, pal.btn_ok, t=3)
-            text_center(d, pal, "Add", add.x + add.w / 2, add.y + 20, 2, pal.ok_fg)
+            text_center(d, pal, "Add", add.x + add.w / 2, add.y + 20, BODY, pal.ok_fg)
             self.buttons.append(add)
 
     def on_button(self, btn):

@@ -3,7 +3,8 @@
 // .buttons, and handles taps in onButton returning the same protocol values.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          stepper, wrapText, truncateText, ribbon, notePanel, drawWeather,
-         disc, arcRuns, ring, token, wxSmall } from "./ui.js";
+         disc, arcRuns, ring, token, wxSmall,
+         DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, REMINDER_DEFS, HEADINGS,
@@ -25,22 +26,22 @@ const GUTTER = MARGIN + 40;
 // shared by drawHeader's close case and modalHeader (same geometry, same pens).
 function doneButton(ctx) {
   bevel(ctx, 408, 4, 64, 32, pal.btn_ok);
-  textCenter(ctx, "DONE", 440, 12, 2, pal.ok_fg);
+  textCenter(ctx, "DONE", 440, 12, BODY, pal.ok_fg);
 }
 
 export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
                                                  close = false, closeLeft = false,
                                                  roundLabel = null } = {}) {
   const roundLbl = roundLabel ?? `R${game.round} ${game.step}`;
-  textLeft(ctx, roundLbl, 10, 12, 2,
+  textLeft(ctx, roundLbl, 10, 12, BODY,
            (closeLeft || highlight === "log") ? pal.gold : pal.muted);
   const center = title ?? (VIEW_LABELS[game.view] ?? phaseStep(game.step).phase);
-  const scale = center.length > 12 ? 2 : 3;
-  textCenter(ctx, center, 240, scale === 2 ? 12 : 8, scale, pal.gold);
+  const scale = center.length > 12 ? BODY : DISPLAY;
+  textCenter(ctx, center, 240, scale === BODY ? 12 : 8, scale, pal.gold);
   if (close) {
     doneButton(ctx);
   } else {
-    textLeft(ctx, "Set.", 480 - 10 - measureText("Set.", 2), 12, 2,
+    textLeft(ctx, "Set.", 480 - 10 - measureText("Set.", BODY), 12, BODY,
              highlight === "settings" ? pal.gold : pal.muted);
   }
   rect(ctx, 0, HEADER_H, 480, 1, pal.border);
@@ -61,8 +62,8 @@ export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
 // onButton maps "close" to its own commit-and-dismiss / dismiss semantics).
 export function modalHeader(ctx, game, title, buttons) {
   const roundLbl = `R${game.round} ${game.step}`;
-  textLeft(ctx, roundLbl, 10, 12, 2, pal.muted);
-  textCenter(ctx, title, 240, 12, 2, pal.gold);
+  textLeft(ctx, roundLbl, 10, 12, BODY, pal.muted);
+  textCenter(ctx, title, 240, 12, BODY, pal.gold);
   rect(ctx, 0, HEADER_H, 480, 1, pal.border);
   doneButton(ctx);
   buttons.push(new Button(["close"], 408, 4, 64, 32));
@@ -74,7 +75,7 @@ export function modalHeader(ctx, game, title, buttons) {
 export function circBtn(ctx, cx, cy, r, glyph, pen = pal.tan) {
   disc(ctx, cx, cy, r, pal.btn);
   arcRuns(ctx, cx, cy, r, r - 2, 0, 360, pal.bevel_l);
-  textCenter(ctx, glyph, cx, Math.round(cy - 8), 2, pen);
+  textCenter(ctx, glyph, cx, Math.round(cy - 8), BODY, pen);
 }
 
 export function drawNotifPie(ctx, cx, cy, r, frac, color = "amber") {
@@ -100,9 +101,9 @@ function footer(ctx, buttons, saveLabel = "Save") {
   const no = new Button(["cancel"], 24, 404, 200, 64);
   const ok = new Button(["save"], 256, 404, 200, 64);
   bevel(ctx, no.x, no.y, no.w, no.h, pal.btn_no, false, 3);
-  textCenter(ctx, "Cancel", no.x + no.w / 2, no.y + 20, 2, pal.no_fg);
+  textCenter(ctx, "Cancel", no.x + no.w / 2, no.y + 20, BODY, pal.no_fg);
   bevel(ctx, ok.x, ok.y, ok.w, ok.h, pal.btn_ok, false, 3);
-  textCenter(ctx, saveLabel, ok.x + ok.w / 2, ok.y + 20, 2, pal.ok_fg);
+  textCenter(ctx, saveLabel, ok.x + ok.w / 2, ok.y + 20, BODY, pal.ok_fg);
   buttons.push(no, ok);
 }
 
@@ -137,20 +138,20 @@ export class CounterModal {
     rect(ctx, 0, 0, 480, 480, pal.bg);
     if (this.icon && CounterModal.ICONS[this.icon]) {
       const [maskName, penName] = CounterModal.ICONS[this.icon];
-      const w = measureText(this.title, 3);
+      const w = measureText(this.title, DISPLAY);
       const ix = Math.floor(240 - w / 2 - 30);
       icons.drawIcon(ctx, icons[maskName], ix, 30, pal[penName]);
-      textCenter(ctx, this.title, 240 + 12, 28, 3, pal.gold);
+      textCenter(ctx, this.title, 240 + 12, 28, DISPLAY, pal.gold);
     } else {
-      textCenter(ctx, this.title, 240, 28, 3, pal.gold);
+      textCenter(ctx, this.title, 240, 28, DISPLAY, pal.gold);
     }
     const val = this.state.preview;
     textCenter(ctx, String(val), 240, 90, 9, pal.gold);
-    if (this.subtext) textCenter(ctx, this.subtext, 240, 168, 2, pal.muted);
+    if (this.subtext) textCenter(ctx, this.subtext, 240, 168, BODY, pal.muted);
     if (this.state.pending) {
       const dlt = this.state.delta;
-      textCenter(ctx, `${this.state.value}  ->  ${val}`, 240, 190, 2, pal.muted);
-      textCenter(ctx, `${dlt >= 0 ? "+" : ""}${dlt}`, 240, 216, 3,
+      textCenter(ctx, `${this.state.value}  ->  ${val}`, 240, 190, BODY, pal.muted);
+      textCenter(ctx, `${dlt >= 0 ? "+" : ""}${dlt}`, 240, 216, DISPLAY,
                  dlt >= 0 ? pal.green : pal.red);
     }
     const bw = 104, bh = 76, gap = 8;
@@ -158,7 +159,7 @@ export class CounterModal {
     CounterModal.STEPS.forEach(([step, label], i) => {
       const b = new Button(["step", step], x0 + i * (bw + gap), 250, bw, bh);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.btn, false, 3);
-      textCenter(ctx, label, b.x + bw / 2, b.y + 26, 3, pal.tan);
+      textCenter(ctx, label, b.x + bw / 2, b.y + 26, DISPLAY, pal.tan);
       this.buttons.push(b);
     });
     const no = new Button(["no"], 24, 360, 200, 92);
@@ -196,17 +197,17 @@ export class PlayerSettingsModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, `P${this.i + 1} settings`, 240, 24, 3, pal.gold);
+    textCenter(ctx, `P${this.i + 1} settings`, 240, 24, DISPLAY, pal.gold);
     icons.drawIcon(ctx, icons.THREAT, 30, 92, pal.red);
-    textLeft(ctx, "Starting threat", 58, 96, 2, pal.tan);
+    textLeft(ctx, "Starting threat", 58, 96, BODY, pal.tan);
     stepper(ctx, this.buttons, ["st", -1], ["st", 1], 260, 82, String(this.st), 190, 56);
     icons.drawIcon(ctx, icons.THREAT, 30, 172, pal.red);
-    textLeft(ctx, "Threat / round", 58, 176, 2, pal.tan);
+    textLeft(ctx, "Threat / round", 58, 176, BODY, pal.tan);
     stepper(ctx, this.buttons, ["tpr", -1], ["tpr", 1], 260, 162, String(this.tpr), 190, 56);
     icons.drawIcon(ctx, icons.THREAT, 30, 252, pal.red);
-    textLeft(ctx, "Elimination level", 58, 256, 2, pal.tan);
+    textLeft(ctx, "Elimination level", 58, 256, BODY, pal.tan);
     stepper(ctx, this.buttons, ["el", -1], ["el", 1], 260, 242, String(this.elim), 190, 56);
-    textLeft(ctx, "eliminated when threat reaches this (50 std)", 30, 306, 1, pal.dim);
+    textLeft(ctx, "eliminated when threat reaches this (50 std)", 30, 306, BODY, pal.dim);
     footer(ctx, this.buttons);
   }
   onButton(btn) {
@@ -233,30 +234,30 @@ export class SideQuestsModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, "Side quests", 240, 22, 3, pal.gold);
+    textCenter(ctx, "Side quests", 240, 22, DISPLAY, pal.gold);
     const sq = this.game.side_quests;
-    if (!sq.length) textCenter(ctx, "none", 240, 90, 3, pal.dim);
+    if (!sq.length) textCenter(ctx, "none", 240, 90, DISPLAY, pal.dim);
     let y = 70;
     sq.forEach((s, i) => {
       panel(ctx, 24, y, 432, 56);
-      textLeft(ctx, `SQ${i + 1}  ${s.progress}/${s.points}`, 36, y + 18, 2, pal.tan);
+      textLeft(ctx, `SQ${i + 1}  ${s.progress}/${s.points}`, 36, y + 18, BODY, pal.tan);
       const mn = new Button(["pts", i, -1], 250, y + 6, 44, 44);
       const pl = new Button(["pts", i, 1], 302, y + 6, 44, 44);
       const rm = new Button(["rm", i], 400, y + 6, 44, 44);
-      button(ctx, this.buttons, mn, "-", 3);
-      button(ctx, this.buttons, pl, "+", 3);
+      button(ctx, this.buttons, mn, "-", DISPLAY);
+      button(ctx, this.buttons, pl, "+", DISPLAY);
       bevel(ctx, rm.x, rm.y, rm.w, rm.h, pal.btn_no);
-      textCenter(ctx, "x", rm.x + 22, rm.y + 10, 3, pal.no_fg);
+      textCenter(ctx, "x", rm.x + 22, rm.y + 10, DISPLAY, pal.no_fg);
       this.buttons.push(mn, pl, rm);
       y += 62;
     });
     const add = new Button(["add"], 24, Math.min(y, 320), 432, 52);
     bevel(ctx, add.x, add.y, add.w, add.h, pal.btn);
-    textCenter(ctx, "+ Add side quest", add.x + 216, add.y + 16, 2, pal.tan);
+    textCenter(ctx, "+ Add side quest", add.x + 216, add.y + 16, BODY, pal.tan);
     this.buttons.push(add);
     const done = new Button(["save"], 24, 404, 432, 64);
     bevel(ctx, done.x, done.y, done.w, done.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Done", done.x + 216, done.y + 20, 2, pal.ok_fg);
+    textCenter(ctx, "Done", done.x + 216, done.y + 20, BODY, pal.ok_fg);
     this.buttons.push(done);
   }
   onButton(btn) {
@@ -285,17 +286,17 @@ export class LocationPickModal {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     const title = this.mode === "new" ? "Travel to new location" : "Change active location";
-    textCenter(ctx, title, 240, 30, 3, pal.gold);
+    textCenter(ctx, title, 240, 30, DISPLAY, pal.gold);
     const loc = this.game.active_location;
     if (this.mode === "change" && loc) {
-      textCenter(ctx, `current ${loc.progress}/${loc.points} will be discarded`, 240, 80, 2, pal.no_fg);
+      textCenter(ctx, `current ${loc.progress}/${loc.points} will be discarded`, 240, 80, BODY, pal.no_fg);
     }
-    textLeft(ctx, "Quest points", 60, 190, 2, pal.tan);
+    textLeft(ctx, "Quest points", 60, 190, BODY, pal.tan);
     stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 250, 174, String(this.pts), 170, 60);
     icons.drawIcon(ctx, icons.THREAT, 60, 262, pal.red);
-    textLeft(ctx, "Contribution", 88, 266, 2, pal.tan);
+    textLeft(ctx, "Contribution", 88, 266, BODY, pal.tan);
     stepper(ctx, this.buttons, ["ctr", -1], ["ctr", 1], 250, 250, String(this.contrib), 170, 60);
-    textLeft(ctx, "subtracted from the staging area on travel", 60, 318, 1, pal.dim);
+    textLeft(ctx, "subtracted from the staging area on travel", 60, 318, BODY, pal.dim);
     footer(ctx, this.buttons, "Travel");
   }
   onButton(btn) {
@@ -375,16 +376,16 @@ export class PlayersDetailModal {
     if (this.edit) { this._drawEdit(ctx); return; }
     modalHeader(ctx, game, "Players", this.buttons);
     const threatX = 150, willX = 330, labelX = 32;
-    textCenter(ctx, "Threat", threatX, 46, 1, pal.dim);
-    textCenter(ctx, "Willpower", willX, 46, 1, pal.dim);
+    textCenter(ctx, "THREAT", threatX, 46, LABEL, pal.dim);
+    textCenter(ctx, "WILLPOWER", willX, 46, LABEL, pal.dim);
     game.players.forEach((p, i) => {
       const cy = 66 + i * 56;
       const label = `P${i + 1}`;
       if (i === game.first_player) {
         rect(ctx, labelX - 18, cy - 11, 36, 22, pal.gold);
-        textCenter(ctx, label, labelX, cy - 8, 2, pal.bg, false);
+        textCenter(ctx, label, labelX, cy - 8, BODY, pal.bg, false);
       } else {
-        textCenter(ctx, label, labelX, cy - 8, 2, pal.tan);
+        textCenter(ctx, label, labelX, cy - 8, BODY, pal.tan);
       }
       const danger = p.threat >= p.elimination - 10;
       const tfrac = p.elimination > 0 ? p.threat / p.elimination : 0;
@@ -398,17 +399,17 @@ export class PlayersDetailModal {
     const isThreat = stat === "threat";
     const title = `P${i + 1} ${isThreat ? "Threat" : "Willpower"}`;
     const [maskName, penName] = isThreat ? ["THREAT", "red"] : ["WILLPOWER", "gold"];
-    const w = measureText(title, 3);
+    const w = measureText(title, DISPLAY);
     const ix = Math.floor(240 - w / 2 - 30);
     icons.drawIcon(ctx, icons[maskName], ix, 30, pal[penName]);
-    textCenter(ctx, title, 240 + 12, 28, 3, pal.gold);
+    textCenter(ctx, title, 240 + 12, 28, DISPLAY, pal.gold);
 
     const val = state.preview;
     textCenter(ctx, String(val), 240, 90, 9, pal.gold);
     if (state.pending) {
       const dlt = state.delta;
-      textCenter(ctx, `${state.value}  ->  ${val}`, 240, 190, 2, pal.muted);
-      textCenter(ctx, `${dlt >= 0 ? "+" : ""}${dlt}`, 240, 216, 3,
+      textCenter(ctx, `${state.value}  ->  ${val}`, 240, 190, BODY, pal.muted);
+      textCenter(ctx, `${dlt >= 0 ? "+" : ""}${dlt}`, 240, 216, DISPLAY,
                  dlt >= 0 ? pal.green : pal.red);
     }
     const bw = 104, bh = 76, gap = 8;
@@ -416,7 +417,7 @@ export class PlayersDetailModal {
     [[-5, "-5"], [-1, "-1"], [1, "+1"], [5, "+5"]].forEach(([step, lbl], k) => {
       const b = new Button(["step", step], x0 + k * (bw + gap), 250, bw, bh);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.btn, false, 3);
-      textCenter(ctx, lbl, b.x + bw / 2, b.y + 26, 3, pal.tan);
+      textCenter(ctx, lbl, b.x + bw / 2, b.y + 26, DISPLAY, pal.tan);
       this.buttons.push(b);
     });
     const no = new Button(["back"], 24, 360, 200, 92);
@@ -473,15 +474,19 @@ export class RemindersModal {
       bevel(ctx, row.x, row.y, row.w, row.h, on ? pal.card_hi : pal.card);
       rect(ctx, 30, y + 17, 28, 28, pal.well);
       if (on) rect(ctx, 36, y + 23, 16, 16, pal.ok_fg);
-      textLeft(ctx, label, 76, y + 12, 2, on ? pal.tan : pal.muted);
+      textLeft(ctx, label, 76, y + 12, BODY, on ? pal.tan : pal.muted);
+      // "At <view>", not "Notifies at <view>": at BODY the archery row
+      // ("Combat (Shadow Cards)" plus the staging condition) runs 22px past
+      // the row at the longer wording. Shortening the copy is the fix;
+      // shrinking the caption is not (see the design system spec).
       if (key === "archery") {
-        const part1 = `Notifies at ${VIEW_LABELS[view]} if staging `;
-        const w1 = measureText(part1, 1);
-        textLeft(ctx, part1, 76, y + 38, 1, pal.dim);
-        icons.drawIcon(ctx, icons.THREAT_SM, 76 + w1 + 2, y + 35, pal.dim);
-        textLeft(ctx, "> 0", 76 + w1 + 18, y + 38, 1, pal.dim);
+        const part1 = `At ${VIEW_LABELS[view]} if staging `;
+        const w1 = measureText(part1, BODY);
+        textLeft(ctx, part1, 76, y + 38, BODY, pal.dim);
+        icons.drawIcon(ctx, icons.THREAT_SM, 76 + w1 + 2, y + 38, pal.dim);
+        textLeft(ctx, "> 0", 76 + w1 + 18, y + 38, BODY, pal.dim);
       } else {
-        textLeft(ctx, `Notifies at ${VIEW_LABELS[view]}`, 76, y + 38, 1, pal.dim);
+        textLeft(ctx, `At ${VIEW_LABELS[view]}`, 76, y + 38, BODY, pal.dim);
       }
       this.buttons.push(row);
       y += 70;
@@ -524,7 +529,7 @@ export class CommitModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, `P${this.idx + 1} quests for...`, 240, 28, 3, pal.gold);
+    textCenter(ctx, `P${this.idx + 1} quests for...`, 240, 28, DISPLAY, pal.gold);
     const val = this.state.preview;
     const VSCALE = 12, ISZ = 84;
     const zoneTop = 58, zoneBottom = 244;
@@ -538,21 +543,21 @@ export class CommitModal {
     CommitModal.STEPS.forEach(([step, label], i) => {
       const b = new Button(["step", step], sx0 + i * (bw + gap), 250, bw, bh);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.btn, false, 3);
-      textCenter(ctx, label, b.x + bw / 2, b.y + 26, 3, pal.tan);
+      textCenter(ctx, label, b.x + bw / 2, b.y + 26, DISPLAY, pal.tan);
       this.buttons.push(b);
     });
     const done = new Button(["done"], 24, 360, 200, 92);
     const nxt = new Button(["next"], 256, 360, 200, 92);
     if (this.final) {
       bevel(ctx, done.x, done.y, done.w, done.h, pal.btn_ok, false, 3);
-      textCenter(ctx, "Done", done.x + 100, done.y + 32, 3, pal.ok_fg);
+      textCenter(ctx, "Done", done.x + 100, done.y + 32, DISPLAY, pal.ok_fg);
       bevel(ctx, nxt.x, nxt.y, nxt.w, nxt.h, pal.card, false, 3);
-      textCenter(ctx, "Next", nxt.x + 100, nxt.y + 32, 3, pal.dim);
+      textCenter(ctx, "Next", nxt.x + 100, nxt.y + 32, DISPLAY, pal.dim);
     } else {
       bevel(ctx, done.x, done.y, done.w, done.h, pal.card, false, 3);
-      textCenter(ctx, "Done", done.x + 100, done.y + 32, 3, pal.dim);
+      textCenter(ctx, "Done", done.x + 100, done.y + 32, DISPLAY, pal.dim);
       bevel(ctx, nxt.x, nxt.y, nxt.w, nxt.h, pal.btn, false, 3);
-      textCenter(ctx, "Next", nxt.x + 100, nxt.y + 32, 3, pal.gold);
+      textCenter(ctx, "Next", nxt.x + 100, nxt.y + 32, DISPLAY, pal.gold);
     }
     this.buttons.push(done, nxt);
   }
@@ -587,28 +592,28 @@ export class EliminationModal {
     rect(ctx, 0, 0, 480, 480, pal.bg);
     const p = this.game.players[this.i];
     const title = `P${this.i + 1} eliminated?`;
-    const tw = measureText(title, 3);
+    const tw = measureText(title, DISPLAY);
     const start = Math.floor((480 - (20 + 8 + tw)) / 2);
     icons.drawIcon(ctx, icons.THREAT, start, 22, pal.red);
-    textLeft(ctx, title, start + 28, 20, 3, pal.red);
+    textLeft(ctx, title, start + 28, 20, DISPLAY, pal.red);
     textCenter(ctx, `threat ${p.threat} reached elimination level ${p.elimination}`,
-               240, 62, 2, pal.tan);
+               240, 62, BODY, pal.tan);
     const eb = new Button(["elim"], 24, 110, 432, 64);
     bevel(ctx, eb.x, eb.y, eb.w, eb.h, pal.btn_no, false, 3);
-    textCenter(ctx, "Yes - eliminated", 240, eb.y + 22, 2, pal.no_fg);
+    textCenter(ctx, "Yes - eliminated", 240, eb.y + 22, BODY, pal.no_fg);
     this.buttons.push(eb);
     const ab = new Button(["avert"], 24, 190, 432, 64);
     bevel(ctx, ab.x, ab.y, ab.w, ab.h, pal.btn, false, 3);
-    textCenter(ctx, "Averted by card effect", 240, ab.y + 12, 2, pal.tan);
+    textCenter(ctx, "Averted by card effect", 240, ab.y + 12, BODY, pal.tan);
     textCenter(ctx, `threat -> ${Math.max(0, p.elimination - 5)}, stays in`,
-               240, ab.y + 38, 1, pal.dim);
+               240, ab.y + 38, BODY, pal.dim);
     this.buttons.push(ab);
-    textLeft(ctx, "Elimination level changed?", 24, 286, 2, pal.tan);
+    textLeft(ctx, "Elimination level changed?", 24, 286, BODY, pal.tan);
     stepper(ctx, this.buttons, ["lvl", -1], ["lvl", 1], 24, 316,
             String(this.newLevel), 300, 56);
     const sb = new Button(["setlvl"], 340, 316, 116, 56);
     bevel(ctx, sb.x, sb.y, sb.w, sb.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Set", sb.x + 58, sb.y + 18, 2, pal.ok_fg);
+    textCenter(ctx, "Set", sb.x + 58, sb.y + 18, BODY, pal.ok_fg);
     this.buttons.push(sb);
   }
   onButton(btn) {
@@ -696,7 +701,7 @@ export class QuestingProgressModal {
     } else {
       disc(ctx, cx, cy, 13, pal.well);
       arcRuns(ctx, cx, cy, 13, 11, 0, 360, pal.dim);
-      textCenter(ctx, String(value), cx, Math.round(cy - 8), 2, pal.gold);
+      textCenter(ctx, String(value), cx, Math.round(cy - 8), BODY, pal.gold);
     }
     circBtn(ctx, cx + 30, cy, 10, "+");
     this.buttons.push(
@@ -744,7 +749,7 @@ export class QuestingProgressModal {
     if (it.kind === "l_add") {
       const b = new Button(["addloc"], 12, y + 7, 140, 24);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-      textCenter(ctx, "+ Add location", b.x + b.w / 2, b.y + 5, 2, pal.tan);
+      textCenter(ctx, "+ Add location", b.x + b.w / 2, b.y + 5, BODY, pal.tan);
       this.buttons.push(b);
       return;
     }
@@ -765,8 +770,8 @@ export class QuestingProgressModal {
     // real catalog side-quest name (up to ~20 chars) can otherwise run into
     // the Current/Target editors, unlike the old always-short generic
     // labels ("Quest 1A", "Location", "Side Quest 3").
-    const nameS = truncateText(it.name, 2, 118);
-    textLeft(ctx, nameS, 12, y, 2, questCardTappable ? pal.gold : pal.tan);
+    const nameS = truncateText(it.name, BODY, 118);
+    textLeft(ctx, nameS, 12, y, BODY, questCardTappable ? pal.gold : pal.tan);
     this._valEditor2(ctx, 178, cy, prog, pts ? prog / pts : 0, true, [pfx + "P-", idx], [pfx + "P+", idx]);
     this._valEditor2(ctx, 300, cy, pts, 0, false, [pfx + "T-", idx], [pfx + "T+", idx]);
     if (it.removable) {
@@ -787,9 +792,9 @@ export class QuestingProgressModal {
     if (this.locPrompt) { this._drawLocPrompt(ctx); return; }
     modalHeader(ctx, this.game, "Progress", this.buttons);
 
-    textLeft(ctx, "Quest points", 12, 48, 1, pal.muted);
-    textCenter(ctx, "Current", 178, 48, 1, pal.dim);
-    textCenter(ctx, "Target", 300, 48, 1, pal.dim);
+    textLeft(ctx, "QUEST POINTS", 12, 48, LABEL, pal.muted);
+    textCenter(ctx, "CURRENT", 178, 48, LABEL, pal.dim);
+    textCenter(ctx, "TARGET", 300, 48, LABEL, pal.dim);
 
     const items = this._items();
     items.forEach((it, i) => this._row(ctx, it, QuestingProgressModal.ROWS_Y0 + i * QuestingProgressModal.ROW_H));
@@ -798,12 +803,12 @@ export class QuestingProgressModal {
     const addY = QuestingProgressModal.ROWS_Y0 + n * QuestingProgressModal.ROW_H - 4;
     const add = new Button(["add"], 12, addY, 120, 24);
     bevel(ctx, add.x, add.y, add.w, add.h, pal.btn);
-    textCenter(ctx, "+ Side quest", add.x + add.w / 2, add.y + 5, 2, pal.tan);
+    textCenter(ctx, "+ Side quest", add.x + add.w / 2, add.y + 5, BODY, pal.tan);
     this.buttons.push(add);
 
     if (this.game.sailing) {
       const headingY = QuestingProgressModal.ROWS_Y0 + n * QuestingProgressModal.ROW_H + 34;
-      textLeft(ctx, "Heading", 12, headingY, 2, pal.tan);
+      textLeft(ctx, "Heading", 12, headingY, BODY, pal.tan);
       const cy = headingY + 4;
       for (let i = 0; i < 4; i++) {
         const cx = 150 + i * 40;
@@ -823,16 +828,16 @@ export class QuestingProgressModal {
   _drawChart(ctx) {
     const cy0 = 344;
     rect(ctx, 8, cy0 - 12, 464, 1, pal.border);
-    textLeft(ctx, "THIS GAME - BY ROUND", 12, cy0 - 9, 1, pal.muted);
+    textLeft(ctx, "THIS GAME - BY ROUND", 12, cy0 - 9, LABEL, pal.muted);
     const cols = this.game.quest_history.slice(-8);
     if (!cols.length) {
-      textCenter(ctx, "No rounds resolved yet", 240, cy0 + 14, 1, pal.dim);
+      textCenter(ctx, "No rounds resolved yet", 240, cy0 + 14, BODY, pal.dim);
       return;
     }
     const x0 = 52;
     const stride = Math.floor((472 - x0) / cols.length);
     cols.forEach((r, i) =>
-      textCenter(ctx, `R${r.round}`, x0 + i * stride + Math.floor(stride / 2), cy0, 1, pal.dim));
+      textCenter(ctx, `R${r.round}`, x0 + i * stride + Math.floor(stride / 2), cy0, LABEL, pal.dim));
     const HDG_PEN = [pal.gold, pal.amber, pal.amber, pal.red];
     const rows = [
       [icons.WILLPOWER, pal.gold, false, r => [String(r.willpower), pal.gold]],
@@ -851,12 +856,15 @@ export class QuestingProgressModal {
       icons.drawIcon(ctx, mask, 12, ry - 2, ipen);
       cols.forEach((r, i) => {
         const [s, pen] = cell(r);
-        textCenter(ctx, s, x0 + i * stride + Math.floor(stride / 2), ry, 2, pen);
+        textCenter(ctx, s, x0 + i * stride + Math.floor(stride / 2), ry, BODY, pen);
       });
       ry += 26;
     }
-    const caption = "willpower / staging / result" + (this.game.sailing ? " / heading" : "");
-    textCenter(ctx, caption, 240, ry + 4, 1, pal.dim);
+    // The key for the icon column above it - chrome for a dense readout,
+    // scanned rather than read, so it stays LABEL and goes ALL CAPS to match
+    // "THIS GAME - BY ROUND" at the top of the same block.
+    const caption = "WILLPOWER / STAGING / RESULT" + (this.game.sailing ? " / HEADING" : "");
+    textCenter(ctx, caption, 240, ry + 4, LABEL, pal.dim);
   }
 
   _drawLocPrompt(ctx) {
@@ -868,14 +876,14 @@ export class QuestingProgressModal {
 
   _drawLocChoose(ctx) {
     const loc = this.game.active_location;
-    textCenter(ctx, "Location removed", 240, 30, 3, pal.gold);
-    textCenter(ctx, "What happened to it?", 240, 70, 2, pal.tan);
-    textCenter(ctx, `${loc.progress}/${loc.points} progress will be discarded`, 240, 94, 1, pal.dim);
+    textCenter(ctx, "Location removed", 240, 30, DISPLAY, pal.gold);
+    textCenter(ctx, "What happened to it?", 240, 70, BODY, pal.tan);
+    textCenter(ctx, `${loc.progress}/${loc.points} progress will be discarded`, 240, 94, BODY, pal.dim);
     const opt = (y, id, label, sub) => {
       const b = new Button([id], 24, y, 432, 64);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.btn, false, 3);
-      textCenter(ctx, label, 240, y + 14, 3, pal.tan);
-      textCenter(ctx, sub, 240, y + 44, 1, pal.dim);
+      textCenter(ctx, label, 240, y + 12, DISPLAY, pal.tan);
+      textCenter(ctx, sub, 240, y + 42, BODY, pal.dim);
       this.buttons.push(b);
     };
     opt(120, "lp_replaced", "Replaced", "enter the new location's quest points");
@@ -883,24 +891,24 @@ export class QuestingProgressModal {
     opt(272, "lp_discard", "Discard", "no replacement");
     const cancel = new Button(["lp_cancel"], 24, 356, 432, 56);
     bevel(ctx, cancel.x, cancel.y, cancel.w, cancel.h, pal.btn_no, false, 3);
-    textCenter(ctx, "Cancel", 240, cancel.y + 18, 2, pal.no_fg);
+    textCenter(ctx, "Cancel", 240, cancel.y + 18, BODY, pal.no_fg);
     this.buttons.push(cancel);
   }
 
   _drawLocPts(ctx) {
-    textCenter(ctx, "Replace location", 240, 30, 3, pal.gold);
-    textLeft(ctx, "Quest points", 60, 216, 2, pal.tan);
+    textCenter(ctx, "Replace location", 240, 30, DISPLAY, pal.gold);
+    textLeft(ctx, "Quest points", 60, 216, BODY, pal.tan);
     stepper(ctx, this.buttons, ["lp_pts", -1], ["lp_pts", 1], 250, 200, String(this.locPrompt.pts), 170, 60);
     footer(ctx, this.buttons, "Confirm");
   }
 
   _drawLocContrib(ctx) {
-    textCenter(ctx, "Location to staging", 240, 30, 3, pal.gold);
+    textCenter(ctx, "Location to staging", 240, 30, DISPLAY, pal.gold);
     icons.drawIcon(ctx, icons.THREAT, 60, 208, pal.red);
-    textLeft(ctx, "Contribution", 88, 216, 2, pal.tan);
+    textLeft(ctx, "Contribution", 88, 216, BODY, pal.tan);
     stepper(ctx, this.buttons, ["lp_ctr", -1], ["lp_ctr", 1], 250, 200,
             String(this.locPrompt.state.preview), 170, 60);
-    textLeft(ctx, "added to the staging area", 60, 270, 1, pal.dim);
+    textLeft(ctx, "added to the staging area", 60, 270, BODY, pal.dim);
     footer(ctx, this.buttons, "Confirm");
   }
 
@@ -1079,10 +1087,10 @@ export class SailingModal {
       const total = 24 + 8 + lw;
       const x0 = Math.floor(240 - total / 2);
       drawWeather(ctx, h, x0 + 12, cy + 10, 12);
-      textLeft(ctx, label, x0 + 32, cy + (scale === 2 ? 2 : 0), scale, pen);
+      textLeft(ctx, label, x0 + 32, cy + (scale === BODY ? 2 : 0), scale, pen);
     };
 
-    textCenter(ctx, "Current heading", 240, 54, 1, pal.dim);
+    textCenter(ctx, "CURRENT HEADING", 240, 54, LABEL, pal.dim);
     heading(this.game.heading, 74, 2);
 
     // wheel stepper
@@ -1097,7 +1105,7 @@ export class SailingModal {
     if (this.v > 0) { sub = `${this.v} wheel${this.v > 1 ? "s" : ""} found - shift on-course`; spen = pal.green; }
     else if (this.v < 0) { sub = `${-this.v} step${this.v < -1 ? "s" : ""} off-course (card effect)`; spen = pal.red; }
     else { sub = "no wheels found - heading stays"; spen = pal.dim; }
-    textCenter(ctx, sub, 240, 200, 1, spen);
+    textCenter(ctx, sub, 240, 200, BODY, spen);
 
     const mn = new Button(["d", -1], 34, 128, 64, 60);
     const pl = new Button(["d", 1], 480 - 34 - 64, 128, 64, 60);
@@ -1107,15 +1115,15 @@ export class SailingModal {
     textCenter(ctx, "+", pl.x + 32, pl.y + 14, 4, pal.tan);
     this.buttons.push(mn, pl);
 
-    textCenter(ctx, "Result", 240, 240, 1, pal.dim);
+    textCenter(ctx, "RESULT", 240, 240, LABEL, pal.dim);
     heading(this._result(), 262, 2);
 
     const no = new Button(["cancel"], 24, 404, 200, 64);
     const ok = new Button(["apply"], 256, 404, 200, 64);
     bevel(ctx, no.x, no.y, no.w, no.h, pal.btn_no, false, 3);
-    textCenter(ctx, "Cancel", no.x + 100, no.y + 20, 2, pal.no_fg);
+    textCenter(ctx, "Cancel", no.x + 100, no.y + 20, BODY, pal.no_fg);
     bevel(ctx, ok.x, ok.y, ok.w, ok.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Apply", ok.x + 100, ok.y + 20, 2, pal.ok_fg);
+    textCenter(ctx, "Apply", ok.x + 100, ok.y + 20, BODY, pal.ok_fg);
     this.buttons.push(no, ok);
   }
   onButton(btn) {
@@ -1151,26 +1159,26 @@ export class StageCompleteModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, `Quest Stage ${this.cleared} cleared!`, 240, 26, 3, pal.gold);
+    textCenter(ctx, `Quest Stage ${this.cleared} cleared!`, 240, 26, DISPLAY, pal.gold);
     let y = 74;
-    textCenter(ctx, "Set up the next stage", 240, y, 2, pal.tan);
+    textCenter(ctx, "Set up the next stage", 240, y, BODY, pal.tan);
     y += 40;
-    textLeft(ctx, "Stage", 30, y + 14, 2, pal.tan);
+    textLeft(ctx, "Stage", 30, y + 14, BODY, pal.tan);
     stepper(ctx, this.buttons, ["n", -1], ["n", 1], 160, y, String(this.n), 130, 52);
     // side cycles A-H (multi-variant quests go beyond A/B - DragnCards data)
     stepper(ctx, this.buttons, ["side", -1], ["side", 1], 316, y, this.side, 144, 52);
     y += 76;
-    textLeft(ctx, "Quest points", 30, y + 14, 2, pal.tan);
+    textLeft(ctx, "Quest points", 30, y + 14, BODY, pal.tan);
     stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 240, y, String(this.pts), 210, 52);
     y += 90;
     const go = new Button(["go"], 30, y, 420, 60);
     bevel(ctx, go.x, go.y, go.w, go.h, pal.btn_ok, false, 3);
-    textCenter(ctx, `Continue to ${this.n}${this.side}`, 240, y + 20, 2, pal.ok_fg);
+    textCenter(ctx, `Continue to ${this.n}${this.side}`, 240, y + 20, BODY, pal.ok_fg);
     this.buttons.push(go);
     y += 74;
     const win = new Button(["win"], 30, y, 420, 60);
     bevel(ctx, win.x, win.y, win.w, win.h, pal.card_hi, false, 3);
-    textCenter(ctx, "That was the final stage - Victory!", 240, y + 20, 2, pal.gold);
+    textCenter(ctx, "That was the final stage - Victory!", 240, y + 20, BODY, pal.gold);
     this.buttons.push(win);
   }
   onButton(btn) {
@@ -1281,90 +1289,117 @@ export class ResolutionModal {
   _cta(ctx, label, id, y = 404, h = 56, ok = true) {
     const b = new Button(id, 24, y, 432, h);
     bevel(ctx, b.x, b.y, b.w, b.h, ok ? pal.btn_ok : pal.btn_no, false, 3);
-    textCenter(ctx, label, 240, y + Math.floor(h / 2) - 10, 2, ok ? pal.ok_fg : pal.no_fg);
+    textCenter(ctx, label, 240, y + Math.floor(h / 2) - 10, BODY, ok ? pal.ok_fg : pal.no_fg);
     this.buttons.push(b);
   }
 
   _drawDone(ctx) {
-    textCenter(ctx, "All resolved", 240, 200, 3, pal.gold);
+    textCenter(ctx, "All resolved", 240, 200, DISPLAY, pal.gold);
     this._cta(ctx, "Continue", ["close"]);
   }
 
   _drawReveal(ctx, st) {
-    textCenter(ctx, `STAGE ${st.stage_n} REVEALED`, 240, 64, 2, pal.amber);
-    const name = truncateText(st.face_a.name || "", 3, 432);
-    textCenter(ctx, name, 240, 92, 3, pal.gold);
+    textCenter(ctx, `STAGE ${st.stage_n} REVEALED`, 240, 64, BODY, pal.amber);
+    const name = truncateText(st.face_a.name || "", DISPLAY, 432);
+    textCenter(ctx, name, 240, 92, DISPLAY, pal.gold);
     const tipX = 24, tipW = 432, tipY = 130;
     const ribbonH = 22, padTop = 10, lineH = 24, padBottom = 10, maxLines = 5;
     const raw = st.face_a.text;
     const body = raw ? raw : "No setup instructions for this stage.";
-    const lines = wrapText(body, 2, tipW - 28).slice(0, maxLines);
+    const lines = wrapText(body, BODY, tipW - 28).slice(0, maxLines);
     const tipH = ribbonH + padTop + lines.length * lineH + padBottom;
     rect(ctx, tipX, tipY, tipW, tipH, pal.border_gold);
     rect(ctx, tipX + 2, tipY + 2, tipW - 4, tipH - 4, pal.bg);
     rect(ctx, tipX + 4, tipY + 4, tipW - 8, tipH - 8, pal.border_gold);
     rect(ctx, tipX + 6, tipY + 6, tipW - 12, tipH - 12, pal.scroll);
     rect(ctx, tipX, tipY, tipW, ribbonH, pal.border_gold);
-    textLeft(ctx, "STAGE ADVANCE - resolve now", tipX + 10, tipY + 6, 1, pal.bg, false);
+    textLeft(ctx, "STAGE ADVANCE - RESOLVE NOW", tipX + 10, tipY + 6, LABEL, pal.bg, false);
     let ly = tipY + ribbonH + padTop;
     for (const ln of lines) {
-      textLeft(ctx, ln, tipX + 14, ly, 2, pal.tan);
+      textLeft(ctx, ln, tipX + 14, ly, BODY, pal.tan);
       ly += lineH;
     }
     this._cta(ctx, `Flip to Side B  ->  ${st.next_points} qp`, ["do_flip"]);
   }
 
   _drawLocation(ctx, st) {
-    textCenter(ctx, "Location Explored", 240, 90, 3, pal.gold);
-    textCenter(ctx, `${st.progress}/${st.points} progress`, 240, 130, 2, pal.tan);
+    textCenter(ctx, "Location Explored", 240, 90, DISPLAY, pal.gold);
+    textCenter(ctx, `${st.progress}/${st.points} progress`, 240, 130, BODY, pal.tan);
     const excess = st.progress - st.points;
     if (excess) {
-      textCenter(ctx, `${excess} excess -> quest card`, 240, 160, 2, pal.amber);
+      textCenter(ctx, `${excess} excess -> quest card`, 240, 160, BODY, pal.amber);
     }
     this._cta(ctx, "Continue", ["resolve_location"]);
   }
 
+  // Branch rows quote the alternative stages' own printed text, so the
+  // preview is card text and gets BODY like every other quote. The rows grow
+  // to hold it (they were 64px with a one-line LABEL preview) instead of the
+  // type shrinking to fit them: the stride is whatever the space left below
+  // the header divides into, capped so a 2-way split does not sprawl, and the
+  // preview takes as many BODY lines as the resulting row height allows.
+  static BRANCH_Y0 = 116;
+  static BRANCH_STRIDE_MAX = 106;
+  static BRANCH_LH = 24;
+
   _drawBranch(ctx, st) {
-    textCenter(ctx, "Choose a path", 240, 56, 3, pal.gold);
-    textCenter(ctx, st.mode !== "random" ? "First player chooses" : "Random", 240, 86, 1, pal.dim);
-    let y = 116;
+    const S = ResolutionModal;
+    textCenter(ctx, "Choose a path", 240, 56, DISPLAY, pal.gold);
+    // ALL CAPS both ways: this slot names how the choice gets made and is
+    // read as chrome under the title, not as a sentence.
+    textCenter(ctx, st.mode !== "random" ? "FIRST PLAYER CHOOSES" : "RANDOM", 240, 86, LABEL, pal.dim);
+    const reserve = st.mode === "random" ? 50 : 0;    // the Randomize button
+    const stride = Math.min(S.BRANCH_STRIDE_MAX,
+      Math.floor((468 - S.BRANCH_Y0 - reserve) / Math.max(1, st.cards.length)));
+    const rowH = Math.max(48, stride - 10);
+    const maxLines = Math.max(1, Math.floor((rowH - 34) / S.BRANCH_LH));
+    const usable = 432 - 28;
+    let y = S.BRANCH_Y0;
     st.cards.forEach((card, i) => {
       const bFace = card.faces.find(f => f.side === "B") ?? {};
-      const b = new Button(["pick_branch", i], 24, y, 432, 64);
+      const b = new Button(["pick_branch", i], 24, y, 432, rowH);
       const sel = this.branchPick === i;
       bevel(ctx, b.x, b.y, b.w, b.h, sel ? pal.btn_ok : pal.btn, false, 3);
-      textLeft(ctx, bFace.name || "?", b.x + 14, y + 10, 2, sel ? pal.ok_fg : pal.tan);
-      const preview = truncateText(bFace.text || "", 1, 400);
-      textLeft(ctx, preview, b.x + 14, y + 38, 1, pal.dim);
+      textLeft(ctx, bFace.name || "?", b.x + 14, y + 10, BODY, sel ? pal.ok_fg : pal.tan);
+      let lines = wrapText(bFace.text || "", BODY, usable);
+      if (lines.length > maxLines) {
+        lines = lines.slice(0, maxLines);
+        lines[lines.length - 1] = truncateText(lines[lines.length - 1] + " ..", BODY, usable);
+      }
+      let ly = y + 38;
+      for (const ln of lines) {
+        if (ln) textLeft(ctx, ln, b.x + 14, ly, BODY, pal.dim);
+        ly += S.BRANCH_LH;
+      }
       this.buttons.push(b);
-      y += 74;
+      y += stride;
     });
     if (st.mode === "random") {
       const r = new Button(["randomize_branch"], 24, y, 432, 40);
       bevel(ctx, r.x, r.y, r.w, r.h, pal.card, false, 2);
-      textCenter(ctx, "Randomize for me", 240, y + 10, 2, pal.tan);
+      textCenter(ctx, "Randomize for me", 240, y + 10, BODY, pal.tan);
       this.buttons.push(r);
     }
   }
 
   _drawAdvance(ctx, st) {
-    textCenter(ctx, `Quest ${st.cleared} cleared`, 240, 90, 3, pal.gold);
+    textCenter(ctx, `Quest ${st.cleared} cleared`, 240, 90, DISPLAY, pal.gold);
     if (st.underfilled) {
-      textCenter(ctx, "Progress hasn't reached target - confirm", 240, 130, 1, pal.red);
+      textCenter(ctx, "Progress hasn't reached target - confirm", 240, 130, BODY, pal.red);
     }
     this._cta(ctx, `Reveal Stage ${st.next_stage}`, ["do_advance"]);
   }
 
   _drawVictory(ctx, st) {
-    textCenter(ctx, `Quest ${st.cleared} cleared`, 240, 70, 2, pal.tan);
-    textCenter(ctx, "That was the final stage!", 240, 110, 3, pal.gold);
+    textCenter(ctx, `Quest ${st.cleared} cleared`, 240, 70, BODY, pal.tan);
+    textCenter(ctx, "That was the final stage!", 240, 110, DISPLAY, pal.gold);
     this._cta(ctx, "Declare Victory", ["declare_victory"], 340);
     this._cta(ctx, "Not yet - keep playing", ["continue_without_victory"], 404, 56, false);
   }
 
   _drawSideQuest(ctx, st) {
-    textCenter(ctx, st.name, 240, 90, 3, pal.gold);
-    textCenter(ctx, `${st.progress}/${st.points}`, 240, 130, 2, pal.tan);
+    textCenter(ctx, st.name, 240, 90, DISPLAY, pal.gold);
+    textCenter(ctx, `${st.progress}/${st.points}`, 240, 130, BODY, pal.tan);
     this._cta(ctx, "Mark Complete", ["resolve_side_quest"], 340);
     this._cta(ctx, "Leave as-is", ["skip_side_quest"], 404, 56, false);
   }
@@ -1420,23 +1455,23 @@ export class QuestConfigModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, `Quest  ${this.q.stage_n}${this.q.side}`, 240, 24, 3, pal.gold);
-    textLeft(ctx, "Stage number", 30, 84, 2, pal.tan);
+    textCenter(ctx, `Quest  ${this.q.stage_n}${this.q.side}`, 240, 24, DISPLAY, pal.gold);
+    textLeft(ctx, "Stage number", 30, 84, BODY, pal.tan);
     stepper(ctx, this.buttons, ["n", -1], ["n", 1], 300, 70, String(this.q.stage_n), 150, 52);
-    textLeft(ctx, "Side", 30, 156, 2, pal.tan);
+    textLeft(ctx, "Side", 30, 156, BODY, pal.tan);
     stepper(ctx, this.buttons, ["side", -1], ["side", 1], 300, 142, this.q.side, 150, 52);
-    textLeft(ctx, "Quest points", 30, 228, 2, pal.tan);
+    textLeft(ctx, "Quest points", 30, 228, BODY, pal.tan);
     stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 300, 214, String(this.q.points), 150, 52);
-    textLeft(ctx, "Sailing quest", 30, 296, 2, pal.tan);
+    textLeft(ctx, "Sailing quest", 30, 296, BODY, pal.tan);
     icons.drawIcon(ctx, icons.WHEEL, 176, 292, this.sail ? pal.gold : pal.dim);
     const sb = new Button(["sail"], 300, 284, 150, 48);
     panel(ctx, sb.x, sb.y, sb.w, sb.h, this.sail ? pal.gold : pal.btn);
-    textCenter(ctx, this.sail ? "On" : "Off", sb.x + 75, sb.y + 14, 2,
+    textCenter(ctx, this.sail ? "On" : "Off", sb.x + 75, sb.y + 14, BODY,
                this.sail ? pal.bg : pal.tan, false);
     this.buttons.push(sb);
     const adv = new Button(["adv"], 30, 344, 420, 48);
     bevel(ctx, adv.x, adv.y, adv.w, adv.h, pal.btn);
-    textCenter(ctx, "Advance stage (progress -> 0)", adv.x + 210, adv.y + 14, 2, pal.tan);
+    textCenter(ctx, "Advance stage (progress -> 0)", adv.x + 210, adv.y + 14, BODY, pal.tan);
     this.buttons.push(adv);
     footer(ctx, this.buttons);
   }
@@ -1501,6 +1536,7 @@ export class QuestCardModal {
   static NAV_Y = 424;
   static NAV_H = 44;
   static BODY_Y0 = 130;
+  static DETAIL_Y0 = 78;
   static LH = 26;              // 10*scale(2)+6 - one wrapped body line
   static TIPS_LINES = 2;       // inline peek before "more" takes over
   static TIPS_H = 18 + 2 * 26 + 8;
@@ -1517,6 +1553,7 @@ export class QuestCardModal {
     this.buttons = [];
     this.tips = tips || {};
     this.detail = null;        // null | "tips" | "text" - full-page views
+    this.detailPage = 0;
     this._tipsData = null;
     this.page = this._livePage();
   }
@@ -1565,9 +1602,9 @@ export class QuestCardModal {
     if (lines.length <= maxLines && !more) return [lines, false];
     const keep = lines.slice(0, maxLines);
     if (!keep.length) keep.push("");
-    const mw = measureText(QuestCardModal.MORE, 2);
+    const mw = measureText(QuestCardModal.MORE, BODY);
     let last = keep[keep.length - 1];
-    while (last && measureText(last, 2) + mw > usable) {
+    while (last && measureText(last, BODY) + mw > usable) {
       last = last.includes(" ") ? last.slice(0, last.lastIndexOf(" ")) : last.slice(0, -1);
     }
     keep[keep.length - 1] = last + QuestCardModal.MORE;
@@ -1580,53 +1617,82 @@ export class QuestCardModal {
     if (this.page > 0) {
       const b = new Button(["prev"], M, QuestCardModal.NAV_Y, half, QuestCardModal.NAV_H);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-      textCenter(ctx, truncateText("< " + this._label(pages[this.page - 1]), 2, half - 16),
-                 b.x + half / 2, b.y + 14, 2, pal.tan);
+      textCenter(ctx, truncateText("< " + this._label(pages[this.page - 1]), BODY, half - 16),
+                 b.x + half / 2, b.y + 14, BODY, pal.tan);
       this.buttons.push(b);
     }
     if (this.page < pages.length - 1) {
       const b = new Button(["next"], M + half + 8, QuestCardModal.NAV_Y, half, QuestCardModal.NAV_H);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-      textCenter(ctx, truncateText(this._label(pages[this.page + 1]) + " >", 2, half - 16),
-                 b.x + half / 2, b.y + 14, 2, pal.tan);
+      textCenter(ctx, truncateText(this._label(pages[this.page + 1]) + " >", BODY, half - 16),
+                 b.x + half / 2, b.y + 14, BODY, pal.tan);
       this.buttons.push(b);
     }
   }
 
-  // The full content behind a "more" tap, at scale 1 so it fits: every
-  // catalogued face wraps to 11 lines or fewer there.
+  // The full content behind a "more" tap - at BODY, like everything else. It
+  // used to render at LABEL so it would fit on one page, which is exactly
+  // backwards: this view exists to give the text ROOM. When it does not fit,
+  // it pages (see _detailCapacity).
   _detailLines(usable) {
     if (this.detail === "tips") {
       const t = this._tipsData ?? { tips: [] };
       const lines = [];
-      for (const tip of t.tips) lines.push(...wrapText("- " + tip, 1, usable));
+      for (const tip of t.tips) lines.push(...wrapText("- " + tip, BODY, usable));
       const attribution = t.attribution ?? {};
       for (const extra of [attribution.name ? "Source: " + attribution.name : "",
                            attribution.url || ""]) {
-        if (extra) lines.push({ dim: truncateText(extra, 1, usable) });
+        if (extra) lines.push({ dim: truncateText(extra, LABEL, usable) });
       }
       return lines;
     }
     const [, , face] = this._at(this._pages()[this.page]);
-    return wrapText(face.text || "no text", 1, usable);
+    return wrapText(face.text || "no text", BODY, usable);
+  }
+
+  // Lines of BODY text one detail page holds.
+  _detailCapacity() {
+    const S = QuestCardModal;
+    return Math.max(1, Math.floor((S.NAV_Y - 12 - S.DETAIL_Y0 - 10) / S.LH));
   }
 
   _drawDetail(ctx, title) {
-    const M = QuestCardModal.MARGIN, W = 480 - 2 * M, usable = W - 20;
-    textLeft(ctx, truncateText(title, 2, W), M, 48, 2, pal.gold);
-    const y = 78;
-    panel(ctx, M, y, W, QuestCardModal.NAV_Y - 12 - y, pal.card);
+    const S = QuestCardModal;
+    const M = S.MARGIN, W = 480 - 2 * M, usable = W - 20;
+    const lines = this._detailLines(usable);
+    const cap = this._detailCapacity();
+    const pages = Math.max(1, Math.ceil(lines.length / cap));
+    this.detailPage = Math.max(0, Math.min(this.detailPage, pages - 1));
+    const chunk = lines.slice(this.detailPage * cap, (this.detailPage + 1) * cap);
+
+    textLeft(ctx, truncateText(title, BODY, W), M, 48, BODY, pal.gold);
+    const y = S.DETAIL_Y0;
+    panel(ctx, M, y, W, S.NAV_Y - 12 - y, pal.card);
     let ty = y + 10;
-    for (const ln of this._detailLines(usable)) {
-      if (ty > QuestCardModal.NAV_Y - 12 - 20) break;
-      if (typeof ln === "object") textLeft(ctx, ln.dim, M + 10, ty, 1, pal.dim);
-      else textLeft(ctx, ln, M + 10, ty, 1, pal.tan);
-      ty += 16;
+    for (const ln of chunk) {
+      if (typeof ln === "object") {
+        textLeft(ctx, ln.dim, M + 10, ty, LABEL, pal.dim);
+        ty += 16;
+      } else {
+        textLeft(ctx, ln, M + 10, ty, BODY, pal.tan);
+        ty += S.LH;
+      }
     }
-    const b = new Button(["back"], M, QuestCardModal.NAV_Y, 480 - 2 * M, QuestCardModal.NAV_H);
+
+    // Back always; a "More" pager only when the text genuinely needs one.
+    const half = Math.floor((480 - 2 * M - 8) / 2);
+    const w = pages > 1 ? half : 480 - 2 * M;
+    const b = new Button(["back"], M, S.NAV_Y, w, S.NAV_H);
     bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-    textCenter(ctx, "Back", 240, b.y + 14, 2, pal.tan);
+    textCenter(ctx, "Back", b.x + Math.floor(w / 2), b.y + 14, BODY, pal.tan);
     this.buttons.push(b);
+    if (pages > 1) {
+      const nb = new Button(["detail_more"], M + half + 8, S.NAV_Y, half, S.NAV_H);
+      bevel(ctx, nb.x, nb.y, nb.w, nb.h, pal.btn);
+      textCenter(ctx, `More ${this.detailPage + 1}/${pages} >`,
+                 nb.x + Math.floor(half / 2), nb.y + 14, BODY, pal.tan);
+      this.buttons.push(nb);
+    }
   }
 
   // -- draw ------------------------------------------------------------
@@ -1639,8 +1705,8 @@ export class QuestCardModal {
 
     const pages = this._pages();
     if (!pages.length) {
-      textCenter(ctx, "No quest loaded", 240, 200, 2, pal.dim);
-      textCenter(ctx, "Start a scenario to see stage cards.", 240, 226, 1, pal.dim);
+      textCenter(ctx, "No quest loaded", 240, 200, BODY, pal.dim);
+      textCenter(ctx, "Start a scenario to see stage cards.", 240, 226, BODY, pal.dim);
       return;
     }
 
@@ -1664,28 +1730,31 @@ export class QuestCardModal {
     // it is worth. The quest points sit here (they used to own a whole
     // block-level row) - it is one number, it belongs in a corner.
     let y = 48;
-    textLeft(ctx, this._label(page), M, y, 2, pal.amber);
+    textLeft(ctx, this._label(page), M, y, BODY, pal.amber);
     const pts = `${card.questPoints ?? 0} pts`;
-    textLeft(ctx, pts, 480 - M - measureText(pts, 2), y, 2, pal.gold);
+    textLeft(ctx, pts, 480 - M - measureText(pts, BODY), y, BODY, pal.gold);
     if (this.page === this._livePage()) {
-      const pw = measureText("CURRENT", 1) + 14;
+      const pw = measureText("CURRENT", LABEL) + 14;
       rect(ctx, 240 - pw / 2, y + 2, pw, 18, pal.gold);
-      textCenter(ctx, "CURRENT", 240, y + 6, 1, pal.bg, false);
+      textCenter(ctx, "CURRENT", 240, y + 6, LABEL, pal.bg, false);
     }
     y += 26;
 
     // Victory/sailing are rare, so they cost a row only when present.
+    // ALL CAPS: this is a keyword badge sitting beside the card name, read as
+    // chrome rather than as a sentence, so the casing carries the demotion
+    // instead of the size (design system, LABEL).
     const extra = [];
-    if (card.victory !== null && card.victory !== undefined) extra.push(`Victory ${card.victory}`);
-    if (card.sailing) extra.push("Sailing");
+    if (card.victory !== null && card.victory !== undefined) extra.push(`VICTORY ${card.victory}`);
+    if (card.sailing) extra.push("SAILING");
     if (extra.length) {
       const s = extra.join("  ");
-      textLeft(ctx, s, 480 - M - measureText(s, 1), y, 1, pal.dim);
+      textLeft(ctx, s, 480 - M - measureText(s, LABEL), y, LABEL, pal.dim);
     }
 
-    textLeft(ctx, truncateText(face.name || "(unnamed)", 2, W), M, y, 2, pal.gold);
+    textLeft(ctx, truncateText(face.name || "(unnamed)", BODY, W), M, y, BODY, pal.gold);
     y += 28;
-    textLeft(ctx, side === "A" ? "SETUP / STORY" : "QUEST", M, y, 1, pal.amber);
+    textLeft(ctx, side === "A" ? "SETUP / STORY" : "QUEST", M, y, LABEL, pal.amber);
 
     // -- body: the card's own text, at the same scale as everywhere else. It
     // gets every pixel between here and whatever sits below (the tips peek,
@@ -1695,13 +1764,13 @@ export class QuestCardModal {
     const bodyBottom = hasTips ? tipsY - 8 : S.NAV_Y - 12;
     const by = S.BODY_Y0, usable = W - 20;
     const text = face.text || "";
-    let [lines, cut] = this._fit(wrapText(text || "no text", 2, usable),
+    let [lines, cut] = this._fit(wrapText(text || "no text", BODY, usable),
                                  Math.max(1, Math.floor((bodyBottom - by) / S.LH)),
                                  usable, false);
     panel(ctx, M, by - 8, W, bodyBottom - by + 8, pal.card);
     let ty = by;
     for (const ln of lines) {
-      textLeft(ctx, ln, M + 10, ty, 2, text ? pal.tan : pal.dim);
+      textLeft(ctx, ln, M + 10, ty, BODY, text ? pal.tan : pal.dim);
       ty += S.LH;
     }
     if (cut) this.buttons.push(new Button(["more_text"], M, by - 8, W, bodyBottom - by + 8));
@@ -1709,12 +1778,12 @@ export class QuestCardModal {
     // -- tips peek: the first lines inline, the rest behind a tap ---------
     if (hasTips) {
       const joined = this._tipsData.tips.join("  ");
-      let [tl] = this._fit(wrapText(joined, 2, usable), S.TIPS_LINES, usable,
-                           wrapText(joined, 2, usable).length > S.TIPS_LINES);
+      let [tl] = this._fit(wrapText(joined, BODY, usable), S.TIPS_LINES, usable,
+                           wrapText(joined, BODY, usable).length > S.TIPS_LINES);
       panel(ctx, M, tipsY, W, S.TIPS_H, pal.card);
-      textLeft(ctx, "TIPS", M + 10, tipsY + 6, 1, pal.amber);
+      textLeft(ctx, "TIPS", M + 10, tipsY + 6, LABEL, pal.amber);
       let tty = tipsY + 22;
-      for (const ln of tl) { textLeft(ctx, ln, M + 10, tty, 2, pal.tan); tty += S.LH; }
+      for (const ln of tl) { textLeft(ctx, ln, M + 10, tty, BODY, pal.tan); tty += S.LH; }
       this.buttons.push(new Button(["tips"], M, tipsY, W, S.TIPS_H));
     }
 
@@ -1724,13 +1793,17 @@ export class QuestCardModal {
   onButton(btn) {
     const k = btn.id[0];
     if (k === "close") return "close";
-    if (k === "back") { this.detail = null; return "redraw"; }
+    if (k === "back") { this.detail = null; this.detailPage = 0; return "redraw"; }
     if (!this.stages?.length) return null;
     if (k === "tips") {
-      if (this._tipsData) { this.detail = "tips"; return "redraw"; }
+      if (this._tipsData) { this.detail = "tips"; this.detailPage = 0; return "redraw"; }
       return null;
     }
-    if (k === "more_text") { this.detail = "text"; return "redraw"; }
+    if (k === "more_text") { this.detail = "text"; this.detailPage = 0; return "redraw"; }
+    if (k === "detail_more") {
+      this.detailPage += 1;     // _drawDetail clamps; wrap is handled there
+      return "redraw";
+    }
     const n = this._pages().length;
     if (k === "next" && this.page < n - 1) { this.page += 1; return "redraw"; }
     if (k === "prev" && this.page > 0) { this.page -= 1; return "redraw"; }
@@ -1738,6 +1811,14 @@ export class QuestCardModal {
   }
 }
 
+
+// Radio-button glyph: ring, filled when selected. Mirror of ui/modals.py's
+// _sq_radio - it was called below but never defined here, so the web twin
+// threw "sqRadio is not defined" on any non-empty side-quest catalog.
+function sqRadio(ctx, cx, cy, on) {
+  arcRuns(ctx, cx, cy, 10, 8, 0, 360, on ? pal.gold : pal.dim);
+  if (on) disc(ctx, cx, cy, 5, pal.gold);
+}
 
 export class SideQuestPickModal {
   static PER_PAGE = 6;
@@ -1765,10 +1846,10 @@ export class SideQuestPickModal {
     modalHeader(ctx, this.game, "Add Side Quest", this.buttons);
 
     if (!this.entries.length) {
-      textCenter(ctx, "No side-quest catalog data available.", 240, 140, 2, pal.dim);
-      textCenter(ctx, "Use Manual entry below.", 240, 168, 1, pal.dim);
+      textCenter(ctx, "No side-quest catalog data available.", 240, 140, BODY, pal.dim);
+      textCenter(ctx, "Use Manual entry below.", 240, 168, BODY, pal.dim);
     } else {
-      textLeft(ctx, "Pick a side quest, then Add - or enter manually.", 12, 46, 1, pal.dim);
+      textLeft(ctx, "Pick a side quest, then Add - or enter manually.", 12, 46, BODY, pal.dim);
       const pages = this._pages();
       this.page = Math.min(this.page, pages - 1);
       const chunk = this.entries.slice(this.page * PER_PAGE, (this.page + 1) * PER_PAGE);
@@ -1777,16 +1858,16 @@ export class SideQuestPickModal {
         const on = e.id === this.selected;
         if (on) rect(ctx, 8, y, 456, ROW_H, pal.card_hi);
         sqRadio(ctx, 30, y + 22, on);
-        const name = truncateText(e.name ?? "", 2, NAME_MAX_W);
-        textLeft(ctx, name, 52, y + 13, 2, on ? pal.tan : pal.muted);
+        const name = truncateText(e.name ?? "", BODY, NAME_MAX_W);
+        textLeft(ctx, name, 52, y + 13, BODY, on ? pal.tan : pal.muted);
         const ptsS = `${e.points ?? 0} pts`;
-        const pw = measureText(ptsS, 2);
-        textLeft(ctx, ptsS, 456 - pw, y + 4, 2, on ? pal.gold : pal.tan);
+        const pw = measureText(ptsS, BODY);
+        textLeft(ctx, ptsS, 456 - pw, y + 4, BODY, on ? pal.gold : pal.tan);
         // ASCII hyphen, not an em-dash - matches ui/modals.py's device-safe
         // choice: PicoGraphics' "bitmap8" font only covers standard ASCII.
         const sphereS = e.sphere || "-";
-        const sw = measureText(sphereS, 1);
-        textLeft(ctx, sphereS, 456 - sw, y + 26, 1, pal.dim);
+        const sw = measureText(sphereS, BODY);
+        textLeft(ctx, sphereS, 456 - sw, y + 26, BODY, pal.dim);
         rect(ctx, 8, y + ROW_H, 456, 1, pal.border);
         this.buttons.push(new Button(["row", e.id], 8, y, 456, ROW_H));
         y += ROW_STRIDE;
@@ -1795,23 +1876,23 @@ export class SideQuestPickModal {
         const up = new Button(["older"], 12, 352, 150, 46);
         const dn = new Button(["newer"], 318, 352, 150, 46);
         bevel(ctx, up.x, up.y, up.w, up.h, pal.btn);
-        textCenter(ctx, "Up", up.x + 75, up.y + 14, 2, pal.tan);
+        textCenter(ctx, "Up", up.x + 75, up.y + 14, BODY, pal.tan);
         bevel(ctx, dn.x, dn.y, dn.w, dn.h, pal.btn);
-        textCenter(ctx, "Down", dn.x + 75, dn.y + 14, 2, pal.tan);
-        textCenter(ctx, `${this.page + 1}/${pages}`, 240, 366, 2, pal.muted);
+        textCenter(ctx, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan);
+        textCenter(ctx, `${this.page + 1}/${pages}`, 240, 366, BODY, pal.muted);
         this.buttons.push(up, dn);
       }
     }
 
     const manual = new Button(["manual"], 24, FOOTER_Y, 200, FOOTER_H);
     bevel(ctx, manual.x, manual.y, manual.w, manual.h, pal.btn, false, 3);
-    textCenter(ctx, "Manual", manual.x + manual.w / 2, manual.y + 20, 2, pal.tan);
+    textCenter(ctx, "Manual", manual.x + manual.w / 2, manual.y + 20, BODY, pal.tan);
     this.buttons.push(manual);
 
     if (this.entries.length) {
       const add = new Button(["add"], 256, FOOTER_Y, 200, FOOTER_H);
       bevel(ctx, add.x, add.y, add.w, add.h, pal.btn_ok, false, 3);
-      textCenter(ctx, "Add", add.x + add.w / 2, add.y + 20, 2, pal.ok_fg);
+      textCenter(ctx, "Add", add.x + add.w / 2, add.y + 20, BODY, pal.ok_fg);
       this.buttons.push(add);
     }
   }
