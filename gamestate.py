@@ -189,6 +189,11 @@ class GameState:
         self.heading = 0             # index into HEADINGS (0 = on-course)
         self.game_over = None        # or {"result", "round", "duration"}
         self.pending_stage = None    # or {"cleared", "excess"} awaiting new stage
+        self.pending_resolution = False  # False | "auto" | "forced" - catalog
+                                          # game wants ResolutionModal opened
+                                          # once the current modal has closed
+                                          # (same pending-flag pattern as
+                                          # pending_quest_card above)
         self.log = []                # oldest-first list of {seq, round, step, text}
         self._seq = 0
 
@@ -471,6 +476,59 @@ class GameState:
         alloc["quest"] = min(remaining, qroom)
         return alloc
 
+    def needs_resolution(self):
+        """True if the active location, the quest, or any side quest is
+        currently at/over its own (positive) quest points - the trigger for
+        the guided resolution flow after a manual progress edit."""
+        loc = self.active_location
+        if loc and loc["points"] > 0 and loc["progress"] >= loc["points"]:
+            return True
+        if self.quest["points"] > 0 and self.quest["progress"] >= self.quest["points"]:
+            return True
+        return any(s["points"] > 0 and s["progress"] >= s["points"] for s in self.side_quests)
+
+    def resolve_location_overflow(self):
+        """Active location at/over its points: explore it (rulebook p.15),
+        crediting any excess progress to the quest card. No-op (returns 0)
+        if there's no active location or it hasn't reached its points."""
+        loc = self.active_location
+        if not loc or loc["points"] <= 0 or loc["progress"] < loc["points"]:
+            return 0
+        excess = loc["progress"] - loc["points"]
+        self.log_event("Active location Explored (%d/%d)%s"
+                       % (loc["progress"], loc["points"],
+                          " - %d excess to quest" % excess if excess else ""))
+        self.active_location = None
+        if excess:
+            self.quest["progress"] += excess
+        return excess
+
+    def clear_and_advance(self, card_idx=0):
+        """Clear the current (side-B) stage and reveal the next stage's side
+        A. Per the rulebook (p.22), excess quest progress does NOT carry to
+        the next stage - it is discarded, so progress always resets to 0.
+        `card_idx` selects the branch alternative when the next stage has
+        more than one card (default 0). Returns False (no mutation) if
+        there is no next stage - the caller should treat that as victory."""
+        if self.stage_idx + 1 >= len(self.stages):
+            return False
+        was = self.quest_label()
+        excess = self.quest["progress"] - self.quest["points"]
+        if excess > 0:
+            self.log_event("Quest %s cleared (%d excess discarded - does not carry over)"
+                           % (was, excess))
+        else:
+            self.log_event("Quest %s cleared" % was)
+        self.stage_idx += 1
+        self.card_idx = card_idx
+        st = self.stages[self.stage_idx]
+        self.quest["stage_n"] = st["stage"]
+        self.quest["side"] = "A"
+        self.quest["points"] = 0
+        self.quest["progress"] = 0
+        self.sailing = bool(st["cards"][card_idx].get("sailing"))
+        return True
+
     def place_progress(self, alloc):
         """Apply an allocation. Returns a list of completion messages."""
         completed = []
@@ -487,10 +545,16 @@ class GameState:
             self.quest["progress"] += n
             if self.quest["points"] > 0 and self.quest["progress"] >= self.quest["points"]:
                 was = self.quest_label()
-                excess = self.quest["progress"] - self.quest["points"]
-                self._advance_quest_stage()
-                self.quest["points"] = 0
-                self.pending_stage = {"cleared": was, "excess": excess}
+                if self.stages:
+                    # Catalog game: defer ALL advance mechanics (branch
+                    # choice, reveal, flip) to ResolutionModal - see
+                    # docs/superpowers/plans/2026-07-24-quest-picker-bresolve.md.
+                    self.pending_resolution = "auto"
+                else:
+                    excess = self.quest["progress"] - self.quest["points"]
+                    self._advance_quest_stage()
+                    self.quest["points"] = 0
+                    self.pending_stage = {"cleared": was, "excess": excess}
                 completed.append("Quest %s cleared" % was)
 
         for i in range(len(self.side_quests) - 1, -1, -1):
@@ -582,6 +646,7 @@ class GameState:
             "heading": self.heading,
             "game_over": dict(self.game_over) if self.game_over else None,
             "pending_stage": dict(self.pending_stage) if self.pending_stage else None,
+            "pending_resolution": self.pending_resolution,
             "elimination_threat": self.elimination_threat,
             "log": [dict(e) for e in self.log],
             "seq": self._seq,
@@ -634,6 +699,7 @@ class GameState:
         g.game_over = dict(go) if go else None
         ps = d.get("pending_stage", None)
         g.pending_stage = dict(ps) if ps else None
+        g.pending_resolution = d.get("pending_resolution", False)
         g.log = [dict(e) for e in d["log"]]
         g._seq = d["seq"]
         return g

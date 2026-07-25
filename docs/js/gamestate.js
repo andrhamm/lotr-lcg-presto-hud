@@ -140,6 +140,11 @@ export class GameState {
     this.heading = 0;
     this.game_over = null;
     this.pending_stage = null;
+    this.pending_resolution = false;  // false | "auto" | "forced" - catalog
+                                       // game wants ResolutionModal opened
+                                       // once the current modal has closed
+                                       // (same pending-flag pattern as
+                                       // pending_quest_card above)
     this.log = [];
     this._seq = 0;
   }
@@ -377,6 +382,56 @@ export class GameState {
     return alloc;
   }
 
+  needsResolution() {
+    // True if the active location, the quest, or any side quest is
+    // currently at/over its own (positive) quest points - the trigger for
+    // the guided resolution flow after a manual progress edit.
+    const loc = this.active_location;
+    if (loc && loc.points > 0 && loc.progress >= loc.points) return true;
+    if (this.quest.points > 0 && this.quest.progress >= this.quest.points) return true;
+    return this.side_quests.some(s => s.points > 0 && s.progress >= s.points);
+  }
+
+  resolveLocationOverflow() {
+    // Active location at/over its points: explore it (rulebook p.15),
+    // crediting any excess progress to the quest card. No-op (returns 0)
+    // if there's no active location or it hasn't reached its points.
+    const loc = this.active_location;
+    if (!loc || loc.points <= 0 || loc.progress < loc.points) return 0;
+    const excess = loc.progress - loc.points;
+    this.logEvent(`Active location Explored (${loc.progress}/${loc.points})` +
+                  (excess ? ` - ${excess} excess to quest` : ""));
+    this.active_location = null;
+    if (excess) this.quest.progress += excess;
+    return excess;
+  }
+
+  clearAndAdvance(cardIdx = 0) {
+    // Clear the current (side-B) stage and reveal the next stage's side A.
+    // Per the rulebook (p.22), excess quest progress does NOT carry to the
+    // next stage - it is discarded, so progress always resets to 0.
+    // cardIdx selects the branch alternative when the next stage has more
+    // than one card (default 0). Returns false (no mutation) if there is
+    // no next stage - the caller should treat that as victory.
+    if (this.stage_idx + 1 >= this.stages.length) return false;
+    const was = this.questLabel();
+    const excess = this.quest.progress - this.quest.points;
+    if (excess > 0) {
+      this.logEvent(`Quest ${was} cleared (${excess} excess discarded - does not carry over)`);
+    } else {
+      this.logEvent(`Quest ${was} cleared`);
+    }
+    this.stage_idx += 1;
+    this.card_idx = cardIdx;
+    const st = this.stages[this.stage_idx];
+    this.quest.stage_n = st.stage;
+    this.quest.side = "A";
+    this.quest.points = 0;
+    this.quest.progress = 0;
+    this.sailing = !!st.cards[cardIdx].sailing;
+    return true;
+  }
+
   placeProgress(alloc) {
     const completed = [];
     let n = alloc.location ?? 0;
@@ -392,10 +447,17 @@ export class GameState {
       this.quest.progress += n;
       if (this.quest.points > 0 && this.quest.progress >= this.quest.points) {
         const was = this.questLabel();
-        const excess = this.quest.progress - this.quest.points;
-        this._advanceQuestStage();
-        this.quest.points = 0;
-        this.pending_stage = { cleared: was, excess };
+        if (this.stages.length) {
+          // Catalog game: defer ALL advance mechanics (branch choice,
+          // reveal, flip) to ResolutionModal - see
+          // docs/superpowers/plans/2026-07-24-quest-picker-bresolve.md.
+          this.pending_resolution = "auto";
+        } else {
+          const excess = this.quest.progress - this.quest.points;
+          this._advanceQuestStage();
+          this.quest.points = 0;
+          this.pending_stage = { cleared: was, excess };
+        }
         completed.push(`Quest ${was} cleared`);
       }
     }
@@ -469,6 +531,7 @@ export class GameState {
       sailing: this.sailing, heading: this.heading,
       game_over: this.game_over ? { ...this.game_over } : null,
       pending_stage: this.pending_stage ? { ...this.pending_stage } : null,
+      pending_resolution: this.pending_resolution,
       log: this.log.map(e => ({ ...e })), seq: this._seq,
     };
   }
@@ -516,6 +579,7 @@ export class GameState {
     g.heading = d.heading ?? 0;
     g.game_over = d.game_over ? { ...d.game_over } : null;
     g.pending_stage = d.pending_stage ? { ...d.pending_stage } : null;
+    g.pending_resolution = d.pending_resolution ?? false;
     g.log = (d.log ?? []).map(e => ({ ...e }));
     g._seq = d.seq ?? 0;
     return g;
