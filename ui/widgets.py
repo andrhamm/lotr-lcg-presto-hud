@@ -170,38 +170,42 @@ def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None):
     return h
 
 
-_PHASE_CAPTIONS = {"framework": "FRAMEWORK", "window": "YOUR WINDOW"}
-
-
 def phase_block(d, pal, x, y, w, sections, reserve_right=0):
-    """Framework(red)/window(green) phase-guidance panel - the semantic
-    sibling of note_panel(). `sections` is an ordered list of
-    (kind, text) tuples (kind is "framework" or "window"; text is a
-    string or list of paragraphs). A phase with no mandatory framework
-    step just omits that entry - nothing is drawn for it. Distinguishes
-    "this happens automatically, no interrupts" from "you may act now"
-    per the rulebook's own turn-sequence colour code
-    (design/design-review.md). Returns the panel height."""
-    usable = w - 16 - 12 - reserve_right
+    """Phase-guidance panel - the semantic sibling of note_panel(). One box;
+    each section is a run of BODY lines with a coloured bar down its left
+    edge. `sections` is an ordered list of (kind, text) tuples (kind is
+    "framework" or "window"; text is a string or list of paragraphs). A phase
+    with no mandatory framework step just omits that entry.
+
+    The bar is the whole vocabulary: red = happens whether or not you act,
+    green = your window to act (the rulebook's own turn-sequence colour code,
+    design/design-review.md). It used to also print FRAMEWORK / YOUR WINDOW
+    label rows; those were dropped - the colour already says it, the terms
+    were jargon, and the two label rows cost ~20px on every phase screen.
+    Settings -> Help teaches the pairing. Returns the panel height."""
+    usable = w - 14 - 12 - reserve_right
     laid = []
     for kind, text in sections:
         body = " ".join(text) if isinstance(text, (list, tuple)) else text
         lines = wrap_text(body, BODY, usable, d.measure_text)
-        laid.append((kind, lines, 14 + len(lines) * 24))
-    h = 8 + sum(sec_h for _, _, sec_h in laid)
+        laid.append((kind, lines, len(lines) * 24))
+    h = 12 + sum(sec_h for _, _, sec_h in laid) + 6 * (len(laid) - 1)
     d.set_pen(pal.card_hi)
     d.rectangle(x, y, w, h)
-    ty = y + 4
+    ty = y + 6
     for kind, lines, sec_h in laid:
-        accent = pal.red if kind == "framework" else pal.green
-        d.set_pen(accent)
+        # The accent bar alone says which kind this is - no label row. Red =
+        # happens whether or not you act; green = your window to act. That
+        # pairing is taught in Settings -> Help, and dropping the words buys
+        # back ~20px on every phase screen, which is the space that used to
+        # get taken out of the type.
+        d.set_pen(pal.red if kind == "framework" else pal.green)
         d.rectangle(x, ty, 4, sec_h)
-        text_left(d, pal, _PHASE_CAPTIONS[kind], x + 12, ty + 2, LABEL, accent)
-        ly = ty + 16
+        ly = ty
         for s in lines:
-            text_left(d, pal, s, x + 12, ly, BODY, pal.muted)
+            text_left(d, pal, s, x + 14, ly, BODY, pal.tan)
             ly += 24
-        ty += sec_h
+        ty += sec_h + 6
     return h
 
 

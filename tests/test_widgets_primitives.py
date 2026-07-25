@@ -58,8 +58,11 @@ def test_phase_block_omits_framework_section_when_absent():
     W.phase_block(d, pal, 8, 100, 300, [("window", "Commit characters.")])
     accents = [c[5] for c in d.calls if c[0] == "rect" and c[1] == 8 and c[3] == 4]
     assert accents == [pal.green]
+    # No label rows any more - the bar is the whole vocabulary, so the only
+    # text in the block is the phase copy itself.
     texts = [c[1] for c in d.calls if c[0] == "text"]
-    assert "FRAMEWORK" not in texts and "YOUR WINDOW" in texts
+    assert "FRAMEWORK" not in texts and "YOUR WINDOW" not in texts
+    assert "Commit characters." in texts
 
 
 def test_phase_block_reserve_right_produces_more_wrapped_lines():

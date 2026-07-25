@@ -106,9 +106,17 @@ Derived from the Revised Core box art — bark, moss, parchment, ember.
 | `red` | Framework — happens whether you act or not; danger | Emphasis |
 | `amber` | Caution, pending, attention | Body text |
 
-Red and green carry the phase-block convention (`FRAMEWORK` / `YOUR WINDOW`)
-and the elimination ramp. Using them decoratively breaks the one piece of
-colour vocabulary a player has to learn.
+Red and green carry the phase-block convention and the elimination ramp. Using
+them decoratively breaks the one piece of colour vocabulary a player has to
+learn.
+
+> [!note] The phase block is colour-only
+> It used to print `FRAMEWORK` / `YOUR WINDOW` label rows above each section.
+> They were dropped: the bar already says it, the terms were rulebook jargon
+> the player never sees on a card, and two label rows cost ~20px on every
+> phase screen — the same vertical space that was pushing text down to
+> `LABEL`. Settings → Help teaches the pairing (red = happens anyway, green =
+> your window), which is the one place the words still belong.
 
 ### Ground
 

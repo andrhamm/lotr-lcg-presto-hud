@@ -27,6 +27,26 @@ def _ids(screen):
     return [b.id[0] for b in screen.buttons]
 
 
+# The phase block no longer prints FRAMEWORK / YOUR WINDOW label rows - the
+# 4px accent bar down each section's left edge is the whole vocabulary now
+# (red = happens anyway, green = your window). These helpers assert the bar,
+# which is the thing that actually carries the meaning.
+
+def _bars(hw, pal):
+    """Accent-bar colours drawn by phase_block, top to bottom."""
+    kinds = {pal.red: "framework", pal.green: "window"}
+    return [kinds[c[5]] for c in hw.display.calls
+            if c[0] == "rect" and c[3] == 4 and c[5] in kinds]
+
+
+def _has_framework(hw, pal):
+    return "framework" in _bars(hw, pal)
+
+
+def _has_window(hw, pal):
+    return "window" in _bars(hw, pal)
+
+
 def test_resource_planning_advances_to_commit():
     hw, pal, game, screen = _setup("resource_planning")
     screen.draw(hw, game, pal)
@@ -38,8 +58,7 @@ def test_resource_planning_shows_framework_and_window_blocks():
     hw, pal, game, screen = _setup("resource_planning")
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "FRAMEWORK" in texts
-    assert "YOUR WINDOW" in texts
+    assert _has_framework(hw, pal) and _has_window(hw, pal)
     accents = [c[5] for c in hw.display.calls if c[0] == "rect" and c[1] == 8 and c[3] == 4]
     assert pal.red in accents and pal.green in accents
 
@@ -377,7 +396,7 @@ def test_staging_shows_framework_window_and_meter():
     game.willpower, game.staging = 11, 7
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "FRAMEWORK" in texts and "YOUR WINDOW" in texts
+    assert _has_framework(hw, pal) and _has_window(hw, pal)
     fills = [c for c in hw.display.calls if c[0] == "rect" and c[4] == 10
              and c[5] in (pal.gold, pal.outline)]
     assert len(fills) == 2
@@ -606,7 +625,7 @@ def test_travel_no_location_shows_framework_and_travel_button():
     game.active_location = None
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "FRAMEWORK" in texts
+    assert _has_framework(hw, pal)
     assert "travel_new" in _ids(screen)
 
 
@@ -623,8 +642,7 @@ def test_enc_optional_has_no_framework_block_but_has_risk_caption():
     hw, pal, game, screen = _setup("enc_optional")
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "FRAMEWORK" not in texts
-    assert "YOUR WINDOW" in texts
+    assert not _has_framework(hw, pal) and _has_window(hw, pal)
     joined = " ".join(texts)
     assert "engage you" in joined
 
@@ -633,7 +651,7 @@ def test_enc_checks_shows_framework_and_first_player_caption():
     hw, pal, game, screen = _setup("enc_checks")
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "FRAMEWORK" in texts
+    assert _has_framework(hw, pal)
     # FFG's own term - Rules Reference p.10 glossary "In Player Order" - not
     # "clockwise", and not the non-existent "turn order". Joined because the
     # phrase wraps across drawn lines.
@@ -648,7 +666,7 @@ def test_combat_shadow_shows_framework_only_ordering_text():
     hw, pal, game, screen = _setup("combat_shadow")
     screen.draw(hw, game, pal)
     texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
-    assert "FRAMEWORK" in texts
+    assert _has_framework(hw, pal)
     # RR 6.2 p.24: dealt in player order, and within one player's enemies the
     # highest ENGAGEMENT cost first. Both halves must reach the screen.
     assert "in player order" in texts
@@ -684,7 +702,7 @@ def test_refresh_shows_framework_window_and_threat_preview():
         p.threat = 20 + i
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "FRAMEWORK" in texts and "YOUR WINDOW" in texts
+    assert _has_framework(hw, pal) and _has_window(hw, pal)
     assert any(t.startswith("P1 20->21") for t in texts)
 
 
