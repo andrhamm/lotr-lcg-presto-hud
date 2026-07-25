@@ -6,6 +6,7 @@ docs/js/screens_other.js - keep the two in lockstep.
 """
 
 from ui.header import draw_header, HEADER_H
+from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import Button, bevel, disc, text_center, text_left, token
 from ui import icons
 
@@ -21,30 +22,30 @@ def draw_legend_rows(d, pal, y):
 
     icons.draw(d, icons.THREAT, x_icon - 10, y - 10, pal.bevel_d)
     icons.draw(d, icons.THREAT, x_icon - 11, y - 11, pal.red)
-    text_left(d, pal, "your threat - enemies engage at/below it", x_text, y - 8, 2, pal.tan)
+    text_left(d, pal, "your threat - enemies engage at/below it", x_text, y - 8, BODY, pal.tan)
     y += 34
 
     icons.draw(d, icons.THREAT, x_icon - 11, y - 11, pal.outline)
-    text_left(d, pal, "staging threat - what questing must beat", x_text, y - 8, 2, pal.tan)
+    text_left(d, pal, "staging threat - what questing must beat", x_text, y - 8, BODY, pal.tan)
     y += 34
 
     icons.draw(d, icons.WILLPOWER, x_icon - 11, y - 11, pal.gold)
-    text_left(d, pal, "willpower committed to the quest", x_text, y - 8, 2, pal.tan)
+    text_left(d, pal, "willpower committed to the quest", x_text, y - 8, BODY, pal.tan)
     y += 34
 
     token(d, pal, x_icon, y, 13, 2, 4, pal.value, 0.55, pal.gold, pal.dim)
-    text_left(d, pal, "ring = progress; number = points left", x_text, y - 8, 2, pal.tan)
+    text_left(d, pal, "ring = progress; number = points left", x_text, y - 8, BODY, pal.tan)
     y += 34
 
     token(d, pal, x_icon, y, 13, 2, 41, pal.value, 0.9, pal.red, pal.dim)
-    text_left(d, pal, "red ring = close to elimination", x_text, y - 8, 2, pal.tan)
+    text_left(d, pal, "red ring = close to elimination", x_text, y - 8, BODY, pal.tan)
     y += 34
 
     d.set_pen(pal.red)
     d.rectangle(x_icon - 12, y - 10, 4, 20)
     d.set_pen(pal.green)
     d.rectangle(x_icon + 2, y - 10, 4, 20)
-    text_left(d, pal, "red = happens anyway; green = your window", x_text, y - 8, 2, pal.tan)
+    text_left(d, pal, "red = happens anyway; green = your window", x_text, y - 8, BODY, pal.tan)
     return y + 30
 
 
@@ -80,17 +81,17 @@ class FirstRunScreen:
     def _body(self, d, pal):
         y = HEADER_H + 40
         if self.page == 0:
-            text_center(d, pal, "A companion, not a rules engine", 240, y, 2, pal.gold)
+            text_center(d, pal, "A companion, not a rules engine", 240, y, BODY, pal.gold)
             y += 40
             for ln in ["This tracks threat, progress and the",
                        "turn sequence for you.",
                        "",
                        "It never touches your cards - you still",
                        "play the game on the table."]:
-                text_center(d, pal, ln, 240, y, 2, pal.tan)
+                text_center(d, pal, ln, 240, y, BODY, pal.tan)
                 y += 26
         elif self.page == 1:
-            text_center(d, pal, "One screen per phase", 240, y, 2, pal.gold)
+            text_center(d, pal, "One screen per phase", 240, y, BODY, pal.gold)
             y += 40
             for ln in ["Pick a quest, then follow the round.",
                        "",
@@ -98,10 +99,10 @@ class FirstRunScreen:
                        "moves you forward.",
                        "",
                        "Tap the stats up top to edit them."]:
-                text_center(d, pal, ln, 240, y, 2, pal.tan)
+                text_center(d, pal, ln, 240, y, BODY, pal.tan)
                 y += 26
         else:
-            text_center(d, pal, "What the marks mean", 240, y, 2, pal.gold)
+            text_center(d, pal, "What the marks mean", 240, y, BODY, pal.gold)
             draw_legend_rows(d, pal, y + 36)
 
     def draw(self, hw, game, pal):
@@ -115,7 +116,7 @@ class FirstRunScreen:
         if self.page > 0:
             b = Button(("fr_back",), 12, 412, 140, 52)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-            text_center(d, pal, "Back", b.x + 70, b.y + 16, 2, pal.tan)
+            text_center(d, pal, "Back", b.x + 70, b.y + 16, BODY, pal.tan)
             self.buttons.append(b)
         for i in range(PAGES):
             cx = 240 + (i - 1) * 18
@@ -123,7 +124,7 @@ class FirstRunScreen:
         last = self.page == PAGES - 1
         b = Button(("fr_done",) if last else ("fr_next",), 328, 412, 140, 52)
         bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn_ok)
-        text_center(d, pal, "Done" if last else "Next", b.x + 70, b.y + 16, 2, pal.ok_fg)
+        text_center(d, pal, "Done" if last else "Next", b.x + 70, b.y + 16, BODY, pal.ok_fg)
         self.buttons.append(b)
 
     def on_button(self, btn, game=None):

@@ -9,6 +9,7 @@ and ChooseScenarioScreen(source, cycle, scenarios) from one group's
 """
 
 from ui.header import draw_header
+from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import (Button, panel, bevel, text_center, text_left,
                          truncate_text, wrap_text, disc, arc_runs, note_panel)
 from ui import icons
@@ -72,14 +73,14 @@ class ScenarioSourceScreen:
 
         off = Button(("choose_scenario", "official"), 24, 96, 432, 120)
         bevel(d, pal, off.x, off.y, off.w, off.h, pal.btn)
-        text_center(d, pal, "Official Scenarios", 240, 128, 3, pal.gold)
-        text_center(d, pal, "Fantasy Flight Games content", 240, 168, 2, pal.muted)
+        text_center(d, pal, "Official Scenarios", 240, 128, DISPLAY, pal.gold)
+        text_center(d, pal, "Fantasy Flight Games content", 240, 168, BODY, pal.muted)
         self.buttons.append(off)
 
         com = Button(("choose_scenario", "alep"), 24, 244, 432, 120)
         bevel(d, pal, com.x, com.y, com.w, com.h, pal.btn)
-        text_center(d, pal, "Community Scenarios", 240, 276, 3, pal.gold)
-        text_center(d, pal, "Community created content", 240, 316, 2, pal.muted)
+        text_center(d, pal, "Community Scenarios", 240, 276, DISPLAY, pal.gold)
+        text_center(d, pal, "Community created content", 240, 316, BODY, pal.muted)
         self.buttons.append(com)
 
     def on_button(self, btn, game):
@@ -123,8 +124,8 @@ class PickCycleScreen:
         d.rectangle(0, 0, 480, 40)
         d.set_pen(pal.border)
         d.rectangle(0, 40, 480, 1)
-        text_left(d, pal, "< Source", 12, 12, 2, pal.muted)
-        text_center(d, pal, "CHOOSE CYCLE", 250, 12, 2, pal.gold)
+        text_left(d, pal, "< Source", 12, 12, BODY, pal.muted)
+        text_center(d, pal, "CHOOSE CYCLE", 250, 12, BODY, pal.gold)
         self.buttons.append(Button(("back",), 0, 0, 150, 40))
 
         pages = self._pages()
@@ -134,17 +135,18 @@ class PickCycleScreen:
         if not self.cycles:
             msg = ("No community scenarios yet" if self.source == "alep"
                    else "No official scenarios yet")
-            text_center(d, pal, msg, 240, 200, 2, pal.dim)
+            text_center(d, pal, msg, 240, 200, BODY, pal.dim)
         else:
             y = self.LIST_Y0
             for entry in chunk:
-                name = truncate_text(entry["cycle"], 2, 320, d.measure_text)
-                text_left(d, pal, name, 20, y + 13, 2, pal.tan)
+                name = truncate_text(entry["cycle"], BODY, 320, d.measure_text)
+                text_left(d, pal, name, 20, y + 13, BODY, pal.tan)
+                # Release date / quest count: row metadata scanned, not read.
                 date = entry.get("date")
                 count = entry.get("count", 0)
                 right = date if date else "%d quest%s" % (count, "" if count == 1 else "s")
-                rw = d.measure_text(right, 1)
-                text_left(d, pal, right, 440 - rw, y + 16, 1, pal.dim)
+                rw = d.measure_text(right, LABEL)
+                text_left(d, pal, right, 440 - rw, y + 16, LABEL, pal.dim)
                 _chevron(d, pal, 452, y + 22)
                 d.set_pen(pal.border)
                 d.rectangle(8, y + self.ROW_H, 456, 1)
@@ -153,7 +155,7 @@ class PickCycleScreen:
 
         custom = Button(("custom",), 8, self.CUSTOM_Y, 464, self.CUSTOM_H)
         bevel(d, pal, custom.x, custom.y, custom.w, custom.h, pal.btn)
-        text_center(d, pal, "Custom / uncatalogued quest", 240, self.CUSTOM_Y + 12, 2, pal.tan)
+        text_center(d, pal, "Custom / uncatalogued quest", 240, self.CUSTOM_Y + 12, BODY, pal.tan)
         self.buttons.append(custom)
 
         d.set_pen(pal.border)
@@ -162,10 +164,10 @@ class PickCycleScreen:
             up = Button(("older",), 12, 420, 150, 46)
             dn = Button(("newer",), 318, 420, 150, 46)
             bevel(d, pal, up.x, up.y, up.w, up.h, pal.btn)
-            text_center(d, pal, "Up", up.x + 75, up.y + 14, 2, pal.tan)
+            text_center(d, pal, "Up", up.x + 75, up.y + 14, BODY, pal.tan)
             bevel(d, pal, dn.x, dn.y, dn.w, dn.h, pal.btn)
-            text_center(d, pal, "Down", dn.x + 75, dn.y + 14, 2, pal.tan)
-            text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 434, 2, pal.muted)
+            text_center(d, pal, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan)
+            text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 434, BODY, pal.muted)
             self.buttons.append(up)
             self.buttons.append(dn)
 
@@ -214,10 +216,13 @@ class ChooseScenarioScreen:
         d.rectangle(0, 0, 480, 52)
         d.set_pen(pal.border)
         d.rectangle(0, 52, 480, 1)
-        text_left(d, pal, "< Cycles", 12, 8, 2, pal.muted)
-        text_center(d, pal, "Choose Scenario", 250, 6, 2, pal.gold)
-        subtitle = truncate_text("Cycle: %s" % self.cycle, 1, 440, d.measure_text)
-        text_center(d, pal, subtitle, 250, 30, 1, pal.dim)
+        text_left(d, pal, "< Cycles", 12, 8, BODY, pal.muted)
+        text_center(d, pal, "Choose Scenario", 250, 6, BODY, pal.gold)
+        # The "Cycle: X" subtitle is deliberately LABEL - the user specified it
+        # small when they designed this header (allow-listed in
+        # tests/test_typography.py).
+        subtitle = truncate_text("Cycle: %s" % self.cycle, LABEL, 440, d.measure_text)
+        text_center(d, pal, subtitle, 250, 30, LABEL, pal.dim)
         self.buttons.append(Button(("back",), 0, 0, 150, 52))
 
         pages = self._pages()
@@ -231,8 +236,8 @@ class ChooseScenarioScreen:
                 d.set_pen(pal.card_hi)
                 d.rectangle(8, y, 456, 44)
             _radio(d, pal, 30, y + 22, on)
-            name = truncate_text(scn["name"], 2, 400, d.measure_text)
-            text_left(d, pal, name, 52, y + 13, 2, pal.tan if on else pal.muted)
+            name = truncate_text(scn["name"], BODY, 400, d.measure_text)
+            text_left(d, pal, name, 52, y + 13, BODY, pal.tan if on else pal.muted)
             d.set_pen(pal.border)
             d.rectangle(8, y + 44, 456, 1)
             self.buttons.append(Button(("scn", scn["slug"]), 8, y, 456, 44))
@@ -242,16 +247,16 @@ class ChooseScenarioScreen:
             up = Button(("older",), 12, 352, 150, 46)
             dn = Button(("newer",), 318, 352, 150, 46)
             bevel(d, pal, up.x, up.y, up.w, up.h, pal.btn)
-            text_center(d, pal, "Up", up.x + 75, up.y + 14, 2, pal.tan)
+            text_center(d, pal, "Up", up.x + 75, up.y + 14, BODY, pal.tan)
             bevel(d, pal, dn.x, dn.y, dn.w, dn.h, pal.btn)
-            text_center(d, pal, "Down", dn.x + 75, dn.y + 14, 2, pal.tan)
-            text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 366, 2, pal.muted)
+            text_center(d, pal, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan)
+            text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 366, BODY, pal.muted)
             self.buttons.append(up)
             self.buttons.append(dn)
 
         submit = Button(("submit",), 130, 414, 220, 52)
         bevel(d, pal, submit.x, submit.y, submit.w, submit.h, pal.btn_ok, False, 3)
-        text_center(d, pal, "Submit", 240, 432, 3, pal.ok_fg)
+        text_center(d, pal, "Submit", 240, 432, DISPLAY, pal.ok_fg)
         self.buttons.append(submit)
 
     def on_button(self, btn, game):
@@ -443,25 +448,27 @@ class ScenarioOptionsScreen:
 
         scenario_mask = quest_catalog.icon_for(self.scenario.get("slug"), self.icons)
         icon_slot(d, pal, 16, 50, 40, pal.gold, mask=scenario_mask)
-        name_s = truncate_text(name, 2, 480 - 66 - 14, d.measure_text)
-        text_left(d, pal, name_s, 66, 54, 2, pal.gold)
-        sub = truncate_text("%s - tap to change" % pack, 1, 480 - 66 - 14, d.measure_text)
-        text_left(d, pal, sub, 66, 76, 1, pal.dim)
+        name_s = truncate_text(name, BODY, 480 - 66 - 14, d.measure_text)
+        text_left(d, pal, name_s, 66, 54, BODY, pal.gold)
+        # "<pack> - tap to change" is an affordance a player reads, not chrome:
+        # BODY. It clears SETS TO GATHER at y=100 (76 + 16 = 92).
+        sub = truncate_text("%s - tap to change" % pack, BODY, 480 - 66 - 14, d.measure_text)
+        text_left(d, pal, sub, 66, 76, BODY, pal.dim)
         self.buttons.append(Button(("retitle",), 8, 46, 464, 50))
 
-        text_left(d, pal, "SETS TO GATHER", 16, 100, 1, pal.muted)
+        text_left(d, pal, "SETS TO GATHER", 16, 100, LABEL, pal.muted)
         gy = self.GATHER_Y0
         for label, is_more in self._gather_rows():
             if is_more:
-                text_left(d, pal, label, 48, gy + 5, 2, pal.muted)
+                text_left(d, pal, label, 48, gy + 5, BODY, pal.muted)
             else:
                 # Slot is 26 (not the mask's exact 24) so panel()'s 1px
                 # border ring stays visible around the icon, same look as
                 # an unmatched placeholder - see the Task 3 report.
                 row_mask = quest_catalog.icon_for(quest_catalog.slugify(label), self.icons)
                 icon_slot(d, pal, 16, gy, 26, mask=row_mask)
-                row_s = truncate_text(label, 2, 480 - 48 - 14, d.measure_text)
-                text_left(d, pal, row_s, 48, gy + 5, 2, pal.tan)
+                row_s = truncate_text(label, BODY, 480 - 48 - 14, d.measure_text)
+                text_left(d, pal, row_s, 48, gy + 5, BODY, pal.tan)
             gy += self.GATHER_ROW_H
 
         # Dropdown y is derived from the actual gather-row count (not a
@@ -469,7 +476,9 @@ class ScenarioOptionsScreen:
         # with the 3-row fixture this reproduces mock_quest.py's y=212
         # exactly (116 + 3*30 + 6).
         dd_y = gy + 6
-        self._dropdown(d, pal, 16, dd_y, self.DD_W, "Difficulty", self.difficulty,
+        # ALL CAPS: a field label beside a control is chrome, and the casing
+        # (not the size) is what demotes it - see the design-system spec.
+        self._dropdown(d, pal, 16, dd_y, self.DD_W, "DIFFICULTY", self.difficulty,
                        ("dd", "difficulty"))
         # Same read-only card reference the Quest Setup view and the progress
         # detail row open - reachable here so you can read the stages before
@@ -477,17 +486,17 @@ class ScenarioOptionsScreen:
         # starts 14px below the label), not under it.
         cb = Button(("open_card_modal",), self.CARD_BTN_X, dd_y + 14, self.CARD_BTN_W, 34)
         bevel(d, pal, cb.x, cb.y, cb.w, cb.h, pal.btn)
-        text_center(d, pal, "Quest card", cb.x + cb.w // 2, cb.y + 9, 2, pal.tan)
+        text_center(d, pal, "Quest card", cb.x + cb.w // 2, cb.y + 9, BODY, pal.tan)
         self.buttons.append(cb)
 
         msgs = self._tip_messages()
         if msgs:
-            # Always the mock's scale (2). The tip used to shrink to scale 1
-            # whenever two messages showed at once, which read as a bug - the
-            # same panel rendering at two different sizes. There is only ever
-            # one message now (see _tip_messages), and the authored copy is
-            # kept short enough to wrap to 2 lines at this scale.
-            scale = 2
+            # Always BODY. The tip used to shrink to LABEL whenever two
+            # messages showed at once, which read as a bug - the same panel
+            # rendering at two different sizes. There is only ever one message
+            # now (see _tip_messages), and the authored copy is kept short
+            # enough to wrap to 2 lines at this size.
+            scale = BODY
             ty = dd_y + 62
             # A scenario-specific mode card's own setup text can run several
             # hundred characters - far past the CTA. Clip to the lines that
@@ -499,7 +508,7 @@ class ScenarioOptionsScreen:
 
         begin = Button(("begin",), 16, self.CTA_Y, 448, self.CTA_H)
         bevel(d, pal, begin.x, begin.y, begin.w, begin.h, pal.btn_ok, False, 3)
-        text_center(d, pal, "Begin Setup", 240, self.CTA_Y + 18, 3, pal.ok_fg)
+        text_center(d, pal, "Begin Setup", 240, self.CTA_Y + 18, DISPLAY, pal.ok_fg)
         self.buttons.append(begin)
 
     def _clip_to_height(self, d, msgs, scale, avail):
@@ -525,10 +534,12 @@ class ScenarioOptionsScreen:
         return [" ".join(lines[:max_lines]).rstrip() + " ..."]
 
     def _dropdown(self, d, pal, x, y, w, label, value, id):
-        text_left(d, pal, label, x, y, 1, pal.muted)
+        """`label` is an ALL-CAPS field label (LABEL chrome); `value` is the
+        chosen option and reads at BODY."""
+        text_left(d, pal, label, x, y, LABEL, pal.muted)
         yy = y + 14
         panel(d, pal, x, yy, w, 34, pal.well)
-        text_left(d, pal, value, x + 10, yy + 9, 2, pal.tan)
+        text_left(d, pal, value, x + 10, yy + 9, BODY, pal.tan)
         _chevron_down(d, pal, x + w - 16, yy + 17)
         self.buttons.append(Button(id, x, yy, w, 34))
 
@@ -578,7 +589,7 @@ class OptionListModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "Choose %s" % self.title, 240, 30, 3, pal.gold)
+        text_center(d, pal, "Choose %s" % self.title, 240, 30, DISPLAY, pal.gold)
 
         current = getattr(self.host, self.attr)
         y = self.ROWS_Y0
@@ -588,7 +599,7 @@ class OptionListModal:
                 d.set_pen(pal.card_hi)
                 d.rectangle(24, y, 432, self.ROW_H)
             _radio(d, pal, 50, y + self.ROW_H // 2, on)
-            text_left(d, pal, opt, 80, y + self.ROW_H // 2 - 12, 3, pal.tan if on else pal.muted)
+            text_left(d, pal, opt, 80, y + self.ROW_H // 2 - 12, DISPLAY, pal.tan if on else pal.muted)
             d.set_pen(pal.border)
             d.rectangle(24, y + self.ROW_H, 432, 1)
             self.buttons.append(Button(("opt", opt), 24, y, 432, self.ROW_H))
@@ -596,7 +607,7 @@ class OptionListModal:
 
         done = Button(("done",), 24, self.DONE_Y, 432, self.DONE_H)
         bevel(d, pal, done.x, done.y, done.w, done.h, pal.btn_ok, False, 3)
-        text_center(d, pal, "Done", 240, self.DONE_Y + 18, 2, pal.ok_fg)
+        text_center(d, pal, "Done", 240, self.DONE_Y + 18, BODY, pal.ok_fg)
         self.buttons.append(done)
 
     def on_button(self, btn):

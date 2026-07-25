@@ -2,6 +2,7 @@
 link. Mirror of the web ScreenAbout (docs/js/screens_other.js)."""
 
 from ui.header import draw_header, HEADER_H
+from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import Button, bevel, text_center, text_left
 from ui import icons
 
@@ -17,12 +18,12 @@ class ScreenAbout:
         d.clear()
         draw_header(d, pal, game, self.buttons, title="About", close=True)
         y = [HEADER_H + 18]
-        text_center(d, pal, "LOTR LCG HUD", 240, y[0], 3, pal.gold)
+        text_center(d, pal, "LOTR LCG HUD", 240, y[0], DISPLAY, pal.gold)
         y[0] += 42
 
         def para(lines, color):
             for ln in lines:
-                text_center(d, pal, ln, 240, y[0], 2, color)
+                text_center(d, pal, ln, 240, y[0], BODY, color)
                 y[0] += 22
             y[0] += 12
 
@@ -37,18 +38,18 @@ class ScreenAbout:
               "license by Fantasy Flight Games."], pal.muted)
 
         label, handle = "made with <3 by", "@andrhamm"
-        lw = d.measure_text(label, 2)
-        hw_ = d.measure_text(handle, 2)
+        lw = d.measure_text(label, BODY)
+        hw_ = d.measure_text(handle, BODY)
         total = lw + 8 + 20 + 6 + hw_
         x = 240 - total // 2
         by = 402
         b = Button(("repo",), x - 10, by - 12, total + 20, 44)
         bevel(d, pal, b.x, b.y, b.w, b.h, pal.card, t=2)
-        text_left(d, pal, label, x, by, 2, pal.tan)
+        text_left(d, pal, label, x, by, BODY, pal.tan)
         x += lw + 8
         icons.draw(d, icons.GITHUB, x, by - 2, pal.gold)
         x += 20 + 6
-        text_left(d, pal, handle, x, by, 2, pal.gold)
+        text_left(d, pal, handle, x, by, BODY, pal.gold)
         self.buttons.append(b)
 
     def on_button(self, btn, game):

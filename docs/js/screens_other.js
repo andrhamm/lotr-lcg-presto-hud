@@ -2,7 +2,8 @@
 // screen_boot.py, screen_setup.py, screen_quest.py + LedModal (virtual LED
 // strip on web).
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
-         stepper, truncateText, wrapText, ribbon, disc, arcRuns, notePanel, token } from "./ui.js";
+         stepper, truncateText, wrapText, ribbon, disc, arcRuns, notePanel, token,
+         DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { viewForStep, DEFAULT_START_THREAT, MAX_PLAYERS } from "./gamestate.js";
@@ -12,8 +13,23 @@ import { drawHeader, HEADER_H, QuestCardModal } from "./screens.js";
 import { iconFor, slugify } from "./quest_catalog.js";
 
 export class ScreenPhases {
+  // Step rows are two columns: the rulebook step number ("3.2", "6.7-6.10")
+  // is tabular chrome and keeps LABEL, the description beside it is prose and
+  // reads at BODY. STEP_ROW_H is 24 (was 26 with LABEL text) so the taller
+  // rows still clear the pinned footnotes - the worst case is a 5-step phase
+  // (Quest, Combat), which now bottoms out at 410 against FOOT_Y 416.
+  static STEP_ROW_H = 24;
+  static FOOT_Y = 416;
+  // Same claim as before, reflowed to two lines at BODY. Wording matches
+  // README.md's own summary of the combat loop ("every enemy attacks, then
+  // every player attacks, in turn order"); "in turn order" already names the
+  // first player, who defines it.
+  static COMBAT_NOTE =
+    "Combat loops in turn order: every enemy attacks, then every player attacks.";
+
   constructor() { this.buttons = []; }
   draw(ctx, game) {
+    const { STEP_ROW_H, FOOT_Y, COMBAT_NOTE } = ScreenPhases;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     drawHeader(ctx, game, this.buttons, { title: "Game Phases", close: true });
@@ -24,33 +40,39 @@ export class ScreenPhases {
       const isCur = ph.id === curPhase;
       if (!isCur) {
         panel(ctx, 12, y, 456, 30);
-        textLeft(ctx, ph.label, 24, y + 8, 2, pal.dim);
+        textLeft(ctx, ph.label, 24, y + 8, BODY, pal.dim);
         this.buttons.push(new Button(["jump", ph.id], 12, y, 456, 30));
         y += 34;
       } else {
         const steps = STEPS.filter(s => s.phase === ph.id);
-        const boxH = 34 + steps.length * 26;
+        const boxH = 34 + steps.length * STEP_ROW_H;
         panel(ctx, 12, y, 456, boxH, pal.card_hi, pal.border_gold);
-        textLeft(ctx, ph.label, 24, y + 8, 2, pal.gold);
+        textLeft(ctx, ph.label, 24, y + 8, BODY, pal.gold);
         let sy = y + 32;
         for (const s of steps) {
           const active = s.id === game.step;
-          if (active) rect(ctx, 20, sy - 2, 440, 24, pal.gold);
+          if (active) rect(ctx, 20, sy - 2, 440, STEP_ROW_H, pal.gold);
           const pen = active ? pal.bg : pal.tan;
-          if (s.action_window) rect(ctx, 28, sy + 3, 8, 8, active ? pal.bg : pal.purple);
-          let label = s.label;
-          if (s.id === "6.E" || s.id === "6.P") label += "  (loops: each player)";
-          textLeft(ctx, label, 42, sy + 2, 1, pen, !active);
-          this.buttons.push(new Button(["step", s.id], 20, sy - 2, 440, 24));
-          sy += 26;
+          if (s.action_window) rect(ctx, 28, sy + 6, 8, 8, active ? pal.bg : pal.purple);
+          const sp = s.label.indexOf(" ");
+          const num = s.label.slice(0, sp);
+          let desc = s.label.slice(sp + 1);
+          if (s.id === "6.E" || s.id === "6.P") desc += "  (loops: each player)";
+          textLeft(ctx, num, 42, sy + 6, LABEL, pen, !active);
+          textLeft(ctx, desc, 82, sy + 2, BODY, pen, !active);
+          this.buttons.push(new Button(["step", s.id], 20, sy - 2, 440, STEP_ROW_H));
+          sy += STEP_ROW_H;
         }
         y += boxH + 4;
       }
     }
-    rect(ctx, 12, 436, 8, 8, pal.purple);
-    textLeft(ctx, "= action window   tap a step to jump", 26, 434, 1, pal.dim);
-    textLeft(ctx, "Combat loops in turn order: every enemy attacks, then", 12, 450, 1, pal.dim);
-    textLeft(ctx, "every player attacks - first player resolves first.", 12, 464, 1, pal.dim);
+    rect(ctx, 12, FOOT_Y + 4, 8, 8, pal.purple);
+    textLeft(ctx, "= action window   tap a step to jump", 26, FOOT_Y, BODY, pal.dim);
+    let fy = FOOT_Y + 22;
+    for (const ln of wrapText(COMBAT_NOTE, BODY, 456)) {
+      textLeft(ctx, ln, 12, fy, BODY, pal.dim);
+      fy += 21;
+    }
   }
   onButton(btn, game) {
     const k = btn.id[0];
@@ -82,25 +104,28 @@ export class ScreenLog {
     this.page = Math.min(this.page, pages - 1);
     const chunk = entries.slice(this.page * PER_PAGE, (this.page + 1) * PER_PAGE);
     let y = HEADER_H + 10;
-    if (!chunk.length) textCenter(ctx, "no activity yet", 240, 200, 2, pal.dim);
+    if (!chunk.length) textCenter(ctx, "no activity yet", 240, 200, BODY, pal.dim);
+    // The feed stays LABEL by design: it is dense tabular metadata with its
+    // own pager, and the row count is the point (see the design-system spec
+    // and tests/test_typography.py's DENSE_SCENES).
     for (const e of chunk) {
-      textLeft(ctx, `R${e.round}.${e.step}`, 12, y, 1, pal.dim);
+      textLeft(ctx, `R${e.round}.${e.step}`, 12, y, LABEL, pal.dim);
       if (e.t !== null && e.t !== undefined) {
         const s = Math.floor(e.t / 1000);
         textLeft(ctx, `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`,
-                 76, y, 1, pal.dim);
+                 76, y, LABEL, pal.dim);
       }
-      textLeft(ctx, truncateText(e.text, 1, 480 - 122 - 12), 122, y, 1, pal.tan);
+      textLeft(ctx, truncateText(e.text, LABEL, 480 - 122 - 12), 122, y, LABEL, pal.tan);
       y += ROW_H;
     }
     if (pages > 1) {
       const up = new Button(["older"], 12, 420, 150, 46);
       const dn = new Button(["newer"], 318, 420, 150, 46);
       bevel(ctx, up.x, up.y, up.w, up.h, pal.btn);
-      textCenter(ctx, "Older", up.x + 75, up.y + 14, 2, pal.tan);
+      textCenter(ctx, "Older", up.x + 75, up.y + 14, BODY, pal.tan);
       bevel(ctx, dn.x, dn.y, dn.w, dn.h, pal.btn);
-      textCenter(ctx, "Newer", dn.x + 75, dn.y + 14, 2, pal.tan);
-      textCenter(ctx, `${this.page + 1}/${pages}`, 240, 434, 2, pal.muted);
+      textCenter(ctx, "Newer", dn.x + 75, dn.y + 14, BODY, pal.tan);
+      textCenter(ctx, `${this.page + 1}/${pages}`, 240, 434, BODY, pal.muted);
       this.buttons.push(up, dn);
     }
   }
@@ -121,8 +146,8 @@ export class LedModal {
                      torch: "Torchlight", off: "Off" };
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, "LED behavior", 240, 22, 3, pal.gold);
-    textLeft(ctx, `Brightness  ${this.prefs.brightness}%`, 24, 70, 2, pal.tan);
+    textCenter(ctx, "LED behavior", 240, 22, DISPLAY, pal.gold);
+    textLeft(ctx, `Brightness  ${this.prefs.brightness}%`, 24, 70, BODY, pal.tan);
     const segW = 42, segH = 52, x0 = 24, y0 = 100;
     const lit = Math.floor(this.prefs.brightness / 10);
     for (let i = 0; i < 10; i++) {
@@ -131,7 +156,7 @@ export class LedModal {
             i < lit ? pal.border_gold : pal.border);
       this.buttons.push(new Button(["bri", (i + 1) * 10], x, y0, segW, segH));
     }
-    textLeft(ctx, "Scene", 24, 182, 2, pal.tan);
+    textLeft(ctx, "Scene", 24, 182, BODY, pal.tan);
     const half = Math.floor((480 - 3 * 24) / 2);
     SCENES.forEach((key, i) => {
       const x = 24 + (i % 2) * (half + 24);
@@ -140,12 +165,12 @@ export class LedModal {
       const b = new Button(["scene", key], x, y, half, 58);
       panel(ctx, b.x, b.y, b.w, b.h, on ? pal.card_hi : pal.card,
             on ? pal.border_gold : pal.border);
-      textCenter(ctx, LABELS[key], x + half / 2, y + 20, 2, on ? pal.gold : pal.muted);
+      textCenter(ctx, LABELS[key], x + half / 2, y + 20, BODY, on ? pal.gold : pal.muted);
       this.buttons.push(b);
     });
     const done = new Button(["save"], 24, 396, 432, 62);
     bevel(ctx, done.x, done.y, done.w, done.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Done", 240, done.y + 20, 2, pal.ok_fg);
+    textCenter(ctx, "Done", 240, done.y + 20, BODY, pal.ok_fg);
     this.buttons.push(done);
   }
   onButton(btn) {
@@ -169,49 +194,51 @@ export class ScreenSettings {
     rect(ctx, 0, 0, 480, 480, pal.bg);
     drawHeader(ctx, game, this.buttons, { title: "Settings", close: true });
     let y = HEADER_H + 16;
-    textLeft(ctx, "GAME", 16, y, 1, pal.dim);
+    textLeft(ctx, "GAME", 16, y, LABEL, pal.dim);
     y += 18;
     const sq = new Button(["save_quit"], 16, y, 452, 56);
     bevel(ctx, sq.x, sq.y, sq.w, sq.h, pal.btn, false, 3);
-    textCenter(ctx, "Save & Quit", 240, y + 18, 2, pal.tan);
+    textCenter(ctx, "Save & Quit", 240, y + 18, BODY, pal.tan);
     this.buttons.push(sq);
     y += 66;
     let b;
     if (this.confirmEnd) {
       b = new Button(["end_game2"], 16, y, 452, 56);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.btn_no, false, 3);
-      textCenter(ctx, "Really end? Save will be deleted", 240, y + 18, 2, pal.no_fg);
+      textCenter(ctx, "Really end? Save will be deleted", 240, y + 18, BODY, pal.no_fg);
     } else {
       b = new Button(["end_game"], 16, y, 452, 56);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.card, false, 3);
-      textCenter(ctx, "End Game", 240, y + 18, 2, pal.no_fg);
+      textCenter(ctx, "End Game", 240, y + 18, BODY, pal.no_fg);
     }
     this.buttons.push(b);
     y += 76;
-    textLeft(ctx, "DEVICE", 16, y, 1, pal.dim);
+    textLeft(ctx, "DEVICE", 16, y, LABEL, pal.dim);
     y += 18;
+    // Tile captions are names, not chrome - BODY. They fit the 100px tile:
+    // the widest ("Network") is 84px at BODY.
     bevel(ctx, 16, y, TILE, TILE, pal.card);
     icons.drawIcon(ctx, icons.LED, 16 + 30, y + 14, pal.gold, 2);
-    textCenter(ctx, "LEDs", 16 + TILE / 2, y + TILE - 22, 1, pal.tan);
+    textCenter(ctx, "LEDs", 16 + TILE / 2, y + TILE - 24, BODY, pal.tan);
     this.buttons.push(new Button(["led"], 16, y, TILE, TILE));
     const ax = 16 + TILE + 16;
     bevel(ctx, ax, y, TILE, TILE, pal.card);
     icons.drawIcon(ctx, icons.LORE, ax + 26, y + 16, pal.gold, 2);
-    textCenter(ctx, "About", ax + TILE / 2, y + TILE - 22, 1, pal.tan);
+    textCenter(ctx, "About", ax + TILE / 2, y + TILE - 24, BODY, pal.tan);
     this.buttons.push(new Button(["about"], ax, y, TILE, TILE));
     const hx = ax + TILE + 16;
     bevel(ctx, hx, y, TILE, TILE, pal.card);
     icons.drawIcon(ctx, icons.PIPE, hx + 26, y + 16, pal.gold, 2);
-    textCenter(ctx, "Help", hx + TILE / 2, y + TILE - 22, 1, pal.tan);
+    textCenter(ctx, "Help", hx + TILE / 2, y + TILE - 24, BODY, pal.tan);
     this.buttons.push(new Button(["help"], hx, y, TILE, TILE));
     y += TILE + 24;
-    textLeft(ctx, "APPS  (coming soon)", 16, y, 1, pal.dim);
+    textLeft(ctx, "APPS  (COMING SOON)", 16, y, LABEL, pal.dim);
     y += 18;
     let x = 16;
     for (const [icon, label] of [[icons.WIFI, "Network"], [icons.MUSIC, "Tunes"]]) {
       bevel(ctx, x, y, TILE, TILE, pal.card);
       icons.drawIcon(ctx, icon, x + 30, y + 14, pal.dim, 2);
-      textCenter(ctx, label, x + TILE / 2, y + TILE - 22, 1, pal.dim);
+      textCenter(ctx, label, x + TILE / 2, y + TILE - 24, BODY, pal.dim);
       x += TILE + 16;
     }
   }
@@ -234,14 +261,15 @@ export class GameOverScreen {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     const win = game.game_over?.result === "victory";
+    // 5 is a wordmark size, not a reading tier - see the type-scale note in ui.js.
     textCenter(ctx, win ? "VICTORY!" : "DEFEAT", 240, 64, 5,
                win ? pal.gold : pal.red);
     textCenter(ctx, win ? "The final quest stage is complete."
-                        : "All players have been eliminated.", 240, 132, 2, pal.tan);
+                        : "All players have been eliminated.", 240, 132, BODY, pal.tan);
     let y = 190;
     const line = (label, val) => {
-      textLeft(ctx, label, 120, y, 2, pal.muted);
-      textLeft(ctx, String(val), 300, y, 2, pal.gold);
+      textLeft(ctx, label, 120, y, BODY, pal.muted);
+      textLeft(ctx, String(val), 300, y, BODY, pal.gold);
       y += 30;
     };
     line("Rounds", game.game_over?.round ?? game.round);
@@ -251,11 +279,11 @@ export class GameOverScreen {
     });
     const fin = new Button(["finish"], 100, 396, 280, 58);
     bevel(ctx, fin.x, fin.y, fin.w, fin.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Finish - clear save", 240, 414, 2, pal.ok_fg);
+    textCenter(ctx, "Finish - clear save", 240, 414, BODY, pal.ok_fg);
     this.buttons.push(fin);
     const back = new Button(["back"], 150, 358, 180, 34);
     bevel(ctx, back.x, back.y, back.w, back.h, pal.card, false, 2);
-    textCenter(ctx, "back to game", 240, back.y + 9, 2, pal.tan);
+    textCenter(ctx, "back to game", 240, back.y + 9, BODY, pal.tan);
     this.buttons.push(back);
   }
   onButton(btn, game) {
@@ -276,11 +304,11 @@ export class ScreenAbout {
     rect(ctx, 0, 0, 480, 480, pal.bg);
     drawHeader(ctx, game, this.buttons, { title: "About", close: true });
     let y = HEADER_H + 18;
-    textCenter(ctx, "LOTR LCG HUD", 240, y, 3, pal.gold);
+    textCenter(ctx, "LOTR LCG HUD", 240, y, DISPLAY, pal.gold);
     y += 42;
     const para = (lines, color) => {
       for (const ln of lines) {
-        textCenter(ctx, ln, 240, y, 2, color);
+        textCenter(ctx, ln, 240, y, BODY, color);
         y += 22;
       }
       y += 12;
@@ -296,17 +324,17 @@ export class ScreenAbout {
           "license by Fantasy Flight Games."], pal.muted);
     const label = "made with <3 by";
     const handle = "@andrhamm";
-    const lw = measureText(label, 2), hw = measureText(handle, 2);
+    const lw = measureText(label, BODY), hw = measureText(handle, BODY);
     const total = lw + 8 + 20 + 6 + hw;
     let x = 240 - Math.floor(total / 2);
     const by = 402;
     const b = new Button(["repo"], x - 10, by - 12, total + 20, 44);
     bevel(ctx, b.x, b.y, b.w, b.h, pal.card, false, 2);
-    textLeft(ctx, label, x, by, 2, pal.tan);
+    textLeft(ctx, label, x, by, BODY, pal.tan);
     x += lw + 8;
     icons.drawIcon(ctx, icons.GITHUB, x, by - 2, pal.gold);
     x += 20 + 6;
-    textLeft(ctx, handle, x, by, 2, pal.gold);
+    textLeft(ctx, handle, x, by, BODY, pal.gold);
     this.buttons.push(b);
   }
   onButton(btn) {
@@ -327,8 +355,11 @@ export class BootScreen {
     const b = new Button(id, 100, y, 280, h);
     bevel(ctx, b.x, b.y, b.w, b.h, primary ? pal.btn_ok : pal.btn, false, 3);
     const ty = b.y + Math.floor((h - (sub ? 26 : 16)) / 2);
-    textCenter(ctx, label, 240, ty, 2, primary ? pal.gold : pal.tan);
-    if (sub) textCenter(ctx, sub, 240, ty + 20, 1, pal.muted);
+    textCenter(ctx, label, 240, ty, BODY, primary ? pal.gold : pal.tan);
+    // The Resume subtitle stays LABEL: it is the round/phase/timestamp stamp
+    // ("R3 - Combat (2026-07-21 19:04)"), the same tabular shape the log feed
+    // uses, and it does not fit the 280px button at BODY.
+    if (sub) textCenter(ctx, sub, 240, ty + 20, LABEL, pal.muted);
     this.buttons.push(b);
   }
   draw(ctx) {
@@ -338,8 +369,9 @@ export class BootScreen {
       ctx.drawImage(this.bootImg, 0, 0, 480, 480);
     } else {
       rect(ctx, 0, 0, 480, 480, pal.bg);
+      // 4 is a wordmark size, not a reading tier - see the type scale in ui.js.
       textCenter(ctx, "LOTR LCG", 240, 120, 4, pal.gold);
-      textCenter(ctx, "THE CARD GAME", 240, 170, 2, pal.tan);
+      textCenter(ctx, "THE CARD GAME", 240, 170, BODY, pal.tan);
     }
     if (this.saved) {
       const sub = `R${this.saved.round} - ${this.saved.phase} (${this.saved.saved_at})`;
@@ -348,12 +380,12 @@ export class BootScreen {
     } else {
       this._button(ctx, ["new"], "New Game", null, 388, 58, true);
     }
-    const dw = measureText("disclaimers", 2);
+    const dw = measureText("disclaimers", BODY);
     const dx = 240 - Math.floor(dw / 2);
     for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1]]) {
-      textLeft(ctx, "disclaimers", dx + ox, 462 + oy, 2, pal.tan, false);
+      textLeft(ctx, "disclaimers", dx + ox, 462 + oy, BODY, pal.tan, false);
     }
-    textLeft(ctx, "disclaimers", dx, 462, 2, pal.outline, false);
+    textLeft(ctx, "disclaimers", dx, 462, BODY, pal.outline, false);
     this.buttons.push(new Button(["about"], dx - 12, 450, dw + 24, 30));
   }
   onButton(btn) { return ["boot", btn.id[0]]; }
@@ -370,23 +402,23 @@ export class SetupScreen {
     const ROW_H = 62, ROW_GAP = 10;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, "New game", 240, 16, 3, pal.gold);
+    textCenter(ctx, "New game", 240, 16, DISPLAY, pal.gold);
     if (this.threats.length > 1) {
-      textLeft(ctx, "tap a row to set the first player", 24, 52, 2, pal.dim);
+      textLeft(ctx, "tap a row to set the first player", 24, 52, BODY, pal.dim);
     }
     this.first = Math.min(this.first, this.threats.length - 1);
     const rowButtons = [];
     let y = 84;
     this.threats.forEach((t, i) => {
       panel(ctx, 16, y, 448, ROW_H);
-      textLeft(ctx, `P${i + 1}`, 30, y + 19, 3, pal.tan);
+      textLeft(ctx, `P${i + 1}`, 30, y + 19, DISPLAY, pal.tan);
       if (i === this.first) ribbon(ctx, 16 + 448 - 26, y + 1);
       icons.drawIcon(ctx, icons.THREAT, 82, y + 21, pal.red);
       stepper(ctx, this.buttons, ["st", i, -1], ["st", i, 1], 108, y + 7, String(t), 210, 48);
       if (this.threats.length > 1) {
         const rm = new Button(["rm", i], 340, y + 7, 48, 48);
         bevel(ctx, rm.x, rm.y, rm.w, rm.h, pal.btn_no);
-        textCenter(ctx, "x", rm.x + 24, rm.y + 12, 3, pal.no_fg);
+        textCenter(ctx, "x", rm.x + 24, rm.y + 12, DISPLAY, pal.no_fg);
         this.buttons.push(rm);
         rowButtons.push(new Button(["fp", i], 16, y, 448, ROW_H));
       }
@@ -395,15 +427,15 @@ export class SetupScreen {
     if (this.threats.length < MAX_PLAYERS) {
       const add = new Button(["add"], 16, y, 448, 50);
       bevel(ctx, add.x, add.y, add.w, add.h, pal.btn);
-      textCenter(ctx, "+ Add player", 240, y + 15, 2, pal.tan);
+      textCenter(ctx, "+ Add player", 240, y + 15, BODY, pal.tan);
       this.buttons.push(add);
     }
     const sb = new Button(["start"], 60, 388, 360, 62);
     bevel(ctx, sb.x, sb.y, sb.w, sb.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Start", 240, 404, 3, pal.gold);
+    textCenter(ctx, "Start", 240, 404, DISPLAY, pal.gold);
     this.buttons.push(sb);
     if (this.hasSave) {
-      textCenter(ctx, "starting a new game overwrites the saved one", 240, 458, 2, pal.no_fg);
+      textCenter(ctx, "starting a new game overwrites the saved one", 240, 458, BODY, pal.no_fg);
     }
     this.buttons.push(...rowButtons);
   }
@@ -502,14 +534,14 @@ export class ScenarioSourceScreen {
 
     const off = new Button(["choose_scenario", "official"], 24, 96, 432, 120);
     bevel(ctx, off.x, off.y, off.w, off.h, pal.btn);
-    textCenter(ctx, "Official Scenarios", 240, 128, 3, pal.gold);
-    textCenter(ctx, "Fantasy Flight Games content", 240, 168, 2, pal.muted);
+    textCenter(ctx, "Official Scenarios", 240, 128, DISPLAY, pal.gold);
+    textCenter(ctx, "Fantasy Flight Games content", 240, 168, BODY, pal.muted);
     this.buttons.push(off);
 
     const com = new Button(["choose_scenario", "alep"], 24, 244, 432, 120);
     bevel(ctx, com.x, com.y, com.w, com.h, pal.btn);
-    textCenter(ctx, "Community Scenarios", 240, 276, 3, pal.gold);
-    textCenter(ctx, "Community created content", 240, 316, 2, pal.muted);
+    textCenter(ctx, "Community Scenarios", 240, 276, DISPLAY, pal.gold);
+    textCenter(ctx, "Community created content", 240, 316, BODY, pal.muted);
     this.buttons.push(com);
   }
   onButton(btn) {
@@ -546,8 +578,8 @@ export class PickCycleScreen {
     rect(ctx, 0, 0, 480, 480, pal.bg);
     rect(ctx, 0, 0, 480, 40, pal.card);
     rect(ctx, 0, 40, 480, 1, pal.border);
-    textLeft(ctx, "< Source", 12, 12, 2, pal.muted);
-    textCenter(ctx, "CHOOSE CYCLE", 250, 12, 2, pal.gold);
+    textLeft(ctx, "< Source", 12, 12, BODY, pal.muted);
+    textCenter(ctx, "CHOOSE CYCLE", 250, 12, BODY, pal.gold);
     this.buttons.push(new Button(["back"], 0, 0, 150, 40));
 
     const pages = this._pages();
@@ -556,15 +588,16 @@ export class PickCycleScreen {
 
     if (!this.cycles.length) {
       const msg = this.source === "alep" ? "No community scenarios yet" : "No official scenarios yet";
-      textCenter(ctx, msg, 240, 200, 2, pal.dim);
+      textCenter(ctx, msg, 240, 200, BODY, pal.dim);
     } else {
       let y = LIST_Y0;
       for (const { cycle, date, count } of chunk) {
-        const name = truncateText(cycle, 2, 320);
-        textLeft(ctx, name, 20, y + 13, 2, pal.tan);
+        const name = truncateText(cycle, BODY, 320);
+        textLeft(ctx, name, 20, y + 13, BODY, pal.tan);
+        // Release date / quest count: row metadata scanned, not read - LABEL.
         const right = date ?? `${count} quest${count === 1 ? "" : "s"}`;
-        const rw = measureText(right, 1);
-        textLeft(ctx, right, 440 - rw, y + 16, 1, pal.dim);
+        const rw = measureText(right, LABEL);
+        textLeft(ctx, right, 440 - rw, y + 16, LABEL, pal.dim);
         chevronRight(ctx, 452, y + 22, pal.dim);
         rect(ctx, 8, y + ROW_H, 456, 1, pal.border);
         this.buttons.push(new Button(["cycle", cycle], 8, y, 456, ROW_H));
@@ -574,7 +607,7 @@ export class PickCycleScreen {
 
     const custom = new Button(["custom"], 8, CUSTOM_Y, 464, CUSTOM_H);
     bevel(ctx, custom.x, custom.y, custom.w, custom.h, pal.btn);
-    textCenter(ctx, "Custom / uncatalogued quest", 240, CUSTOM_Y + 12, 2, pal.tan);
+    textCenter(ctx, "Custom / uncatalogued quest", 240, CUSTOM_Y + 12, BODY, pal.tan);
     this.buttons.push(custom);
 
     rect(ctx, 0, 410, 480, 1, pal.border);
@@ -582,10 +615,10 @@ export class PickCycleScreen {
       const up = new Button(["older"], 12, 420, 150, 46);
       const dn = new Button(["newer"], 318, 420, 150, 46);
       bevel(ctx, up.x, up.y, up.w, up.h, pal.btn);
-      textCenter(ctx, "Up", up.x + 75, up.y + 14, 2, pal.tan);
+      textCenter(ctx, "Up", up.x + 75, up.y + 14, BODY, pal.tan);
       bevel(ctx, dn.x, dn.y, dn.w, dn.h, pal.btn);
-      textCenter(ctx, "Down", dn.x + 75, dn.y + 14, 2, pal.tan);
-      textCenter(ctx, `${this.page + 1}/${pages}`, 240, 434, 2, pal.muted);
+      textCenter(ctx, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan);
+      textCenter(ctx, `${this.page + 1}/${pages}`, 240, 434, BODY, pal.muted);
       this.buttons.push(up, dn);
     }
   }
@@ -622,9 +655,11 @@ export class ChooseScenarioScreen {
     rect(ctx, 0, 0, 480, 480, pal.bg);
     rect(ctx, 0, 0, 480, 52, pal.card);
     rect(ctx, 0, 52, 480, 1, pal.border);
-    textLeft(ctx, "< Cycles", 12, 8, 2, pal.muted);
-    textCenter(ctx, "Choose Scenario", 250, 6, 2, pal.gold);
-    textCenter(ctx, truncateText(`Cycle: ${this.cycle}`, 1, 440), 250, 30, 1, pal.dim);
+    textLeft(ctx, "< Cycles", 12, 8, BODY, pal.muted);
+    textCenter(ctx, "Choose Scenario", 250, 6, BODY, pal.gold);
+    // The "Cycle: X" subtitle is deliberately LABEL - the user specified it
+    // small when they designed this header (allow-listed in test_typography).
+    textCenter(ctx, truncateText(`Cycle: ${this.cycle}`, LABEL, 440), 250, 30, LABEL, pal.dim);
     this.buttons.push(new Button(["back"], 0, 0, 150, 52));
 
     const pages = this._pages();
@@ -636,8 +671,8 @@ export class ChooseScenarioScreen {
       const on = scn.slug === this.selected;
       if (on) rect(ctx, 8, y, 456, 44, pal.card_hi);
       radioGlyph(ctx, 30, y + 22, on);
-      const name = truncateText(scn.name, 2, 400);
-      textLeft(ctx, name, 52, y + 13, 2, on ? pal.tan : pal.muted);
+      const name = truncateText(scn.name, BODY, 400);
+      textLeft(ctx, name, 52, y + 13, BODY, on ? pal.tan : pal.muted);
       rect(ctx, 8, y + 44, 456, 1, pal.border);
       this.buttons.push(new Button(["scn", scn.slug], 8, y, 456, 44));
       y += ROW_STRIDE;
@@ -647,16 +682,16 @@ export class ChooseScenarioScreen {
       const up = new Button(["older"], 12, 352, 150, 46);
       const dn = new Button(["newer"], 318, 352, 150, 46);
       bevel(ctx, up.x, up.y, up.w, up.h, pal.btn);
-      textCenter(ctx, "Up", up.x + 75, up.y + 14, 2, pal.tan);
+      textCenter(ctx, "Up", up.x + 75, up.y + 14, BODY, pal.tan);
       bevel(ctx, dn.x, dn.y, dn.w, dn.h, pal.btn);
-      textCenter(ctx, "Down", dn.x + 75, dn.y + 14, 2, pal.tan);
-      textCenter(ctx, `${this.page + 1}/${pages}`, 240, 366, 2, pal.muted);
+      textCenter(ctx, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan);
+      textCenter(ctx, `${this.page + 1}/${pages}`, 240, 366, BODY, pal.muted);
       this.buttons.push(up, dn);
     }
 
     const submit = new Button(["submit"], 130, 414, 220, 52);
     bevel(ctx, submit.x, submit.y, submit.w, submit.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Submit", 240, 432, 3, pal.ok_fg);
+    textCenter(ctx, "Submit", 240, 432, DISPLAY, pal.ok_fg);
     this.buttons.push(submit);
   }
   onButton(btn) {
@@ -803,22 +838,24 @@ export class ScenarioOptionsScreen {
 
     const scenarioMask = iconFor(this.scenario.slug, this.icons);
     iconSlot(ctx, 16, 50, 40, pal.gold, scenarioMask);
-    textLeft(ctx, truncateText(name, 2, 480 - 66 - 14), 66, 54, 2, pal.gold);
-    textLeft(ctx, truncateText(`${pack} - tap to change`, 1, 480 - 66 - 14), 66, 76, 1, pal.dim);
+    textLeft(ctx, truncateText(name, BODY, 480 - 66 - 14), 66, 54, BODY, pal.gold);
+    // "<pack> - tap to change" is an affordance a player reads, not chrome:
+    // BODY. It clears SETS TO GATHER at y=100 (76 + 16 = 92).
+    textLeft(ctx, truncateText(`${pack} - tap to change`, BODY, 480 - 66 - 14), 66, 76, BODY, pal.dim);
     this.buttons.push(new Button(["retitle"], 8, 46, 464, 50));
 
-    textLeft(ctx, "SETS TO GATHER", 16, 100, 1, pal.muted);
+    textLeft(ctx, "SETS TO GATHER", 16, 100, LABEL, pal.muted);
     let gy = GATHER_Y0;
     for (const [label, isMore] of this._gatherRows()) {
       if (isMore) {
-        textLeft(ctx, label, 48, gy + 5, 2, pal.muted);
+        textLeft(ctx, label, 48, gy + 5, BODY, pal.muted);
       } else {
         // Slot is 26 (not the mask's exact 24) so panel()'s 1px border ring
         // stays visible around the icon, same look as an unmatched
         // placeholder - see the Task 3 report.
         const rowMask = iconFor(slugify(label), this.icons);
         iconSlot(ctx, 16, gy, 26, null, rowMask);
-        textLeft(ctx, truncateText(label, 2, 480 - 48 - 14), 48, gy + 5, 2, pal.tan);
+        textLeft(ctx, truncateText(label, BODY, 480 - 48 - 14), 48, gy + 5, BODY, pal.tan);
       }
       gy += GATHER_ROW_H;
     }
@@ -829,24 +866,26 @@ export class ScenarioOptionsScreen {
     // (116 + 3*30 + 6).
     const ddY = gy + 6;
     const S = ScenarioOptionsScreen;
-    this._dropdown(ctx, 16, ddY, S.DD_W, "Difficulty", this.difficulty, ["dd", "difficulty"]);
+    // ALL CAPS: a field label beside a control is chrome, and the casing (not
+    // the size) is what demotes it - see the design-system spec.
+    this._dropdown(ctx, 16, ddY, S.DD_W, "DIFFICULTY", this.difficulty, ["dd", "difficulty"]);
     // Same read-only card reference the Quest Setup view and the progress
     // detail row open - reachable here so you can read the stages before
     // committing to the scenario. Sits on the dropdown's row (its box starts
     // 14px below the label), not under it.
     const cb = new Button(["open_card_modal"], S.CARD_BTN_X, ddY + 14, S.CARD_BTN_W, 34);
     bevel(ctx, cb.x, cb.y, cb.w, cb.h, pal.btn);
-    textCenter(ctx, "Quest card", cb.x + cb.w / 2, cb.y + 9, 2, pal.tan);
+    textCenter(ctx, "Quest card", cb.x + cb.w / 2, cb.y + 9, BODY, pal.tan);
     this.buttons.push(cb);
 
     let msgs = this._tipMessages();
     if (msgs.length) {
-      // Always the mock's scale (2). The tip used to shrink to scale 1
-      // whenever two messages showed at once, which read as a bug - the same
-      // panel rendering at two different sizes. There is only ever one
-      // message now (see _tipMessages), and the authored copy is kept short
-      // enough to wrap to 2 lines at this scale.
-      const scale = 2;
+      // Always BODY. The tip used to shrink to LABEL whenever two messages
+      // showed at once, which read as a bug - the same panel rendering at two
+      // different sizes. There is only ever one message now (see
+      // _tipMessages), and the authored copy is kept short enough to wrap to
+      // 2 lines at this size.
+      const scale = BODY;
       const ty = ddY + 62;
       // A scenario-specific mode card's own printed setup text can run several
       // hundred characters. Clip it above the CTA rather than letting it run
@@ -866,15 +905,17 @@ export class ScenarioOptionsScreen {
 
     const begin = new Button(["begin"], 16, CTA_Y, 448, CTA_H);
     bevel(ctx, begin.x, begin.y, begin.w, begin.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Begin Setup", 240, CTA_Y + 18, 3, pal.ok_fg);
+    textCenter(ctx, "Begin Setup", 240, CTA_Y + 18, DISPLAY, pal.ok_fg);
     this.buttons.push(begin);
   }
 
+  // `label` is an ALL-CAPS field label (LABEL chrome); `value` is the chosen
+  // option and reads at BODY.
   _dropdown(ctx, x, y, w, label, value, id) {
-    textLeft(ctx, label, x, y, 1, pal.muted);
+    textLeft(ctx, label, x, y, LABEL, pal.muted);
     const yy = y + 14;
     panel(ctx, x, yy, w, 34, pal.well);
-    textLeft(ctx, value, x + 10, yy + 9, 2, pal.tan);
+    textLeft(ctx, value, x + 10, yy + 9, BODY, pal.tan);
     chevronDown(ctx, x + w - 16, yy + 17, pal.dim);
     this.buttons.push(new Button(id, x, yy, w, 34));
   }
@@ -921,7 +962,7 @@ export class OptionListModal {
     const { ROWS_Y0, ROW_H, ROW_STRIDE, DONE_Y, DONE_H } = OptionListModal;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, `Choose ${this.title}`, 240, 30, 3, pal.gold);
+    textCenter(ctx, `Choose ${this.title}`, 240, 30, DISPLAY, pal.gold);
 
     const current = this.host[this.attr];
     let y = ROWS_Y0;
@@ -929,7 +970,7 @@ export class OptionListModal {
       const on = opt === current;
       if (on) rect(ctx, 24, y, 432, ROW_H, pal.card_hi);
       radioGlyph(ctx, 50, y + ROW_H / 2, on);
-      textLeft(ctx, opt, 80, y + ROW_H / 2 - 12, 3, on ? pal.tan : pal.muted);
+      textLeft(ctx, opt, 80, y + ROW_H / 2 - 12, DISPLAY, on ? pal.tan : pal.muted);
       rect(ctx, 24, y + ROW_H, 432, 1, pal.border);
       this.buttons.push(new Button(["opt", opt], 24, y, 432, ROW_H));
       y += ROW_STRIDE;
@@ -937,7 +978,7 @@ export class OptionListModal {
 
     const done = new Button(["done"], 24, DONE_Y, 432, DONE_H);
     bevel(ctx, done.x, done.y, done.w, done.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Done", 240, DONE_Y + 18, 2, pal.ok_fg);
+    textCenter(ctx, "Done", 240, DONE_Y + 18, BODY, pal.ok_fg);
     this.buttons.push(done);
   }
 
@@ -958,23 +999,23 @@ export function drawLegendRows(ctx, y) {
   const xIcon = 30, xText = 76;
   icons.drawIcon(ctx, icons.THREAT, xIcon - 10, y - 10, pal.bevel_d);
   icons.drawIcon(ctx, icons.THREAT, xIcon - 11, y - 11, pal.red);
-  textLeft(ctx, "your threat - enemies engage at/below it", xText, y - 8, 2, pal.tan);
+  textLeft(ctx, "your threat - enemies engage at/below it", xText, y - 8, BODY, pal.tan);
   y += 34;
   icons.drawIcon(ctx, icons.THREAT, xIcon - 11, y - 11, pal.outline);
-  textLeft(ctx, "staging threat - what questing must beat", xText, y - 8, 2, pal.tan);
+  textLeft(ctx, "staging threat - what questing must beat", xText, y - 8, BODY, pal.tan);
   y += 34;
   icons.drawIcon(ctx, icons.WILLPOWER, xIcon - 11, y - 11, pal.gold);
-  textLeft(ctx, "willpower committed to the quest", xText, y - 8, 2, pal.tan);
+  textLeft(ctx, "willpower committed to the quest", xText, y - 8, BODY, pal.tan);
   y += 34;
   token(ctx, xIcon, y, 13, 2, 4, pal.value, 0.55, pal.gold, pal.dim);
-  textLeft(ctx, "ring = progress; number = points left", xText, y - 8, 2, pal.tan);
+  textLeft(ctx, "ring = progress; number = points left", xText, y - 8, BODY, pal.tan);
   y += 34;
   token(ctx, xIcon, y, 13, 2, 41, pal.value, 0.9, pal.red, pal.dim);
-  textLeft(ctx, "red ring = close to elimination", xText, y - 8, 2, pal.tan);
+  textLeft(ctx, "red ring = close to elimination", xText, y - 8, BODY, pal.tan);
   y += 34;
   rect(ctx, xIcon - 12, y - 10, 4, 20, pal.red);
   rect(ctx, xIcon + 2, y - 10, 4, 20, pal.green);
-  textLeft(ctx, "red = happens anyway; green = your window", xText, y - 8, 2, pal.tan);
+  textLeft(ctx, "red = happens anyway; green = your window", xText, y - 8, BODY, pal.tan);
   return y + 30;
 }
 
@@ -997,9 +1038,9 @@ export class FirstRunScreen {
   _body(ctx) {
     let y = HEADER_H + 40;
     const para = (title, lines) => {
-      textCenter(ctx, title, 240, y, 2, pal.gold);
+      textCenter(ctx, title, 240, y, BODY, pal.gold);
       y += 40;
-      for (const ln of lines) { textCenter(ctx, ln, 240, y, 2, pal.tan); y += 26; }
+      for (const ln of lines) { textCenter(ctx, ln, 240, y, BODY, pal.tan); y += 26; }
     };
     if (this.page === 0) {
       para("A companion, not a rules engine",
@@ -1013,7 +1054,7 @@ export class FirstRunScreen {
          "moves you forward.", "",
          "Tap the stats up top to edit them."]);
     } else {
-      textCenter(ctx, "What the marks mean", 240, y, 2, pal.gold);
+      textCenter(ctx, "What the marks mean", 240, y, BODY, pal.gold);
       drawLegendRows(ctx, y + 36);
     }
   }
@@ -1025,7 +1066,7 @@ export class FirstRunScreen {
     if (this.page > 0) {
       const b = new Button(["fr_back"], 12, 412, 140, 52);
       bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-      textCenter(ctx, "Back", b.x + 70, b.y + 16, 2, pal.tan);
+      textCenter(ctx, "Back", b.x + 70, b.y + 16, BODY, pal.tan);
       this.buttons.push(b);
     }
     for (let i = 0; i < FIRSTRUN_PAGES; i++) {
@@ -1034,7 +1075,7 @@ export class FirstRunScreen {
     const last = this.page === FIRSTRUN_PAGES - 1;
     const b = new Button([last ? "fr_done" : "fr_next"], 328, 412, 140, 52);
     bevel(ctx, b.x, b.y, b.w, b.h, pal.btn_ok);
-    textCenter(ctx, last ? "Done" : "Next", b.x + 70, b.y + 16, 2, pal.ok_fg);
+    textCenter(ctx, last ? "Done" : "Next", b.x + 70, b.y + 16, BODY, pal.ok_fg);
     this.buttons.push(b);
   }
   onButton(btn) {

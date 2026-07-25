@@ -6,6 +6,8 @@ every draw passes NOWRAP (a width no string can reach) to disable it.
 """
 import math
 
+from ui.theme import DISPLAY, BODY, LABEL
+
 NOWRAP = 10000
 
 
@@ -48,7 +50,7 @@ def bevel(d, pal, x, y, w, h, fill, pressed=False, t=2):
 
 def text_left(d, pal, s, x, y, scale, pen, shadow=True):
     if shadow:
-        off = 1 if scale == 1 else 2
+        off = 1 if scale == LABEL else 2
         d.set_pen(pal.shadow)
         d.text(s, x + off, y + off, NOWRAP, scale)
     d.set_pen(pen)
@@ -59,14 +61,14 @@ def text_center(d, pal, s, cx, y, scale, pen, shadow=True):
     w = d.measure_text(s, scale)
     x = int(cx - w / 2)
     if shadow:
-        off = 1 if scale == 1 else 2
+        off = 1 if scale == LABEL else 2
         d.set_pen(pal.shadow)
         d.text(s, x + off, y + off, NOWRAP, scale)
     d.set_pen(pen)
     d.text(s, x, y, NOWRAP, scale)
 
 
-def button(d, pal, btn, label, scale=2, fill=None, fg=None, pressed=False):
+def button(d, pal, btn, label, scale=BODY, fill=None, fg=None, pressed=False):
     bevel(d, pal, btn.x, btn.y, btn.w, btn.h,
           fill if fill is not None else pal.btn, pressed=pressed)
     ch = 8 * scale
@@ -81,14 +83,14 @@ def stepper(d, pal, buttons, id_minus, id_plus, x, y, value_str, w=200, h=56):
     bw = h
     minus = Button(id_minus, x, y, bw, h)
     plus = Button(id_plus, x + w - bw, y, bw, h)
-    button(d, pal, minus, "-", 3)
-    button(d, pal, plus, "+", 3)
-    text_center(d, pal, value_str, x + w / 2, int(y + (h - 24) / 2), 3, pal.gold)
+    button(d, pal, minus, "-", DISPLAY)
+    button(d, pal, plus, "+", DISPLAY)
+    text_center(d, pal, value_str, x + w / 2, int(y + (h - 24) / 2), DISPLAY, pal.gold)
     buttons.append(minus)
     buttons.append(plus)
 
 
-def row_label(d, pal, s, x, y, scale=2, pen=None):
+def row_label(d, pal, s, x, y, scale=BODY, pen=None):
     text_left(d, pal, s, x, y, scale, pen if pen is not None else pal.tan)
 
 
@@ -138,7 +140,7 @@ def ribbon(d, pal, x, y, w=12, h=22):
     d.triangle(x, y + h, x + w, y + h, x + w // 2, y + h - 7)
 
 
-def note_panel(d, pal, x, y, w, text, scale=2, reserve_right=0, icon=None):
+def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None):
     """Distinct style for phase reminder messages: dark panel, gold edge,
     muted text, and (by default) the hobbit-pipe hint medallion on the left.
     Accepts a string or list of paragraphs; each is word-wrapped to the usable
@@ -184,7 +186,7 @@ def phase_block(d, pal, x, y, w, sections, reserve_right=0):
     laid = []
     for kind, text in sections:
         body = " ".join(text) if isinstance(text, (list, tuple)) else text
-        lines = wrap_text(body, 2, usable, d.measure_text)
+        lines = wrap_text(body, BODY, usable, d.measure_text)
         laid.append((kind, lines, 14 + len(lines) * 24))
     h = 8 + sum(sec_h for _, _, sec_h in laid)
     d.set_pen(pal.card_hi)
@@ -194,10 +196,10 @@ def phase_block(d, pal, x, y, w, sections, reserve_right=0):
         accent = pal.red if kind == "framework" else pal.green
         d.set_pen(accent)
         d.rectangle(x, ty, 4, sec_h)
-        text_left(d, pal, _PHASE_CAPTIONS[kind], x + 12, ty + 2, 1, accent)
+        text_left(d, pal, _PHASE_CAPTIONS[kind], x + 12, ty + 2, LABEL, accent)
         ly = ty + 16
         for s in lines:
-            text_left(d, pal, s, x + 12, ly, 2, pal.muted)
+            text_left(d, pal, s, x + 12, ly, BODY, pal.muted)
             ly += 24
         ty += sec_h
     return h
@@ -232,16 +234,16 @@ def willpower_staging_meter(d, pal, x, y, w, willpower, staging):
     diff = willpower - staging
     if diff != 0:
         pre = "%s will gain %d " % ("You" if diff > 0 else "Each player", abs(diff))
-        pre_w = d.measure_text(pre, 2)
+        pre_w = d.measure_text(pre, BODY)
         ic = _icons.TRAIL if diff > 0 else _icons.THREAT_SM
         tail = "at resolution."
-        total_w = pre_w + len(ic) + 6 + d.measure_text(tail, 2)
+        total_w = pre_w + len(ic) + 6 + d.measure_text(tail, BODY)
         lx = x + round((w - total_w) / 2)
-        text_left(d, pal, pre, lx, ly, 2, pal.muted)
+        text_left(d, pal, pre, lx, ly, BODY, pal.muted)
         icons_draw(d, ic, lx + pre_w, ly - 1, pal.gold if diff > 0 else pal.red)
-        text_left(d, pal, tail, lx + pre_w + len(ic) + 6, ly, 2, pal.muted)
+        text_left(d, pal, tail, lx + pre_w + len(ic) + 6, ly, BODY, pal.muted)
     else:
-        text_center(d, pal, "Tied - no change at resolution.", x + w / 2, ly, 2, pal.dim)
+        text_center(d, pal, "Tied - no change at resolution.", x + w / 2, ly, BODY, pal.dim)
     return 64
 
 
@@ -328,7 +330,7 @@ def circ_btn(d, pal, cx, cy, r, glyph, pen=None):
     centred on the same (cx, cy)."""
     disc(d, cx, cy, r, pal.btn)
     arc_runs(d, cx, cy, r, r - 2, 0, 360, pal.bevel_l)
-    text_center(d, pal, glyph, cx, int(cy - 8), 2, pen if pen is not None else pal.tan)
+    text_center(d, pal, glyph, cx, int(cy - 8), BODY, pen if pen is not None else pal.tan)
 
 
 def wx_small(d, pal, idx, cx, cy, r, pen=None):

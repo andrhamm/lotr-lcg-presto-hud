@@ -323,6 +323,13 @@ def _counter():
     return hw, m
 
 
+def _step_prep(step):
+    """Park the game on `step` so the Phases screen expands that phase."""
+    def prep(g):
+        g.step = step
+    return prep
+
+
 def _log_prep(g):
     for i in range(30):
         g.log_event("P%d threat %d -> %d after a fairly long explanation" % ((i % 4) + 1, 20 + i, 21 + i))
@@ -1026,6 +1033,14 @@ SCENES = {
     "scenario_options_icons": _scenario_options_icons,
     "scenario_options_no_enrichment": _scenario_options_no_enrichment,
     "phases_screen": _screen("ui.screen_phases", "ScreenPhases"),
+    # An expanded phase is the only state that draws the step rows, and the
+    # 5-step phases (Quest, Combat) are the tallest the list ever gets - the
+    # case where BODY step text has to clear the pinned footnotes. Combat also
+    # carries the widest row ("(loops: each player)").
+    "phases_screen_quest": _screen("ui.screen_phases", "ScreenPhases",
+                                   prep=_step_prep("3.3")),
+    "phases_screen_combat": _screen("ui.screen_phases", "ScreenPhases",
+                                    prep=_step_prep("6.P")),
     "log": _screen("ui.screen_log", "ScreenLog", prep=_log_prep),
     "settings": _screen("ui.screen_settings", "ScreenSettings"),
     "counter": _counter,
