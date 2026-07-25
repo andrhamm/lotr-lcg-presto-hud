@@ -35,6 +35,11 @@ Web and firmware stay in lockstep. See [[design-review]] and [[stat-system]].
    player's threat and flags a projection that crosses the danger threshold.
 3. **M3 · Speed** — inline threat −/+, direct willpower total, one-tap all-players;
    declutter commit. No tap-and-hold. *Done when* a common round hits a tap budget.
+   **Status: DONE.** Threat edits inline in the players zone (48px columns split
+   into two 24px halves), willpower gained the same inline ± as staging, and
+   `CommitModal` retired in favour of a one-tap "Confirm all commits (N/M)".
+   A common round now takes **22 taps, down from 29**, gated by
+   `tests/test_tap_budget.py`.
 4. **M4 · Quest awareness** — quest picker preloads stages/points + **encounter
    sets to gather** (icon-pack glyphs); conditional advancement; per-quest threat
    warnings; **quest appendix** (tips/FAQ/campaign-cards from blog+forums);
@@ -87,8 +92,10 @@ Web and firmware stay in lockstep. See [[design-review]] and [[stat-system]].
   `docs/superpowers/specs/`.
 - **Pending ops:** push `feat/quest-picker` (local commits are unsigned — sign
   or re-sign before pushing), deploy `docs/data/` + firmware to the Presto, soak.
-- **Next milestone: M3 · Speed** — inline threat +/-, direct willpower total,
-  one-tap all-players, declutter commit. Planned in
-  `docs/superpowers/plans/2026-07-25-m3-speed.md`, which measures today's common
-  round at 29 taps and sets a 22-tap budget with an executable gate.
+- **Next milestone: M5 · Beta hardening** — first-run guidance + conventions
+  legend, copy/tone pass (the Sailing "discarded" fix is located and specified),
+  accessibility (measured: `pal.dim` fails WCAG AA on every background it is used
+  on), and an on-device soak protocol. Planned in
+  `docs/superpowers/plans/2026-07-25-m5-beta-hardening.md`.
+- **M1-M4 all shipped**; only M5 remains before the beta bar.
 - Mockups must be **device-faithful** (render via `tools/preview.py`), not HTML.
