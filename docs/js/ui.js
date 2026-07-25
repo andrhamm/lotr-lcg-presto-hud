@@ -10,9 +10,9 @@ const rgb = (r, g, b) => `rgb(${r},${g},${b})`;
 export const pal = {
   bg: rgb(16, 12, 9), card: rgb(36, 32, 21), card_hi: rgb(48, 44, 29),
   border: rgb(60, 54, 35), border_gold: rgb(150, 118, 48),
-  gold: rgb(214, 180, 110), tan: rgb(200, 186, 144), muted: rgb(146, 132, 96),
-  dim: rgb(100, 90, 62), green: rgb(136, 168, 92), amber: rgb(214, 164, 70),
-  red: rgb(206, 84, 52), btn: rgb(52, 42, 26), btn_ok: rgb(40, 50, 26),
+  gold: rgb(214, 180, 110), tan: rgb(200, 186, 144), muted: rgb(180, 162, 118),
+  dim: rgb(162, 146, 100), green: rgb(136, 168, 92), amber: rgb(214, 164, 70),
+  red: rgb(247, 101, 62), btn: rgb(52, 42, 26), btn_ok: rgb(40, 50, 26),
   ok_fg: rgb(158, 196, 104), btn_no: rgb(56, 26, 18), no_fg: rgb(224, 112, 80),
   tab_active: rgb(30, 24, 15), bevel_l: rgb(96, 86, 54), bevel_d: rgb(7, 5, 3),
   shadow: rgb(34, 30, 24),

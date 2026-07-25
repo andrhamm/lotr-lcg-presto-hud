@@ -14,14 +14,14 @@ class Palette:
         # ink
         self.gold = d.create_pen(214, 180, 110)
         self.tan = d.create_pen(200, 186, 144)
-        self.muted = d.create_pen(146, 132, 96)
+        self.muted = d.create_pen(180, 162, 118)
         # stat-value ink (threat / willpower / progress) - one constant colour
         self.value = self.gold
-        self.dim = d.create_pen(100, 90, 62)
+        self.dim = d.create_pen(162, 146, 100)
         # semantics
         self.green = d.create_pen(136, 168, 92)
         self.amber = d.create_pen(214, 164, 70)
-        self.red = d.create_pen(206, 84, 52)
+        self.red = d.create_pen(247, 101, 62)
         # weather (heading facing glyphs)
         self.cloud = d.create_pen(185, 188, 198)
         self.sky = d.create_pen(95, 168, 230)

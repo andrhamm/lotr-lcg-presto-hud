@@ -303,7 +303,7 @@ export class ScreenPlay {
         sx0 += 10 + 6;
         textLeft(ctx, "exhausts characters (ships", sx0, ly, 2, pal.muted);
         ly += lh;
-        textLeft(ctx, "count), looks at that many cards.", tx, ly, 2, pal.muted);
+        textLeft(ctx, "count), looks at and discards them.", tx, ly, 2, pal.muted);
         ly += lh;
         icons.drawIcon(ctx, icons.WHEEL_SM, tx, ly, pal.gold);
         textLeft(ctx, "found: move 1 step on-course.", tx + 22, ly, 2, pal.muted);
