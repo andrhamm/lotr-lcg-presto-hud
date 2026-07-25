@@ -95,19 +95,39 @@ Practical consequence: prefer committing derived data over re-fetching it at
 build time. A slow third-party fetch in CI (see the Hall of Beorn enrichment)
 is a smell — commit the derived output and let the build merge it.
 
-## Card data (generated, never committed)
+## Card data (generated — except two committed derived files)
+
+`docs/data/` is a **mixed** directory, and `.gitignore` says so explicitly: a
+blanket `docs/data/*` ignore (the verbatim compiled card DB) plus a one-line
+allow-list, `!docs/data/tips.json` (our own summaries). `tools/data/` splits the
+same way — `enrichment.json` (aggregated set names) is **committed**, the raw
+`hob_cache/` and `tips_cache/` responses are not. The rule behind both is the
+data policy above: verbatim vs derived, not third-party vs ours.
+
+**Committed, so CI never fetches them:** `tools/data/enrichment.json` and
+`docs/data/tips.json`. Both fetchers are a **no-op when their output already
+exists** (shared guard: `build_card_data.needs_refresh()`); regenerating is an
+explicit local act with `--refresh`, never something a build does. This is
+deliberate — the Hall of Beorn fetch used to run in CI and pushed the Pages
+deploy from ~30s to 9min+, worst case 40+ minutes cold.
+
+**Generated, never committed:** the compiled card DB (`index.json`,
+`scenarios/`, `players/`, `rules.json`) and `icons.json`.
 
 `tools/build_card_data.py` compiles the full DragnCards card DB into
 `docs/data/` (index + per-scenario + player DB + rules). The source of truth is
-the pinned TSV (`tools/data/cardDb.SOURCE.txt`); the output is **gitignored** and
-regenerated — never hand-edit `docs/data/`. Refresh the pin with
-`python3 tools/build_card_data.py --refresh`. Web Pages builds it in CI
-(`.github/workflows/pages.yml`); the device gets it at deploy:
+the pinned TSV (`tools/data/cardDb.SOURCE.txt` — a URL + sha, tracked); the
+output is **gitignored** and regenerated — never hand-edit `docs/data/`.
+Refresh the pin with `python3 tools/build_card_data.py --refresh`. It also
+merges the committed `tools/data/enrichment.json` in the same pass (absent or
+corrupt enrichment is silently skipped, never a build failure). Web Pages
+builds it in CI (`.github/workflows/pages.yml` — one pass, no fetch steps); the
+device gets it at deploy:
 `python3 tools/build_card_data.py && mpremote cp -r docs/data/ :/data/`.
 
 `tools/build_icons.py` rasterizes the community SVG icon pack (encounter-set
 + expansion-symbol symbols) into `docs/data/icons.json` (24×24 1-bit masks,
-same gitignored/regenerated posture as the rest of `docs/data/` — never
+same gitignored/regenerated posture as the compiled card DB — never
 hand-edit). Same pinned-upstream pattern as the card data: the source of
 truth is `tools/data/icons.SOURCE.txt` (pack repo `KevBelisle/lotr-lcg-assets`
 + commit sha); a normal run downloads that commit's tarball and reads the
@@ -127,45 +147,54 @@ artifact); the device gets it at deploy via
 `tools/build_hob_enrichment.py` fetches Hall of Beorn's per-scenario "sets to
 gather" data (every encounter set a quest draws from, not just its own —
 `Export/Search?EncounterSet=<name>&CardType=Quest`) into
-`tools/data/enrichment.json`, cached per-scenario under
-`tools/data/hob_cache/<slug>.json` — both **gitignored**, same posture as
-`docs/data/`. `build_card_data.py` merges it automatically when present
-(`includedSets` on each scenario, `gatherCount` on its index entry) — absent
-or corrupt enrichment is silently skipped, never a build failure. The
-endpoint is slow (~20s/request) and third-party, so the fetcher is polite —
-strictly serial with a small delay, and a warm cache skips the network call
-entirely — but a *cold* run over the full catalog takes 40+ minutes; run
-`--limit N` first for a quick smoke check. Order matters: the enrichment
-fetcher reads scenario names out of `docs/data/index.json`, so
-`build_card_data.py` must run once *before* it and once *after* (to merge)
-— `python3 tools/build_card_data.py && python3 tools/build_hob_enrichment.py
-&& python3 tools/build_card_data.py`. CI does exactly this in
-`.github/workflows/pages.yml`, with the cache step persisted via
-`actions/cache` across runs (marked `continue-on-error`, same reasoning as
-icons); for a device deploy, run that same three-command sequence before
-`mpremote cp -r docs/data/ :/data/` if you want the gather list on-device —
-the plain `build_card_data.py`-only one-liner above still works fine without
-it, just without a merged gather list.
+`tools/data/enrichment.json` — **committed**: it holds only a sorted list of
+encounter-set *names* per scenario, aggregated metadata with no printed card
+text. The raw per-scenario responses it aggregates (`tools/data/hob_cache/
+<slug>.json`) are verbatim third-party card data and stay **gitignored**.
+`build_card_data.py` merges the committed file automatically (`includedSets`
+on each scenario, `gatherCount` on its index entry) — absent or corrupt
+enrichment is silently skipped, never a build failure.
 
-`tools/build_tips.py` fetches per-scenario strategy tips from Vision of the
-Palantir (the site `quests/*.md` already cites) into `docs/data/tips.json` —
-gitignored, same posture as the rest of `docs/data/`. It resolves a catalog
-slug to a VotP article via the site's `sitemap.xml` (cached under
-`tools/data/tips_cache/`, also **gitignored**), then **summarizes, never
-reproduces**: only sentences a small set of fact-pattern rules can restate in
-fixed original phrasing become tips (≤140 chars, ≤4/scenario), everything
-else is dropped — see the module docstring's "Verified facts" and Copyright
-posture for the robots.txt check and the summarization approach. Politeness
-mirrors `build_hob_enrichment.py`: strictly serial with a delay, cache-first.
-`QuestCardModal` loads it via `quest_catalog.load_tips()` /
-`docs/js/quest_catalog.js`'s `loadTips()` and enables its Tips button only
-where `tips_for()`/`tipsFor()` finds something — absent/corrupt/not-yet-built
-`tips.json` just leaves the button in its disabled state. CI builds it in
-`.github/workflows/pages.yml` (`continue-on-error` — tips are optional, card
-data is the critical artifact); for a device deploy, run
-`python3 tools/build_tips.py && mpremote cp -r docs/data/ :/data/` if you want
-tips on-device, or skip it — everything else still works without a
-`tips.json`.
+**Nothing fetches this in CI, and a plain run fetches nothing.** With
+`enrichment.json` present, `python3 tools/build_hob_enrichment.py` prints a
+one-line no-op and exits 0. To actually regenerate: `python3
+tools/build_card_data.py && python3 tools/build_hob_enrichment.py --refresh &&
+python3 tools/build_card_data.py` — two card-data passes because the fetcher
+reads scenario names out of `docs/data/index.json` and the merge is the second
+pass. Then commit the new `enrichment.json`. The endpoint is slow
+(~20s/request) and third-party, so the fetcher is polite — strictly serial
+with a small delay, warm cache skips the network entirely — but a cold run
+over the full catalog takes 40+ minutes; `--limit N` first for a smoke check.
+A device deploy needs none of this: `docs/data/` gets the gather list from the
+plain `build_card_data.py` one-liner above, since the enrichment is in the
+checkout.
+
+`tools/build_tips.py` writes per-scenario strategy tips to `docs/data/tips.json`
+— **committed**, the single `!docs/data/tips.json` allow-list line in
+`.gitignore`. Everything in it is text this project wrote itself: tips come
+either from our own `quests/*.md` callouts or from a Vision of the Palantir
+article (the site `quests/*.md` already cites) run through a **summarize,
+never reproduce** pipeline — only sentences a small set of fact-pattern rules
+can restate in fixed original phrasing survive (≤140 chars, ≤4/scenario), with
+a mechanical `_too_verbatim` guard on top; everything else is dropped. See the
+module docstring's "Verified facts" and Copyright posture for the robots.txt
+check and the approach. The fetched article HTML (`tools/data/tips_cache/`) is
+verbatim third-party content and stays **gitignored**. In practice the gate is
+strict enough that *nothing scraped currently survives it*: as committed, every
+tip in `tips.json` comes from a `quests/*.md` callout we wrote, and the file's
+own `source` string says so (it only credits the scrape when a scraped tip
+actually made it in — same rule as `index.json`'s Hall of Beorn credit).
+
+**Nothing fetches this in CI, and a plain run fetches nothing.** With
+`tips.json` present, `python3 tools/build_tips.py` prints a one-line no-op and
+exits 0; `--refresh` is the way to regenerate (then commit the result).
+Politeness on a refresh mirrors `build_hob_enrichment.py`: strictly serial with
+a delay, cache-first. `QuestCardModal` loads it via `quest_catalog.load_tips()`
+/ `docs/js/quest_catalog.js`'s `loadTips()` and enables its Tips button only
+where `tips_for()`/`tipsFor()` finds something — an absent or corrupt
+`tips.json` just leaves the button in its disabled state. A device deploy needs
+no extra step: the committed file rides along with
+`mpremote cp -r docs/data/ :/data/`.
 
 ## The TODO board (TODO.md)
 

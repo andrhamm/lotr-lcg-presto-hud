@@ -246,3 +246,20 @@ def test_load_enrichment_missing_corrupt_and_good(tmp_path):
     good.write_text('{"scenarios": {"x": {"includedSets": ["A"]}}}', encoding="utf-8")
     loaded = b._load_enrichment(str(good))
     assert loaded["scenarios"]["x"]["includedSets"] == ["A"]
+
+# --- needs_refresh: the committed-derived-data guard ----------------------
+# Shared by tools/build_hob_enrichment.py and tools/build_tips.py, whose
+# outputs are committed (see CLAUDE.md's "What may be committed") - so the
+# default has to be "don't fetch", not "fetch again".
+
+def test_needs_refresh_only_when_absent_or_asked_for(tmp_path):
+    present = tmp_path / "enrichment.json"
+    present.write_text("{}", encoding="utf-8")
+    absent = tmp_path / "nope.json"
+    # An existing output is left alone unless --refresh says otherwise...
+    assert b.needs_refresh(str(present), False) is False
+    assert b.needs_refresh(str(present), True) is True
+    # ...and a missing one is always built, --refresh or not (a fresh clone
+    # that somehow lacks the file, or a --out pointed somewhere new).
+    assert b.needs_refresh(str(absent), False) is True
+    assert b.needs_refresh(str(absent), True) is True

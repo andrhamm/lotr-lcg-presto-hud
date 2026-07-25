@@ -1,9 +1,19 @@
 """Fetch, cache, and summarize per-scenario strategy write-ups from Vision of
 the Palantir (https://visionofthepalantir.com/) - the site the project's own
-quests/*.md notes already cite as their source - into docs/data/tips.json,
-gitignored/generated exactly like the rest of docs/data/ (see tools/
-build_card_data.py). See docs/superpowers/plans/2026-07-24-stage-tips.md,
-Task 1.
+quests/*.md notes already cite as their source - into docs/data/tips.json.
+That output is COMMITTED, the one allow-listed exception to the blanket
+docs/data/ gitignore: everything in it is text this project wrote itself (see
+the Copyright posture below - a source sentence is never trimmed and shipped;
+only a fact-pattern rule's own fixed phrasing, or a quests/*.md callout we
+authored, survives), which CLAUDE.md's "What may be committed" allows in git,
+while the verbatim card DB alongside it stays generated. See docs/superpowers/
+plans/2026-07-24-stage-tips.md, Task 1.
+
+Because it is committed, this fetcher is a NO-OP by default: main() bails out
+early via build_card_data.needs_refresh() whenever --out already exists, so a
+clean checkout or a Pages build never re-scrapes the site. Regenerating is an
+explicit, local act: --refresh. Nothing in CI runs this any more (see
+.github/workflows/pages.yml).
 
 Verified facts (Task 1 Step 1-2, recorded per the plan's Global Constraints):
 
@@ -86,6 +96,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+
+from build_card_data import needs_refresh
 
 SOURCE_NAME = "Vision of the Palantir"
 BASE_URL = "https://visionofthepalantir.com"
@@ -896,15 +908,31 @@ def build(index_path, out_path, cache_dir, limit=None, delay=DEFAULT_DELAY,
         out_scenarios[slug] = build_entry(slug, url, tips)
         resolved += 1
 
+    # Provenance: only credit the scrape when a scraped tip actually survived
+    # the gate. Mirrors build_card_data.build_outputs()'s "only claim Hall of
+    # Beorn as a source when enrichment was really merged" rule, and it
+    # matters more here now that this file is COMMITTED: the gate is strict
+    # enough that a run can (and currently does) end up with every entry
+    # sourced from quests/*.md, in which case a hardcoded Vision of the
+    # Palantir credit would attribute our own words to a third party. Each
+    # entry's own "attribution" is authoritative either way; this string just
+    # summarizes them.
+    if resolved - from_notes > 0:
+        source = ("%s (%s) - summarized, not reproduced; some scenarios use "
+                   "this project's own quests/*.md notes instead"
+                   % (SOURCE_NAME, BASE_URL))
+    else:
+        source = ("this project's own quests/*.md notes - no %s material "
+                   "survived summarization this build; see each scenario's "
+                   "attribution" % SOURCE_NAME)
+
     out_dir = os.path.dirname(out_path)
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump({
             "generated": datetime.date.today().isoformat(),
-            "source": "%s (%s) - summarized, not reproduced; some scenarios "
-                       "use this project's own quests/*.md notes instead"
-                       % (SOURCE_NAME, BASE_URL),
+            "source": source,
             "scenarios": out_scenarios,
         }, f, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -931,6 +959,10 @@ def main(argv=None):
                           "(default: %s) - preferred over the scrape when "
                           "a scenario has both, see load_project_notes()"
                           % DEFAULT_NOTES)
+    ap.add_argument("--refresh", action="store_true",
+                     help="re-fetch and overwrite --out even though it already "
+                          "exists. Without this, an existing --out is left "
+                          "alone and nothing is fetched - see needs_refresh().")
     ap.add_argument("--limit", type=int, default=None,
                      help="only process the first N pickable scenarios "
                           "(quick smoke run)")
@@ -938,6 +970,12 @@ def main(argv=None):
                      help="seconds to sleep after each real network fetch "
                           "(default %.1f; not applied on cache hits)" % DEFAULT_DELAY)
     args = ap.parse_args(argv)
+
+    if not needs_refresh(args.out, args.refresh):
+        print("build_tips: %r already present (committed derived data - see "
+              "CLAUDE.md's Card data section); nothing fetched. Pass "
+              "--refresh to rebuild it." % args.out)
+        return 0
 
     if not os.path.exists(args.index):
         raise SystemExit("No catalog index at %r - run tools/build_card_data.py "

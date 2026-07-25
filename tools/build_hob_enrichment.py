@@ -1,9 +1,19 @@
 """Fetch Hall of Beorn's per-scenario "sets to gather" enrichment (the full
 list of encounter sets a scenario draws from, beyond just its own named
-set) and cache it to tools/data/enrichment.json - gitignored, same posture
-as tools/build_card_data.py's docs/data/ output and tools/build_icons.py's
-docs/data/icons.json. See docs/superpowers/plans/2026-07-24-catalog-
+set) into tools/data/enrichment.json - which, unlike tools/build_card_data.py's
+docs/data/ output, is COMMITTED. The file holds only aggregated metadata (per
+scenario, a sorted list of encounter-set NAMES - no printed card text, stats,
+or any other verbatim third-party content), which CLAUDE.md's "What may be
+committed" allows in git; the raw API responses it is aggregated from stay in
+the gitignored cache below. See docs/superpowers/plans/2026-07-24-catalog-
 enrichment.md, Task 1.
+
+Because it is committed, this fetcher is a NO-OP by default: main() bails out
+early via build_card_data.needs_refresh() whenever --out already exists, so a
+clean checkout, a Pages build, or an absent-minded rerun never re-hits the API.
+Regenerating is an explicit, local, occasional act: --refresh. Nothing in CI
+runs this any more (see .github/workflows/pages.yml) - a cold run costs 40+
+minutes, which is exactly why the output is in git instead.
 
 Hall of Beorn's Export/Search endpoint (https://hallofbeorn.com/Export/
 Search?EncounterSet=<name>&CardType=Quest) returns every quest-stage card
@@ -21,8 +31,8 @@ never raised past build() (mirrors build_icons.py's "optional data source"
 posture) - only a bad/missing --index catalog (nothing to enrich) raises a
 friendly SystemExit from the CLI. Every fetch is cached to
 <cache_dir>/<slug>.json (default tools/data/hob_cache/, gitignored - it
-holds third-party card data) so repeat builds and CI don't re-hit the API;
-a cache hit skips the network call and its rate-limit delay entirely.
+holds verbatim third-party card data) so repeat --refresh runs don't re-hit
+the API; a cache hit skips the network call and its rate-limit delay entirely.
 
 Politeness: requests are strictly serial (one scenario at a time, driven by
 a plain for-loop - never concurrent) with a small delay after each real
@@ -47,7 +57,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from build_card_data import slugify
+from build_card_data import needs_refresh, slugify
 
 SEARCH_URL = "https://hallofbeorn.com/Export/Search?EncounterSet=%s&CardType=Quest"
 USER_AGENT = ("lotr-lcg-presto-hud/build_hob_enrichment "
@@ -202,6 +212,10 @@ def main(argv=None):
                           % DEFAULT_INDEX)
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--cache", default=DEFAULT_CACHE)
+    ap.add_argument("--refresh", action="store_true",
+                     help="re-fetch and overwrite --out even though it already "
+                          "exists. Without this, an existing --out is left "
+                          "alone and nothing is fetched - see needs_refresh().")
     ap.add_argument("--limit", type=int, default=None,
                      help="only process the first N quest scenarios (quick "
                           "smoke run)")
@@ -209,6 +223,12 @@ def main(argv=None):
                      help="seconds to sleep after each real network fetch "
                           "(default 0.5; not applied on cache hits)")
     args = ap.parse_args(argv)
+
+    if not needs_refresh(args.out, args.refresh):
+        print("build_hob_enrichment: %r already present (committed derived "
+              "data - see CLAUDE.md's Card data section); nothing fetched. "
+              "Pass --refresh to rebuild it." % args.out)
+        return 0
 
     if not os.path.exists(args.index):
         raise SystemExit("No catalog index at %r - run tools/build_card_data.py "
