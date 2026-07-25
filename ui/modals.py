@@ -13,6 +13,7 @@ from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
 from ui.counter import CounterState
 from ui import icons
 from gamestate import HEADINGS
+from ui.theme import DISPLAY, BODY, LABEL
 from quest_catalog import tips_for
 
 CANCEL_Y = 404
@@ -1688,6 +1689,7 @@ class QuestCardModal:
     NAV_Y = 424
     NAV_H = 44
     BODY_Y0 = 130
+    DETAIL_Y0 = 78
     LH = 26                 # 10*scale(2)+6 - one wrapped body line
     TIPS_LINES = 2          # inline peek before "more" takes over
     TIPS_H = 18 + TIPS_LINES * LH + 8
@@ -1704,6 +1706,7 @@ class QuestCardModal:
         self.buttons = []
         self.tips = tips or {}          # loaded tips.json "scenarios" map (M4-B tips)
         self.detail = None              # None | "tips" | "text" - full-page views
+        self.detail_page = 0
         self._tips_data = None          # tips_for(...) for the current stage, set by draw()
         self.page = self._live_page()
 
@@ -1783,41 +1786,62 @@ class QuestCardModal:
             self.buttons.append(b)
 
     def _detail_lines(self, d, usable):
-        """The full content behind a "more" tap, at scale 1 so it fits: every
-        catalogued face wraps to 11 lines or fewer there."""
+        """The full content behind a "more" tap - at BODY, like everything
+        else. It used to render at LABEL so it would fit on one page, which
+        is exactly backwards: this view exists to give the text ROOM. When it
+        does not fit, it pages (see _detail_pages)."""
         if self.detail == "tips":
             t = self._tips_data or {"tips": []}
             lines = []
             for tip in t["tips"]:
-                lines.extend(wrap_text("- " + tip, 1, usable, d.measure_text))
+                lines.extend(wrap_text("- " + tip, BODY, usable, d.measure_text))
             attribution = t.get("attribution") or {}
             for extra in (("Source: " + attribution["name"]) if attribution.get("name") else "",
                           attribution.get("url") or ""):
                 if extra:
-                    lines.append(("ATTRIB", truncate_text(extra, 1, usable, d.measure_text)))
+                    lines.append(("ATTRIB", truncate_text(extra, LABEL, usable, d.measure_text)))
             return lines
         _, _, face = self._at(self._pages()[self.page])
-        return wrap_text(self._body_text(face) or "no text", 1, usable, d.measure_text)
+        return wrap_text(self._body_text(face) or "no text", BODY, usable, d.measure_text)
+
+    def _detail_capacity(self):
+        """Lines of BODY text one detail page holds."""
+        return max(1, (self.NAV_Y - 12 - self.DETAIL_Y0 - 10) // self.LH)
 
     def _draw_detail(self, d, pal, title):
         M, W = self.MARGIN, 480 - 2 * self.MARGIN
         usable = W - 20
-        text_left(d, pal, truncate_text(title, 2, W, d.measure_text), M, 48, 2, pal.gold)
-        y = 78
+        lines = self._detail_lines(d, usable)
+        cap = self._detail_capacity()
+        pages = max(1, (len(lines) + cap - 1) // cap)
+        self.detail_page = max(0, min(self.detail_page, pages - 1))
+        chunk = lines[self.detail_page * cap:(self.detail_page + 1) * cap]
+
+        text_left(d, pal, truncate_text(title, BODY, W, d.measure_text), M, 48, BODY, pal.gold)
+        y = self.DETAIL_Y0
         panel(d, pal, M, y, W, self.NAV_Y - 12 - y, fill=pal.card)
         ty = y + 10
-        for ln in self._detail_lines(d, usable):
-            if ty > self.NAV_Y - 12 - 20:
-                break
+        for ln in chunk:
             if isinstance(ln, tuple):
-                text_left(d, pal, ln[1], M + 10, ty, 1, pal.dim)
+                text_left(d, pal, ln[1], M + 10, ty, LABEL, pal.dim)
+                ty += 16
             else:
-                text_left(d, pal, ln, M + 10, ty, 1, pal.tan)
-            ty += 16
-        b = Button(("back",), M, self.NAV_Y, 480 - 2 * M, self.NAV_H)
+                text_left(d, pal, ln, M + 10, ty, BODY, pal.tan)
+                ty += self.LH
+
+        # Back always; a "More" pager only when the text genuinely needs one.
+        half = (480 - 2 * M - 8) // 2
+        w = half if pages > 1 else 480 - 2 * M
+        b = Button(("back",), M, self.NAV_Y, w, self.NAV_H)
         bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-        text_center(d, pal, "Back", 240, b.y + 14, 2, pal.tan)
+        text_center(d, pal, "Back", b.x + w // 2, b.y + 14, BODY, pal.tan)
         self.buttons.append(b)
+        if pages > 1:
+            nb = Button(("detail_more",), M + half + 8, self.NAV_Y, half, self.NAV_H)
+            bevel(d, pal, nb.x, nb.y, nb.w, nb.h, pal.btn)
+            text_center(d, pal, "More %d/%d >" % (self.detail_page + 1, pages),
+                        nb.x + half // 2, nb.y + 14, BODY, pal.tan)
+            self.buttons.append(nb)
 
     # -- draw ------------------------------------------------------------
     def draw(self, hw, game, pal):
@@ -1918,16 +1942,22 @@ class QuestCardModal:
             return "close"
         if k == "back":
             self.detail = None
+            self.detail_page = 0
             return "redraw"
         if not self.stages:
             return None
         if k == "tips":
             if self._tips_data:
                 self.detail = "tips"
+                self.detail_page = 0
                 return "redraw"
             return None
         if k == "more_text":
             self.detail = "text"
+            self.detail_page = 0
+            return "redraw"
+        if k == "detail_more":
+            self.detail_page += 1     # _draw_detail clamps; wrap is handled there
             return "redraw"
         n = len(self._pages())
         if k == "next" and self.page < n - 1:

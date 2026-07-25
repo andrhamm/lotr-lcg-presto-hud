@@ -18,6 +18,15 @@ implementations:
    change. Never hand-edit `docs/js/{phases,icons,metrics}.js`.
 3. `python3 -m pytest tests/` must stay green (includes the layout linter
    over every screen scene). Add scenes for new screens/modals.
+3b. **Follow the design system**
+   (`docs/superpowers/specs/2026-07-25-design-system.md`) — the type scale,
+   colour roles, element vocabulary and copy rules, each with the test that
+   enforces it. The one that keeps getting broken: **if a player reads it as
+   a sentence, a name, or an option, it is `BODY` (scale 2)**. Running out of
+   room is never a reason to shrink text — say less, page it, truncate it
+   with a `[...] more` affordance, or re-lay out. `LABEL` (scale 1) is
+   ALL-CAPS chrome and dense tabular metadata only. Use the names from
+   `ui/theme.py` / `docs/js/ui.js`, never a bare integer.
 4. **Never ship an unverified rules claim.** Every statement the UI makes
    about how the game works — tip copy, button labels, captions, anything a
    player could act on — must be checked before it ships. This rule has been

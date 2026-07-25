@@ -1,6 +1,30 @@
 """Palette derived from the Revised Core box art (bark, moss, parchment,
 ember) + bevel pens for the video-game chrome. Pens are created lazily from a
-PicoGraphics display."""
+PicoGraphics display.
+
+Also the home of the **type scale** - see docs/superpowers/specs/
+2026-07-25-design-system.md for the rules these names encode, and
+tests/test_typography.py for the gate that enforces them.
+"""
+
+# -- type scale ---------------------------------------------------------
+# The device font is a bitmap8, so "size" is an integer multiplier and there
+# are only three of them. Use the NAMES, not the numbers: a bare `1` at a
+# draw site is how prose keeps ending up unreadably small, which has been
+# reported more than once.
+#
+#   BODY is the default. If a player READS it as a sentence - card text,
+#   tips, rules captions, empty states, option names - it is BODY. "It did
+#   not fit" is not a reason to drop to LABEL; page it, truncate it with a
+#   "more" affordance, or give it less to say.
+DISPLAY = 3   # screen + modal titles, the primary CTA
+BODY = 2      # DEFAULT: anything read as a sentence or a name
+LABEL = 1     # ALL-CAPS section labels + dense tabular metadata ONLY
+#
+# Above DISPLAY there is no reading tier - only numerals and wordmarks: the
+# threat/willpower counters, the sailing dial, "LOTR LCG" on boot, "VICTORY!".
+# Those sizes are chosen by the widget that owns the numeral, not at a call
+# site, and a sentence may never use them.
 
 
 class Palette:

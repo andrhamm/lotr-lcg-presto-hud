@@ -5,6 +5,20 @@ import * as icons from "./icons.js";
 
 export const NOWRAP = 10000; // parity with widgets.py (canvas never auto-wraps)
 
+// -- type scale (mirror of ui/theme.py) --------------------------------
+// The device font is a bitmap8, so "size" is an integer multiplier and there
+// are only three of them. Use the NAMES, not the numbers: a bare `1` at a
+// draw site is how prose keeps ending up unreadably small.
+//
+//   BODY is the default. If a player READS it as a sentence - card text,
+//   tips, rules captions, empty states, option names - it is BODY. "It did
+//   not fit" is not a reason to drop to LABEL; page it, truncate it with a
+//   "more" affordance, or give it less to say.
+// See docs/superpowers/specs/2026-07-25-design-system.md.
+export const DISPLAY = 3;   // screen + modal titles, the primary CTA
+export const BODY = 2;      // DEFAULT: anything read as a sentence or a name
+export const LABEL = 1;     // ALL-CAPS section labels + dense metadata ONLY
+
 const rgb = (r, g, b) => `rgb(${r},${g},${b})`;
 
 export const pal = {
