@@ -9,7 +9,7 @@ from ui.widgets import Button, panel, bevel, text_center, text_left
 
 class BootScreen:
     def __init__(self, saved_meta):
-        # saved_meta: None or {"round": int, "phase": str, "saved_at": str}
+        # saved_meta: None or {"round": int, "step": str, "saved_at": str}
         self.saved = saved_meta
         self.buttons = []
 
@@ -27,13 +27,14 @@ class BootScreen:
         b = Button(id, 100, y, 280, h)
         bevel(d, pal, b.x, b.y, b.w, b.h,
               pal.btn_ok if primary else pal.btn, t=3)
-        ty = b.y + (h - (26 if sub else 16)) // 2
+        ty = b.y + (h - (30 if sub else 16)) // 2
         text_center(d, pal, label, 240, ty, BODY, pal.gold if primary else pal.tan)
-        # The Resume subtitle stays LABEL: it is the round/phase/timestamp
-        # stamp ("R3 - Combat (2026-07-21 19:04)"), the same tabular shape
-        # the log feed uses, and it does not fit the 280px button at BODY.
+        # The Resume subtitle reads at BODY like everything else. It only fits
+        # because it says less: dropping the phase title left the round/step
+        # key and a when-did-I-last-play stamp, worst case
+        # "R12 5.3  12/21/26 11:04 PM" at 230px in a 280px button.
         if sub:
-            text_center(d, pal, sub, 240, ty + 20, LABEL, pal.muted)
+            text_center(d, pal, sub, 240, ty + 22, BODY, pal.muted)
         self.buttons.append(b)
 
     def draw(self, hw, game, pal):
@@ -48,9 +49,9 @@ class BootScreen:
             text_center(d, pal, "THE CARD GAME", 240, 170, BODY, pal.tan)
 
         if self.saved:
-            sub = "R%d - %s (%s)" % (self.saved["round"], self.saved["phase"],
-                                     self.saved["saved_at"])
-            self._button(d, pal, ("resume",), "Resume Game", sub, 336, 58, True)
+            sub = "R%s %s  %s" % (self.saved["round"], self.saved.get("step", ""),
+                                  self.saved["saved_at"])
+            self._button(d, pal, ("resume",), "Resume Game", sub, 330, 64, True)
             self._button(d, pal, ("new",), "New Game", None, 402, 48, False)
         else:
             self._button(d, pal, ("new",), "New Game", None, 388, 58, True)

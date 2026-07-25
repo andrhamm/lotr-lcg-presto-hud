@@ -64,15 +64,19 @@ def load_saved():
         t = d.get("saved_at")
         if t:
             lt = time.localtime(t)
-            when = "%04d-%02d-%02d %02d:%02d" % (lt[0], lt[1], lt[2], lt[3], lt[4])
+            # 12-hour with AM/PM, and a 2-digit year: the boot subtitle has a
+            # 280px button to live in, and this is a "when did I last play"
+            # glance, not a log stamp. Format is duplicated verbatim in
+            # docs/js/main.js rather than left to toLocaleString, so both
+            # twins read identically.
+            hour = lt[3] % 12 or 12
+            when = "%d/%d/%02d %d:%02d %s" % (lt[1], lt[2], lt[0] % 100, hour,
+                                              lt[4], "AM" if lt[3] < 12 else "PM")
             if lt[0] < 2024:  # RTC not set — wall time unknown
                 when = "earlier session"
         else:
             when = "earlier session"
-        meta = {"round": game.round,
-                "phase": VIEW_LABEL.get(game.view,
-                                        phases.step(game.step)["phase"]),
-                "saved_at": when}
+        meta = {"round": game.round, "step": game.step, "saved_at": when}
         return game, meta
     except Exception:
         return None, None

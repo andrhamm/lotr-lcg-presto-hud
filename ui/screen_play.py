@@ -161,9 +161,9 @@ class ScreenPlay:
         b = Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H)
         bevel(d, pal, b.x, b.y, b.w, b.h,
               fill if fill is not None else pal.btn_ok, t=3)
-        # BODY, not DISPLAY: the longest label ("End round (raise threat, pass
-        # token)") measures 507px at DISPLAY against a 464px button, and the
-        # scale's own rule forbids shrinking prose to make it fit.
+        # CTAs are BODY. Not a compromise: at 480px wide no phase CTA fits at
+        # DISPLAY - "Next Phase: Combat (Player Attacks)" measures 495px
+        # against 424px of usable button. The design-system spec says so.
         text_center(d, pal, label, 240, CTA_Y + 20, BODY,
                     fg if fg is not None else pal.gold)
         self.buttons.append(b)
@@ -291,7 +291,7 @@ class ScreenPlay:
                 ("window", "Responses."),
             ])
             self._refresh_threat_preview(d, pal, game, CONTENT_Y + bh + 8)
-            self._cta(d, pal, "End round (raise threat, pass token)", ("endround",))
+            self._cta(d, pal, "End Round", ("endround",))
         else:
             self._players_zone(d, pal, game)
             ship_notes = {

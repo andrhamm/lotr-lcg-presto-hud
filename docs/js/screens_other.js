@@ -354,12 +354,13 @@ export class BootScreen {
   _button(ctx, id, label, sub, y, h, primary) {
     const b = new Button(id, 100, y, 280, h);
     bevel(ctx, b.x, b.y, b.w, b.h, primary ? pal.btn_ok : pal.btn, false, 3);
-    const ty = b.y + Math.floor((h - (sub ? 26 : 16)) / 2);
+    const ty = b.y + Math.floor((h - (sub ? 30 : 16)) / 2);
     textCenter(ctx, label, 240, ty, BODY, primary ? pal.gold : pal.tan);
-    // The Resume subtitle stays LABEL: it is the round/phase/timestamp stamp
-    // ("R3 - Combat (2026-07-21 19:04)"), the same tabular shape the log feed
-    // uses, and it does not fit the 280px button at BODY.
-    if (sub) textCenter(ctx, sub, 240, ty + 20, LABEL, pal.muted);
+    // The Resume subtitle reads at BODY like everything else. It only fits
+    // because it says less: dropping the phase title left the round/step key
+    // and a when-did-I-last-play stamp, worst case
+    // "R12 5.3  12/21/26 11:04 PM" at 230px in a 280px button.
+    if (sub) textCenter(ctx, sub, 240, ty + 22, BODY, pal.muted);
     this.buttons.push(b);
   }
   draw(ctx) {
@@ -374,8 +375,8 @@ export class BootScreen {
       textCenter(ctx, "THE CARD GAME", 240, 170, BODY, pal.tan);
     }
     if (this.saved) {
-      const sub = `R${this.saved.round} - ${this.saved.phase} (${this.saved.saved_at})`;
-      this._button(ctx, ["resume"], "Resume Game", sub, 336, 58, true);
+      const sub = `R${this.saved.round} ${this.saved.step ?? ""}  ${this.saved.saved_at}`;
+      this._button(ctx, ["resume"], "Resume Game", sub, 330, 64, true);
       this._button(ctx, ["new"], "New Game", null, 402, 48, false);
     } else {
       this._button(ctx, ["new"], "New Game", null, 388, 58, true);

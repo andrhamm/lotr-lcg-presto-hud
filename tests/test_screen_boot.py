@@ -18,7 +18,7 @@ def _draw(saved):
 
 
 def test_saved_game_shows_resume_new_and_disclaimers():
-    hw, s = _draw({"round": 2, "phase": "Travel", "saved_at": "earlier session"})
+    hw, s = _draw({"round": 2, "step": "4.2", "saved_at": "earlier session"})
     ids = [b.id for b in s.buttons]
     assert ids == [("resume",), ("new",), ("about",)]
 
@@ -29,7 +29,7 @@ def test_no_save_shows_new_and_disclaimers():
 
 
 def test_no_header_round_text():
-    hw, s = _draw({"round": 2, "phase": "Travel", "saved_at": "x"})
+    hw, s = _draw({"round": 2, "step": "4.2", "saved_at": "7/21/26 7:04 PM"})
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert not any(t.startswith("resume R") for t in texts)
     assert "Resume Game" in texts and "New Game" in texts

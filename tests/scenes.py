@@ -994,7 +994,10 @@ SCENES = {
     "firstrun_1": _firstrun(0),
     "firstrun_3": _firstrun(2),
     "legend": _legend,
-    "boot": _boot({"round": 3, "phase": "Combat (Enemy Attacks)", "saved_at": "2026-07-21 19:04"}),
+    # Worst-case subtitle width: 2-digit round, longest step id, 2-digit month
+    # and day, and a 2-digit hour - "R12 5.3  12/21/26 11:04 PM" at 230px in a
+    # 280px button. If this fits, every real save does.
+    "boot": _boot({"round": 12, "step": "5.3", "saved_at": "12/21/26 11:04 PM"}),
     "boot_fresh": _boot(None),
     "setup": _setup([25]),
     "setup3": _setup([25, 27, 29], first=1),

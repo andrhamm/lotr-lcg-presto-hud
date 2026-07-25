@@ -36,10 +36,17 @@ function loadSaved() {
     const d = JSON.parse(localStorage.getItem(STATE_KEY));
     if (!d) return [null, null];
     const game = GameState.fromDict(d.state);
-    const when = d.saved_at ? new Date(d.saved_at).toLocaleString() : "earlier session";
-    return [game, { round: game.round,
-                    phase: VIEW_LABELS[game.view] ?? phaseStep(game.step).phase,
-                    saved_at: when }];
+    // Built by hand rather than via toLocaleString so it reads identically to
+    // the firmware (main.py) regardless of the browser's locale: 12-hour with
+    // AM/PM and a 2-digit year, sized for the 280px boot button.
+    let when = "earlier session";
+    if (d.saved_at) {
+      const t = new Date(d.saved_at);
+      const h = t.getHours() % 12 || 12;
+      when = `${t.getMonth() + 1}/${t.getDate()}/${String(t.getFullYear() % 100).padStart(2, "0")}`
+           + ` ${h}:${String(t.getMinutes()).padStart(2, "0")} ${t.getHours() < 12 ? "AM" : "PM"}`;
+    }
+    return [game, { round: game.round, step: game.step, saved_at: when }];
   } catch { return [null, null]; }
 }
 function saveState(game) {

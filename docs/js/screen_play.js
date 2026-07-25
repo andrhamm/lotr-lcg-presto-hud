@@ -134,9 +134,9 @@ export class ScreenPlay {
   _cta(ctx, label, id, fill = pal.btn_ok, fg = pal.gold) {
     const b = new Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H);
     bevel(ctx, b.x, b.y, b.w, b.h, fill, false, 3);
-    // BODY, not DISPLAY: the longest label ("End round (raise threat, pass
-    // token)") measures 507px at DISPLAY against a 464px button, and the
-    // scale's own rule forbids shrinking prose to make it fit.
+    // CTAs are BODY. Not a compromise: at 480px wide no phase CTA fits at
+    // DISPLAY - "Next Phase: Combat (Player Attacks)" measures 495px against
+    // 424px of usable button. The design-system spec says so.
     textCenter(ctx, label, 240, CTA_Y + 20, BODY, fg);
     this.buttons.push(b);
   }
@@ -348,7 +348,7 @@ export class ScreenPlay {
         { kind: "window", text: "Responses." },
       ]);
       this._refreshThreatPreview(ctx, game, CONTENT_Y + bh + 8);
-      this._cta(ctx, "End round (raise threat, pass token)", ["endround"]);
+      this._cta(ctx, "End Round", ["endround"]);
     } else {
       this._playersZone(ctx, game);
       const flavor = { combat_enemy: [icons.DEFENSE, pal.green],

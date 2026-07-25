@@ -29,9 +29,16 @@ bare `1` at a draw site is how prose ends up unreadable.
 
 | Name | Multiplier | What it is for |
 |---|---|---|
-| `DISPLAY` | 3 | Screen and modal titles; the primary CTA |
+| `DISPLAY` | 3 | Screen and modal titles |
 | `BODY` | 2 | **Default.** Anything read as a sentence or a name |
 | `LABEL` | 1 | ALL-CAPS section labels; dense tabular metadata |
+
+> [!note] The primary CTA is `BODY`, not `DISPLAY`
+> An earlier draft of this table claimed the CTA was `DISPLAY`. It cannot be:
+> the bottom CTA has 424px of usable width, and `Next Phase: Combat (Player
+> Attacks)` measures **495px at `DISPLAY`**. Every phase CTA overflows. The
+> CTA earns its emphasis from size *and position* — full width, pinned to the
+> bottom, `btn_ok` green — not from the type scale alone.
 
 Above `DISPLAY` there is no reading tier — sizes 4–9 belong to **numerals and
 wordmarks** (the threat counters, the sailing dial, `LOTR LCG`, `VICTORY!`).
