@@ -53,11 +53,15 @@ export class ScreenPlay {
     this.toast = null;       // [[icon, text, color]] picked up by the main loop
   }
 
-  // Flipped 3-row players matrix: P# header / threat token / willpower token,
-  // one shared tap target over the whole zone (columns are fixed - up to
-  // MAX_PLAYERS - not width-sized off the live player count like the old chips).
+  // Flipped 3-row players matrix: P# header / threat token (inline +/-) /
+  // willpower token. Columns are fixed - up to MAX_PLAYERS - not width-sized
+  // off the live player count. Threat columns are 48px wide (not 32px) so
+  // each half - tap left = -1, tap right = +1 - clears the >=24px touch
+  // target rule; the shared zone button is still the fallback for the P#
+  // and willpower rows, appended last so the specific halves win first
+  // (first-match-wins hit order).
   _playersZone(ctx, game) {
-    const pcx = [50, 82, 114, 146];
+    const pcx = [44, 92, 140, 188];
     const threatCy = ZONE_TOP + 40, willCy = ZONE_TOP + 72;
     textCenter(ctx, "P", 18, ZONE_TOP + 2, 2, pal.muted);
     // player threat helm keeps its red identity (charcoal dropshadow)
@@ -77,37 +81,41 @@ export class ScreenPlay {
       token(ctx, cx, threatCy, 14, 2, p.eliminated ? "OUT" : String(p.threat),
             p.eliminated ? pal.red : pal.value, tfrac,
             danger ? pal.red : pal.gold, pal.dim);
+      // inline +/- split: thin divider through the token, tap left=-1 right=+1
+      rect(ctx, cx, threatCy - 14, 1, 28, pal.border);
+      this.buttons.push(new Button(["threat", i, -1], cx - 24, threatCy - 16, 24, 32));
+      this.buttons.push(new Button(["threat", i, 1], cx, threatCy - 16, 24, 32));
       const wpFill = game.view === "quest_commit"
         ? (p.commit_touched ? pal.gold : pal.dim) : pal.gold;
       token(ctx, cx, willCy, 14, 2, p.commit, pal.value, 1.0, wpFill, pal.dim);
     });
-    this.buttons.push(new Button(["players_detail"], 8, ZONE_TOP - 2, 156, 90));
+    this.buttons.push(new Button(["players_detail"], 8, ZONE_TOP - 2, 196, 90));
   }
 
-  // Flipped progress header + one circle row: Q / L / S1..Sn / sailing, one
-  // shared tap target over the whole zone. Columns are capped to what fits;
-  // overflow drops the newest side quests (Q, L, the oldest sides, and
-  // sailing always stay).
+  // Flipped progress header + one circle row: Q / L / S1..Sn / sailing. Starts
+  // at x=210 (was 174) - the players zone above gave up 36px for the inline
+  // threat +/- columns, so max_cols drops from 9 to 8; the existing overflow
+  // logic (drop the newest side quests) already handles that gracefully.
   _progressZone(ctx, game) {
-    rect(ctx, 168, ZONE_TOP, 1, 90, pal.border);
+    rect(ctx, 208, ZONE_TOP, 1, 90, pal.border);
     const cols = [["Q", game.quest.progress, game.quest.points]];
     if (game.active_location) {
       cols.push(["L", game.active_location.progress, game.active_location.points]);
     }
     const sideCols = game.side_quests.map((sq, i) => [`S${i + 1}`, sq.progress, sq.points]);
-    const maxCols = Math.floor((472 - 174) / 32);
+    const maxCols = Math.floor((472 - 214) / 32);
     const fixed = cols.length + (game.sailing ? 1 : 0);
     const sideBudget = Math.max(0, maxCols - fixed);
     const allCols = cols.concat(sideCols.slice(0, sideBudget));
     allCols.forEach(([label, prog, pts], i) => {
-      const cx = 190 + i * 32;
+      const cx = 230 + i * 32;
       textCenter(ctx, label, cx, ZONE_TOP + 2, 2, pal.tan);
       const rem = Math.max(0, pts - prog);
       const frac = pts > 0 ? prog / pts : 0;
       token(ctx, cx, ZONE_TOP + 40, 14, 2, rem, pal.value, frac, pal.gold, pal.dim);
     });
     if (game.sailing) {
-      const scx = 190 + allCols.length * 32;
+      const scx = 230 + allCols.length * 32;
       icons.drawIcon(ctx, icons.WHEEL_SM, scx - 8, ZONE_TOP, pal.gold);
       disc(ctx, scx, ZONE_TOP + 40, 14, pal.well);
       [[272, 360], [0, 88], [92, 178], [182, 268]].forEach(([a0, a1], rank) => {
@@ -116,8 +124,8 @@ export class ScreenPlay {
       });
       wxSmall(ctx, game.heading, scx, ZONE_TOP + 40, 6);
     }
-    textLeft(ctx, "quest points remaining", 174, ZONE_TOP + 66, 1, pal.dim);
-    this.buttons.push(new Button(["progress_detail"], 174, ZONE_TOP - 2, 298, 90));
+    textLeft(ctx, "quest points remaining", 214, ZONE_TOP + 66, 1, pal.dim);
+    this.buttons.push(new Button(["progress_detail"], 214, ZONE_TOP - 2, 258, 90));
   }
 
   _cta(ctx, label, id, fill = pal.btn_ok, fg = pal.gold) {
@@ -607,6 +615,14 @@ export class ScreenPlay {
       return true;
     }
     if (k === "players_detail") return ["modal", new PlayersDetailModal(game)];
+    if (k === "threat") {
+      const [, i, delta] = btn.id;
+      const before = game.players[i].threat;
+      game.adjustThreat(i, delta);
+      const after = game.players[i].threat;
+      if (after !== before) game.logEvent(`P${i + 1} threat ${before} -> ${after}`);
+      return true;
+    }
     if (k === "commit_tip") return ["modal", new CommitModal(game, 0)];
     if (k === "wp") return ["modal", new PlayersDetailModal(game)];
     if (k === "enc_rem") return ["modal", new RemindersModal(game)];

@@ -80,11 +80,14 @@ class ScreenPlay:
 
     # -- shared pieces -----------------------------------------------------
     def _players_zone(self, d, pal, game):
-        """Flipped 3-row players matrix: P# header / threat token / willpower
-        token, one shared tap target over the whole zone (columns are fixed -
-        up to MAX_PLAYERS - not width-sized off the live player count like the
-        old chips)."""
-        pcx = [50, 82, 114, 146]
+        """Flipped 3-row players matrix: P# header / threat token (inline
+        +/-) / willpower token. Columns are fixed - up to MAX_PLAYERS - not
+        width-sized off the live player count. Threat columns are 48px wide
+        (not 32px) so each half - tap left = -1, tap right = +1 - clears the
+        >=24px touch target rule; the shared zone button is still the
+        fallback for the P#/willpower rows, appended last so the specific
+        halves win first (first-match-wins hit order)."""
+        pcx = [44, 92, 140, 188]
         threat_cy, will_cy = ZONE_TOP + 40, ZONE_TOP + 72
         text_center(d, pal, "P", 18, ZONE_TOP + 2, 2, pal.muted)
         # player threat helm keeps its red identity (charcoal dropshadow)
@@ -105,45 +108,51 @@ class ScreenPlay:
                   "OUT" if p.eliminated else str(p.threat),
                   pal.red if p.eliminated else pal.value, tfrac,
                   pal.red if danger else pal.gold, pal.dim)
+            # inline +/- split: thin divider through the token, tap left=-1 right=+1
+            d.set_pen(pal.border)
+            d.rectangle(cx, threat_cy - 14, 1, 28)
+            self.buttons.append(Button(("threat", i, -1), cx - 24, threat_cy - 16, 24, 32))
+            self.buttons.append(Button(("threat", i, 1), cx, threat_cy - 16, 24, 32))
             if game.view == "quest_commit":
                 wp_fill = pal.gold if p.commit_touched else pal.dim
             else:
                 wp_fill = pal.gold
             token(d, pal, cx, will_cy, 14, 2, p.commit, pal.value, 1.0, wp_fill, pal.dim)
-        self.buttons.append(Button(("players_detail",), 8, ZONE_TOP - 2, 156, 90))
+        self.buttons.append(Button(("players_detail",), 8, ZONE_TOP - 2, 196, 90))
 
     def _progress_zone(self, d, pal, game):
-        """Flipped progress header + one circle row: Q / L / S1..Sn / sailing,
-        one shared tap target over the whole zone. Columns are capped to what
-        fits; overflow drops the newest side quests (Q, L, the oldest sides,
-        and sailing always stay)."""
+        """Flipped progress header + one circle row: Q / L / S1..Sn /
+        sailing. Starts at x=210 (was 174) - the players zone above gave up
+        36px for the inline threat +/- columns, so max_cols drops from 9 to
+        8; the existing overflow logic (drop the newest side quests) already
+        handles that gracefully."""
         d.set_pen(pal.border)
-        d.rectangle(168, ZONE_TOP, 1, 90)
+        d.rectangle(208, ZONE_TOP, 1, 90)
         cols = [("Q", game.quest["progress"], game.quest["points"])]
         if game.active_location is not None:
             cols.append(("L", game.active_location["progress"], game.active_location["points"]))
         side_cols = [("S%d" % (i + 1), sq["progress"], sq["points"])
                      for i, sq in enumerate(game.side_quests)]
-        max_cols = (472 - 174) // 32
+        max_cols = (472 - 214) // 32
         fixed = len(cols) + (1 if game.sailing else 0)
         side_budget = max(0, max_cols - fixed)
         all_cols = cols + side_cols[:side_budget]
         for i, (label, prog, pts) in enumerate(all_cols):
-            cx = 190 + i * 32
+            cx = 230 + i * 32
             text_center(d, pal, label, cx, ZONE_TOP + 2, 2, pal.tan)
             rem = max(0, pts - prog)
             frac = prog / pts if pts > 0 else 0
             token(d, pal, cx, ZONE_TOP + 40, 14, 2, rem, pal.value, frac, pal.gold, pal.dim)
         if game.sailing:
-            scx = 190 + len(all_cols) * 32
+            scx = 230 + len(all_cols) * 32
             icons.draw(d, icons.WHEEL_SM, scx - 8, ZONE_TOP, pal.gold)
             disc(d, scx, ZONE_TOP + 40, 14, pal.well)
             for rank, (a0, a1) in enumerate([(272, 360), (0, 88), (92, 178), (182, 268)]):
                 arc_runs(d, scx, ZONE_TOP + 40, 14, 11, a0, a1,
                          pal.dim if rank < game.heading else pal.gold)
             wx_small(d, pal, game.heading, scx, ZONE_TOP + 40, 6)
-        text_left(d, pal, "quest points remaining", 174, ZONE_TOP + 66, 1, pal.dim)
-        self.buttons.append(Button(("progress_detail",), 174, ZONE_TOP - 2, 298, 90))
+        text_left(d, pal, "quest points remaining", 214, ZONE_TOP + 66, 1, pal.dim)
+        self.buttons.append(Button(("progress_detail",), 214, ZONE_TOP - 2, 258, 90))
 
     def _cta(self, d, pal, label, id, fill=None, fg=None):
         b = Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H)
@@ -644,6 +653,14 @@ class ScreenPlay:
         if k == "players_detail":
             from ui.modals import PlayersDetailModal
             return ("modal", PlayersDetailModal(game))
+        if k == "threat":
+            i, delta = btn.id[1], btn.id[2]
+            before = game.players[i].threat
+            game.adjust_threat(i, delta)
+            after = game.players[i].threat
+            if after != before:
+                game.log_event("P%d threat %d -> %d" % (i + 1, before, after))
+            return True
         if k == "commit_tip":
             from ui.modals import CommitModal
             return ("modal", CommitModal(game, 0))
