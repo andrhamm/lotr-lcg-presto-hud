@@ -8,7 +8,7 @@ import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP } from "./gamestate.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal, CommitModal,
          PlayersDetailModal, RemindersModal, LocationPickModal, SideQuestsModal,
          QuestConfigModal, StageCompleteModal, SailingModal,
-         QuestingProgressModal } from "./screens.js";
+         QuestingProgressModal, QuestCardModal } from "./screens.js";
 
 const MARGIN = 8;
 const ZONE_TOP = HEADER_H + 6;            // top of the players/progress zones
@@ -157,8 +157,12 @@ export class ScreenPlay {
   draw(ctx, game) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    drawHeader(ctx, game, this.buttons);
     const view = game.view;
+    if (view === "quest_setup") {
+      drawHeader(ctx, game, this.buttons, { title: "QUEST SETUP", roundLabel: "R0" });
+    } else {
+      drawHeader(ctx, game, this.buttons);
+    }
 
     if (view === "setup_game") {
       const th = notePanel(ctx, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP);
@@ -182,6 +186,10 @@ export class ScreenPlay {
                  game.sailing ? pal.bg : pal.tan, false);
       this.buttons.push(sb);
       this._cta(ctx, "Begin Round 1", ["advance"]);
+    } else if (view === "quest_setup") {
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
+      this._drawQuestSetup(ctx, game);
     } else if (view === "resource_planning") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
@@ -351,6 +359,54 @@ export class ScreenPlay {
     }
   }
 
+  // R0 pre-round-1 phase: stage 1A's setup text to resolve, then the first
+  // flip (1A -> 1B) that begins round 1. Reuses the standard zones (Task 8).
+  _drawQuestSetup(ctx, game) {
+    const card = game.stages[game.stage_idx].cards[game.card_idx];
+    const aFace = card.faces.find(f => f.side === "A") ?? {};
+    const stageLabel = `STAGE ${game.quest.stage_n}${game.quest.side}`;
+    textCenter(ctx, stageLabel, 240, CONTENT_Y, 2, pal.amber);
+    const nameY = CONTENT_Y + 22;
+    const cardName = truncateText(aFace.name ?? "", 3, 480 - 2 * MARGIN);
+    textCenter(ctx, cardName, 240, nameY, 3, pal.gold);
+
+    // Distinct scroll-style tip: a double gold frame + ribbon banner - UNLIKE
+    // the standard notePanel() left-accent-bar style used elsewhere, since
+    // this is the one moment that reads as "resolve this printed text now".
+    const tipX = MARGIN, tipW = 480 - 2 * MARGIN, tipY = nameY + 30;
+    const ribbonH = 22, padTop = 10, lineH = 24, padBottom = 10, maxLines = 4;
+    const usable = tipW - 28;
+    const raw = aFace.text;
+    const body = (raw === null || raw === undefined || raw === "")
+      ? "No setup instructions for this stage." : raw;
+    let lines = wrapText(body, 2, usable);
+    if (lines.length > maxLines) {
+      lines = lines.slice(0, maxLines);
+      lines[maxLines - 1] = truncateText(`${lines[maxLines - 1]} ..`, 2, usable);
+    }
+    const tipH = ribbonH + padTop + lines.length * lineH + padBottom;
+    rect(ctx, tipX, tipY, tipW, tipH, pal.border_gold);
+    rect(ctx, tipX + 2, tipY + 2, tipW - 4, tipH - 4, pal.bg);
+    rect(ctx, tipX + 4, tipY + 4, tipW - 8, tipH - 8, pal.border_gold);
+    rect(ctx, tipX + 6, tipY + 6, tipW - 12, tipH - 12, pal.scroll);
+    rect(ctx, tipX, tipY, tipW, ribbonH, pal.border_gold);
+    textLeft(ctx, "QUEST SETUP - resolve now", tipX + 10, tipY + 6, 1, pal.bg, false);
+    let ly = tipY + ribbonH + padTop;
+    for (const ln of lines) {
+      textLeft(ctx, ln, tipX + 14, ly, 2, pal.tan);
+      ly += lineH;
+    }
+
+    // Read-only card modal (M4-B) - see onButton; null for custom games
+    // (no scenario loaded, nothing to show).
+    const cardBtn = new Button(["open_card_modal"], MARGIN, 358, 480 - 2 * MARGIN, 44);
+    bevel(ctx, cardBtn.x, cardBtn.y, cardBtn.w, cardBtn.h, pal.btn);
+    textCenter(ctx, "View quest card", 240, cardBtn.y + 14, 2, pal.tan);
+    this.buttons.push(cardBtn);
+
+    this._cta(ctx, `Flip to Side B  ->  ${card.questPoints} qp`, ["flip_to_b"]);
+  }
+
   _drawTravel(ctx, game) {
     const loc = game.active_location;
     let y = CONTENT_Y + 4;
@@ -504,6 +560,22 @@ export class ScreenPlay {
       return true;
     }
     if (k === "setup" ) return null;
+    if (k === "open_card_modal") {
+      // Custom games have no scenario/stages - nothing to show.
+      return game.stages.length ? ["modal", new QuestCardModal(game)] : null;
+    }
+    if (k === "flip_to_b") {
+      // Mirrors advanceView's setup_game -> round-1 branch (custom-quest
+      // path), but for a scenario game: flip 1A -> 1B first, then the same
+      // round-1 entry (log, enter view, reset commits, snapshot round).
+      const pts = game.flipToB();
+      game.logEvent(`Setup complete - round 1 begins (quest ${game.questLabel()} needs ${pts})`);
+      game.enterView(VIEW_ORDER[0]);
+      game.players.forEach(p => { p.commit_touched = false; });
+      game._snapshotRound();
+      this.banner = null;
+      return true;
+    }
     if (k === "players_detail") return ["modal", new PlayersDetailModal(game)];
     if (k === "commit_tip") return ["modal", new CommitModal(game, 0)];
     if (k === "wp") return ["modal", new PlayersDetailModal(game)];

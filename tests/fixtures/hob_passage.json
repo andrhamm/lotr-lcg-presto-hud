@@ -1,0 +1,222 @@
+[
+  {
+    "Artist": "Ben Zweifel",
+    "Back": {
+      "FlavorText": "The nastiest things they saw were the cobwebs; dark dense cobwebs, with threads extradionairly thick, often stretched from tree to tree, or tangled in the lower branches on either side of them. There were none stretched across the path, but whether because some magic kept it clear, or for what other reasons they could not guess. - The Hobbit",
+      "ImagePath": "https://s3.amazonaws.com/hallofbeorn-resources/Images/Cards/Core-Set/Flies-and-Spiders-1B.jpg",
+      "Keywords": [],
+      "Shadow": null,
+      "Stats": {
+        "QuestPoints": "8",
+        "StageNumber": "1B"
+      },
+      "Subtitle": null,
+      "Text": [],
+      "Traits": []
+    },
+    "CardSet": "Core Set",
+    "CardSubType": "None",
+    "CardType": "Quest",
+    "Categories": null,
+    "EncounterInfo": {
+      "EasyModeQuantity": 0,
+      "EncounterSet": "Passage Through Mirkwood",
+      "IncludedEncounterSets": [
+        "Dol Guldur Orcs",
+        "Spiders of Mirkwood"
+      ],
+      "StageLetter": "A",
+      "StageNumber": 1
+    },
+    "Front": {
+      "FlavorText": "You are traveling through Mirkwood forest, carrying an urgent message from King Thanduil to the Lady Galadriel of Lorien. As you move along the dark trail, the spiders gather around you...",
+      "ImagePath": "https://s3.amazonaws.com/hallofbeorn-resources/Images/Cards/Core-Set/Flies-and-Spiders-1A.jpg",
+      "Keywords": [],
+      "Shadow": null,
+      "Stats": {
+        "StageNumber": "1A"
+      },
+      "Subtitle": null,
+      "Text": [
+        "Setup: Search the encounter deck for 1 copy of the Forest Spider and 1 copy of the Old Forest Road, and add them to the staging area. Then, shuffle the encounter deck.\n"
+      ],
+      "Traits": []
+    },
+    "HasErrata": false,
+    "IsUnique": false,
+    "Number": 119,
+    "OctgnGuid": "51223bd0-ffd1-11df-a976-0801200c9119",
+    "Quantity": 1,
+    "RingsDbCardId": "01119",
+    "RingsDbPopularity": 0,
+    "RingsDbVotes": 0,
+    "Slug": "Flies-and-Spiders-Core",
+    "Sphere": null,
+    "Title": "Flies and Spiders"
+  },
+  {
+    "Artist": "Ben Zweifel",
+    "Back": {
+      "FlavorText": "Unsure of what lies ahead but spurred by the urgency of your message, you choose a path and proceed... ",
+      "ImagePath": "https://s3.amazonaws.com/hallofbeorn-resources/Images/Cards/Core-Set/A-Fork-in-the-Road-2B.jpg",
+      "Keywords": [],
+      "Shadow": null,
+      "Stats": {
+        "QuestPoints": "2",
+        "StageNumber": "2B"
+      },
+      "Subtitle": null,
+      "Text": [
+        "Forced: When you defeat this stage, proceed to one of the 2 `A Chosen Path` stages, at random.\n"
+      ],
+      "Traits": []
+    },
+    "CardSet": "Core Set",
+    "CardSubType": "None",
+    "CardType": "Quest",
+    "Categories": null,
+    "EncounterInfo": {
+      "EasyModeQuantity": 0,
+      "EncounterSet": "Passage Through Mirkwood",
+      "IncludedEncounterSets": [
+        "Dol Guldur Orcs",
+        "Spiders of Mirkwood"
+      ],
+      "StageLetter": "A",
+      "StageNumber": 2
+    },
+    "Front": {
+      "FlavorText": "As you move through Mirkwood, hounded by spiders, the forest path forks before you...",
+      "ImagePath": "https://s3.amazonaws.com/hallofbeorn-resources/Images/Cards/Core-Set/A-Fork-in-the-Road-2A.jpg",
+      "Keywords": [],
+      "Shadow": null,
+      "Stats": {
+        "StageNumber": "2A"
+      },
+      "Subtitle": null,
+      "Text": [],
+      "Traits": []
+    },
+    "HasErrata": false,
+    "IsUnique": false,
+    "Number": 120,
+    "OctgnGuid": "51223bd0-ffd1-11df-a976-0801200c9121",
+    "Quantity": 1,
+    "RingsDbCardId": "01120",
+    "RingsDbPopularity": 0,
+    "RingsDbVotes": 0,
+    "Slug": "A-Fork-in-the-Road-Core",
+    "Sphere": null,
+    "Title": "A Fork in the Road"
+  },
+  {
+    "Artist": "Yoann Boissonnet",
+    "Back": {
+      "FlavorText": "The shadows grow darker, and you realize that a foul presence is aiming to draw you from the path. You must defeat it to pass this way.",
+      "ImagePath": "https://s3.amazonaws.com/hallofbeorn-resources/Images/Cards/Core-Set/A-Chosen-Path-Don't-Leave-the-Path-3B.jpg",
+      "Keywords": [],
+      "Shadow": null,
+      "Stats": {
+        "QuestPoints": "0",
+        "StageNumber": "3B"
+      },
+      "Subtitle": null,
+      "Text": [
+        "When Revealed: Each player must search the encounter deck and discard pile for 1 Spider card of his choice, and add it to the staging area.\nThe players must find and defeat Ungoliant`s Spawn to win this game.\n"
+      ],
+      "Traits": []
+    },
+    "CardSet": "Core Set",
+    "CardSubType": "None",
+    "CardType": "Quest",
+    "Categories": null,
+    "EncounterInfo": {
+      "EasyModeQuantity": 0,
+      "EncounterSet": "Passage Through Mirkwood",
+      "IncludedEncounterSets": [
+        "Dol Guldur Orcs",
+        "Spiders of Mirkwood"
+      ],
+      "StageLetter": "A",
+      "StageNumber": 3
+    },
+    "Front": {
+      "FlavorText": "The trail winds into one of the darkest, most tangled parts of the forest...\r\n\r\nYou sense that foul, dark presence is hunting you, and you move quickly in an attempt to avoid its evil.",
+      "ImagePath": "https://s3.amazonaws.com/hallofbeorn-resources/Images/Cards/Core-Set/A-Chosen-Path-Don't-Leave-the-Path-3A.jpg",
+      "Keywords": [],
+      "Shadow": null,
+      "Stats": {
+        "StageNumber": "3A"
+      },
+      "Subtitle": null,
+      "Text": [],
+      "Traits": []
+    },
+    "HasErrata": false,
+    "IsUnique": false,
+    "Number": 121,
+    "OctgnGuid": "",
+    "Quantity": 1,
+    "RingsDbCardId": "01121",
+    "RingsDbPopularity": 0,
+    "RingsDbVotes": 0,
+    "Slug": "A-Chosen-Path-Don't-Leave-the-Path-Core",
+    "Sphere": null,
+    "Title": "A Chosen Path"
+  },
+  {
+    "Artist": "Yoann Boissonnet",
+    "Back": {
+      "FlavorText": "You attempt to follow a secret, hidden trail to avoid the enemy...",
+      "ImagePath": "https://s3.amazonaws.com/hallofbeorn-resources/Images/Cards/Core-Set/A-Chosen-Path-Beorn's-Path-3B.jpg",
+      "Keywords": [],
+      "Shadow": null,
+      "Stats": {
+        "QuestPoints": "10",
+        "StageNumber": "3B"
+      },
+      "Subtitle": null,
+      "Text": [
+        "Players cannot defeat this stage while Ungoliant`s Spawn is in play. If players defeat this stage, they have won the game.\n"
+      ],
+      "Traits": []
+    },
+    "CardSet": "Core Set",
+    "CardSubType": "None",
+    "CardType": "Quest",
+    "Categories": null,
+    "EncounterInfo": {
+      "EasyModeQuantity": 0,
+      "EncounterSet": "Passage Through Mirkwood",
+      "IncludedEncounterSets": [
+        "Dol Guldur Orcs",
+        "Spiders of Mirkwood"
+      ],
+      "StageLetter": "A",
+      "StageNumber": 3
+    },
+    "Front": {
+      "FlavorText": "The trail winds into one of the darkest, most tangled parts of the forest...\r\n\r\nYou sense that foul, dark presence is hunting you, and you move quickly in an attempt to avoid its evil.",
+      "ImagePath": "https://s3.amazonaws.com/hallofbeorn-resources/Images/Cards/Core-Set/A-Chosen-Path-Beorn's-Path-3A.jpg",
+      "Keywords": [],
+      "Shadow": null,
+      "Stats": {
+        "StageNumber": "3A"
+      },
+      "Subtitle": null,
+      "Text": [],
+      "Traits": []
+    },
+    "HasErrata": false,
+    "IsUnique": false,
+    "Number": 122,
+    "OctgnGuid": "",
+    "Quantity": 1,
+    "RingsDbCardId": "01122",
+    "RingsDbPopularity": 0,
+    "RingsDbVotes": 0,
+    "Slug": "A-Chosen-Path-Beorn's-Path-Core",
+    "Sphere": null,
+    "Title": "A Chosen Path"
+  }
+]

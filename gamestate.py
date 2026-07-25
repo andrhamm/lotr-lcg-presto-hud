@@ -21,6 +21,7 @@ VIEW_ORDER = ["resource_planning", "quest_commit", "quest_staging",
 # view -> representative step id (for the phases screen / log tags / LEDs)
 VIEW_STEP = {
     "setup_game": "0.0",
+    "quest_setup": "0.0",
     "resource_planning": "1.R",
     "quest_sailing": "3.1",
     "quest_commit": "3.2",
@@ -72,6 +73,7 @@ def view_for_step(step_id):
 # Time counter is removed each refresh.
 VIEW_LABELS = {
     "setup_game": "Setup",
+    "quest_setup": "Quest Setup",
     "resource_planning": "Resource & Planning",
     "quest_sailing": "Questing (Sailing)",
     "quest_commit": "Questing (Commit)",
@@ -158,11 +160,26 @@ class GameState:
         self.stage_idx = 0           # index into self.stages
         self.card_idx = 0            # index into stages[stage_idx]["cards"]
         self.active_location = None  # or {"points": int, "progress": int}
-        self.side_quests = []        # list of {"points": int, "progress": int}
+        self.side_quests = []        # list of {"points": int, "progress": int,
+                                      #           "name": str|None (optional,
+                                      #           absent/None on old saves)}
         self.willpower = 0           # transient questing input
         self.staging = 0             # transient questing input (staging area threat)
         self.pending_budget = 0      # success progress awaiting placement
         self.pending_elim = None     # player index that just crossed elimination
+        self.pending_quest_card = False   # Progress-detail quest-row tap wants
+                                           # QuestCardModal opened once the
+                                           # Progress-detail modal has closed
+                                           # (router replaces one modal at a
+                                           # time - see main.py's loop)
+        self.pending_side_quest_pick = False  # Progress-detail "+ Side quest"
+                                           # tap wants SideQuestPickModal
+                                           # opened once the Progress-detail
+                                           # modal has closed (same
+                                           # pending-flag pattern as
+                                           # pending_quest_card above - the
+                                           # picker also needs a catalog read
+                                           # first, see main.py's loop)
         self.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         self.quest_resolved = False  # quest resolved this round
         self.quest_outcome = None    # "success" | "fail" | "tie" - last resolution
@@ -554,6 +571,8 @@ class GameState:
             "staging": self.staging,
             "pending_budget": self.pending_budget,
             "pending_elim": self.pending_elim,
+            "pending_quest_card": self.pending_quest_card,
+            "pending_side_quest_pick": self.pending_side_quest_pick,
             "reminders": dict(self.reminders),
             "quest_resolved": self.quest_resolved,
             "quest_outcome": self.quest_outcome,
@@ -598,6 +617,8 @@ class GameState:
         g.staging = d.get("staging", 0)
         g.pending_budget = d.get("pending_budget", 0)
         g.pending_elim = d.get("pending_elim", None)
+        g.pending_quest_card = d.get("pending_quest_card", False)
+        g.pending_side_quest_pick = d.get("pending_side_quest_pick", False)
         g.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         saved_rem = d.get("reminders", {})
         for k in g.reminders:

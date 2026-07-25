@@ -7,10 +7,11 @@ Each modal mutates the passed GameState directly on confirm. Protocol:
 
 from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         stepper, draw_weather, token, circ_btn, disc, arc_runs,
-                        ring, wx_small)
+                        ring, wx_small, wrap_text, truncate_text)
 from ui.counter import CounterState
 from ui import icons
 from gamestate import HEADINGS
+from quest_catalog import tips_for
 
 CANCEL_Y = 404
 BTN_H = 64
@@ -912,7 +913,11 @@ class QuestingProgressModal:
         items.append({"kind": "l", "name": "Location", "removable": True}
                      if g.active_location else {"kind": "l_add"})
         for i, s in enumerate(g.side_quests):
-            items.append({"kind": "s", "idx": i, "name": "Side Quest %d" % (i + 1), "removable": True})
+            # Prefer the catalog name (SideQuestPickModal, M4-B sidequest
+            # Task 2) when present; old saves and manual entries have no
+            # "name" key at all, so this stays "Side Quest N" for them.
+            label = s.get("name") or "Side Quest %d" % (i + 1)
+            items.append({"kind": "s", "idx": i, "name": label, "removable": True})
         return items
 
     def _val_editor2(self, d, pal, cx, cy, value, frac, progress_ring, id_minus, id_plus):
@@ -959,7 +964,22 @@ class QuestingProgressModal:
         else:
             s = g.side_quests[it["idx"]]
             prog, pts, pfx, idx = s["progress"], s["points"], "s", it["idx"]
-        text_left(d, pal, it["name"], 12, y, 2, pal.tan)
+        # The quest row's title doubles as a tap target opening the read-only
+        # QuestCardModal (M4-B, second entry point) - gold ink hints it's
+        # interactive, matching this row alone (Location/Side Quest titles
+        # stay plain). The button is pushed AFTER the Current/Target editors
+        # below so their hit regions win on any overlap; its own bounds
+        # (x 12-130) sit left of the Current editor's leftmost hit-box
+        # (x=136) by construction, so there should be no real overlap to
+        # arbitrate.
+        quest_card_tappable = it["kind"] == "q" and bool(g.stages)
+        # 118px matches the quest_card tap target's fixed width below (and
+        # the room left before the Current editor's leftmost hit-box at
+        # x=136) - a real catalog side-quest name (up to ~20 chars) can
+        # otherwise run into the Current/Target editors, unlike the old
+        # always-short generic labels ("Quest 1A", "Location", "Side Quest 3").
+        name_s = truncate_text(it["name"], 2, 118, d.measure_text)
+        text_left(d, pal, name_s, 12, y, 2, pal.gold if quest_card_tappable else pal.tan)
         self._val_editor2(d, pal, 178, cy, prog, (prog / pts if pts else 0), True,
                           (pfx + "P-", idx), (pfx + "P+", idx))
         self._val_editor2(d, pal, 300, cy, pts, 0, False,
@@ -967,6 +987,8 @@ class QuestingProgressModal:
         if it.get("removable"):
             self._icon_btn(d, pal, 400, cy, 11, "done", (pfx + "done", idx))
             self._icon_btn(d, pal, 436, cy, 11, "x", (pfx + "X", idx))
+        if quest_card_tappable:
+            self.buttons.append(Button(("quest_card",), 12, y, 118, self.ROW_H))
 
     def draw(self, hw, game, pal):
         from ui.header import modal_header
@@ -1149,10 +1171,15 @@ class QuestingProgressModal:
             self._snap = self._snapshot()
             return None
         if k == "add":
-            g.side_quests.append({"points": 4, "progress": 0})
-            g.log_event("Side quest %d added (progress view)" % len(g.side_quests))
-            self._snap = self._snapshot()
-            return None
+            # The router holds one modal at a time (no stacking) - close this
+            # one (flushing any pending edits, same as a normal "close") and
+            # flag that SideQuestPickModal should open on the next loop pass,
+            # same pending-flag pattern as "quest_card" below. The picker
+            # needs a catalog read (flash I/O) that a modal's on_button
+            # can't do mid-tap without breaking that invariant.
+            g.pending_side_quest_pick = True
+            self._log_changes()
+            return "close"
         if k == "addloc":
             g.active_location = {"points": 3, "progress": 0}
             g.log_event("Active location added (card effect)")
@@ -1162,6 +1189,15 @@ class QuestingProgressModal:
             if a != g.heading:
                 g.shift_heading(a - g.heading, "progress view")
             return None
+        if k == "quest_card":
+            # The router holds one modal at a time (no stacking) - close this
+            # one (flushing any pending edits, same as a normal "close") and
+            # flag that QuestCardModal should open on the next loop pass. See
+            # main.py's loop, which checks pending_quest_card once modal is
+            # None.
+            g.pending_quest_card = True
+            self._log_changes()
+            return "close"
         if k == "close":
             self._log_changes()
             return "close"
@@ -1385,5 +1421,423 @@ class StageCompleteModal:
         if k == "win":
             self.game.pending_stage = None
             self.game.set_game_over("victory")
+            return "close"
+        return None
+
+
+class QuestCardModal:
+    """Read-only stage/card reference (M4-B): opens on the game's current
+    stage and pages through every stage of the loaded scenario snapshot
+    (game.stages, copied at preload - no catalog re-read). Branch stages
+    (multiple alternative cards) can be flipped between with the alt
+    control; switching only changes what is displayed. Purely presentational
+    - idx/card are the modal's own state, never written back to game."""
+
+    MARGIN = 12
+    # Ceiling, not a floor: the SIDE A/SIDE B blocks must end at or below this
+    # y so the Tips button + pager (a fixed 88px: 48px gap + 40px pager tall,
+    # themselves 40px tall) still fit above 480 with margin. _line_budget()
+    # uses it to size each block's line cap per render (see below) instead of
+    # a flat constant - short text no longer leaves Tips/pager stranded down
+    # at a fixed position (they float up to meet the content), and long text
+    # gets far more than the old flat 3-line cap when the other side is short.
+    BOTTOM_Y0 = 380
+
+    def __init__(self, game, tips=None):
+        self.game = game
+        self.idx = game.stage_idx if game.stages else 0
+        self.card = game.card_idx if game.stages else 0
+        self.buttons = []
+        self.tips = tips or {}          # loaded tips.json "scenarios" map (M4-B tips)
+        self.tips_open = False          # toggled by the Tips/Back button
+        self._tips_data = None          # tips_for(...) result for the current stage, set by draw()
+
+    def _wrap_body(self, d, text, w):
+        """Word-wraps text (or the "no text" placeholder) at the block's
+        usable width with no line cap - the "natural" line count
+        _line_budget() then allocates space against."""
+        usable = w - 20
+        has_text = bool(text)
+        body = text if has_text else "no text"
+        lines = wrap_text(body, 1, usable, d.measure_text)
+        return has_text, lines, usable
+
+    def _line_budget(self, y0, natural_a, natural_b):
+        """Distributes the pixel budget between y0 (top of the SIDE A block)
+        and BOTTOM_Y0 across the two blocks' natural line counts: each gets
+        its full natural count if both fit, otherwise the longer block is
+        trimmed one line at a time (ties trim A first) until the total fits.
+        Always leaves at least 1 line per block."""
+        overhead = 26   # per block: 18px label row + 8px bottom pad
+        gap = 12         # 6px trailing gap after each of the two blocks
+        lh = 16          # 10*scale(1) + 6, one wrapped text line
+        available_px = self.BOTTOM_Y0 - y0 - 2 * overhead - gap
+        budget_lines = max(2, available_px // lh)
+        allowed_a, allowed_b = natural_a, natural_b
+        while allowed_a + allowed_b > budget_lines and (allowed_a > 1 or allowed_b > 1):
+            if allowed_a >= allowed_b and allowed_a > 1:
+                allowed_a -= 1
+            elif allowed_b > 1:
+                allowed_b -= 1
+            else:
+                allowed_a -= 1
+        return allowed_a, allowed_b
+
+    def _side_block(self, d, pal, x, y, w, label, wrapped, max_lines):
+        """Bordered panel: a small label row + up to max_lines of the
+        pre-wrapped body text (or the "no text" placeholder). Returns
+        height."""
+        has_text, lines, usable = wrapped
+        if len(lines) > max_lines:
+            lines = lines[:max_lines]
+            lines[-1] = truncate_text(lines[-1] + " ..", 1, usable, d.measure_text)
+        lh = 16
+        h = 18 + len(lines) * lh + 8
+        panel(d, pal, x, y, w, h, fill=pal.card)
+        text_left(d, pal, label, x + 10, y + 6, 1, pal.amber)
+        ty = y + 20
+        ink = pal.tan if has_text else pal.dim
+        for ln in lines:
+            text_left(d, pal, ln, x + 10, ty, 1, ink)
+            ty += lh
+        return h
+
+    def _tips_panel(self, d, pal, x, y, w, tips_data, max_h):
+        """Bordered panel: a "TIPS" label row, up to `max_h` px of wrapped
+        tip lines (each prefixed "- "), and the attribution name + URL in
+        pal.dim beneath - the tips-view counterpart of _side_block, sized
+        against the same BOTTOM_Y0 ceiling so the Tips/Back button and
+        pager land at the same y in either view. Excess content truncates
+        its last visible line with ".." rather than overflowing into the
+        button/pager area, mirroring _side_block's own truncate-to-fit.
+        Returns height (always <= max_h)."""
+        usable = w - 20
+        lh = 16
+        lines = []
+        for t in tips_data["tips"]:
+            lines.extend(wrap_text("- " + t, 1, usable, d.measure_text))
+        attribution = tips_data.get("attribution") or {}
+        name = attribution.get("name") or ""
+        url = attribution.get("url") or ""
+        attrib_lines = [truncate_text(s, 1, usable, d.measure_text)
+                         for s in (("Source: " + name) if name else "", url) if s]
+
+        overhead = 18 + 8   # label row + bottom pad, matches _side_block
+        budget = max(1, (max_h - overhead - len(attrib_lines) * lh) // lh)
+        if len(lines) > budget:
+            lines = lines[:budget]
+            lines[-1] = truncate_text(lines[-1] + " ..", 1, usable, d.measure_text)
+
+        h = min(max_h, overhead + (len(lines) + len(attrib_lines)) * lh)
+        panel(d, pal, x, y, w, h, fill=pal.card)
+        text_left(d, pal, "TIPS", x + 10, y + 6, 1, pal.amber)
+        ty = y + 20
+        for ln in lines:
+            text_left(d, pal, ln, x + 10, ty, 1, pal.tan)
+            ty += lh
+        for ln in attrib_lines:
+            text_left(d, pal, ln, x + 10, ty, 1, pal.dim)
+            ty += lh
+        return h
+
+    def draw(self, hw, game, pal):
+        from ui.header import modal_header
+        d = hw.display
+        self.buttons = []
+        d.set_pen(pal.bg)
+        d.clear()
+        modal_header(d, pal, game, "QUEST CARD", self.buttons)
+        M, W = self.MARGIN, 480 - 2 * self.MARGIN
+
+        if not game.stages:
+            text_center(d, pal, "No quest loaded", 240, 200, 2, pal.dim)
+            text_center(d, pal, "Start a scenario to see stage cards.", 240, 226, 1, pal.dim)
+            return
+
+        n = len(game.stages)
+        self.idx = max(0, min(self.idx, n - 1))
+        stage = game.stages[self.idx]
+        cards = stage["cards"]
+        self.card = max(0, min(self.card, len(cards) - 1))
+        card = cards[self.card]
+        # Front is side A; the back is whatever non-A side this printing uses.
+        # Most cards are A/B, but epic multiplayer variants share one A front
+        # with backs C..H (e.g. Mount Gundabad stage 2 has 7 alternatives),
+        # so matching "B" literally would blank all but the first.
+        faces = card["faces"]
+        a_face = next((f for f in faces if f["side"] == "A"), faces[0] if faces else {})
+        b_face = next((f for f in faces if f["side"] and f["side"] != "A"),
+                      faces[1] if len(faces) > 1 else {})
+        a_name = a_face.get("name") or ""
+        b_name = b_face.get("name") or ""
+
+        # -- stage line: number, an A/B legend, and a CURRENT marker so
+        # paging away from the game's live stage is obvious -----------------
+        y = 48
+        text_left(d, pal, "STAGE %d" % stage["stage"], M, y, 2, pal.amber)
+        ab_hint = "A / B"
+        text_left(d, pal, ab_hint, 480 - M - d.measure_text(ab_hint, 1), y + 4, 1, pal.dim)
+        if self.idx == game.stage_idx:
+            pw = d.measure_text("CURRENT", 1) + 14
+            px = 240 - pw // 2
+            d.set_pen(pal.gold)
+            d.rectangle(px, y, pw, 18)
+            text_center(d, pal, "CURRENT", 240, y + 4, 1, pal.bg, shadow=False)
+        y += 28
+
+        # -- card name(s): a shared name shows once; a branch payoff (the
+        # B-face name differs, e.g. "A Chosen Path" -> "Beorn's Path") shows
+        # both, labelled -----------------------------------------------------
+        if b_name and b_name != a_name:
+            text_left(d, pal, truncate_text("A: " + a_name, 2, W, d.measure_text), M, y, 2, pal.gold)
+            y += 22
+            text_left(d, pal, truncate_text("B: " + b_name, 2, W, d.measure_text), M, y, 2, pal.gold)
+            y += 26
+        else:
+            name = a_name or b_name or "(unnamed)"
+            text_center(d, pal, truncate_text(name, 3, W, d.measure_text), 240, y, 3, pal.gold)
+            y += 32
+
+        # -- quest points / victory / sailing stat strip ---------------------
+        cx = M + 16
+        text_left(d, pal, "PTS", M, y, 1, pal.dim)
+        token(d, pal, cx, y + 22, 14, 2, card.get("questPoints", 0), pal.gold, 0, pal.gold, pal.dim)
+        nx = cx + 40
+        if card.get("victory") is not None:
+            text_left(d, pal, "VP", nx - 14, y, 1, pal.dim)
+            token(d, pal, nx, y + 22, 14, 2, card["victory"], pal.gold, 0, pal.gold, pal.dim)
+            nx += 40
+        if card.get("sailing"):
+            text_left(d, pal, "SAIL", nx - 16, y, 1, pal.dim)
+            disc(d, nx, y + 22, 14, pal.well)
+            icons.draw(d, icons.WHEEL_SM, nx - 8, y + 14, pal.gold)
+        y += 46
+
+        # -- branch: which alternative is displayed only affects the view ----
+        if len(cards) > 1:
+            label = {"random": "BRANCH - random",
+                     "choice": "BRANCH - first player chooses"}.get(stage.get("branch"), "BRANCH")
+            text_left(d, pal, truncate_text(label, 2, 480 - 2 * M - 162, d.measure_text),
+                      M, y + 12, 2, pal.amber)
+            alt = Button(("alt",), 480 - M - 150, y, 150, 36)
+            bevel(d, pal, alt.x, alt.y, alt.w, alt.h, pal.btn)
+            text_center(d, pal, "Card %d / %d" % (self.card + 1, len(cards)),
+                        alt.x + alt.w / 2, alt.y + 12, 1, pal.tan)
+            self.buttons.append(alt)
+            y += 44
+
+        # -- SIDE A/B card text, or (M4-B tips) the tips panel in its place --
+        self._tips_data = tips_for(
+            (self.game.scenario or {}).get("slug"), stage["stage"], self.tips)
+        if self.tips_open and self._tips_data:
+            y += self._tips_panel(d, pal, M, y, W, self._tips_data, self.BOTTOM_Y0 - y) + 6
+        else:
+            self.tips_open = False   # nothing to show (e.g. paged to an untipped stage)
+            wrap_a = self._wrap_body(d, a_face.get("text"), W)
+            wrap_b = self._wrap_body(d, b_face.get("text"), W)
+            max_a, max_b = self._line_budget(y, len(wrap_a[1]), len(wrap_b[1]))
+            y += self._side_block(d, pal, M, y, W, "SIDE A - setup / story", wrap_a, max_a) + 6
+            y += self._side_block(d, pal, M, y, W, "SIDE B - quest", wrap_b, max_b) + 6
+
+        # -- Tips: enabled (normal palette) only where tips exist for this
+        # stage; toggles the tips panel above in place of the SIDE A/B blocks
+        # (M4-B tips) --------------------------------------------------------
+        tips = Button(("tips",), M, y, 140, 40)
+        bevel(d, pal, tips.x, tips.y, tips.w, tips.h, pal.btn)
+        if self._tips_data:
+            n = len(self._tips_data["tips"])
+            text_center(d, pal, "Back" if self.tips_open else "Tips", tips.x + 70, tips.y + 6, 2, pal.tan)
+            sub = "to card" if self.tips_open else ("%d note%s" % (n, "" if n == 1 else "s"))
+            text_center(d, pal, sub, tips.x + 70, tips.y + 26, 1, pal.dim)
+        else:
+            text_center(d, pal, "Tips", tips.x + 70, tips.y + 6, 2, pal.dim)
+            text_center(d, pal, "none yet", tips.x + 70, tips.y + 26, 1, pal.dim)
+        self.buttons.append(tips)
+
+        # -- pager: hidden (not just disabled) at each end --------------------
+        py = y + 48
+        if self.idx > 0:
+            prev = Button(("prev",), M, py, 110, 40)
+            bevel(d, pal, prev.x, prev.y, prev.w, prev.h, pal.btn)
+            text_center(d, pal, "< Prev", prev.x + 55, prev.y + 12, 2, pal.tan)
+            self.buttons.append(prev)
+        if self.idx < n - 1:
+            nxt = Button(("next",), 480 - M - 110, py, 110, 40)
+            bevel(d, pal, nxt.x, nxt.y, nxt.w, nxt.h, pal.btn)
+            text_center(d, pal, "Next >", nxt.x + 55, nxt.y + 12, 2, pal.tan)
+            self.buttons.append(nxt)
+        text_center(d, pal, "stage %d of %d" % (self.idx + 1, n), 240, py + 12, 2, pal.muted)
+
+    def on_button(self, btn):
+        k = btn.id[0]
+        if k == "close":
+            return "close"
+        if k == "tips":
+            if self._tips_data:
+                self.tips_open = not self.tips_open
+                return "redraw"
+            return None
+        if not self.game.stages:
+            return None
+        n = len(self.game.stages)
+        if k == "next":
+            if self.idx < n - 1:
+                self.idx += 1
+                self.card = 0
+                return "redraw"
+            return None
+        if k == "prev":
+            if self.idx > 0:
+                self.idx -= 1
+                self.card = 0
+                return "redraw"
+            return None
+        if k == "alt":
+            cards = self.game.stages[self.idx]["cards"]
+            if len(cards) > 1:
+                self.card = (self.card + 1) % len(cards)
+                return "redraw"
+            return None
+        return None
+
+
+def _sq_radio(d, pal, cx, cy, on):
+    """Radio-button glyph: ring, filled when selected. Duplicates
+    ui/screen_quest.py's _radio (this codebase's screen/modal helpers are
+    per-file, not cross-imported - e.g. _footer/footer and circ_btn/circBtn
+    already exist independently in this file vs. the web twin) so
+    SideQuestPickModal can "feel like the same family" as ChooseScenarioScreen
+    without a new cross-module dependency."""
+    arc_runs(d, cx, cy, 10, 8, 0, 360, pal.gold if on else pal.dim)
+    if on:
+        disc(d, cx, cy, 5, pal.gold)
+
+
+class SideQuestPickModal:
+    """Picker over the player side-quest catalog (M4-B sidequest, Task 2):
+    radio-select list (name / points / sphere), Up/Down pager (mirrors
+    ChooseScenarioScreen/PickCycleScreen in ui/screen_quest.py - same row
+    stride/pager geometry, same radio glyph), plus Add (commits the
+    selection) and Manual (today's blank-entry fallback, unchanged shape).
+
+    Opened from QuestingProgressModal's "+ Side quest" button via the
+    pending_side_quest_pick flag (see main.py's loop) - constructed with the
+    already-loaded catalog entries (quest_catalog.side_quests(...) shape:
+    {"id","name","points","sphere","pack"}), never reads the catalog itself.
+
+    Empty `entries` (no catalog data) still renders and offers Manual rather
+    than raising - defense in depth. The call site is expected to skip
+    opening this modal entirely when load_player_side_quests() comes back
+    empty and append directly instead (today's behavior, Global Constraints:
+    catalog data is optional at runtime), but nothing here assumes that."""
+
+    PER_PAGE = 6
+    ROW_H = 44
+    ROW_STRIDE = 46
+    LIST_Y0 = 66
+    NAME_MAX_W = 300
+    FOOTER_Y = 404
+    FOOTER_H = 64
+
+    def __init__(self, game, entries):
+        self.game = game
+        self.entries = entries
+        self.selected = entries[0]["id"] if entries else None
+        self.page = 0
+        self.buttons = []
+
+    def _pages(self):
+        return max(1, -(-len(self.entries) // self.PER_PAGE))
+
+    def draw(self, hw, game, pal):
+        from ui.header import modal_header
+        d = hw.display
+        self.buttons = []
+        d.set_pen(pal.bg)
+        d.clear()
+        modal_header(d, pal, game, "Add Side Quest", self.buttons)
+
+        if not self.entries:
+            text_center(d, pal, "No side-quest catalog data available.", 240, 140, 2, pal.dim)
+            text_center(d, pal, "Use Manual entry below.", 240, 168, 1, pal.dim)
+        else:
+            text_left(d, pal, "Pick a side quest, then Add - or enter manually.",
+                      12, 46, 1, pal.dim)
+            pages = self._pages()
+            self.page = min(self.page, pages - 1)
+            chunk = self.entries[self.page * self.PER_PAGE:(self.page + 1) * self.PER_PAGE]
+            y = self.LIST_Y0
+            for e in chunk:
+                on = e["id"] == self.selected
+                if on:
+                    d.set_pen(pal.card_hi)
+                    d.rectangle(8, y, 456, self.ROW_H)
+                _sq_radio(d, pal, 30, y + 22, on)
+                name = truncate_text(e.get("name") or "", 2, self.NAME_MAX_W, d.measure_text)
+                text_left(d, pal, name, 52, y + 13, 2, pal.tan if on else pal.muted)
+                pts_s = "%d pts" % (e.get("points") or 0)
+                pw = d.measure_text(pts_s, 2)
+                text_left(d, pal, pts_s, 456 - pw, y + 4, 2, pal.gold if on else pal.tan)
+                # ASCII hyphen, not an em-dash - the device pins PicoGraphics'
+                # "bitmap8" font (hardware.py), which only covers the
+                # standard-ASCII glyphs verified in tests/fake_hardware.py's
+                # BITMAP8_W table; a real dash character risks a blank/tofu
+                # glyph on hardware even though it renders fine in this host
+                # preview (PIL/Menlo has full Unicode coverage, masking it).
+                sphere_s = e.get("sphere") or "-"
+                sw = d.measure_text(sphere_s, 1)
+                text_left(d, pal, sphere_s, 456 - sw, y + 26, 1, pal.dim)
+                d.set_pen(pal.border)
+                d.rectangle(8, y + self.ROW_H, 456, 1)
+                self.buttons.append(Button(("row", e["id"]), 8, y, 456, self.ROW_H))
+                y += self.ROW_STRIDE
+
+            if pages > 1:
+                up = Button(("older",), 12, 352, 150, 46)
+                dn = Button(("newer",), 318, 352, 150, 46)
+                bevel(d, pal, up.x, up.y, up.w, up.h, pal.btn)
+                text_center(d, pal, "Up", up.x + 75, up.y + 14, 2, pal.tan)
+                bevel(d, pal, dn.x, dn.y, dn.w, dn.h, pal.btn)
+                text_center(d, pal, "Down", dn.x + 75, dn.y + 14, 2, pal.tan)
+                text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 366, 2, pal.muted)
+                self.buttons.append(up)
+                self.buttons.append(dn)
+
+        manual = Button(("manual",), 24, self.FOOTER_Y, 200, self.FOOTER_H)
+        bevel(d, pal, manual.x, manual.y, manual.w, manual.h, pal.btn, t=3)
+        text_center(d, pal, "Manual", manual.x + manual.w / 2, manual.y + 20, 2, pal.tan)
+        self.buttons.append(manual)
+
+        if self.entries:
+            add = Button(("add",), 256, self.FOOTER_Y, 200, self.FOOTER_H)
+            bevel(d, pal, add.x, add.y, add.w, add.h, pal.btn_ok, t=3)
+            text_center(d, pal, "Add", add.x + add.w / 2, add.y + 20, 2, pal.ok_fg)
+            self.buttons.append(add)
+
+    def on_button(self, btn):
+        k = btn.id[0]
+        if k == "close":
+            return "close"
+        if k == "row":
+            self.selected = btn.id[1]
+            return "redraw"
+        if k == "older":
+            self.page = max(0, self.page - 1)
+            return "redraw"
+        if k == "newer":
+            self.page = min(self._pages() - 1, self.page + 1)
+            return "redraw"
+        if k == "manual":
+            self.game.side_quests.append({"points": 0, "progress": 0})
+            self.game.log_event("Side quest added manually (progress view)")
+            return "close"
+        if k == "add":
+            e = next((x for x in self.entries if x["id"] == self.selected), None)
+            if e:
+                pts = e.get("points") or 0
+                self.game.side_quests.append({"points": pts, "progress": 0,
+                                              "name": e.get("name")})
+                self.game.log_event("Side quest added: %s (%d pts, progress view)"
+                                    % (e.get("name"), pts))
             return "close"
         return None

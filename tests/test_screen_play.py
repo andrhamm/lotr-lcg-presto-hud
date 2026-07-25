@@ -406,3 +406,70 @@ def test_questing_for_card_taps_open_modal_on_both_views():
         screen.draw(hw, game, pal)
         result = screen.on_button(_find(screen, ("wp",)), game)
         assert isinstance(result[1], PlayersDetailModal), view
+
+
+# -- Task 8: Quest Setup (R0 pre-round-1) ----------------------------------
+
+_QS_SCN = {"slug": "p", "name": "P", "pack": "Core Set", "cycle": "Core Set",
+           "source": "official", "kind": "quest", "nightmare": False, "mode": "Standard"}
+_QS_STAGES = [{"stage": 1, "cards": [{"questPoints": 8, "victory": None, "sailing": False,
+    "faces": [{"side": "A", "name": "Flies and Spiders", "text": "Setup: do the thing."},
+              {"side": "B", "name": "Flies and Spiders", "text": None}]}]}]
+
+
+def test_quest_setup_flip_to_b_enters_round_1():
+    hw, pal, game, screen = _setup("quest_setup")
+    game.preload_scenario(_QS_SCN, _QS_STAGES)
+    for p in game.players:
+        p.commit_touched = True
+    screen.draw(hw, game, pal)
+    result = screen.on_button(_find(screen, ("flip_to_b",)), game)
+    assert result is True
+    assert game.quest["side"] == "B" and game.quest["points"] == 8
+    assert game.view == "resource_planning"        # VIEW_ORDER[0]
+    assert all(not p.commit_touched for p in game.players)
+    assert game._round_snap is not None
+    messages = [e["text"] for e in game.log]
+    assert any("Setup complete" in m and "1B" in m and "8" in m for m in messages)
+
+
+def test_quest_setup_card_modal_button_opens_quest_card_modal():
+    from ui.modals import QuestCardModal
+    hw, pal, game, screen = _setup("quest_setup")
+    game.preload_scenario(_QS_SCN, _QS_STAGES)
+    screen.draw(hw, game, pal)
+    result = screen.on_button(_find(screen, ("open_card_modal",)), game)
+    assert isinstance(result, tuple) and result[0] == "modal"
+    assert isinstance(result[1], QuestCardModal)
+
+
+def test_quest_setup_card_modal_button_is_null_for_custom_game():
+    # No preload_scenario call: game.stages == [] (custom/manual quest). The
+    # quest_setup view itself assumes a loaded scenario elsewhere in its draw
+    # path (not reachable via normal nav without one), so exercise on_button
+    # directly with a synthetic button rather than via draw()+_find().
+    from ui.widgets import Button
+    hw, pal, game, screen = _setup("quest_setup")
+    result = screen.on_button(Button(("open_card_modal",), 0, 0, 1, 1), game)
+    assert result is None
+
+
+def test_quest_setup_shows_stage_and_setup_text():
+    hw, pal, game, screen = _setup("quest_setup")
+    game.preload_scenario(_QS_SCN, _QS_STAGES)
+    screen.draw(hw, game, pal)
+    texts = _texts(hw)
+    assert "STAGE 1A" in texts
+    assert any("Flies and Spiders" in t for t in texts)
+    assert any("Setup: do the thing." in t for t in texts)
+    assert any("Flip to Side B" in t and "8 qp" in t for t in texts)
+
+
+def test_quest_setup_no_setup_text_shows_fallback():
+    hw, pal, game, screen = _setup("quest_setup")
+    stages = [{"stage": 1, "cards": [{"questPoints": 8, "victory": None, "sailing": False,
+        "faces": [{"side": "A", "name": "x", "text": None},
+                  {"side": "B", "name": "x", "text": None}]}]}]
+    game.preload_scenario(_QS_SCN, stages)
+    screen.draw(hw, game, pal)
+    assert any("No setup instructions for this stage." in t for t in _texts(hw))

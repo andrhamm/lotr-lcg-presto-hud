@@ -79,6 +79,11 @@ def build():
     with open(FIXTURE, encoding="utf-8") as f:
         return b.build_outputs(f, meta={"generated": "2026-07-24", "source": "fixture"})
 
+def build_with_enrichment(enrichment):
+    with open(FIXTURE, encoding="utf-8") as f:
+        return b.build_outputs(f, meta={"generated": "2026-07-24", "source": "fixture"},
+                                enrichment=enrichment)
+
 def test_scenario_assembly_and_index():
     out = build()
     scn = out["scenarios"]["passage-through-mirkwood"]
@@ -99,6 +104,22 @@ def test_index_has_cycle_source_date():
     passage = next(s for s in out["index"]["scenarios"] if s["slug"] == "passage-through-mirkwood")
     assert passage["cycle"] == "Core Set" and passage["source"] == "official"
     assert "releaseDate" in passage
+
+def test_index_release_dates_known_and_unknown():
+    # B-data (catalog-enrichment plan, Task 2): PACK_META's per-pack dates
+    # flow through to index entries. Core Set's date is independently
+    # verified against Fantasy Flight's own release announcement (see
+    # RELEASE_DATES' sourcing comment in build_card_data.py) - "2011-04".
+    out = build()
+    idx = {s["slug"]: s for s in out["index"]["scenarios"]}
+    assert idx["passage-through-mirkwood"]["releaseDate"] == "2011-04"
+    # "The Flight of the Stormcaller" (the fixture's pack name) doesn't
+    # match any PACK_META key (the real pack is "Flight of the Stormcaller",
+    # no "The") - PACK_META.get(pack, {}) must fall back cleanly to a null
+    # date (and "Other"/"official") rather than raising.
+    unknown = idx["flight-of-the-stormcaller"]
+    assert unknown["releaseDate"] is None
+    assert unknown["cycle"] == "Other" and unknown["source"] == "official"
 
 def test_modes_campaign_players_rules():
     out = build()
@@ -172,3 +193,56 @@ def test_extra_columns_captured():
     assert c["cardBack"] == "encounter"
     assert c["quantity"] == 3
     assert c["setUuid"] == "uuid-xyz"
+
+# --- B-data Task 3: enrichment merge (optional, absent-tolerant) ----------
+
+ENRICHMENT = {"scenarios": {
+    "passage-through-mirkwood": {
+        "includedSets": ["Dol Guldur Orcs", "Passage Through Mirkwood", "Spiders of Mirkwood"]},
+}}
+
+def test_enrichment_merges_included_sets_and_gather_count():
+    out = build_with_enrichment(ENRICHMENT)
+    scn = out["scenarios"]["passage-through-mirkwood"]
+    assert scn["includedSets"] == ["Dol Guldur Orcs", "Passage Through Mirkwood", "Spiders of Mirkwood"]
+    idx = {s["slug"]: s for s in out["index"]["scenarios"]}
+    assert idx["passage-through-mirkwood"]["gatherCount"] == 3
+    # a scenario absent from the enrichment map is untouched - no key, not null
+    other = out["scenarios"]["flight-of-the-stormcaller"]
+    assert "includedSets" not in other
+    assert "gatherCount" not in idx["flight-of-the-stormcaller"]
+    # provenance: Hall of Beorn only credited when enrichment was actually used
+    assert "hallofbeorn.com" in out["index"]["source"]
+
+def test_enrichment_absent_omits_fields_and_source_unchanged():
+    out = build()  # no enrichment kwarg -> None, same as a build with no enrichment file
+    scn = out["scenarios"]["passage-through-mirkwood"]
+    assert "includedSets" not in scn
+    idx = {s["slug"]: s for s in out["index"]["scenarios"]}
+    assert "gatherCount" not in idx["passage-through-mirkwood"]
+    assert out["index"]["source"] == "fixture"
+    assert "hallofbeorn" not in out["index"]["source"].lower()
+
+def test_enrichment_scenario_with_empty_included_sets_is_omitted():
+    # A scenario present in the enrichment map but with no resolved sets
+    # (shouldn't happen from build_hob_enrichment.build(), which never
+    # writes an empty list - see its own tests - but defend the merge
+    # itself too) must not add either field.
+    out = build_with_enrichment({"scenarios": {"passage-through-mirkwood": {"includedSets": []}}})
+    scn = out["scenarios"]["passage-through-mirkwood"]
+    assert "includedSets" not in scn
+    idx = {s["slug"]: s for s in out["index"]["scenarios"]}
+    assert "gatherCount" not in idx["passage-through-mirkwood"]
+
+def test_load_enrichment_missing_corrupt_and_good(tmp_path):
+    assert b._load_enrichment(str(tmp_path / "nope.json")) is None
+    corrupt = tmp_path / "bad.json"
+    corrupt.write_text("not json", encoding="utf-8")
+    assert b._load_enrichment(str(corrupt)) is None
+    wrong_shape = tmp_path / "shape.json"
+    wrong_shape.write_text('{"scenarios": "not a dict"}', encoding="utf-8")
+    assert b._load_enrichment(str(wrong_shape)) is None
+    good = tmp_path / "good.json"
+    good.write_text('{"scenarios": {"x": {"includedSets": ["A"]}}}', encoding="utf-8")
+    loaded = b._load_enrichment(str(good))
+    assert loaded["scenarios"]["x"]["includedSets"] == ["A"]

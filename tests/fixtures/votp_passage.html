@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!--
+  Synthetic fixture, NOT a copy of any real page. It mirrors the real site's
+  DOM shape (WordPress <article>/entry-content wrapper, H2/H3 heading nesting,
+  a "Tips and Tricks" section bounded by the next H2, inline <a>/<strong>/<em>
+  markup, HTML entities, and a trailing share/related block) closely enough to
+  exercise build_tips.extract_blocks()'s real parsing logic, but every sentence
+  of prose below was written for this test - see docs/superpowers/plans/
+  2026-07-24-stage-tips.md Task 1 Step 3.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Passage through Mirkwood &#8211; Example Quest Spotlight</title></head>
+<body>
+<div id="page">
+<header id="masthead"><nav><a href="/">Home</a> <a href="/about">About</a></nav></header>
+<div id="content">
+<article id="post-1" class="post-1 post type-post status-publish format-standard hentry category-example">
+<div class="entry-content">
+<h2>Passage through Mirkwood</h2>
+<p>An example write-up used only to exercise the parser in tests.</p>
+
+<h2>The Quest</h2>
+<h3>Setup</h3>
+<p>Shuffle the example staging cards and place the starting locations as described on the quest card.</p>
+<h3>Quest card 1: Flies and Spiders &#8211; 8 quest points</h3>
+<p>Placeholder setup text for stage one, included only to give the fixture a realistic shape.</p>
+
+<h2>The Encounter deck</h2>
+<h3>Enemies</h3>
+<p>A short list of example enemies would normally appear here.</p>
+
+<h2>Tips and Tricks</h2>
+<p>Keep your threat below 40 to avoid the <a href="https://example.com/hummerhorns">Hummerhorns</a>, who deal heavy damage the moment they engage.</p>
+<p>Don&#8217;t leave allies undefended near the end of the round, since several treacheries punish it harshly and can swing the game.</p>
+<p>For a tougher run once you have learned the ropes, try the <strong>Nightmare</strong> version of this <em>quest</em> for a bigger challenge.</p>
+<p>Some players like to spend a long time deliberating over which exact cards to bring, and honestly there is no single right answer here because it really depends on your group&#8217;s collection, play style, and how many players are at the table that day.</p>
+<ul>
+<li>Never commit your last resource on a turn when a nearby treachery could punish an empty hand.</li>
+</ul>
+
+<h2>Playthrough</h2>
+<p>In this section a playthrough video would normally be embedded, along with commentary that should never be picked up as a tip.</p>
+
+<h3>Share this:</h3>
+<p><a href="#">Share on social media</a></p>
+<h3>Related</h3>
+<p><a href="/other-post">Another example post</a></p>
+</div>
+</article>
+</div>
+<footer id="colophon"><p>Example footer text and widgets go here.</p></footer>
+</div>
+<script>console.log("tracking snippet that must never be parsed as content");</script>
+</body>
+</html>

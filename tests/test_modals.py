@@ -379,6 +379,64 @@ def test_questing_progress_modal_quest_editors_adjust_and_log_on_close():
     assert any("Quest 1A set 4/9 (progress view)" in e["text"] for e in game.log)
 
 
+_QPM_STAGES = [{"stage": 1, "cards": [{"questPoints": 8, "victory": None, "sailing": False,
+    "faces": [{"side": "A", "name": "x", "text": None}, {"side": "B", "name": "x", "text": None}]}]}]
+
+
+def test_questing_progress_modal_quest_card_button_present_only_with_stages():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()   # no preload_scenario: game.stages == [] (custom game)
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert not any(b.id == ("quest_card",) for b in m.buttons)
+
+    game.preload_scenario({"slug": "p", "name": "P", "pack": "Core Set", "cycle": "Core Set",
+                           "source": "official", "kind": "quest", "nightmare": False,
+                           "mode": "Standard"}, _QPM_STAGES)
+    m2 = modals.QuestingProgressModal(game)
+    m2.draw(hw, game, pal)
+    assert any(b.id == ("quest_card",) for b in m2.buttons)
+
+
+def test_questing_progress_modal_quest_card_tap_flags_pending_and_closes():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.preload_scenario({"slug": "p", "name": "P", "pack": "Core Set", "cycle": "Core Set",
+                           "source": "official", "kind": "quest", "nightmare": False,
+                           "mode": "Standard"}, _QPM_STAGES)
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert game.pending_quest_card is False
+    assert m.on_button(_find(m, ("quest_card",))) == "close"
+    assert game.pending_quest_card is True
+
+
+def test_questing_progress_modal_quest_card_button_does_not_overlap_current_editor():
+    # Hit-test order: buttons are matched in array order, so the Current/
+    # Target editors (pushed first) must win on any overlap. The quest_card
+    # button is sized to sit left of the Current editor's leftmost hit-box
+    # by construction - assert that geometrically, not just by push order.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.preload_scenario({"slug": "p", "name": "P", "pack": "Core Set", "cycle": "Core Set",
+                           "source": "official", "kind": "quest", "nightmare": False,
+                           "mode": "Standard"}, _QPM_STAGES)
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    qc = _find(m, ("quest_card",))
+    cur_minus = _find(m, ("qP-", None))
+    assert qc.x + qc.w <= cur_minus.x
+    # and editors were pushed first, so they'd win on overlap regardless
+    ids = [b.id for b in m.buttons]
+    assert ids.index(("qP-", None)) < ids.index(("quest_card",))
+    assert ids.index(("qP+", None)) < ids.index(("quest_card",))
+    assert ids.index(("qT-", None)) < ids.index(("quest_card",))
+    assert ids.index(("qT+", None)) < ids.index(("quest_card",))
+
+
 def test_questing_progress_modal_location_current_bump_explores_when_done():
     hw = FakeHardware()
     pal = Palette(hw.display)
@@ -600,3 +658,97 @@ def test_questing_progress_modal_chart_hides_heading_row_when_not_sailing():
     assert "willpower / staging / result" in texts
     assert "willpower / staging / result / heading" not in texts
     assert not any(b.id[0] == "hd_set" for b in m.buttons)
+
+
+# -- "+ Side quest" -> SideQuestPickModal wiring (M4-B sidequest, Task 2) ----
+
+def test_questing_progress_modal_add_side_quest_flags_pending_and_closes():
+    # Mirrors test_questing_progress_modal_quest_card_tap_flags_pending_and_
+    # closes' pattern: the router only holds one modal at a time, so tapping
+    # "+ Side quest" can no longer append directly (that would skip the
+    # catalog-backed picker) - it flags pending_side_quest_pick and closes,
+    # same as the pre-existing quest-card second-entry-point.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert game.pending_side_quest_pick is False
+    assert m.on_button(_find(m, ("add",))) == "close"
+    assert game.pending_side_quest_pick is True
+    assert game.side_quests == []          # nothing appended yet - picker does that
+
+
+def test_questing_progress_modal_side_quest_row_prefers_name_when_present():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.side_quests = [{"points": 6, "progress": 1, "name": "Keep Watch"},
+                        {"points": 4, "progress": 0}]      # old-save shape, no name
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "Keep Watch" in texts
+    assert "Side Quest 2" in texts
+    assert "Side Quest 1" not in texts
+
+
+def test_side_quest_pick_adds_selected_with_points():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    entries = [{"id": "a", "name": "Scout Ahead", "points": 4, "sphere": "Lore", "pack": "p"},
+               {"id": "b", "name": "Keep Watch", "points": 6, "sphere": "Tactics", "pack": "p"}]
+    m = modals.SideQuestPickModal(game, entries)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("row", "b"))) == "redraw"     # select "Keep Watch"
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("add",))) == "close"
+    assert game.side_quests[-1]["points"] == 6
+    assert game.side_quests[-1]["name"] == "Keep Watch"
+    assert game.side_quests[-1]["progress"] == 0
+
+
+def test_side_quest_pick_manual_falls_back_to_blank_entry():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    entries = [{"id": "a", "name": "Scout Ahead", "points": 4, "sphere": "Lore", "pack": "p"}]
+    m = modals.SideQuestPickModal(game, entries)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("manual",))) == "close"
+    assert game.side_quests[-1]["points"] == 0 and game.side_quests[-1]["progress"] == 0
+
+
+def test_side_quest_pick_empty_entries_renders_and_offers_manual():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    m = modals.SideQuestPickModal(game, [])
+    m.draw(hw, game, pal)          # must not raise
+    assert any(b.id[0] == "manual" for b in m.buttons)
+    assert not any(b.id[0] == "add" for b in m.buttons)   # nothing to add yet
+    assert m.on_button(_find(m, ("manual",))) == "close"
+    assert game.side_quests[-1]["points"] == 0 and game.side_quests[-1]["progress"] == 0
+
+
+def test_side_quest_pick_null_points_default_to_zero_and_pager_pages():
+    # 8 entries at PER_PAGE=6 exercises the Up/Down pager; one entry with
+    # points=0 (the modal's already-normalized shape for a variable "X"
+    # quest, per side_quests()'s null -> 0 contract) must never crash and
+    # must still be selectable/addable.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    entries = [{"id": "x0", "name": "Protect the Innocent", "points": 0,
+               "sphere": None, "pack": "p"}] + \
+              [{"id": "e%d" % i, "name": "Quest %d" % i, "points": i + 1,
+               "sphere": "Lore", "pack": "p"} for i in range(7)]
+    m = modals.SideQuestPickModal(game, entries)
+    m.draw(hw, game, pal)
+    assert any(b.id == ("older",) for b in m.buttons) or any(b.id == ("newer",) for b in m.buttons)
+    assert m.on_button(_find(m, ("row", "x0"))) == "redraw"
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("add",))) == "close"
+    assert game.side_quests[-1]["points"] == 0
+    assert game.side_quests[-1]["name"] == "Protect the Innocent"

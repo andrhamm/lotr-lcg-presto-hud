@@ -11,7 +11,7 @@ export const VIEW_ORDER = ["resource_planning", "quest_commit", "quest_staging",
   "combat_shadow", "combat_enemy", "combat_player", "refresh"];
 
 export const VIEW_STEP = {
-  setup_game: "0.0", resource_planning: "1.R", quest_sailing: "3.1",
+  setup_game: "0.0", quest_setup: "0.0", resource_planning: "1.R", quest_sailing: "3.1",
   quest_commit: "3.2",
   quest_staging: "3.3", quest_resolution: "3.4", travel: "4.2",
   enc_optional: "5.2", enc_checks: "5.3", combat_shadow: "6.2",
@@ -19,7 +19,7 @@ export const VIEW_STEP = {
 };
 
 export const VIEW_LABELS = {
-  setup_game: "Setup", resource_planning: "Resource & Planning",
+  setup_game: "Setup", quest_setup: "Quest Setup", resource_planning: "Resource & Planning",
   quest_sailing: "Questing (Sailing)", quest_commit: "Questing (Commit)", quest_staging: "Questing (Staging)",
   quest_resolution: "Questing (Resolution)", travel: "Travel",
   enc_optional: "Encounter (Opt. Engage)", enc_checks: "Encounter (Checks)",
@@ -115,11 +115,22 @@ export class GameState {
     this.stage_idx = 0;          // index into this.stages
     this.card_idx = 0;           // index into stages[stage_idx].cards
     this.active_location = null;
-    this.side_quests = [];
+    this.side_quests = [];       // {points, progress, name?} - name is optional
+                                  // (absent/null on old saves)
     this.willpower = 0;
     this.staging = 0;
     this.pending_budget = 0;
     this.pending_elim = null;
+    this.pending_quest_card = false;   // Progress-detail quest-row tap wants
+                                        // QuestCardModal opened once the
+                                        // Progress-detail modal has closed
+                                        // (router replaces one modal at a
+                                        // time - see main.js's setInterval)
+    this.pending_side_quest_pick = false;  // Progress-detail "+ Side quest"
+                                        // tap wants SideQuestPickModal opened
+                                        // once the Progress-detail modal has
+                                        // closed (same pending-flag pattern
+                                        // as pending_quest_card above)
     this.reminders = Object.fromEntries(REMINDER_DEFS.map(d => [d[0], false]));
     this.quest_resolved = false;
     this.quest_outcome = null;      // "success" | "fail" | "tie" - last resolution
@@ -448,6 +459,8 @@ export class GameState {
       side_quests: this.side_quests.map(s => ({ ...s })),
       willpower: this.willpower, staging: this.staging,
       pending_budget: this.pending_budget, pending_elim: this.pending_elim,
+      pending_quest_card: this.pending_quest_card,
+      pending_side_quest_pick: this.pending_side_quest_pick,
       reminders: { ...this.reminders },
       elimination_threat: this.elimination_threat,
       quest_resolved: this.quest_resolved,
@@ -489,6 +502,8 @@ export class GameState {
     g.staging = d.staging ?? 0;
     g.pending_budget = d.pending_budget ?? 0;
     g.pending_elim = d.pending_elim ?? null;
+    g.pending_quest_card = d.pending_quest_card ?? false;
+    g.pending_side_quest_pick = d.pending_side_quest_pick ?? false;
     g.reminders = Object.fromEntries(REMINDER_DEFS.map(dd => [dd[0], false]));
     for (const k of Object.keys(g.reminders)) {
       if (d.reminders && k in d.reminders) g.reminders[k] = d.reminders[k];

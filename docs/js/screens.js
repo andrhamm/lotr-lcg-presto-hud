@@ -9,6 +9,7 @@ import * as icons from "./icons.js";
 import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, REMINDER_DEFS, HEADINGS,
          DEFAULT_START_THREAT, MAX_PLAYERS, viewForStep, fmtMs } from "./gamestate.js";
 import { PHASES, STEPS, step as phaseStep } from "./phases.js";
+import { tipsFor } from "./quest_catalog.js";
 
 export const HEADER_H = 40;
 const MARGIN = 8;
@@ -28,8 +29,9 @@ function doneButton(ctx) {
 }
 
 export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
-                                                 close = false, closeLeft = false } = {}) {
-  const roundLbl = `R${game.round} ${game.step}`;
+                                                 close = false, closeLeft = false,
+                                                 roundLabel = null } = {}) {
+  const roundLbl = roundLabel ?? `R${game.round} ${game.step}`;
   textLeft(ctx, roundLbl, 10, 12, 2,
            (closeLeft || highlight === "log") ? pal.gold : pal.muted);
   const center = title ?? (VIEW_LABELS[game.view] ?? phaseStep(game.step).phase);
@@ -675,8 +677,11 @@ export class QuestingProgressModal {
     items.push(g.active_location
       ? { kind: "l", name: "Location", removable: true }
       : { kind: "l_add" });
+    // Prefer the catalog name (SideQuestPickModal, M4-B sidequest Task 2)
+    // when present; old saves and manual entries have no "name" key at
+    // all, so this stays "Side Quest N" for them.
     g.side_quests.forEach((s, i) =>
-      items.push({ kind: "s", idx: i, name: `Side Quest ${i + 1}`, removable: true }));
+      items.push({ kind: "s", idx: i, name: s.name || `Side Quest ${i + 1}`, removable: true }));
     return items;
   }
 
@@ -733,12 +738,29 @@ export class QuestingProgressModal {
     if (it.kind === "q") { prog = g.quest.progress; pts = g.quest.points; pfx = "q"; idx = null; }
     else if (it.kind === "l") { prog = g.active_location.progress; pts = g.active_location.points; pfx = "l"; idx = null; }
     else { const s = g.side_quests[it.idx]; prog = s.progress; pts = s.points; pfx = "s"; idx = it.idx; }
-    textLeft(ctx, it.name, 12, y, 2, pal.tan);
+    // The quest row's title doubles as a tap target opening the read-only
+    // QuestCardModal (M4-B, second entry point) - gold ink hints it's
+    // interactive, matching this row alone (Location/Side Quest titles stay
+    // plain). Pushed AFTER the Current/Target editors below so their hit
+    // regions win on any overlap; the button's own bounds (x 12-130) sit
+    // left of the Current editor's leftmost hit-box (x=136) by construction,
+    // so there should be no real overlap to arbitrate.
+    const questCardTappable = it.kind === "q" && g.stages.length > 0;
+    // 118px matches the quest_card tap target's fixed width below (and the
+    // room left before the Current editor's leftmost hit-box at x=136) - a
+    // real catalog side-quest name (up to ~20 chars) can otherwise run into
+    // the Current/Target editors, unlike the old always-short generic
+    // labels ("Quest 1A", "Location", "Side Quest 3").
+    const nameS = truncateText(it.name, 2, 118);
+    textLeft(ctx, nameS, 12, y, 2, questCardTappable ? pal.gold : pal.tan);
     this._valEditor2(ctx, 178, cy, prog, pts ? prog / pts : 0, true, [pfx + "P-", idx], [pfx + "P+", idx]);
     this._valEditor2(ctx, 300, cy, pts, 0, false, [pfx + "T-", idx], [pfx + "T+", idx]);
     if (it.removable) {
       this._iconBtn(ctx, 400, cy, 11, "done", [pfx + "done", idx]);
       this._iconBtn(ctx, 436, cy, 11, "x", [pfx + "X", idx]);
+    }
+    if (questCardTappable) {
+      this.buttons.push(new Button(["quest_card"], 12, y, 118, QuestingProgressModal.ROW_H));
     }
   }
 
@@ -901,10 +923,15 @@ export class QuestingProgressModal {
       return null;
     }
     if (k === "add") {
-      g.side_quests.push({ points: 4, progress: 0 });
-      g.logEvent(`Side quest ${g.side_quests.length} added (progress view)`);
-      this._snap = this._snapshot();
-      return null;
+      // The router holds one modal at a time (no stacking) - close this one
+      // (flushing any pending edits, same as a normal "close") and flag
+      // that SideQuestPickModal should open on the next tick, same
+      // pending-flag pattern as "quest_card" below. The picker needs a
+      // catalog fetch that onButton can't await mid-tap without breaking
+      // that invariant.
+      g.pending_side_quest_pick = true;
+      this._logChanges();
+      return "close";
     }
     if (k === "addloc") {
       g.active_location = { points: 3, progress: 0 };
@@ -915,6 +942,15 @@ export class QuestingProgressModal {
     if (k === "hd_set") {
       if (a !== g.heading) g.shiftHeading(a - g.heading, "progress view");
       return null;
+    }
+    if (k === "quest_card") {
+      // The router holds one modal at a time (no stacking) - close this one
+      // (flushing any pending edits, same as a normal "close") and flag that
+      // QuestCardModal should open on the next tick. See main.js's
+      // setInterval, which checks pending_quest_card once modal is null.
+      g.pending_quest_card = true;
+      this._logChanges();
+      return "close";
     }
     if (k === "close") { this._logChanges(); return "close"; }
     return null;
@@ -1171,6 +1207,402 @@ export class QuestConfigModal {
       return "close";
     }
     if (k === "cancel") return "cancel";
+    return null;
+  }
+}
+
+// Read-only stage/card reference (M4-B): opens on the game's current stage
+// and pages through every stage of the loaded scenario snapshot (game.stages,
+// copied at preload - no catalog re-read). Branch stages (multiple
+// alternative cards) can be flipped between with the alt control; switching
+// only changes what is displayed. Purely presentational - idx/card are the
+// modal's own state, never written back to game.
+export class QuestCardModal {
+  static MARGIN = 12;
+  // Ceiling, not a floor: the SIDE A/SIDE B blocks must end at or below this
+  // y so the Tips button + pager (a fixed 88px: 48px gap + 40px pager tall,
+  // themselves 40px tall) still fit above 480 with margin. _lineBudget()
+  // uses it to size each block's line cap per render (see below) instead of
+  // a flat constant - short text no longer leaves Tips/pager stranded down
+  // at a fixed position (they float up to meet the content), and long text
+  // gets far more than the old flat 3-line cap when the other side is short.
+  static BOTTOM_Y0 = 380;
+
+  constructor(game, tips = null) {
+    this.game = game;
+    this.idx = game.stages.length ? game.stage_idx : 0;
+    this.card = game.stages.length ? game.card_idx : 0;
+    this.buttons = [];
+    this.tips = tips ?? {};      // loaded tips.json "scenarios" map (M4-B tips)
+    this.tipsOpen = false;       // toggled by the Tips/Back button
+    this._tipsData = null;       // tipsFor(...) result for the current stage, set by draw()
+  }
+
+  // Word-wraps text (or the "no text" placeholder) at the block's usable
+  // width with no line cap - the "natural" line count _lineBudget() then
+  // allocates space against.
+  _wrapBody(text, w) {
+    const usable = w - 20;
+    const hasText = Boolean(text);
+    const body = hasText ? text : "no text";
+    return { hasText, lines: wrapText(body, 1, usable), usable };
+  }
+
+  // Distributes the pixel budget between y0 (top of the SIDE A block) and
+  // BOTTOM_Y0 across the two blocks' natural line counts: each gets its full
+  // natural count if both fit, otherwise the longer block is trimmed one
+  // line at a time (ties trim A first) until the total fits. Always leaves
+  // at least 1 line per block.
+  _lineBudget(y0, naturalA, naturalB) {
+    const OVERHEAD = 26;   // per block: 18px label row + 8px bottom pad
+    const GAP = 12;        // 6px trailing gap after each of the two blocks
+    const LH = 16;         // 10*scale(1) + 6, one wrapped text line
+    const availablePx = QuestCardModal.BOTTOM_Y0 - y0 - 2 * OVERHEAD - GAP;
+    const budgetLines = Math.max(2, Math.floor(availablePx / LH));
+    let allowedA = naturalA, allowedB = naturalB;
+    while (allowedA + allowedB > budgetLines && (allowedA > 1 || allowedB > 1)) {
+      if (allowedA >= allowedB && allowedA > 1) allowedA -= 1;
+      else if (allowedB > 1) allowedB -= 1;
+      else allowedA -= 1;
+    }
+    return [allowedA, allowedB];
+  }
+
+  // Bordered panel: a small label row + up to maxLines of the pre-wrapped
+  // body text (or the "no text" placeholder). Returns height.
+  _sideBlock(ctx, x, y, w, label, wrapped, maxLines) {
+    let lines = wrapped.lines;
+    if (lines.length > maxLines) {
+      lines = lines.slice(0, maxLines);
+      lines[lines.length - 1] = truncateText(`${lines[lines.length - 1]} ..`, 1, wrapped.usable);
+    }
+    const lh = 16;
+    const h = 18 + lines.length * lh + 8;
+    panel(ctx, x, y, w, h, pal.card);
+    textLeft(ctx, label, x + 10, y + 6, 1, pal.amber);
+    let ty = y + 20;
+    const ink = wrapped.hasText ? pal.tan : pal.dim;
+    for (const ln of lines) {
+      textLeft(ctx, ln, x + 10, ty, 1, ink);
+      ty += lh;
+    }
+    return h;
+  }
+
+  // Bordered panel: a "TIPS" label row, up to maxH px of wrapped tip lines
+  // (each prefixed "- "), and the attribution name + URL in pal.dim
+  // beneath - the tips-view counterpart of _sideBlock, sized against the
+  // same BOTTOM_Y0 ceiling so the Tips/Back button and pager land at the
+  // same y in either view. Excess content truncates its last visible line
+  // with ".." rather than overflowing into the button/pager area,
+  // mirroring _sideBlock's own truncate-to-fit. Returns height (<= maxH).
+  _tipsPanel(ctx, x, y, w, tipsData, maxH) {
+    const usable = w - 20;
+    const lh = 16;
+    let lines = [];
+    for (const t of tipsData.tips) lines.push(...wrapText(`- ${t}`, 1, usable));
+    const attribution = tipsData.attribution ?? {};
+    const name = attribution.name ?? "";
+    const url = attribution.url ?? "";
+    const attribLines = [name ? `Source: ${name}` : "", url]
+      .filter(Boolean)
+      .map(s => truncateText(s, 1, usable));
+
+    const overhead = 18 + 8;   // label row + bottom pad, matches _sideBlock
+    const budget = Math.max(1, Math.floor((maxH - overhead - attribLines.length * lh) / lh));
+    if (lines.length > budget) {
+      lines = lines.slice(0, budget);
+      lines[lines.length - 1] = truncateText(`${lines[lines.length - 1]} ..`, 1, usable);
+    }
+
+    const h = Math.min(maxH, overhead + (lines.length + attribLines.length) * lh);
+    panel(ctx, x, y, w, h, pal.card);
+    textLeft(ctx, "TIPS", x + 10, y + 6, 1, pal.amber);
+    let ty = y + 20;
+    for (const ln of lines) { textLeft(ctx, ln, x + 10, ty, 1, pal.tan); ty += lh; }
+    for (const ln of attribLines) { textLeft(ctx, ln, x + 10, ty, 1, pal.dim); ty += lh; }
+    return h;
+  }
+
+  draw(ctx, game) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    modalHeader(ctx, game, "QUEST CARD", this.buttons);
+    const M = QuestCardModal.MARGIN, W = 480 - 2 * M;
+
+    if (!game.stages.length) {
+      textCenter(ctx, "No quest loaded", 240, 200, 2, pal.dim);
+      textCenter(ctx, "Start a scenario to see stage cards.", 240, 226, 1, pal.dim);
+      return;
+    }
+
+    const n = game.stages.length;
+    this.idx = Math.max(0, Math.min(this.idx, n - 1));
+    const stage = game.stages[this.idx];
+    const cards = stage.cards;
+    this.card = Math.max(0, Math.min(this.card, cards.length - 1));
+    const card = cards[this.card];
+    // Front is side A; the back is whatever non-A side this printing uses.
+    // Most cards are A/B, but epic multiplayer variants share one A front with
+    // backs C..H (e.g. Mount Gundabad stage 2 has 7 alternatives), so matching
+    // "B" literally would blank all but the first.
+    const aFace = card.faces.find(f => f.side === "A") ?? card.faces[0] ?? {};
+    const bFace = card.faces.find(f => f.side && f.side !== "A") ?? card.faces[1] ?? {};
+    const aName = aFace.name ?? "";
+    const bName = bFace.name ?? "";
+
+    // -- stage line: number, an A/B legend, and a CURRENT marker so paging
+    // away from the game's live stage is obvious --------------------------
+    let y = 48;
+    textLeft(ctx, `STAGE ${stage.stage}`, M, y, 2, pal.amber);
+    const abHint = "A / B";
+    textLeft(ctx, abHint, 480 - M - measureText(abHint, 1), y + 4, 1, pal.dim);
+    if (this.idx === game.stage_idx) {
+      const pw = measureText("CURRENT", 1) + 14;
+      const px = 240 - Math.floor(pw / 2);
+      rect(ctx, px, y, pw, 18, pal.gold);
+      textCenter(ctx, "CURRENT", 240, y + 4, 1, pal.bg, false);
+    }
+    y += 28;
+
+    // -- card name(s): a shared name shows once; a branch payoff (the
+    // B-face name differs, e.g. "A Chosen Path" -> "Beorn's Path") shows
+    // both, labelled --------------------------------------------------------
+    if (bName && bName !== aName) {
+      textLeft(ctx, truncateText(`A: ${aName}`, 2, W), M, y, 2, pal.gold);
+      y += 22;
+      textLeft(ctx, truncateText(`B: ${bName}`, 2, W), M, y, 2, pal.gold);
+      y += 26;
+    } else {
+      const name = aName || bName || "(unnamed)";
+      textCenter(ctx, truncateText(name, 3, W), 240, y, 3, pal.gold);
+      y += 32;
+    }
+
+    // -- quest points / victory / sailing stat strip -------------------------
+    const cx = M + 16;
+    textLeft(ctx, "PTS", M, y, 1, pal.dim);
+    token(ctx, cx, y + 22, 14, 2, card.questPoints ?? 0, pal.gold, 0, pal.gold, pal.dim);
+    let nx = cx + 40;
+    if (card.victory !== null && card.victory !== undefined) {
+      textLeft(ctx, "VP", nx - 14, y, 1, pal.dim);
+      token(ctx, nx, y + 22, 14, 2, card.victory, pal.gold, 0, pal.gold, pal.dim);
+      nx += 40;
+    }
+    if (card.sailing) {
+      textLeft(ctx, "SAIL", nx - 16, y, 1, pal.dim);
+      disc(ctx, nx, y + 22, 14, pal.well);
+      icons.drawIcon(ctx, icons.WHEEL_SM, nx - 8, y + 14, pal.gold);
+    }
+    y += 46;
+
+    // -- branch: which alternative is displayed only affects the view --------
+    if (cards.length > 1) {
+      const label = { random: "BRANCH - random",
+                      choice: "BRANCH - first player chooses" }[stage.branch] ?? "BRANCH";
+      textLeft(ctx, truncateText(label, 2, 480 - 2 * M - 162), M, y + 12, 2, pal.amber);
+      const alt = new Button(["alt"], 480 - M - 150, y, 150, 36);
+      bevel(ctx, alt.x, alt.y, alt.w, alt.h, pal.btn);
+      textCenter(ctx, `Card ${this.card + 1} / ${cards.length}`, alt.x + alt.w / 2, alt.y + 12, 1, pal.tan);
+      this.buttons.push(alt);
+      y += 44;
+    }
+
+    // -- SIDE A/B card text, or (M4-B tips) the tips panel in its place -------
+    this._tipsData = tipsFor(this.game.scenario?.slug, stage.stage, this.tips);
+    if (this.tipsOpen && this._tipsData) {
+      y += this._tipsPanel(ctx, M, y, W, this._tipsData, QuestCardModal.BOTTOM_Y0 - y) + 6;
+    } else {
+      this.tipsOpen = false;   // nothing to show (e.g. paged to an untipped stage)
+      const wrapA = this._wrapBody(aFace.text, W);
+      const wrapB = this._wrapBody(bFace.text, W);
+      const [maxA, maxB] = this._lineBudget(y, wrapA.lines.length, wrapB.lines.length);
+      y += this._sideBlock(ctx, M, y, W, "SIDE A - setup / story", wrapA, maxA) + 6;
+      y += this._sideBlock(ctx, M, y, W, "SIDE B - quest", wrapB, maxB) + 6;
+    }
+
+    // -- Tips: enabled (normal palette) only where tips exist for this stage;
+    // toggles the tips panel above in place of the SIDE A/B blocks
+    // (M4-B tips) --------------------------------------------------------------
+    const tips = new Button(["tips"], M, y, 140, 40);
+    bevel(ctx, tips.x, tips.y, tips.w, tips.h, pal.btn);
+    if (this._tipsData) {
+      const n = this._tipsData.tips.length;
+      textCenter(ctx, this.tipsOpen ? "Back" : "Tips", tips.x + 70, tips.y + 6, 2, pal.tan);
+      const sub = this.tipsOpen ? "to card" : `${n} note${n === 1 ? "" : "s"}`;
+      textCenter(ctx, sub, tips.x + 70, tips.y + 26, 1, pal.dim);
+    } else {
+      textCenter(ctx, "Tips", tips.x + 70, tips.y + 6, 2, pal.dim);
+      textCenter(ctx, "none yet", tips.x + 70, tips.y + 26, 1, pal.dim);
+    }
+    this.buttons.push(tips);
+
+    // -- pager: hidden (not just disabled) at each end ------------------------
+    const py = y + 48;
+    if (this.idx > 0) {
+      const prev = new Button(["prev"], M, py, 110, 40);
+      bevel(ctx, prev.x, prev.y, prev.w, prev.h, pal.btn);
+      textCenter(ctx, "< Prev", prev.x + 55, prev.y + 12, 2, pal.tan);
+      this.buttons.push(prev);
+    }
+    if (this.idx < n - 1) {
+      const nxt = new Button(["next"], 480 - M - 110, py, 110, 40);
+      bevel(ctx, nxt.x, nxt.y, nxt.w, nxt.h, pal.btn);
+      textCenter(ctx, "Next >", nxt.x + 55, nxt.y + 12, 2, pal.tan);
+      this.buttons.push(nxt);
+    }
+    textCenter(ctx, `stage ${this.idx + 1} of ${n}`, 240, py + 12, 2, pal.muted);
+  }
+
+  onButton(btn) {
+    const k = btn.id[0];
+    if (k === "close") return "close";
+    if (k === "tips") {
+      if (this._tipsData) { this.tipsOpen = !this.tipsOpen; return "redraw"; }
+      return null;
+    }
+    if (!this.game.stages.length) return null;
+    const n = this.game.stages.length;
+    if (k === "next") {
+      if (this.idx < n - 1) { this.idx += 1; this.card = 0; return "redraw"; }
+      return null;
+    }
+    if (k === "prev") {
+      if (this.idx > 0) { this.idx -= 1; this.card = 0; return "redraw"; }
+      return null;
+    }
+    if (k === "alt") {
+      const cards = this.game.stages[this.idx].cards;
+      if (cards.length > 1) { this.card = (this.card + 1) % cards.length; return "redraw"; }
+      return null;
+    }
+    return null;
+  }
+}
+
+// Radio-button glyph: ring, filled when selected. Duplicates
+// screens_other.js's radioGlyph (this codebase's screen/modal helpers are
+// per-file, not cross-imported - screens_other.js already imports from this
+// file, so the reverse would cycle) so SideQuestPickModal can "feel like
+// the same family" as ChooseScenarioScreen without a new module cycle.
+function sqRadio(ctx, cx, cy, on) {
+  arcRuns(ctx, cx, cy, 10, 8, 0, 360, on ? pal.gold : pal.dim);
+  if (on) disc(ctx, cx, cy, 5, pal.gold);
+}
+
+// Picker over the player side-quest catalog (M4-B sidequest, Task 2):
+// radio-select list (name / points / sphere), Up/Down pager (mirrors
+// ChooseScenarioScreen/PickCycleScreen in screens_other.js - same row
+// stride/pager geometry, same radio glyph), plus Add (commits the
+// selection) and Manual (today's blank-entry fallback, unchanged shape).
+//
+// Opened from QuestingProgressModal's "+ Side quest" button via the
+// pending_side_quest_pick flag (see main.js's setInterval) - constructed
+// with the already-loaded catalog entries (quest_catalog.sideQuests(...)
+// shape: {id, name, points, sphere, pack}), never reads the catalog itself.
+//
+// Empty `entries` (no catalog data) still renders and offers Manual rather
+// than throwing - defense in depth. The call site is expected to skip
+// opening this modal entirely when loadPlayerSideQuests() comes back empty
+// and append directly instead (today's behavior, Global Constraints:
+// catalog data is optional at runtime), but nothing here assumes that.
+export class SideQuestPickModal {
+  static PER_PAGE = 6;
+  static ROW_H = 44;
+  static ROW_STRIDE = 46;
+  static LIST_Y0 = 66;
+  static NAME_MAX_W = 300;
+  static FOOTER_Y = 404;
+  static FOOTER_H = 64;
+
+  constructor(game, entries) {
+    this.game = game;
+    this.entries = entries;
+    this.selected = entries.length ? entries[0].id : null;
+    this.page = 0;
+    this.buttons = [];
+  }
+
+  _pages() { return Math.max(1, Math.ceil(this.entries.length / SideQuestPickModal.PER_PAGE)); }
+
+  draw(ctx) {
+    const { PER_PAGE, ROW_H, ROW_STRIDE, LIST_Y0, NAME_MAX_W, FOOTER_Y, FOOTER_H } = SideQuestPickModal;
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    modalHeader(ctx, this.game, "Add Side Quest", this.buttons);
+
+    if (!this.entries.length) {
+      textCenter(ctx, "No side-quest catalog data available.", 240, 140, 2, pal.dim);
+      textCenter(ctx, "Use Manual entry below.", 240, 168, 1, pal.dim);
+    } else {
+      textLeft(ctx, "Pick a side quest, then Add - or enter manually.", 12, 46, 1, pal.dim);
+      const pages = this._pages();
+      this.page = Math.min(this.page, pages - 1);
+      const chunk = this.entries.slice(this.page * PER_PAGE, (this.page + 1) * PER_PAGE);
+      let y = LIST_Y0;
+      for (const e of chunk) {
+        const on = e.id === this.selected;
+        if (on) rect(ctx, 8, y, 456, ROW_H, pal.card_hi);
+        sqRadio(ctx, 30, y + 22, on);
+        const name = truncateText(e.name ?? "", 2, NAME_MAX_W);
+        textLeft(ctx, name, 52, y + 13, 2, on ? pal.tan : pal.muted);
+        const ptsS = `${e.points ?? 0} pts`;
+        const pw = measureText(ptsS, 2);
+        textLeft(ctx, ptsS, 456 - pw, y + 4, 2, on ? pal.gold : pal.tan);
+        // ASCII hyphen, not an em-dash - matches ui/modals.py's device-safe
+        // choice: PicoGraphics' "bitmap8" font only covers standard ASCII.
+        const sphereS = e.sphere || "-";
+        const sw = measureText(sphereS, 1);
+        textLeft(ctx, sphereS, 456 - sw, y + 26, 1, pal.dim);
+        rect(ctx, 8, y + ROW_H, 456, 1, pal.border);
+        this.buttons.push(new Button(["row", e.id], 8, y, 456, ROW_H));
+        y += ROW_STRIDE;
+      }
+      if (pages > 1) {
+        const up = new Button(["older"], 12, 352, 150, 46);
+        const dn = new Button(["newer"], 318, 352, 150, 46);
+        bevel(ctx, up.x, up.y, up.w, up.h, pal.btn);
+        textCenter(ctx, "Up", up.x + 75, up.y + 14, 2, pal.tan);
+        bevel(ctx, dn.x, dn.y, dn.w, dn.h, pal.btn);
+        textCenter(ctx, "Down", dn.x + 75, dn.y + 14, 2, pal.tan);
+        textCenter(ctx, `${this.page + 1}/${pages}`, 240, 366, 2, pal.muted);
+        this.buttons.push(up, dn);
+      }
+    }
+
+    const manual = new Button(["manual"], 24, FOOTER_Y, 200, FOOTER_H);
+    bevel(ctx, manual.x, manual.y, manual.w, manual.h, pal.btn, false, 3);
+    textCenter(ctx, "Manual", manual.x + manual.w / 2, manual.y + 20, 2, pal.tan);
+    this.buttons.push(manual);
+
+    if (this.entries.length) {
+      const add = new Button(["add"], 256, FOOTER_Y, 200, FOOTER_H);
+      bevel(ctx, add.x, add.y, add.w, add.h, pal.btn_ok, false, 3);
+      textCenter(ctx, "Add", add.x + add.w / 2, add.y + 20, 2, pal.ok_fg);
+      this.buttons.push(add);
+    }
+  }
+
+  onButton(btn) {
+    const k = btn.id[0];
+    if (k === "close") return "close";
+    if (k === "row") { this.selected = btn.id[1]; return "redraw"; }
+    if (k === "older") { this.page = Math.max(0, this.page - 1); return "redraw"; }
+    if (k === "newer") { this.page = Math.min(this._pages() - 1, this.page + 1); return "redraw"; }
+    if (k === "manual") {
+      this.game.side_quests.push({ points: 0, progress: 0 });
+      this.game.logEvent("Side quest added manually (progress view)");
+      return "close";
+    }
+    if (k === "add") {
+      const e = this.entries.find(x => x.id === this.selected);
+      if (e) {
+        const pts = e.points ?? 0;
+        this.game.side_quests.push({ points: pts, progress: 0, name: e.name });
+        this.game.logEvent(`Side quest added: ${e.name} (${pts} pts, progress view)`);
+      }
+      return "close";
+    }
     return null;
   }
 }

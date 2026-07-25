@@ -19,6 +19,12 @@ export const pal = {
   purple: rgb(166, 122, 196), outline: rgb(0, 0, 0), well: rgb(24, 20, 12),
   value: rgb(214, 180, 110), brown: rgb(104, 70, 34),
   row_stripe: rgb(66, 60, 42),
+  // placeholder fill for undrawn scenario/set icons (Scenario Options - real
+  // icons land in a later sub-project)
+  iconslot: rgb(44, 40, 28),
+  // parchment fill for the Quest Setup scroll-style tip (deliberately
+  // distinct from the standard note-panel card_hi background)
+  scroll: rgb(30, 26, 17),
   threatPen(t) { return t >= 35 ? this.red : t >= 20 ? this.amber : this.green; },
 };
 

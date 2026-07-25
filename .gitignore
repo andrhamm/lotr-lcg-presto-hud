@@ -11,3 +11,11 @@ assets/gameicons_svg/
 assets/gameicons/
 # generated card DB (compiled from DragnCards; never committed — see tools/build_card_data.py)
 docs/data/
+# Hall of Beorn sets-to-gather enrichment cache + output (third-party card
+# data; never committed — see tools/build_hob_enrichment.py)
+tools/data/hob_cache/
+tools/data/enrichment.json
+# Vision of the Palantir strategy-tip HTML cache (third-party page content;
+# never committed — see tools/build_tips.py). docs/data/ above already
+# covers the tips.json output.
+tools/data/tips_cache/

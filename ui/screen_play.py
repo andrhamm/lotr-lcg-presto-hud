@@ -183,9 +183,12 @@ class ScreenPlay:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        draw_header(d, pal, game, self.buttons)
-
         view = game.view
+        if view == "quest_setup":
+            draw_header(d, pal, game, self.buttons, title="QUEST SETUP", round_label="R0")
+        else:
+            draw_header(d, pal, game, self.buttons)
+
         if view == "setup_game":
             th = note_panel(d, pal, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP)
             y = 56 + th + 18
@@ -206,6 +209,10 @@ class ScreenPlay:
                         pal.bg if game.sailing else pal.tan, shadow=False)
             self.buttons.append(sb)
             self._cta(d, pal, "Begin Round 1", ("advance",))
+        elif view == "quest_setup":
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
+            self._draw_quest_setup(d, pal, game)
         elif view == "resource_planning":
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
@@ -391,6 +398,59 @@ class ScreenPlay:
         self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_resolution"],
                   ("stage_advance",))
 
+    def _draw_quest_setup(self, d, pal, game):
+        """R0 pre-round-1 phase: stage 1A's setup text to resolve, then the
+        first flip (1A -> 1B) that begins round 1. Reuses the standard zones
+        (Task 8) - mirror of screen_play.js's _drawQuestSetup."""
+        card = game.stages[game.stage_idx]["cards"][game.card_idx]
+        a_face = next((f for f in card["faces"] if f["side"] == "A"), {})
+        stage_label = "STAGE %d%s" % (game.quest["stage_n"], game.quest["side"])
+        text_center(d, pal, stage_label, 240, CONTENT_Y, 2, pal.amber)
+        name_y = CONTENT_Y + 22
+        card_name = truncate_text(a_face.get("name") or "", 3, 480 - 2 * MARGIN, d.measure_text)
+        text_center(d, pal, card_name, 240, name_y, 3, pal.gold)
+
+        # Distinct scroll-style tip: a double gold frame + ribbon banner -
+        # UNLIKE the standard note_panel() left-accent-bar style used
+        # elsewhere, since this is the one moment that reads as "resolve
+        # this printed text now".
+        tip_x, tip_w, tip_y = MARGIN, 480 - 2 * MARGIN, name_y + 30
+        ribbon_h, pad_top, line_h, pad_bottom, max_lines = 22, 10, 24, 10, 4
+        usable = tip_w - 28
+        raw = a_face.get("text")
+        body = raw if raw else "No setup instructions for this stage."
+        lines = wrap_text(body, 2, usable, measure=d.measure_text)
+        if len(lines) > max_lines:
+            lines = lines[:max_lines]
+            lines[max_lines - 1] = truncate_text(lines[max_lines - 1] + " ..", 2, usable,
+                                                 d.measure_text)
+        tip_h = ribbon_h + pad_top + len(lines) * line_h + pad_bottom
+        d.set_pen(pal.border_gold)
+        d.rectangle(tip_x, tip_y, tip_w, tip_h)
+        d.set_pen(pal.bg)
+        d.rectangle(tip_x + 2, tip_y + 2, tip_w - 4, tip_h - 4)
+        d.set_pen(pal.border_gold)
+        d.rectangle(tip_x + 4, tip_y + 4, tip_w - 8, tip_h - 8)
+        d.set_pen(pal.scroll)
+        d.rectangle(tip_x + 6, tip_y + 6, tip_w - 12, tip_h - 12)
+        d.set_pen(pal.border_gold)
+        d.rectangle(tip_x, tip_y, tip_w, ribbon_h)
+        text_left(d, pal, "QUEST SETUP - resolve now", tip_x + 10, tip_y + 6, 1, pal.bg,
+                  shadow=False)
+        ly = tip_y + ribbon_h + pad_top
+        for ln in lines:
+            text_left(d, pal, ln, tip_x + 14, ly, 2, pal.tan)
+            ly += line_h
+
+        # Read-only card modal (M4-B) - see on_button; null for custom games
+        # (no scenario loaded, nothing to show).
+        card_btn = Button(("open_card_modal",), MARGIN, 358, 480 - 2 * MARGIN, 44)
+        bevel(d, pal, card_btn.x, card_btn.y, card_btn.w, card_btn.h, pal.btn)
+        text_center(d, pal, "View quest card", 240, card_btn.y + 14, 2, pal.tan)
+        self.buttons.append(card_btn)
+
+        self._cta(d, pal, "Flip to Side B  ->  %d qp" % card["questPoints"], ("flip_to_b",))
+
     def _draw_travel(self, d, pal, game):
         loc = game.active_location
         y = CONTENT_Y + 4
@@ -535,6 +595,24 @@ class ScreenPlay:
             return True
         if k == "qp":
             game.quest["points"] = max(0, min(30, game.quest["points"] + btn.id[1]))
+            return True
+        if k == "open_card_modal":
+            if not game.stages:
+                return None    # custom game: no scenario, nothing to show
+            from ui.modals import QuestCardModal
+            return ("modal", QuestCardModal(game))
+        if k == "flip_to_b":
+            # Mirrors advance_view's setup_game -> round-1 branch (custom-quest
+            # path), but for a scenario game: flip 1A -> 1B first, then the
+            # same round-1 entry (log, enter view, reset commits, snapshot).
+            pts = game.flip_to_b()
+            game.log_event("Setup complete - round 1 begins (quest %s needs %d)"
+                           % (game.quest_label(), pts))
+            game.enter_view(VIEW_ORDER[0])
+            for p in game.players:
+                p.commit_touched = False
+            game._snapshot_round()
+            self.banner = None
             return True
         if k == "players_detail":
             from ui.modals import PlayersDetailModal

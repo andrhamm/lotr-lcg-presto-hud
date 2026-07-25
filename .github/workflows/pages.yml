@@ -20,6 +20,86 @@ jobs:
           python-version: "3.12"
       - name: Build card data
         run: python3 tools/build_card_data.py
+      - name: Restore Hall of Beorn enrichment cache
+        # tools/data/hob_cache/ (gitignored - see CLAUDE.md's Card data
+        # section) is per-scenario JSON fetched from a slow (~20s/request)
+        # third-party API - restoring it across runs is what keeps the next
+        # step's steady-state cost low (cache hits skip the network call
+        # and its rate-limit delay entirely - see tools/build_hob_
+        # enrichment.py's fetch_scenario()). No exact-key hit is expected
+        # every run (the key includes run_id so a fresh entry is always
+        # saved); restore-keys falls back to the most recent prior cache.
+        uses: actions/cache@v4
+        with:
+          path: tools/data/hob_cache
+          key: hob-cache-${{ github.run_id }}
+          restore-keys: |
+            hob-cache-
+      - name: Build sets-to-gather enrichment
+        # Fetches Hall of Beorn's per-scenario "sets to gather" data
+        # (tools/data/enrichment.json, gitignored) and re-runs the card-data
+        # build so it gets merged in (build_hob_enrichment.py needs
+        # docs/data/index.json - written by the "Build card data" step
+        # above - to know which scenarios to ask for, so the merge is
+        # necessarily a second build_card_data.py pass, not foldable into
+        # the first). continue-on-error, same posture as the icons step:
+        # enrichment is optional (ScenarioOptionsScreen falls back to each
+        # scenario's own set when it's missing) - card data from the first
+        # pass is already the critical, already-written artifact, so a
+        # failure here (or a run without a warm cache, worst case ~40+
+        # minutes cold for the ~130 pickable quests - see the Task 1
+        # report) never fails the deploy; docs/data/ simply stays at the
+        # first pass's un-enriched state.
+        continue-on-error: true
+        run: |
+          python3 tools/build_hob_enrichment.py
+          python3 tools/build_card_data.py
+      - name: Install icon rasterizer deps
+        # librsvg2-bin provides the rsvg-convert CLI - build_icons.py's
+        # svg_to_mask() fallback backend when the cairosvg package isn't
+        # installed (avoids also needing libcairo2's native lib). Pillow is
+        # required either way, for the greyscale/threshold step. continue-
+        # on-error: an apt/pip hiccup here just means the next step falls
+        # through to its own clean SystemExit (icons are optional - see
+        # CLAUDE.md's Card data section), not a failed deploy.
+        continue-on-error: true
+        run: |
+          sudo apt-get update && sudo apt-get install -y librsvg2-bin
+          pip install Pillow
+      - name: Build icons
+        # Fetches the pinned icon pack tarball (tools/data/icons.SOURCE.txt,
+        # see CLAUDE.md's Card data section) - no local --assets pack needed.
+        # continue-on-error because icons are optional: a fetch/rasterize
+        # hiccup here must not fail the Pages deploy (card data, built
+        # above, is the critical artifact). On failure no icons.json is
+        # written and every icon_slot() falls back to its placeholder glyph
+        # until the next successful build.
+        continue-on-error: true
+        run: python3 tools/build_icons.py
+      - name: Restore strategy-tips cache
+        # tools/data/tips_cache/ (gitignored - see CLAUDE.md's Card data
+        # section) is the fetched Vision of the Palantir sitemap + article
+        # HTML - restoring it across runs is what keeps the next step's
+        # steady-state cost low (a cache hit skips the network call and its
+        # politeness delay entirely - see tools/build_tips.py's fetch()).
+        # Same restore-keys fallback shape as the Hall of Beorn cache above.
+        uses: actions/cache@v4
+        with:
+          path: tools/data/tips_cache
+          key: tips-cache-${{ github.run_id }}
+          restore-keys: |
+            tips-cache-
+      - name: Build strategy tips
+        # Fetches/summarizes per-scenario strategy tips (docs/data/
+        # tips.json, gitignored) from the community write-ups the project's
+        # own quests/*.md notes already cite - see tools/build_tips.py's
+        # module docstring for the robots.txt/sitemap verification this is
+        # built on. continue-on-error, same posture as icons/enrichment:
+        # tips are optional (QuestCardModal's Tips button stays in its
+        # disabled state without a tips.json) and card data is already the
+        # critical, already-written artifact.
+        continue-on-error: true
+        run: python3 tools/build_tips.py
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs

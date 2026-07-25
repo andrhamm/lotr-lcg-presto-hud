@@ -1,0 +1,2 @@
+url=https://codeload.github.com/KevBelisle/lotr-lcg-assets/tar.gz/{sha}
+sha=8434468effde9216d514af33a1abac3268bd50e1

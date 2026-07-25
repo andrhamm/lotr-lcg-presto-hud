@@ -46,6 +46,12 @@ class Palette:
         self.well = d.create_pen(24, 20, 12)
         # lighter row-stripe background (by-round chart: makes black ink read)
         self.row_stripe = d.create_pen(66, 60, 42)
+        # placeholder fill for undrawn scenario/set icons (Scenario Options -
+        # real icons land in a later sub-project)
+        self.iconslot = d.create_pen(44, 40, 28)
+        # parchment fill for the Quest Setup scroll-style tip (deliberately
+        # distinct from the standard note-panel card_hi background)
+        self.scroll = d.create_pen(30, 26, 17)
 
     def threat_pen(self, threat):
         if threat >= 35:

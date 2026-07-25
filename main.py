@@ -22,10 +22,18 @@ from ui.screen_boot import BootScreen
 from ui.screen_setup import SetupScreen
 from ui.screen_gameover import GameOverScreen
 from ui.screen_about import ScreenAbout
+from ui.screen_quest import (ScenarioSourceScreen, PickCycleScreen,
+                              ChooseScenarioScreen, ScenarioOptionsScreen)
+import quest_catalog
 
 STATE_PATH = "/state.json"
 PREFS_PATH = "/device.json"
 DEFAULT_PREFS = {"brightness": 100, "scene": "phase"}
+
+# Pre-game screens with no live game to animate: LED/notification/elimination
+# per-tick housekeeping (below) is skipped while any of these is active.
+PREGAME_ACTIVE = ("boot", "setup", "scenario_source", "pick_cycle",
+                  "choose_scenario", "scenario_options")
 
 
 def load_prefs():
@@ -134,11 +142,24 @@ def main():
         "setup": SetupScreen(),
         "gameover": GameOverScreen(),
         "about": ScreenAbout(),
+        "scenario_source": ScenarioSourceScreen(),
+        "pick_cycle": PickCycleScreen("official", []),
+        "choose_scenario": ChooseScenarioScreen("official", "", []),
+        "scenario_options": ScenarioOptionsScreen({}, {}),
     }
     active = "boot"
     nav_stack = []  # origins to return to when overlay screens (log/settings) close
     modal = None
     dirty = True
+    catalog_index = None  # cached quest_catalog.load_index() result (fetched once)
+    catalog_icons = None  # cached quest_catalog.load_icons() result (fetched once;
+                           # load_icons() never raises, so no try/except needed)
+    catalog_tips = None    # cached quest_catalog.load_tips() result (M4-B tips;
+                            # never raises either - lazily loaded both when entering
+                            # the picker AND right before each QuestCardModal is
+                            # built, so a resumed game that skipped the picker this
+                            # session still gets tips - see the two "if catalog_tips
+                            # is None" sites below)
 
     tick = 0
     torch_t = 0
@@ -187,13 +208,13 @@ def main():
                 modal.draw(hw, game, pal)
             else:
                 screens[active].draw(hw, game, pal)
-                if active not in ("boot", "setup"):
+                if active not in PREGAME_ACTIVE:
                     update_leds(hw, game, prefs, tick)
             hw.update()
             dirty = False
 
         # torchlight flickers ~5x/sec without needing a redraw
-        if prefs["scene"] == "torch" and active not in ("boot", "setup"):
+        if prefs["scene"] == "torch" and active not in PREGAME_ACTIVE:
             torch_t += 1
             if torch_t >= 10:  # ~0.2 s at the 0.02 s loop sleep
                 torch_t = 0
@@ -201,10 +222,46 @@ def main():
                 update_leds(hw, game, prefs, tick)
 
         # a threat change crossed someone's elimination level -> confirm
-        if modal is None and active not in ("boot", "setup") \
+        if modal is None and active not in PREGAME_ACTIVE \
                 and game.pending_elim is not None:
             from ui.modals import EliminationModal
             modal = EliminationModal(game, game.pending_elim)
+            dirty = True
+            continue
+
+        # Progress-detail quest-row tap (second QuestCardModal entry point):
+        # the router replaces one modal at a time, so QuestingProgressModal's
+        # on_button closed itself and flagged this instead of returning a
+        # modal transition directly - open the card modal now that modal is
+        # None.
+        if modal is None and active == "play" and game.pending_quest_card:
+            from ui.modals import QuestCardModal
+            game.pending_quest_card = False
+            if catalog_tips is None:
+                catalog_tips = quest_catalog.load_tips()
+            modal = QuestCardModal(game, tips=catalog_tips)
+            dirty = True
+            continue
+
+        # Progress-detail "+ Side quest" tap (SideQuestPickModal entry
+        # point): same pending-flag pattern as pending_quest_card above -
+        # the picker needs a catalog read (flash I/O) that
+        # QuestingProgressModal.on_button can't do mid-tap without breaking
+        # the modal-replaces-modal invariant, so it flags this instead and
+        # the read happens here, once modal is None. A missing/unreadable
+        # catalog (load_player_side_quests() returns []) skips the picker
+        # and keeps today's direct-append behavior instead of showing an
+        # empty list.
+        if modal is None and active == "play" and game.pending_side_quest_pick:
+            game.pending_side_quest_pick = False
+            entries = quest_catalog.load_player_side_quests()
+            if entries:
+                from ui.modals import SideQuestPickModal
+                modal = SideQuestPickModal(game, entries)
+            else:
+                game.side_quests.append({"points": 4, "progress": 0})
+                game.log_event("Side quest %d added (progress view)" % len(game.side_quests))
+                save_state(game)
             dirty = True
             continue
 
@@ -259,6 +316,16 @@ def main():
                             active = target
                         elif kind == "modal":
                             modal = result[1]
+                            # Quest Setup button (first QuestCardModal entry
+                            # point): screen_play.py builds the modal itself
+                            # (it can't await a flash read mid-tap either -
+                            # see pending_quest_card above), so tips are
+                            # attached here instead of at construction.
+                            from ui.modals import QuestCardModal
+                            if isinstance(modal, QuestCardModal):
+                                if catalog_tips is None:
+                                    catalog_tips = quest_catalog.load_tips()
+                                modal.tips = catalog_tips
                         elif kind == "boot":
                             if result[1] == "resume":
                                 active = "play"
@@ -285,6 +352,82 @@ def main():
                                               "/".join(str(t) for t in threats),
                                               first + 1))
                             save_state(game)
+                            active = "scenario_source"
+                        elif kind == "choose_scenario":
+                            # Official/Community gate tapped: load (and cache)
+                            # the whole catalog index, then show that
+                            # source's cycle list. A missing/unreadable
+                            # catalog (e.g. no data deploy yet) falls back to
+                            # the custom/manual flow rather than crashing the
+                            # device loop.
+                            source = result[1]
+                            try:
+                                if catalog_index is None:
+                                    catalog_index = quest_catalog.load_index()
+                            except Exception as e:
+                                print("quest catalog: load_index failed (%r) "
+                                      "- falling back to custom quest" % (e,))
+                                game.log_event(
+                                    "Quest catalog unavailable - continuing "
+                                    "with custom/manual setup")
+                                game.scenario = None
+                                game.view = "setup_game"
+                                active = "play"
+                                save_state(game)
+                            else:
+                                if catalog_icons is None:
+                                    catalog_icons = quest_catalog.load_icons()
+                                if catalog_tips is None:
+                                    catalog_tips = quest_catalog.load_tips()
+                                cycles = quest_catalog.cycles_for(catalog_index, source)
+                                screens["pick_cycle"] = PickCycleScreen(source, cycles)
+                                active = "pick_cycle"
+                        elif kind == "choose_scenario_list":
+                            source, cycle = result[1], result[2]
+                            groups = quest_catalog.group_by_cycle(
+                                catalog_index.get("scenarios", []), source)
+                            group = next((g for g in groups if g["cycle"] == cycle), None)
+                            screens["choose_scenario"] = ChooseScenarioScreen(
+                                source, cycle, group["scenarios"] if group else [])
+                            active = "choose_scenario"
+                        elif kind == "goto_pick_cycle":
+                            active = "pick_cycle"
+                        elif kind == "scenario_chosen":
+                            # Load this one scenario's stage/card data. Kept
+                            # separate from the load_index() fallback above:
+                            # the whole catalog loaded fine to get here, so a
+                            # single missing/corrupt scenario file just stays
+                            # on the chooser rather than derailing the game.
+                            slug = result[1]
+                            try:
+                                data = quest_catalog.load_scenario(slug)
+                            except Exception as e:
+                                print("quest catalog: load_scenario(%r) failed "
+                                      "(%r) - staying on chooser" % (slug, e))
+                            else:
+                                entry = next((s for s in catalog_index.get("scenarios", [])
+                                             if s["slug"] == slug), None) or {}
+                                screens["scenario_options"] = ScenarioOptionsScreen(
+                                    entry, data, catalog_icons)
+                                active = "scenario_options"
+                        elif kind == "begin_setup":
+                            difficulty, mode = result[1], result[2]
+                            opts = screens["scenario_options"]
+                            scn = opts.scenario
+                            scenario_meta = {
+                                "slug": scn.get("slug"), "name": scn.get("name"),
+                                "pack": scn.get("pack"), "cycle": scn.get("cycle"),
+                                "source": scn.get("source"), "kind": scn.get("kind"),
+                                "nightmare": mode == "Nightmare", "mode": difficulty,
+                            }
+                            stages = opts.data.get("quest", {}).get("stages", [])
+                            game.preload_scenario(scenario_meta, stages)
+                            game.view = "quest_setup"
+                            active = "play"
+                            save_state(game)
+                        elif kind == "start_custom":
+                            game.scenario = None
+                            game.view = "setup_game"
                             active = "play"
                         elif kind == "save_quit":
                             save_state(game)

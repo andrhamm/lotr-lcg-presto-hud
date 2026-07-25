@@ -19,7 +19,7 @@ def _done_button(d, pal):
 
 
 def draw_header(d, pal, game, buttons, highlight=None, title=None,
-                close=False, close_left=False):
+                close=False, close_left=False, round_label=None):
     """Standard header. Default: R# (tap -> log) | view label (tap -> phases)
     | Set. (tap -> settings).
     title: static center text instead of the view label.
@@ -27,7 +27,8 @@ def draw_header(d, pal, game, buttons, highlight=None, title=None,
     close_left: the R# label is highlighted and tapping it again closes
     (Game Log — toggle behavior)."""
     # DragnCards-style step decimal beside the round (e.g. R2 3.4, R1 6.E)
-    round_lbl = "R%d %s" % (game.round, game.step)
+    # round_label overrides it entirely (pre-game setup screens show "R0").
+    round_lbl = round_label if round_label else "R%d %s" % (game.round, game.step)
     text_left(d, pal, round_lbl, 10, 12, 2,
               pal.gold if (close_left or highlight == "log") else pal.muted)
 
