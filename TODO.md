@@ -10,6 +10,11 @@ Drop ideas into **Ideas**. Anything in **Ready** is fair game for background
 workers. Card protocol lives in [[CLAUDE]] — workers claim cards, move them
 across columns, and surface blockers here.
 
+> **Most Ideas below now have a written implementation plan** under
+> `docs/superpowers/plans/` (and two have feasibility reports under
+> `docs/superpowers/specs/`). They are still Ideas — grooming them into Ready
+> is yours to do; the plans just mean the research is already done.
+
 ## Ideas
 
 * not in love with the placement or design of the tips... the stats redesign is much more compact than the initial design so the tips can be revamped to use the recovered space more effectively
@@ -35,6 +40,10 @@ across columns, and surface blockers here.
 
 ## Done
 
+- [x] **M4 · Quest awareness** — full DragnCards card-data pipeline (generated-only, gitignored) + the Setup-phase quest picker (Scenario Source → Pick Cycle → Choose Scenario → Scenario Options → Quest Setup R0 view → flip to side B → round 1), quest-card modal, player side-quest picker, set/scenario icons, Hall-of-Beorn sets-to-gather + release dates, and per-stage tips
+  - notes: spec `docs/superpowers/specs/2026-07-24-card-data-pipeline-design.md` + `...-quest-picker-bcore-design.md`; plans for each piece under `docs/superpowers/plans/`. Picking Passage preloads 8 / 2 / {0,10} and lists its three sets with icons. ~594 host tests green; every flow verified in the browser.
+  - done: on `feat/quest-picker` (local, **unsigned** commits — sign before pushing)
+  - follow-ups: **B-resolve** (guided progress resolution) is planned but deliberately last; deploy `docs/data/` + firmware to the Presto; push + Pages deploy
 - [x] **Stats redesign** — two flipped compact zones (Players matrix + Progress zone), circular arc/token primitives, Players + Progress detail views, DONE header convention, staging inline ±, `commit_touched` + `quest_history`
   - notes: spec [[stats-redesign]], plan `design/stats-redesign-plan.md`; web-first + firmware lockstep; 378 host tests green; verified device-faithful via `tools/preview.py`
   - done: squash-merged to `main` locally (one commit)

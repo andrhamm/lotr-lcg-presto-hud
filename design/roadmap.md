@@ -34,6 +34,18 @@ Web and firmware stay in lockstep. See [[design-review]] and [[stat-system]].
    warnings; **quest appendix** (tips/FAQ/campaign-cards from blog+forums);
    optional chase track. *Done when* picking Passage Through Mirkwood preloads
    8/2/10, lists its sets, and warnings go live.
+   **Status: SUBSTANTIALLY DONE.** Shipped: the full DragnCards card-data
+   pipeline (M4-A, generated-only), the Setup-phase quest picker + R0 Quest
+   Setup view with the pre-round-1 A→B flip (B-core), the quest-card modal
+   (B-modal), the player side-quest picker (B-sidequest), set/scenario icons
+   at 97% coverage (B-icons), Hall-of-Beorn sets-to-gather + release dates
+   (B-data), and per-stage tips (B-tips). Picking Passage preloads **8 / 2 /
+   {0,10}** and lists its three encounter sets with icons.
+   **Remaining:** **B-resolve** — the guided, correctly-ordered progress
+   resolution (location→explore→overflow→advance+flip) incl. conditional
+   advancement; planned in `docs/superpowers/plans/2026-07-24-quest-picker-bresolve.md`,
+   deliberately sequenced last. Per-quest threat warnings and the chase track
+   also remain.
 5. **M5 · Beta hardening** — first-run guidance + a legend for HUD conventions;
    copy/tone pass (incl. the Sailing "discarded" fix); accessibility + touch;
    full tests + on-device soak.
@@ -53,12 +65,21 @@ Web and firmware stay in lockstep. See [[design-review]] and [[stat-system]].
   https://claude.ai/code/artifact/1b62c19e-f561-427c-88aa-275f4558a000
 
 ## Current state / next step
-- **M1 shipped** on `feat/stats-redesign` (see [[stats-redesign]]): two-zone
-  layout, circular primitives, both detail views, DONE header, staging inline ±,
-  `commit_touched` + `quest_history`. 382 host tests green, verified
-  device-faithful via `tools/preview.py`.
-- **Pending ops:** land the final review-fix + staging-button commits (blocked on
-  1Password signing), merge to main, deploy to the Presto + soak.
+- **M1 shipped** (see [[stats-redesign]]): two-zone layout, circular primitives,
+  both detail views, DONE header, staging inline ±, `commit_touched` +
+  `quest_history`. Squash-merged to `main`.
+- **M4 substantially shipped** on `feat/quest-picker` (see the M4 entry above):
+  card-data pipeline + quest picker + card modal + side-quest picker + icons +
+  enrichment + tips. ~594 host tests green; every flow verified end to end in
+  the browser. **Not yet deployed to the Presto, and not yet pushed.**
+- **Planned, not built:** every remaining TODO/roadmap item now has an
+  implementation plan under `docs/superpowers/plans/` (B-resolve, M2, M3, M5,
+  back button, action-window interstitials, game log, toasts/animation,
+  side-quest clarity, RingsDB, campaign/history, license, contributing,
+  Playwright CI) plus two hardware feasibility reports under
+  `docs/superpowers/specs/`.
+- **Pending ops:** push `feat/quest-picker` (local commits are unsigned — sign
+  or re-sign before pushing), deploy `docs/data/` + firmware to the Presto, soak.
 - **Next milestone: M2 · Phase clarity** — framework (red) / action-window
   (green) / stat model per phase; threat-as-risk on Encounter & Combat.
 - Mockups must be **device-faithful** (render via `tools/preview.py`), not HTML.
