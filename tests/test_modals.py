@@ -204,7 +204,7 @@ def test_players_detail_modal_grid_has_editor_buttons_for_each_player():
     close = _find(m, ("close",))
     assert (close.x, close.y, close.w, close.h) == (408, 4, 64, 32)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "Players" in texts and "Threat" in texts and "Willpower" in texts
+    assert "Players" in texts and "THREAT" in texts and "WILLPOWER" in texts
 
 
 def test_players_detail_modal_threat_step_adjusts_and_logs():
@@ -587,7 +587,7 @@ def test_questing_progress_modal_chart_shows_heading_row_when_sailing():
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "willpower / staging / result / heading" in texts
+    assert "WILLPOWER / STAGING / RESULT / HEADING" in texts
 
 
 def test_questing_progress_modal_chart_hides_heading_row_when_not_sailing():
@@ -599,8 +599,8 @@ def test_questing_progress_modal_chart_hides_heading_row_when_not_sailing():
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "willpower / staging / result" in texts
-    assert "willpower / staging / result / heading" not in texts
+    assert "WILLPOWER / STAGING / RESULT" in texts
+    assert "WILLPOWER / STAGING / RESULT / HEADING" not in texts
     assert not any(b.id[0] == "hd_set" for b in m.buttons)
 
 
