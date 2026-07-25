@@ -3,6 +3,7 @@ Settings (tap -> Settings). Nav buttons get ids ("nav", target).
 """
 
 import phases
+from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import Button, bevel, text_center, text_left
 
 HEADER_H = 40
@@ -15,7 +16,7 @@ def _done_button(d, pal):
     affordance shared by draw_header's close case and modal_header (same
     geometry, same pens)."""
     bevel(d, pal, 408, 4, 64, 32, pal.btn_ok)
-    text_center(d, pal, "DONE", 440, 12, 2, pal.ok_fg)
+    text_center(d, pal, "DONE", 440, 12, BODY, pal.ok_fg)
 
 
 def draw_header(d, pal, game, buttons, highlight=None, title=None,
@@ -29,20 +30,20 @@ def draw_header(d, pal, game, buttons, highlight=None, title=None,
     # DragnCards-style step decimal beside the round (e.g. R2 3.4, R1 6.E)
     # round_label overrides it entirely (pre-game setup screens show "R0").
     round_lbl = round_label if round_label else "R%d %s" % (game.round, game.step)
-    text_left(d, pal, round_lbl, 10, 12, 2,
+    text_left(d, pal, round_lbl, 10, 12, BODY,
               pal.gold if (close_left or highlight == "log") else pal.muted)
 
     center = title if title is not None else VIEW_LABEL.get(
         getattr(game, "view", None), phases.step(game.step)["phase"])
-    scale = 2 if len(center) > 12 else 3
-    text_center(d, pal, center, 240, 12 if scale == 2 else 8, scale, pal.gold)
+    scale = BODY if len(center) > 12 else DISPLAY
+    text_center(d, pal, center, 240, 12 if scale == BODY else 8, scale, pal.gold)
 
     if close:
         _done_button(d, pal)
     else:
         gear = "Set."
-        w = d.measure_text(gear, 2)
-        text_left(d, pal, gear, 480 - 10 - w, 12, 2,
+        w = d.measure_text(gear, BODY)
+        text_left(d, pal, gear, 480 - 10 - w, 12, BODY,
                   pal.gold if highlight == "settings" else pal.muted)
     d.set_pen(pal.border)
     d.rectangle(0, HEADER_H, 480, 1)
@@ -66,8 +67,8 @@ def modal_header(d, pal, game, title, buttons):
     modal's on_button maps "close" to its own commit-and-dismiss / dismiss
     semantics)."""
     round_lbl = "R%d %s" % (game.round, game.step)
-    text_left(d, pal, round_lbl, 10, 12, 2, pal.muted)
-    text_center(d, pal, title, 240, 12, 2, pal.gold)
+    text_left(d, pal, round_lbl, 10, 12, BODY, pal.muted)
+    text_center(d, pal, title, 240, 12, BODY, pal.gold)
     d.set_pen(pal.border)
     d.rectangle(0, HEADER_H, 480, 1)
     _done_button(d, pal)

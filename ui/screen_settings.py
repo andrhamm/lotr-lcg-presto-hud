@@ -2,6 +2,7 @@
 (M2/M3; dimmed until they land). Header: static title + X to close."""
 
 from ui.header import draw_header, HEADER_H
+from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import Button, panel, bevel, text_center, text_left
 from ui import icons
 
@@ -19,7 +20,9 @@ class ScreenSettings:
         bevel(d, pal, x, y, TILE, TILE, pal.card)
         pen = pal.gold if enabled else pal.dim
         icons.draw(d, icon, x + (TILE - 40) // 2, y + 14, pen, scale=2)
-        text_center(d, pal, label, x + TILE / 2, y + TILE - 22, 1,
+        # Tile captions are names, not chrome - BODY. They fit the 100px tile:
+        # the widest ("Network") is 84px at BODY.
+        text_center(d, pal, label, x + TILE / 2, y + TILE - 24, BODY,
                     pal.tan if enabled else pal.dim)
 
     def draw(self, hw, game, pal):
@@ -30,36 +33,36 @@ class ScreenSettings:
         draw_header(d, pal, game, self.buttons, title="Settings", close=True)
 
         y = HEADER_H + 16
-        text_left(d, pal, "GAME", 16, y, 1, pal.dim)
+        text_left(d, pal, "GAME", 16, y, LABEL, pal.dim)
         y += 18
         sq = Button(("save_quit",), 16, y, 452, 56)
         bevel(d, pal, sq.x, sq.y, sq.w, sq.h, pal.btn, t=3)
-        text_center(d, pal, "Save & Quit", 240, y + 18, 2, pal.tan)
+        text_center(d, pal, "Save & Quit", 240, y + 18, BODY, pal.tan)
         self.buttons.append(sq)
         y += 66
         if self.confirm_end:
             b = Button(("end_game2",), 16, y, 452, 56)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn_no, t=3)
-            text_center(d, pal, "Really end? Save will be deleted", 240, y + 18, 2, pal.no_fg)
+            text_center(d, pal, "Really end? Save will be deleted", 240, y + 18, BODY, pal.no_fg)
         else:
             b = Button(("end_game",), 16, y, 452, 56)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.card, t=3)
-            text_center(d, pal, "End Game", 240, y + 18, 2, pal.no_fg)
+            text_center(d, pal, "End Game", 240, y + 18, BODY, pal.no_fg)
         self.buttons.append(b)
 
         y += 76
-        text_left(d, pal, "DEVICE", 16, y, 1, pal.dim)
+        text_left(d, pal, "DEVICE", 16, y, LABEL, pal.dim)
         y += 18
         self._app_tile(d, pal, 16, y, icons.LED, "LEDs", enabled=True)
         self.buttons.append(Button(("led",), 16, y, TILE, TILE))
         hb = Button(("legend",), 16 + TILE + TILE_GAP, y, 232, TILE)
         bevel(d, pal, hb.x, hb.y, hb.w, hb.h, pal.btn)
         text_center(d, pal, "Help", hb.x + 116, hb.y + TILE // 2 - 8,
-                    2, pal.tan)
+                    BODY, pal.tan)
         self.buttons.append(hb)
 
         y += TILE + 24
-        text_left(d, pal, "APPS  (coming soon)", 16, y, 1, pal.dim)
+        text_left(d, pal, "APPS  (COMING SOON)", 16, y, LABEL, pal.dim)
         y += 18
         x = 16
         for icon, label in ((icons.WIFI, "Network"), (icons.MUSIC, "Tunes")):

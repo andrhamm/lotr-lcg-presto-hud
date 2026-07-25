@@ -3,6 +3,7 @@ header. Entries are tagged R<round>.<step>.
 """
 
 from ui.header import draw_header, HEADER_H
+from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import Button, panel, bevel, text_center, text_left, truncate_text
 
 PER_PAGE = 13
@@ -28,16 +29,19 @@ class ScreenLog:
 
         y = HEADER_H + 10
         if not chunk:
-            text_center(d, pal, "no activity yet", 240, 200, 2, pal.dim)
+            text_center(d, pal, "no activity yet", 240, 200, BODY, pal.dim)
+        # The feed stays LABEL by design: it is dense tabular metadata with
+        # its own pager, and the row count is the point (see the design-system
+        # spec and tests/test_typography.py's DENSE_SCENES).
         for e in chunk:
             tag = "R%d.%s" % (e["round"], e["step"])
-            text_left(d, pal, tag, 12, y, 1, pal.dim)
+            text_left(d, pal, tag, 12, y, LABEL, pal.dim)
             t = e.get("t")
             if t is not None:
                 s = t // 1000
-                text_left(d, pal, "%d:%02d" % (s // 60, s % 60), 76, y, 1, pal.dim)
-            body = truncate_text(e["text"], 1, 480 - 122 - 12, d.measure_text)
-            text_left(d, pal, body, 122, y, 1, pal.tan)
+                text_left(d, pal, "%d:%02d" % (s // 60, s % 60), 76, y, LABEL, pal.dim)
+            body = truncate_text(e["text"], LABEL, 480 - 122 - 12, d.measure_text)
+            text_left(d, pal, body, 122, y, LABEL, pal.tan)
             y += ROW_H
 
         # pager
@@ -45,10 +49,10 @@ class ScreenLog:
             up = Button(("older",), 12, 420, 150, 46)
             dn = Button(("newer",), 318, 420, 150, 46)
             bevel(d, pal, up.x, up.y, up.w, up.h, pal.btn)
-            text_center(d, pal, "Older", up.x + 75, up.y + 14, 2, pal.tan)
+            text_center(d, pal, "Older", up.x + 75, up.y + 14, BODY, pal.tan)
             bevel(d, pal, dn.x, dn.y, dn.w, dn.h, pal.btn)
-            text_center(d, pal, "Newer", dn.x + 75, dn.y + 14, 2, pal.tan)
-            text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 434, 2, pal.muted)
+            text_center(d, pal, "Newer", dn.x + 75, dn.y + 14, BODY, pal.tan)
+            text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 434, BODY, pal.muted)
             self.buttons.append(up)
             self.buttons.append(dn)
 
