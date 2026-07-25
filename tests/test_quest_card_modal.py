@@ -33,36 +33,98 @@ def _draw(m, g):
     m.draw(hw, g, Palette(hw.display))
     return hw
 
-def test_opens_on_current_stage():
-    g = _game(stage_idx=1)
-    m = QuestCardModal(g)
-    assert m.idx == 1
+# One page per card SIDE, flat across every stage and every alternative:
+# STAGES is 1A,1B,2A,2B, then stage 3's two alternatives 3A,3B,3A,3B = 8.
+PAGES = 8
 
-def test_paging_moves_and_clamps():
+
+def test_pages_are_one_per_card_side():
+    g = _game()
+    assert len(QuestCardModal(g)._pages()) == PAGES
+
+
+def test_opens_on_the_live_card_side():
+    """stage_idx=1 with the game on side B is page 3 (1A,1B,2A,2B)."""
+    g = _game(stage_idx=1)
+    g.quest["side"] = "B"
+    assert QuestCardModal(g).page == 3
+    g.quest["side"] = "A"
+    assert QuestCardModal(g).page == 2
+
+
+def test_paging_moves_and_hides_nav_at_each_end():
     g = _game(stage_idx=0)
     m = QuestCardModal(g)
     _draw(m, g)
-    nxt = next(b for b in m.buttons if b.id[0] == "next")
-    assert m.on_button(nxt) == "redraw" and m.idx == 1
-    m.idx = len(STAGES) - 1
+    assert not any(b.id[0] == "prev" for b in m.buttons)   # no Prev at the start
+    assert m.on_button(next(b for b in m.buttons if b.id[0] == "next")) == "redraw"
+    assert m.page == 1
+    m.page = PAGES - 1
     _draw(m, g)
     assert not any(b.id[0] == "next" for b in m.buttons)   # no Next at the end
+    assert m.on_button(next(b for b in m.buttons if b.id[0] == "prev")) == "redraw"
 
-def test_branch_switch_changes_displayed_card():
-    g = _game(stage_idx=2)
-    m = QuestCardModal(g)
-    _draw(m, g)
-    assert m.card == 0
-    alt = next(b for b in m.buttons if b.id[0] == "alt")
-    m.on_button(alt)
-    assert m.card == 1
 
-def test_tips_button_disabled_and_inert():
+def test_nav_buttons_name_the_page_they_lead_to():
     g = _game()
     m = QuestCardModal(g)
     _draw(m, g)
-    tips = next(b for b in m.buttons if b.id[0] == "tips")
-    assert m.on_button(tips) is None
+    m.on_button(next(b for b in m.buttons if b.id[0] == "next"))
+    hw = _draw(m, g)
+    drawn = " ".join(c[1] for c in hw.display.calls if c[0] == "text")
+    assert "< Stage 1A" in drawn and "Stage 2A >" in drawn
+
+
+def test_branch_alternatives_are_just_more_pages():
+    """It is a reference, not a game view - both of stage 3's alternatives are
+    reachable by paging, and there is no branch toggle to find."""
+    g = _game()
+    m = QuestCardModal(g)
+    seen = []
+    for p in range(PAGES):
+        m.page = p
+        hw = _draw(m, g)
+        seen.append(" ".join(c[1] for c in hw.display.calls if c[0] == "text"))
+        assert not any(b.id[0] == "alt" for b in m.buttons), "no branch toggle any more"
+    joined = " ".join(seen)
+    assert "Don't Leave the Path!" in joined and "Beorn's Path" in joined
+
+
+def test_quest_points_sit_in_the_identity_row_not_their_own_block():
+    g = _game()
+    m = QuestCardModal(g)
+    hw = _draw(m, g)
+    texts = [c for c in hw.display.calls if c[0] == "text"]
+    pts = [c for c in texts if c[1] == "8 pts"]
+    assert pts, "quest points must show on the card side"
+    stage_row = [c for c in texts if c[1] == "Stage 1A"][0]
+    assert pts[0][3] == stage_row[3], "points belong on the stage row's baseline"
+
+
+def test_no_tips_block_at_all_when_a_stage_has_none():
+    g = _game()
+    m = QuestCardModal(g)
+    hw = _draw(m, g)
+    assert not any(b.id[0] == "tips" for b in m.buttons)
+    drawn = " ".join(c[1] for c in hw.display.calls if c[0] == "text")
+    assert "TIPS" not in drawn
+
+
+def test_long_text_is_marked_truncated_and_opens_a_detail_view():
+    stages = [{"stage": 1, "cards": [{"questPoints": 1, "victory": None, "sailing": False,
+        "faces": [{"side": "A", "name": "Wordy", "text": "lorem ipsum dolor " * 40}]}]}]
+    g = gamestate.GameState(2, 25)
+    m = QuestCardModal(g, stages=stages, scenario={"slug": "x"})
+    hw = _draw(m, g)
+    drawn = " ".join(c[1] for c in hw.display.calls if c[0] == "text")
+    assert "more" in drawn, "a clipped card must say so"
+    more = next(b for b in m.buttons if b.id[0] == "more_text")
+    assert m.on_button(more) == "redraw" and m.detail == "text"
+    hw2 = _draw(m, g)
+    full = " ".join(c[1] for c in hw2.display.calls if c[0] == "text")
+    assert full.count("lorem") > drawn.count("lorem"), "detail view shows more of it"
+    assert m.on_button(next(b for b in m.buttons if b.id[0] == "back")) == "redraw"
+    assert m.detail is None
 
 
 # Strategy tips (M4-B tips, Task 2). Slug "p" matches _game()'s
@@ -73,20 +135,21 @@ TIPS = {"p": {"attribution": {"name": "Src", "url": "http://x"},
               "general": ["watch threat"], "stages": {"3": ["branch note"]}}}
 
 
-def test_tips_button_enabled_when_tips_exist():
+def test_tips_show_inline_and_open_a_detail_view():
     g = _game()
     m = QuestCardModal(g, tips=TIPS)          # slug "p" per the fixture
-    _draw(m, g)
+    hw = _draw(m, g)
+    drawn = " ".join(c[1] for c in hw.display.calls if c[0] == "text")
+    assert "TIPS" in drawn and "watch threat" in drawn, "tips render inline, not behind a tap"
     tips = next(b for b in m.buttons if b.id[0] == "tips")
-    assert m.on_button(tips) == "redraw"      # opens the tips view, no longer inert
+    assert m.on_button(tips) == "redraw" and m.detail == "tips"
 
 
 def test_tips_view_shows_attribution_and_stage_specific_first():
     g = _game(stage_idx=2)
     m = QuestCardModal(g, tips=TIPS)
     _draw(m, g)
-    tips_btn = next(b for b in m.buttons if b.id[0] == "tips")
-    m.on_button(tips_btn)
+    m.on_button(next(b for b in m.buttons if b.id[0] == "tips"))
     hw = _draw(m, g)
     drawn = " ".join(c[1] for c in hw.display.calls if c[0] == "text")
     assert "branch note" in drawn and "watch threat" in drawn and "Src" in drawn
@@ -102,28 +165,26 @@ def test_tips_view_orders_stage_specific_before_general():
     assert drawn.index("branch note") < drawn.index("watch threat")
 
 
-def test_tips_button_stays_disabled_without_tips():
+def test_no_tips_block_without_tips_data():
     g = _game()
     m = QuestCardModal(g, tips={})
     _draw(m, g)
-    assert m.on_button(next(b for b in m.buttons if b.id[0] == "tips")) is None
+    assert not any(b.id[0] == "tips" for b in m.buttons)
 
 
-def test_tips_back_toggle_returns_to_card_view():
+def test_tips_detail_back_returns_to_the_card():
     g = _game()
     m = QuestCardModal(g, tips=TIPS)
     _draw(m, g)
-    tips_btn = next(b for b in m.buttons if b.id[0] == "tips")
-    assert m.on_button(tips_btn) == "redraw"
+    assert m.on_button(next(b for b in m.buttons if b.id[0] == "tips")) == "redraw"
     hw = _draw(m, g)
     drawn = " ".join(c[1] for c in hw.display.calls if c[0] == "text")
-    assert "watch threat" in drawn and "SIDE A" not in drawn   # tips view, not card view
+    assert "watch threat" in drawn and "SETUP / STORY" not in drawn   # detail, not card
 
-    back_btn = next(b for b in m.buttons if b.id[0] == "tips")
-    assert m.on_button(back_btn) == "redraw"
+    assert m.on_button(next(b for b in m.buttons if b.id[0] == "back")) == "redraw"
     hw2 = _draw(m, g)
     drawn2 = " ".join(c[1] for c in hw2.display.calls if c[0] == "text")
-    assert "SIDE A" in drawn2 and "watch threat" not in drawn2  # back to the card view
+    assert "SETUP / STORY" in drawn2
 
 
 def test_tips_default_kwarg_keeps_existing_call_sites_working():
@@ -168,7 +229,11 @@ def test_epic_variant_backs_are_not_blank():
                         "source": "official", "kind": "quest", "nightmare": False,
                         "mode": "Standard"}, stages)
     m = QuestCardModal(g)
-    m.card = 1                       # the C..H-backed alternative
-    hw = _draw(m, g)
-    drawn = " ".join(c[1] for c in hw.display.calls if c[0] == "text")
-    assert "back E" in drawn, "non-B back face must still render its text"
+    seen = []
+    for p in range(len(m._pages())):
+        m.page = p
+        hw = _draw(m, g)
+        seen.append(" ".join(c[1] for c in hw.display.calls if c[0] == "text"))
+    joined = " ".join(seen)
+    assert "back E" in joined, "non-B back face must still get its own page"
+    assert "Stage 2E" in joined, "the page is labelled with the face's real side"

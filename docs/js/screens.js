@@ -1479,304 +1479,266 @@ export class QuestConfigModal {
 // only changes what is displayed. Purely presentational - idx/card are the
 // modal's own state, never written back to game.
 export class QuestCardModal {
+  // Read-only card reference (M4-B): one **card side per page**, paged flat
+  // across every stage, every alternative and every face of the loaded
+  // scenario snapshot (game.stages, copied at preload), or of a `stages` list
+  // handed in directly (preview mode, see the constructor).
+  //
+  // It is a reference, not a game view, so branch structure deliberately does
+  // not shape it: a stage's alternatives are simply more pages rather than a
+  // toggle, and nothing here reads or writes the branch the game actually
+  // took. Purely presentational - page/detail are the modal's own state,
+  // never written back to game.
+  //
+  // Long card text and the stage's tips are both shown truncated inline with
+  // a "more" affordance; tapping either opens a full-page detail view of it
+  // (scale 1, where every catalogued face fits - the longest is 11 lines).
+  // Mirror of ui/modals.py - keep the two in lockstep.
   static MARGIN = 12;
-  // Ceiling, not a floor: the SIDE A/SIDE B blocks must end at or below this
-  // y so the Tips button + pager (a fixed 88px: 48px gap + 40px pager tall,
-  // themselves 40px tall) still fit above 480 with margin. _lineBudget()
-  // uses it to size each block's line cap per render (see below) instead of
-  // a flat constant - short text no longer leaves Tips/pager stranded down
-  // at a fixed position (they float up to meet the content), and long text
-  // gets far more than the old flat 3-line cap when the other side is short.
-  static BOTTOM_Y0 = 380;
+  // Fixed bottom nav, so the reading area above it is the same height on
+  // every page (the previous layout let the pager float up under short text,
+  // which meant the body started at a different y on every card).
+  static NAV_Y = 424;
+  static NAV_H = 44;
+  static BODY_Y0 = 130;
+  static LH = 26;              // 10*scale(2)+6 - one wrapped body line
+  static TIPS_LINES = 2;       // inline peek before "more" takes over
+  static TIPS_H = 18 + 2 * 26 + 8;
+  static MORE = " [...] more";
 
-  // stages/scenario override the game's own: Scenario Options opens this
-  // BEFORE the scenario is preloaded into the game, so it passes the picked
-  // scenario's stages and index entry directly. Everything below reads these,
-  // never the game - the modal was already read-only, this just names its
-  // source. Mirrors ui/modals.py.
   constructor(game, tips = null, stages = null, scenario = null) {
     this.game = game;
+    // Preview mode: Scenario Options opens this BEFORE the scenario is
+    // preloaded into the game, so it passes the picked scenario's stages and
+    // index entry directly. Everything below reads these, never the game.
+    this.preview = stages !== null;
     this.stages = stages ?? game.stages;
     this.scenario = (stages === null ? game.scenario : scenario) ?? {};
-    // Which stage is live. In preview there is no live stage yet, and stage 1
-    // is where the game will start, so 0 marks the same card Quest Setup would.
-    this.currentIdx = stages === null ? game.stage_idx : 0;
-    this.idx = this.stages.length ? this.currentIdx : 0;
-    this.card = this.stages.length ? (stages === null ? game.card_idx : 0) : 0;
     this.buttons = [];
-    this.tips = tips ?? {};      // loaded tips.json "scenarios" map (M4-B tips)
-    this.tipsOpen = false;       // toggled by the Tips/Back button
-    this._tipsData = null;       // tipsFor(...) result for the current stage, set by draw()
+    this.tips = tips || {};
+    this.detail = null;        // null | "tips" | "text" - full-page views
+    this._tipsData = null;
+    this.page = this._livePage();
   }
 
-  // Word-wraps text (or the "no text" placeholder) at the block's usable
-  // width with no line cap - the "natural" line count _lineBudget() then
-  // allocates space against.
-  _wrapBody(text, w) {
-    const usable = w - 20;
-    const hasText = Boolean(text);
-    const body = hasText ? text : "no text";
-    return { hasText, lines: wrapText(body, 1, usable), usable };
+  // -- page model ------------------------------------------------------
+  _pages() {
+    const out = [];
+    (this.stages ?? []).forEach((st, si) => {
+      (st.cards ?? []).forEach((card, ci) => {
+        (card.faces ?? []).forEach((_, fi) => out.push([si, ci, fi]));
+      });
+    });
+    return out;
   }
 
-  // Distributes the pixel budget between y0 (top of the SIDE A block) and
-  // BOTTOM_Y0 across the two blocks' natural line counts: each gets its full
-  // natural count if both fit, otherwise the longer block is trimmed one
-  // line at a time (ties trim A first) until the total fits. Always leaves
-  // at least 1 line per block.
-  _lineBudget(y0, naturalA, naturalB) {
-    const OVERHEAD = 26;   // per block: 18px label row + 8px bottom pad
-    const GAP = 12;        // 6px trailing gap after each of the two blocks
-    const LH = 16;         // 10*scale(1) + 6, one wrapped text line
-    const availablePx = QuestCardModal.BOTTOM_Y0 - y0 - 2 * OVERHEAD - GAP;
-    const budgetLines = Math.max(2, Math.floor(availablePx / LH));
-    let allowedA = naturalA, allowedB = naturalB;
-    while (allowedA + allowedB > budgetLines && (allowedA > 1 || allowedB > 1)) {
-      if (allowedA >= allowedB && allowedA > 1) allowedA -= 1;
-      else if (allowedB > 1) allowedB -= 1;
-      else allowedA -= 1;
+  _at(page) {
+    const [si, ci, fi] = page;
+    const st = this.stages[si];
+    const card = st.cards[ci];
+    return [st, card, card.faces[fi]];
+  }
+
+  _livePage() {
+    const pages = this._pages();
+    if (!pages.length || this.preview) return 0;
+    const want = this.game.quest?.side ?? "A";
+    for (let i = 0; i < pages.length; i++) {
+      const [si, ci] = pages[i];
+      if (si === this.game.stage_idx && ci === this.game.card_idx) {
+        if ((this._at(pages[i])[2].side || "A") === want) return i;
+      }
     }
-    return [allowedA, allowedB];
+    return 0;
   }
 
-  // Bordered panel: a small label row + up to maxLines of the pre-wrapped
-  // body text (or the "no text" placeholder). Returns height.
-  _sideBlock(ctx, x, y, w, label, wrapped, maxLines) {
-    let lines = wrapped.lines;
-    if (lines.length > maxLines) {
-      lines = lines.slice(0, maxLines);
-      lines[lines.length - 1] = truncateText(`${lines[lines.length - 1]} ..`, 1, wrapped.usable);
-    }
-    const lh = 16;
-    const h = 18 + lines.length * lh + 8;
-    panel(ctx, x, y, w, h, pal.card);
-    textLeft(ctx, label, x + 10, y + 6, 1, pal.amber);
-    let ty = y + 20;
-    const ink = wrapped.hasText ? pal.tan : pal.dim;
-    for (const ln of lines) {
-      textLeft(ctx, ln, x + 10, ty, 1, ink);
-      ty += lh;
-    }
-    return h;
+  _label(page) {
+    const [st, , face] = this._at(page);
+    return `Stage ${st.stage}${face.side || ""}`;
   }
 
-  // Bordered panel: a "TIPS" label row, up to maxH px of wrapped tip lines
-  // (each prefixed "- "), and the attribution name + URL in pal.dim
-  // beneath - the tips-view counterpart of _sideBlock, sized against the
-  // same BOTTOM_Y0 ceiling so the Tips/Back button and pager land at the
-  // same y in either view. Excess content truncates its last visible line
-  // with ".." rather than overflowing into the button/pager area,
-  // mirroring _sideBlock's own truncate-to-fit. Returns height (<= maxH).
-  _tipsPanel(ctx, x, y, w, tipsData, maxH) {
-    const usable = w - 20;
-    const lh = 16;
-    let lines = [];
-    for (const t of tipsData.tips) lines.push(...wrapText(`- ${t}`, 1, usable));
-    const attribution = tipsData.attribution ?? {};
-    const name = attribution.name ?? "";
-    const url = attribution.url ?? "";
-    const attribLines = [name ? `Source: ${name}` : "", url]
-      .filter(Boolean)
-      .map(s => truncateText(s, 1, usable));
-
-    const overhead = 18 + 8;   // label row + bottom pad, matches _sideBlock
-    const budget = Math.max(1, Math.floor((maxH - overhead - attribLines.length * lh) / lh));
-    if (lines.length > budget) {
-      lines = lines.slice(0, budget);
-      lines[lines.length - 1] = truncateText(`${lines[lines.length - 1]} ..`, 1, usable);
+  // -- shared bits -----------------------------------------------------
+  // The marker has to be made room for, not appended and truncated - doing
+  // the latter cuts the marker itself down to "[...." and the affordance
+  // disappears.
+  _fit(lines, maxLines, usable, more) {
+    if (lines.length <= maxLines && !more) return [lines, false];
+    const keep = lines.slice(0, maxLines);
+    if (!keep.length) keep.push("");
+    const mw = measureText(QuestCardModal.MORE, 2);
+    let last = keep[keep.length - 1];
+    while (last && measureText(last, 2) + mw > usable) {
+      last = last.includes(" ") ? last.slice(0, last.lastIndexOf(" ")) : last.slice(0, -1);
     }
-
-    const h = Math.min(maxH, overhead + (lines.length + attribLines.length) * lh);
-    panel(ctx, x, y, w, h, pal.card);
-    textLeft(ctx, "TIPS", x + 10, y + 6, 1, pal.amber);
-    let ty = y + 20;
-    for (const ln of lines) { textLeft(ctx, ln, x + 10, ty, 1, pal.tan); ty += lh; }
-    for (const ln of attribLines) { textLeft(ctx, ln, x + 10, ty, 1, pal.dim); ty += lh; }
-    return h;
+    keep[keep.length - 1] = last + QuestCardModal.MORE;
+    return [keep, true];
   }
 
+  _nav(ctx, pages) {
+    const M = QuestCardModal.MARGIN;
+    const half = Math.floor((480 - 2 * M - 8) / 2);
+    if (this.page > 0) {
+      const b = new Button(["prev"], M, QuestCardModal.NAV_Y, half, QuestCardModal.NAV_H);
+      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+      textCenter(ctx, truncateText("< " + this._label(pages[this.page - 1]), 2, half - 16),
+                 b.x + half / 2, b.y + 14, 2, pal.tan);
+      this.buttons.push(b);
+    }
+    if (this.page < pages.length - 1) {
+      const b = new Button(["next"], M + half + 8, QuestCardModal.NAV_Y, half, QuestCardModal.NAV_H);
+      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+      textCenter(ctx, truncateText(this._label(pages[this.page + 1]) + " >", 2, half - 16),
+                 b.x + half / 2, b.y + 14, 2, pal.tan);
+      this.buttons.push(b);
+    }
+  }
+
+  // The full content behind a "more" tap, at scale 1 so it fits: every
+  // catalogued face wraps to 11 lines or fewer there.
+  _detailLines(usable) {
+    if (this.detail === "tips") {
+      const t = this._tipsData ?? { tips: [] };
+      const lines = [];
+      for (const tip of t.tips) lines.push(...wrapText("- " + tip, 1, usable));
+      const attribution = t.attribution ?? {};
+      for (const extra of [attribution.name ? "Source: " + attribution.name : "",
+                           attribution.url || ""]) {
+        if (extra) lines.push({ dim: truncateText(extra, 1, usable) });
+      }
+      return lines;
+    }
+    const [, , face] = this._at(this._pages()[this.page]);
+    return wrapText(face.text || "no text", 1, usable);
+  }
+
+  _drawDetail(ctx, title) {
+    const M = QuestCardModal.MARGIN, W = 480 - 2 * M, usable = W - 20;
+    textLeft(ctx, truncateText(title, 2, W), M, 48, 2, pal.gold);
+    const y = 78;
+    panel(ctx, M, y, W, QuestCardModal.NAV_Y - 12 - y, pal.card);
+    let ty = y + 10;
+    for (const ln of this._detailLines(usable)) {
+      if (ty > QuestCardModal.NAV_Y - 12 - 20) break;
+      if (typeof ln === "object") textLeft(ctx, ln.dim, M + 10, ty, 1, pal.dim);
+      else textLeft(ctx, ln, M + 10, ty, 1, pal.tan);
+      ty += 16;
+    }
+    const b = new Button(["back"], M, QuestCardModal.NAV_Y, 480 - 2 * M, QuestCardModal.NAV_H);
+    bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+    textCenter(ctx, "Back", 240, b.y + 14, 2, pal.tan);
+    this.buttons.push(b);
+  }
+
+  // -- draw ------------------------------------------------------------
   draw(ctx, game) {
+    const S = QuestCardModal;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    modalHeader(ctx, game, "QUEST CARD", this.buttons);
-    const M = QuestCardModal.MARGIN, W = 480 - 2 * M;
+    modalHeader(ctx, game, "QUEST CARDS", this.buttons);
+    const M = S.MARGIN, W = 480 - 2 * M;
 
-    if (!this.stages.length) {
+    const pages = this._pages();
+    if (!pages.length) {
       textCenter(ctx, "No quest loaded", 240, 200, 2, pal.dim);
       textCenter(ctx, "Start a scenario to see stage cards.", 240, 226, 1, pal.dim);
       return;
     }
 
-    const n = this.stages.length;
-    this.idx = Math.max(0, Math.min(this.idx, n - 1));
-    const stage = this.stages[this.idx];
-    const cards = stage.cards;
-    this.card = Math.max(0, Math.min(this.card, cards.length - 1));
-    const card = cards[this.card];
-    // Front is side A; the back is whatever non-A side this printing uses.
-    // Most cards are A/B, but epic multiplayer variants share one A front with
-    // backs C..H (e.g. Mount Gundabad stage 2 has 7 alternatives), so matching
-    // "B" literally would blank all but the first.
-    const aFace = card.faces.find(f => f.side === "A") ?? card.faces[0] ?? {};
-    const bFace = card.faces.find(f => f.side && f.side !== "A") ?? card.faces[1] ?? {};
-    const aName = aFace.name ?? "";
-    const bName = bFace.name ?? "";
-
-    // -- stage line: number, an A/B legend, and a CURRENT marker so paging
-    // away from the game's live stage is obvious --------------------------
-    let y = 48;
-    textLeft(ctx, `STAGE ${stage.stage}`, M, y, 2, pal.amber);
-    const abHint = "A / B";
-    textLeft(ctx, abHint, 480 - M - measureText(abHint, 1), y + 4, 1, pal.dim);
-    if (this.idx === this.currentIdx) {
-      const pw = measureText("CURRENT", 1) + 14;
-      const px = 240 - Math.floor(pw / 2);
-      rect(ctx, px, y, pw, 18, pal.gold);
-      textCenter(ctx, "CURRENT", 240, y + 4, 1, pal.bg, false);
-    }
-    y += 28;
-
-    // -- card name(s): a shared name shows once; a branch payoff (the
-    // B-face name differs, e.g. "A Chosen Path" -> "Beorn's Path") shows
-    // both, labelled --------------------------------------------------------
-    if (bName && bName !== aName) {
-      textLeft(ctx, truncateText(`A: ${aName}`, 2, W), M, y, 2, pal.gold);
-      y += 22;
-      textLeft(ctx, truncateText(`B: ${bName}`, 2, W), M, y, 2, pal.gold);
-      y += 26;
-    } else {
-      const name = aName || bName || "(unnamed)";
-      textCenter(ctx, truncateText(name, 3, W), 240, y, 3, pal.gold);
-      y += 32;
-    }
-
-    // -- quest points / victory / sailing stat strip -------------------------
-    const cx = M + 16;
-    textLeft(ctx, "PTS", M, y, 1, pal.dim);
-    token(ctx, cx, y + 22, 14, 2, card.questPoints ?? 0, pal.gold, 0, pal.gold, pal.dim);
-    let nx = cx + 40;
-    if (card.victory !== null && card.victory !== undefined) {
-      textLeft(ctx, "VP", nx - 14, y, 1, pal.dim);
-      token(ctx, nx, y + 22, 14, 2, card.victory, pal.gold, 0, pal.gold, pal.dim);
-      nx += 40;
-    }
-    if (card.sailing) {
-      textLeft(ctx, "SAIL", nx - 16, y, 1, pal.dim);
-      disc(ctx, nx, y + 22, 14, pal.well);
-      icons.drawIcon(ctx, icons.WHEEL_SM, nx - 8, y + 14, pal.gold);
-    }
-    y += 46;
-
-    // -- branch: which alternative is displayed only affects the view --------
-    if (cards.length > 1) {
-      const label = { random: "BRANCH - random",
-                      choice: "BRANCH - first player chooses" }[stage.branch] ?? "BRANCH";
-      textLeft(ctx, truncateText(label, 2, 480 - 2 * M - 162), M, y + 12, 2, pal.amber);
-      const alt = new Button(["alt"], 480 - M - 150, y, 150, 36);
-      bevel(ctx, alt.x, alt.y, alt.w, alt.h, pal.btn);
-      textCenter(ctx, `Card ${this.card + 1} / ${cards.length}`, alt.x + alt.w / 2, alt.y + 12, 1, pal.tan);
-      this.buttons.push(alt);
-      y += 44;
-    }
-
-    // -- SIDE A/B card text, or (M4-B tips) the tips panel in its place -------
+    this.page = Math.max(0, Math.min(this.page, pages.length - 1));
+    const page = pages[this.page];
+    const [stage, card, face] = this._at(page);
+    const side = face.side || "A";
     this._tipsData = tipsFor(this.scenario?.slug, stage.stage, this.tips);
-    if (this.tipsOpen && this._tipsData) {
-      y += this._tipsPanel(ctx, M, y, W, this._tipsData, QuestCardModal.BOTTOM_Y0 - y) + 6;
-    } else {
-      this.tipsOpen = false;   // nothing to show (e.g. paged to an untipped stage)
-      const wrapA = this._wrapBody(aFace.text, W);
-      const wrapB = this._wrapBody(bFace.text, W);
-      const [maxA, maxB] = this._lineBudget(y, wrapA.lines.length, wrapB.lines.length);
-      y += this._sideBlock(ctx, M, y, W, "SIDE A - setup / story", wrapA, maxA) + 6;
-      y += this._sideBlock(ctx, M, y, W, "SIDE B - quest", wrapB, maxB) + 6;
+
+    if (this.detail === "tips" && this._tipsData) {
+      this._drawDetail(ctx, `Tips - Stage ${stage.stage}`);
+      return;
+    }
+    if (this.detail === "text") {
+      this._drawDetail(ctx, this._label(page));
+      return;
+    }
+    this.detail = null;
+
+    // -- identity row: which card side, whether it is the live one, and what
+    // it is worth. The quest points sit here (they used to own a whole
+    // block-level row) - it is one number, it belongs in a corner.
+    let y = 48;
+    textLeft(ctx, this._label(page), M, y, 2, pal.amber);
+    const pts = `${card.questPoints ?? 0} pts`;
+    textLeft(ctx, pts, 480 - M - measureText(pts, 2), y, 2, pal.gold);
+    if (this.page === this._livePage()) {
+      const pw = measureText("CURRENT", 1) + 14;
+      rect(ctx, 240 - pw / 2, y + 2, pw, 18, pal.gold);
+      textCenter(ctx, "CURRENT", 240, y + 6, 1, pal.bg, false);
+    }
+    y += 26;
+
+    // Victory/sailing are rare, so they cost a row only when present.
+    const extra = [];
+    if (card.victory !== null && card.victory !== undefined) extra.push(`Victory ${card.victory}`);
+    if (card.sailing) extra.push("Sailing");
+    if (extra.length) {
+      const s = extra.join("  ");
+      textLeft(ctx, s, 480 - M - measureText(s, 1), y, 1, pal.dim);
     }
 
-    // -- Tips: enabled (normal palette) only where tips exist for this stage;
-    // toggles the tips panel above in place of the SIDE A/B blocks
-    // (M4-B tips) --------------------------------------------------------------
-    const tips = new Button(["tips"], M, y, 140, 40);
-    bevel(ctx, tips.x, tips.y, tips.w, tips.h, pal.btn);
-    if (this._tipsData) {
-      const n = this._tipsData.tips.length;
-      textCenter(ctx, this.tipsOpen ? "Back" : "Tips", tips.x + 70, tips.y + 6, 2, pal.tan);
-      const sub = this.tipsOpen ? "to card" : `${n} note${n === 1 ? "" : "s"}`;
-      textCenter(ctx, sub, tips.x + 70, tips.y + 26, 1, pal.dim);
-    } else {
-      textCenter(ctx, "Tips", tips.x + 70, tips.y + 6, 2, pal.dim);
-      textCenter(ctx, "none yet", tips.x + 70, tips.y + 26, 1, pal.dim);
-    }
-    this.buttons.push(tips);
+    textLeft(ctx, truncateText(face.name || "(unnamed)", 2, W), M, y, 2, pal.gold);
+    y += 28;
+    textLeft(ctx, side === "A" ? "SETUP / STORY" : "QUEST", M, y, 1, pal.amber);
 
-    // -- pager: hidden (not just disabled) at each end ------------------------
-    const py = y + 48;
-    if (this.idx > 0) {
-      const prev = new Button(["prev"], M, py, 110, 40);
-      bevel(ctx, prev.x, prev.y, prev.w, prev.h, pal.btn);
-      textCenter(ctx, "< Prev", prev.x + 55, prev.y + 12, 2, pal.tan);
-      this.buttons.push(prev);
+    // -- body: the card's own text, at the same scale as everywhere else. It
+    // gets every pixel between here and whatever sits below (the tips peek,
+    // or the nav), and marks its own truncation.
+    const hasTips = !!this._tipsData;
+    const tipsY = S.NAV_Y - 12 - S.TIPS_H;
+    const bodyBottom = hasTips ? tipsY - 8 : S.NAV_Y - 12;
+    const by = S.BODY_Y0, usable = W - 20;
+    const text = face.text || "";
+    let [lines, cut] = this._fit(wrapText(text || "no text", 2, usable),
+                                 Math.max(1, Math.floor((bodyBottom - by) / S.LH)),
+                                 usable, false);
+    panel(ctx, M, by - 8, W, bodyBottom - by + 8, pal.card);
+    let ty = by;
+    for (const ln of lines) {
+      textLeft(ctx, ln, M + 10, ty, 2, text ? pal.tan : pal.dim);
+      ty += S.LH;
     }
-    if (this.idx < n - 1) {
-      const nxt = new Button(["next"], 480 - M - 110, py, 110, 40);
-      bevel(ctx, nxt.x, nxt.y, nxt.w, nxt.h, pal.btn);
-      textCenter(ctx, "Next >", nxt.x + 55, nxt.y + 12, 2, pal.tan);
-      this.buttons.push(nxt);
+    if (cut) this.buttons.push(new Button(["more_text"], M, by - 8, W, bodyBottom - by + 8));
+
+    // -- tips peek: the first lines inline, the rest behind a tap ---------
+    if (hasTips) {
+      const joined = this._tipsData.tips.join("  ");
+      let [tl] = this._fit(wrapText(joined, 2, usable), S.TIPS_LINES, usable,
+                           wrapText(joined, 2, usable).length > S.TIPS_LINES);
+      panel(ctx, M, tipsY, W, S.TIPS_H, pal.card);
+      textLeft(ctx, "TIPS", M + 10, tipsY + 6, 1, pal.amber);
+      let tty = tipsY + 22;
+      for (const ln of tl) { textLeft(ctx, ln, M + 10, tty, 2, pal.tan); tty += S.LH; }
+      this.buttons.push(new Button(["tips"], M, tipsY, W, S.TIPS_H));
     }
-    textCenter(ctx, `stage ${this.idx + 1} of ${n}`, 240, py + 12, 2, pal.muted);
+
+    this._nav(ctx, pages);
   }
 
   onButton(btn) {
     const k = btn.id[0];
     if (k === "close") return "close";
+    if (k === "back") { this.detail = null; return "redraw"; }
+    if (!this.stages?.length) return null;
     if (k === "tips") {
-      if (this._tipsData) { this.tipsOpen = !this.tipsOpen; return "redraw"; }
+      if (this._tipsData) { this.detail = "tips"; return "redraw"; }
       return null;
     }
-    if (!this.stages.length) return null;
-    const n = this.stages.length;
-    if (k === "next") {
-      if (this.idx < n - 1) { this.idx += 1; this.card = 0; return "redraw"; }
-      return null;
-    }
-    if (k === "prev") {
-      if (this.idx > 0) { this.idx -= 1; this.card = 0; return "redraw"; }
-      return null;
-    }
-    if (k === "alt") {
-      const cards = this.stages[this.idx].cards;
-      if (cards.length > 1) { this.card = (this.card + 1) % cards.length; return "redraw"; }
-      return null;
-    }
+    if (k === "more_text") { this.detail = "text"; return "redraw"; }
+    const n = this._pages().length;
+    if (k === "next" && this.page < n - 1) { this.page += 1; return "redraw"; }
+    if (k === "prev" && this.page > 0) { this.page -= 1; return "redraw"; }
     return null;
   }
 }
 
-// Radio-button glyph: ring, filled when selected. Duplicates
-// screens_other.js's radioGlyph (this codebase's screen/modal helpers are
-// per-file, not cross-imported - screens_other.js already imports from this
-// file, so the reverse would cycle) so SideQuestPickModal can "feel like
-// the same family" as ChooseScenarioScreen without a new module cycle.
-function sqRadio(ctx, cx, cy, on) {
-  arcRuns(ctx, cx, cy, 10, 8, 0, 360, on ? pal.gold : pal.dim);
-  if (on) disc(ctx, cx, cy, 5, pal.gold);
-}
 
-// Picker over the player side-quest catalog (M4-B sidequest, Task 2):
-// radio-select list (name / points / sphere), Up/Down pager (mirrors
-// ChooseScenarioScreen/PickCycleScreen in screens_other.js - same row
-// stride/pager geometry, same radio glyph), plus Add (commits the
-// selection) and Manual (today's blank-entry fallback, unchanged shape).
-//
-// Opened from QuestingProgressModal's "+ Side quest" button via the
-// pending_side_quest_pick flag (see main.js's setInterval) - constructed
-// with the already-loaded catalog entries (quest_catalog.sideQuests(...)
-// shape: {id, name, points, sphere, pack}), never reads the catalog itself.
-//
-// Empty `entries` (no catalog data) still renders and offers Manual rather
-// than throwing - defense in depth. The call site is expected to skip
-// opening this modal entirely when loadPlayerSideQuests() comes back empty
-// and append directly instead (today's behavior, Global Constraints:
-// catalog data is optional at runtime), but nothing here assumes that.
 export class SideQuestPickModal {
   static PER_PAGE = 6;
   static ROW_H = 44;

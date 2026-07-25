@@ -729,12 +729,10 @@ def _quest_card_modal_tips():
     # scenario-wide general notes, attribution name + URL visible beneath -
     # same passage-through-mirkwood branch-stage fixture as
     # _quest_card_modal_branch (stage 3 of 3), so this doubles as a visual
-    # check that the tips panel replaces the SIDE A/B blocks cleanly without
-    # disturbing the header/stat-strip/branch row above it or the
-    # button/pager below it. The three "general" strings are the real
-    # tools/build_tips.py output for this scenario (see the Task 1 report);
-    # "stages" is a synthetic stand-in - the automated build only populates
-    # "general" today (see build_tips.py's module docstring).
+    # check that the inline tips peek sits cleanly between the card body and
+    # the bottom nav. The "general" strings are the real committed
+    # docs/data/tips.json output for this scenario; "stages" is a synthetic
+    # stand-in - the build only populates "general" today (see build_tips.py).
     from ui.modals import QuestCardModal
     hw = FakeHardware()
     pal = Palette(hw.display)
@@ -746,19 +744,32 @@ def _quest_card_modal_tips():
         _MIRKWOOD_STAGES)
     g.stage_idx = 2
     tips = {"passage-through-mirkwood": {
-        "attribution": {"name": "Vision of the Palantir",
-                         "url": "https://visionofthepalantir.com/2020/09/05/passage-through-mirkwood/"},
-        "general": ["Avoid: bother with easy mode.",
-                    "Stay under 40 threat - avoid Hummerhorns.",
-                    "Avoid: take undefended attacks."],
+        # Verbatim from the committed docs/data/tips.json. The previous
+        # fixture here still held two strings from the meaning-inverting
+        # summarizer that was removed ("Avoid: bother with easy mode." came
+        # from "Don't bother with easy mode") - wrong advice has no business
+        # living on as a test fixture.
+        "attribution": {"name": "Presto HUD notes", "url": ""},
+        "general": ["Stage points are fixed: 1 = 8, 2 = 2, 3B = 10.",
+                    "Hummerhorns engage at 40 -> deal 5 dmg to the engaged hero.",
+                    "Chieftain Ufthak (35 eng) snowballs +2 atk per resource token."],
         "stages": {"3": ["Beorn's Path cannot be defeated while Ungoliant's Spawn is in play."]},
     }}
     m = QuestCardModal(g, tips=tips)
-    m.tips_open = True   # set state directly, not via on_button - a second
-                          # draw() on the same FakeHardware would accumulate
-                          # both views' text calls into one collision check
     m.draw(hw, g, pal)
     return hw, m
+
+
+def _quest_card_modal_tips_detail():
+    # The full-page tips view behind the inline peek's "more" tap: every tip
+    # plus the attribution, at scale 1 so it all fits. State is set directly
+    # rather than via on_button - a second draw() on the same FakeHardware
+    # would accumulate both views' text calls into one collision check.
+    hw, m = _quest_card_modal_tips()
+    hw2 = FakeHardware()
+    m.detail = "tips"
+    m.draw(hw2, _game(), Palette(hw2.display))
+    return hw2, m
 
 
 def _quest_card_modal_empty():
@@ -1046,6 +1057,7 @@ SCENES = {
     "quest_card_modal_branch": _quest_card_modal_branch,
     "quest_card_modal_long_text": _quest_card_modal_long_text,
     "quest_card_modal_tips": _quest_card_modal_tips,
+    "quest_card_modal_tips_detail": _quest_card_modal_tips_detail,
     "quest_card_modal_empty": _quest_card_modal_empty,
     "quest_card_modal_preview": _quest_card_modal_preview,
     "gameover_victory": _gameover("victory"),

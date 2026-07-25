@@ -1666,22 +1666,31 @@ class ResolutionModal:
 
 
 class QuestCardModal:
-    """Read-only stage/card reference (M4-B): opens on the game's current
-    stage and pages through every stage of the loaded scenario snapshot
-    (game.stages, copied at preload - no catalog re-read). Branch stages
-    (multiple alternative cards) can be flipped between with the alt
-    control; switching only changes what is displayed. Purely presentational
-    - idx/card are the modal's own state, never written back to game."""
+    """Read-only card reference (M4-B): one **card side per page**, paged flat
+    across every stage, every alternative and every face of the loaded
+    scenario snapshot (game.stages, copied at preload - no catalog re-read),
+    or of a `stages` list handed in directly (preview mode, see __init__).
+
+    It is a reference, not a game view, so branch structure deliberately does
+    not shape it: a stage's alternatives are simply more pages rather than a
+    toggle, and nothing here reads or writes the branch the game actually
+    took. Purely presentational - page/detail are the modal's own state,
+    never written back to game.
+
+    Long card text and the stage's tips are both shown truncated inline with
+    a "more" affordance; tapping either opens a full-page detail view of it
+    (scale 1, where every catalogued face fits - the longest is 11 lines)."""
 
     MARGIN = 12
-    # Ceiling, not a floor: the SIDE A/SIDE B blocks must end at or below this
-    # y so the Tips button + pager (a fixed 88px: 48px gap + 40px pager tall,
-    # themselves 40px tall) still fit above 480 with margin. _line_budget()
-    # uses it to size each block's line cap per render (see below) instead of
-    # a flat constant - short text no longer leaves Tips/pager stranded down
-    # at a fixed position (they float up to meet the content), and long text
-    # gets far more than the old flat 3-line cap when the other side is short.
-    BOTTOM_Y0 = 380
+    # Fixed bottom nav, so the reading area above it is the same height on
+    # every page (the previous layout let the pager float up under short text,
+    # which meant the body started at a different y on every card).
+    NAV_Y = 424
+    NAV_H = 44
+    BODY_Y0 = 130
+    LH = 26                 # 10*scale(2)+6 - one wrapped body line
+    TIPS_LINES = 2          # inline peek before "more" takes over
+    TIPS_H = 18 + TIPS_LINES * LH + 8
 
     def __init__(self, game, tips=None, stages=None, scenario=None):
         self.game = game
@@ -1689,266 +1698,246 @@ class QuestCardModal:
         # preloaded into the game, so it passes the picked scenario's stages
         # and index entry directly. Everything below reads these, never the
         # game - the modal was already read-only, this just names its source.
+        self.preview = stages is not None
         self.stages = game.stages if stages is None else stages
         self.scenario = (game.scenario or {}) if scenario is None else (scenario or {})
-        # Which stage is live. In preview there is no live stage yet, and
-        # stage 1 is where the game will start, so 0 marks the same card the
-        # Quest Setup view would.
-        self.current_idx = game.stage_idx if stages is None else 0
-        self.idx = self.current_idx if self.stages else 0
-        self.card = (game.card_idx if stages is None else 0) if self.stages else 0
         self.buttons = []
         self.tips = tips or {}          # loaded tips.json "scenarios" map (M4-B tips)
-        self.tips_open = False          # toggled by the Tips/Back button
-        self._tips_data = None          # tips_for(...) result for the current stage, set by draw()
+        self.detail = None              # None | "tips" | "text" - full-page views
+        self._tips_data = None          # tips_for(...) for the current stage, set by draw()
+        self.page = self._live_page()
 
-    def _wrap_body(self, d, text, w):
-        """Word-wraps text (or the "no text" placeholder) at the block's
-        usable width with no line cap - the "natural" line count
-        _line_budget() then allocates space against."""
-        usable = w - 20
-        has_text = bool(text)
-        body = text if has_text else "no text"
-        lines = wrap_text(body, 1, usable, d.measure_text)
-        return has_text, lines, usable
+    # -- page model ------------------------------------------------------
+    def _pages(self):
+        """(stage_idx, card_idx, face_idx) for every face, in catalog order."""
+        out = []
+        for si, st in enumerate(self.stages or []):
+            for ci, card in enumerate(st.get("cards") or []):
+                for fi in range(len(card.get("faces") or [])):
+                    out.append((si, ci, fi))
+        return out
 
-    def _line_budget(self, y0, natural_a, natural_b):
-        """Distributes the pixel budget between y0 (top of the SIDE A block)
-        and BOTTOM_Y0 across the two blocks' natural line counts: each gets
-        its full natural count if both fit, otherwise the longer block is
-        trimmed one line at a time (ties trim A first) until the total fits.
-        Always leaves at least 1 line per block."""
-        overhead = 26   # per block: 18px label row + 8px bottom pad
-        gap = 12         # 6px trailing gap after each of the two blocks
-        lh = 16          # 10*scale(1) + 6, one wrapped text line
-        available_px = self.BOTTOM_Y0 - y0 - 2 * overhead - gap
-        budget_lines = max(2, available_px // lh)
-        allowed_a, allowed_b = natural_a, natural_b
-        while allowed_a + allowed_b > budget_lines and (allowed_a > 1 or allowed_b > 1):
-            if allowed_a >= allowed_b and allowed_a > 1:
-                allowed_a -= 1
-            elif allowed_b > 1:
-                allowed_b -= 1
+    def _at(self, page):
+        si, ci, fi = page
+        st = self.stages[si]
+        card = st["cards"][ci]
+        return st, card, card["faces"][fi]
+
+    def _live_page(self):
+        """Index of the page the game is actually on. In preview there is no
+        live side yet and stage 1A is where play begins, so page 0."""
+        pages = self._pages()
+        if not pages or self.preview:
+            return 0
+        want = (self.game.quest or {}).get("side", "A")
+        for i, p in enumerate(pages):
+            si, ci, _ = p
+            if si == self.game.stage_idx and ci == self.game.card_idx:
+                if (self._at(p)[2].get("side") or "A") == want:
+                    return i
+        return 0
+
+    def _label(self, page):
+        st, _, face = self._at(page)
+        return "Stage %d%s" % (st["stage"], face.get("side") or "")
+
+    # -- shared bits -----------------------------------------------------
+    def _body_text(self, face):
+        return face.get("text") or ""
+
+    MORE = " [...] more"
+
+    def _fit(self, d, lines, max_lines, usable, more):
+        """Trims to max_lines, marking the cut with "[...] more" so a
+        truncated card never looks like the whole card. The marker has to be
+        made room for, not appended and truncated - doing the latter cuts the
+        marker itself down to "[...." and the affordance disappears."""
+        if len(lines) <= max_lines and not more:
+            return lines, False
+        keep = lines[:max_lines] or [""]
+        mw = d.measure_text(self.MORE, 2)
+        last = keep[-1]
+        while last and d.measure_text(last, 2) + mw > usable:
+            last = last.rsplit(" ", 1)[0] if " " in last else last[:-1]
+        keep[-1] = last + self.MORE
+        return keep, True
+
+    def _nav(self, d, pal, pages):
+        """Prev/Next, equal width, pinned to the bottom and labelled with the
+        page they lead to. Hidden (not just disabled) at each end."""
+        M = self.MARGIN
+        half = (480 - 2 * M - 8) // 2
+        if self.page > 0:
+            b = Button(("prev",), M, self.NAV_Y, half, self.NAV_H)
+            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
+            text_center(d, pal, truncate_text("< " + self._label(pages[self.page - 1]),
+                                              2, half - 16, d.measure_text),
+                        b.x + half // 2, b.y + 14, 2, pal.tan)
+            self.buttons.append(b)
+        if self.page < len(pages) - 1:
+            b = Button(("next",), M + half + 8, self.NAV_Y, half, self.NAV_H)
+            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
+            text_center(d, pal, truncate_text(self._label(pages[self.page + 1]) + " >",
+                                              2, half - 16, d.measure_text),
+                        b.x + half // 2, b.y + 14, 2, pal.tan)
+            self.buttons.append(b)
+
+    def _detail_lines(self, d, usable):
+        """The full content behind a "more" tap, at scale 1 so it fits: every
+        catalogued face wraps to 11 lines or fewer there."""
+        if self.detail == "tips":
+            t = self._tips_data or {"tips": []}
+            lines = []
+            for tip in t["tips"]:
+                lines.extend(wrap_text("- " + tip, 1, usable, d.measure_text))
+            attribution = t.get("attribution") or {}
+            for extra in (("Source: " + attribution["name"]) if attribution.get("name") else "",
+                          attribution.get("url") or ""):
+                if extra:
+                    lines.append(("ATTRIB", truncate_text(extra, 1, usable, d.measure_text)))
+            return lines
+        _, _, face = self._at(self._pages()[self.page])
+        return wrap_text(self._body_text(face) or "no text", 1, usable, d.measure_text)
+
+    def _draw_detail(self, d, pal, title):
+        M, W = self.MARGIN, 480 - 2 * self.MARGIN
+        usable = W - 20
+        text_left(d, pal, truncate_text(title, 2, W, d.measure_text), M, 48, 2, pal.gold)
+        y = 78
+        panel(d, pal, M, y, W, self.NAV_Y - 12 - y, fill=pal.card)
+        ty = y + 10
+        for ln in self._detail_lines(d, usable):
+            if ty > self.NAV_Y - 12 - 20:
+                break
+            if isinstance(ln, tuple):
+                text_left(d, pal, ln[1], M + 10, ty, 1, pal.dim)
             else:
-                allowed_a -= 1
-        return allowed_a, allowed_b
+                text_left(d, pal, ln, M + 10, ty, 1, pal.tan)
+            ty += 16
+        b = Button(("back",), M, self.NAV_Y, 480 - 2 * M, self.NAV_H)
+        bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
+        text_center(d, pal, "Back", 240, b.y + 14, 2, pal.tan)
+        self.buttons.append(b)
 
-    def _side_block(self, d, pal, x, y, w, label, wrapped, max_lines):
-        """Bordered panel: a small label row + up to max_lines of the
-        pre-wrapped body text (or the "no text" placeholder). Returns
-        height."""
-        has_text, lines, usable = wrapped
-        if len(lines) > max_lines:
-            lines = lines[:max_lines]
-            lines[-1] = truncate_text(lines[-1] + " ..", 1, usable, d.measure_text)
-        lh = 16
-        h = 18 + len(lines) * lh + 8
-        panel(d, pal, x, y, w, h, fill=pal.card)
-        text_left(d, pal, label, x + 10, y + 6, 1, pal.amber)
-        ty = y + 20
-        ink = pal.tan if has_text else pal.dim
-        for ln in lines:
-            text_left(d, pal, ln, x + 10, ty, 1, ink)
-            ty += lh
-        return h
-
-    def _tips_panel(self, d, pal, x, y, w, tips_data, max_h):
-        """Bordered panel: a "TIPS" label row, up to `max_h` px of wrapped
-        tip lines (each prefixed "- "), and the attribution name + URL in
-        pal.dim beneath - the tips-view counterpart of _side_block, sized
-        against the same BOTTOM_Y0 ceiling so the Tips/Back button and
-        pager land at the same y in either view. Excess content truncates
-        its last visible line with ".." rather than overflowing into the
-        button/pager area, mirroring _side_block's own truncate-to-fit.
-        Returns height (always <= max_h)."""
-        usable = w - 20
-        lh = 16
-        lines = []
-        for t in tips_data["tips"]:
-            lines.extend(wrap_text("- " + t, 1, usable, d.measure_text))
-        attribution = tips_data.get("attribution") or {}
-        name = attribution.get("name") or ""
-        url = attribution.get("url") or ""
-        attrib_lines = [truncate_text(s, 1, usable, d.measure_text)
-                         for s in (("Source: " + name) if name else "", url) if s]
-
-        overhead = 18 + 8   # label row + bottom pad, matches _side_block
-        budget = max(1, (max_h - overhead - len(attrib_lines) * lh) // lh)
-        if len(lines) > budget:
-            lines = lines[:budget]
-            lines[-1] = truncate_text(lines[-1] + " ..", 1, usable, d.measure_text)
-
-        h = min(max_h, overhead + (len(lines) + len(attrib_lines)) * lh)
-        panel(d, pal, x, y, w, h, fill=pal.card)
-        text_left(d, pal, "TIPS", x + 10, y + 6, 1, pal.amber)
-        ty = y + 20
-        for ln in lines:
-            text_left(d, pal, ln, x + 10, ty, 1, pal.tan)
-            ty += lh
-        for ln in attrib_lines:
-            text_left(d, pal, ln, x + 10, ty, 1, pal.dim)
-            ty += lh
-        return h
-
+    # -- draw ------------------------------------------------------------
     def draw(self, hw, game, pal):
         from ui.header import modal_header
         d = hw.display
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        modal_header(d, pal, game, "QUEST CARD", self.buttons)
+        modal_header(d, pal, game, "QUEST CARDS", self.buttons)
         M, W = self.MARGIN, 480 - 2 * self.MARGIN
 
-        if not self.stages:
+        pages = self._pages()
+        if not pages:
             text_center(d, pal, "No quest loaded", 240, 200, 2, pal.dim)
             text_center(d, pal, "Start a scenario to see stage cards.", 240, 226, 1, pal.dim)
             return
 
-        n = len(self.stages)
-        self.idx = max(0, min(self.idx, n - 1))
-        stage = self.stages[self.idx]
-        cards = stage["cards"]
-        self.card = max(0, min(self.card, len(cards) - 1))
-        card = cards[self.card]
-        # Front is side A; the back is whatever non-A side this printing uses.
-        # Most cards are A/B, but epic multiplayer variants share one A front
-        # with backs C..H (e.g. Mount Gundabad stage 2 has 7 alternatives),
-        # so matching "B" literally would blank all but the first.
-        faces = card["faces"]
-        a_face = next((f for f in faces if f["side"] == "A"), faces[0] if faces else {})
-        b_face = next((f for f in faces if f["side"] and f["side"] != "A"),
-                      faces[1] if len(faces) > 1 else {})
-        a_name = a_face.get("name") or ""
-        b_name = b_face.get("name") or ""
+        self.page = max(0, min(self.page, len(pages) - 1))
+        page = pages[self.page]
+        stage, card, face = self._at(page)
+        side = face.get("side") or "A"
+        self._tips_data = tips_for(self.scenario.get("slug"), stage["stage"], self.tips)
 
-        # -- stage line: number, an A/B legend, and a CURRENT marker so
-        # paging away from the game's live stage is obvious -----------------
+        if self.detail == "tips" and self._tips_data:
+            self._draw_detail(d, pal, "Tips - Stage %d" % stage["stage"])
+            return
+        if self.detail == "text":
+            self._draw_detail(d, pal, self._label(page))
+            return
+        self.detail = None
+
+        # -- identity row: which card side, whether it is the live one, and
+        # what it is worth. The quest points sit here (they used to own a
+        # whole block-level row) - it is one number, it belongs in a corner.
         y = 48
-        text_left(d, pal, "STAGE %d" % stage["stage"], M, y, 2, pal.amber)
-        ab_hint = "A / B"
-        text_left(d, pal, ab_hint, 480 - M - d.measure_text(ab_hint, 1), y + 4, 1, pal.dim)
-        if self.idx == self.current_idx:
+        text_left(d, pal, self._label(page), M, y, 2, pal.amber)
+        pts = "%d pts" % card.get("questPoints", 0)
+        text_left(d, pal, pts, 480 - M - d.measure_text(pts, 2), y, 2, pal.gold)
+        if self.page == self._live_page():
             pw = d.measure_text("CURRENT", 1) + 14
-            px = 240 - pw // 2
             d.set_pen(pal.gold)
-            d.rectangle(px, y, pw, 18)
-            text_center(d, pal, "CURRENT", 240, y + 4, 1, pal.bg, shadow=False)
-        y += 28
+            d.rectangle(240 - pw // 2, y + 2, pw, 18)
+            text_center(d, pal, "CURRENT", 240, y + 6, 1, pal.bg, shadow=False)
+        y += 26
 
-        # -- card name(s): a shared name shows once; a branch payoff (the
-        # B-face name differs, e.g. "A Chosen Path" -> "Beorn's Path") shows
-        # both, labelled -----------------------------------------------------
-        if b_name and b_name != a_name:
-            text_left(d, pal, truncate_text("A: " + a_name, 2, W, d.measure_text), M, y, 2, pal.gold)
-            y += 22
-            text_left(d, pal, truncate_text("B: " + b_name, 2, W, d.measure_text), M, y, 2, pal.gold)
-            y += 26
-        else:
-            name = a_name or b_name or "(unnamed)"
-            text_center(d, pal, truncate_text(name, 3, W, d.measure_text), 240, y, 3, pal.gold)
-            y += 32
-
-        # -- quest points / victory / sailing stat strip ---------------------
-        cx = M + 16
-        text_left(d, pal, "PTS", M, y, 1, pal.dim)
-        token(d, pal, cx, y + 22, 14, 2, card.get("questPoints", 0), pal.gold, 0, pal.gold, pal.dim)
-        nx = cx + 40
+        # Victory/sailing are rare, so they cost a row only when present.
+        extra = []
         if card.get("victory") is not None:
-            text_left(d, pal, "VP", nx - 14, y, 1, pal.dim)
-            token(d, pal, nx, y + 22, 14, 2, card["victory"], pal.gold, 0, pal.gold, pal.dim)
-            nx += 40
+            extra.append("Victory %d" % card["victory"])
         if card.get("sailing"):
-            text_left(d, pal, "SAIL", nx - 16, y, 1, pal.dim)
-            disc(d, nx, y + 22, 14, pal.well)
-            icons.draw(d, icons.WHEEL_SM, nx - 8, y + 14, pal.gold)
-        y += 46
+            extra.append("Sailing")
+        if extra:
+            s = "  ".join(extra)
+            text_left(d, pal, s, 480 - M - d.measure_text(s, 1), y, 1, pal.dim)
 
-        # -- branch: which alternative is displayed only affects the view ----
-        if len(cards) > 1:
-            label = {"random": "BRANCH - random",
-                     "choice": "BRANCH - first player chooses"}.get(stage.get("branch"), "BRANCH")
-            text_left(d, pal, truncate_text(label, 2, 480 - 2 * M - 162, d.measure_text),
-                      M, y + 12, 2, pal.amber)
-            alt = Button(("alt",), 480 - M - 150, y, 150, 36)
-            bevel(d, pal, alt.x, alt.y, alt.w, alt.h, pal.btn)
-            text_center(d, pal, "Card %d / %d" % (self.card + 1, len(cards)),
-                        alt.x + alt.w / 2, alt.y + 12, 1, pal.tan)
-            self.buttons.append(alt)
-            y += 44
+        text_left(d, pal, truncate_text(face.get("name") or "(unnamed)", 2, W, d.measure_text),
+                  M, y, 2, pal.gold)
+        y += 28
+        text_left(d, pal, "SETUP / STORY" if side == "A" else "QUEST", M, y, 1, pal.amber)
 
-        # -- SIDE A/B card text, or (M4-B tips) the tips panel in its place --
-        self._tips_data = tips_for(
-            self.scenario.get("slug"), stage["stage"], self.tips)
-        if self.tips_open and self._tips_data:
-            y += self._tips_panel(d, pal, M, y, W, self._tips_data, self.BOTTOM_Y0 - y) + 6
-        else:
-            self.tips_open = False   # nothing to show (e.g. paged to an untipped stage)
-            wrap_a = self._wrap_body(d, a_face.get("text"), W)
-            wrap_b = self._wrap_body(d, b_face.get("text"), W)
-            max_a, max_b = self._line_budget(y, len(wrap_a[1]), len(wrap_b[1]))
-            y += self._side_block(d, pal, M, y, W, "SIDE A - setup / story", wrap_a, max_a) + 6
-            y += self._side_block(d, pal, M, y, W, "SIDE B - quest", wrap_b, max_b) + 6
+        # -- body: the card's own text, at the same scale as everywhere else.
+        # It gets every pixel between here and whatever sits below (the tips
+        # peek, or the nav), and marks its own truncation.
+        has_tips = bool(self._tips_data)
+        tips_y = self.NAV_Y - 12 - self.TIPS_H
+        body_bottom = (tips_y - 8) if has_tips else (self.NAV_Y - 12)
+        by = self.BODY_Y0
+        usable = W - 20
+        text = self._body_text(face)
+        lines = wrap_text(text or "no text", 2, usable, d.measure_text)
+        lines, cut = self._fit(d, lines, max(1, (body_bottom - by) // self.LH), usable, False)
+        panel(d, pal, M, by - 8, W, body_bottom - by + 8, fill=pal.card)
+        ty = by
+        for ln in lines:
+            text_left(d, pal, ln, M + 10, ty, 2, pal.tan if text else pal.dim)
+            ty += self.LH
+        if cut:
+            self.buttons.append(Button(("more_text",), M, by - 8, W, body_bottom - by + 8))
 
-        # -- Tips: enabled (normal palette) only where tips exist for this
-        # stage; toggles the tips panel above in place of the SIDE A/B blocks
-        # (M4-B tips) --------------------------------------------------------
-        tips = Button(("tips",), M, y, 140, 40)
-        bevel(d, pal, tips.x, tips.y, tips.w, tips.h, pal.btn)
-        if self._tips_data:
-            n = len(self._tips_data["tips"])
-            text_center(d, pal, "Back" if self.tips_open else "Tips", tips.x + 70, tips.y + 6, 2, pal.tan)
-            sub = "to card" if self.tips_open else ("%d note%s" % (n, "" if n == 1 else "s"))
-            text_center(d, pal, sub, tips.x + 70, tips.y + 26, 1, pal.dim)
-        else:
-            text_center(d, pal, "Tips", tips.x + 70, tips.y + 6, 2, pal.dim)
-            text_center(d, pal, "none yet", tips.x + 70, tips.y + 26, 1, pal.dim)
-        self.buttons.append(tips)
+        # -- tips peek: the first lines inline, the rest behind a tap -------
+        if has_tips:
+            joined = "  ".join(self._tips_data["tips"])
+            tl = wrap_text(joined, 2, usable, d.measure_text)
+            tl, _ = self._fit(d, tl, self.TIPS_LINES, usable, len(tl) > self.TIPS_LINES)
+            panel(d, pal, M, tips_y, W, self.TIPS_H, fill=pal.card)
+            text_left(d, pal, "TIPS", M + 10, tips_y + 6, 1, pal.amber)
+            ty = tips_y + 22
+            for ln in tl:
+                text_left(d, pal, ln, M + 10, ty, 2, pal.tan)
+                ty += self.LH
+            self.buttons.append(Button(("tips",), M, tips_y, W, self.TIPS_H))
 
-        # -- pager: hidden (not just disabled) at each end --------------------
-        py = y + 48
-        if self.idx > 0:
-            prev = Button(("prev",), M, py, 110, 40)
-            bevel(d, pal, prev.x, prev.y, prev.w, prev.h, pal.btn)
-            text_center(d, pal, "< Prev", prev.x + 55, prev.y + 12, 2, pal.tan)
-            self.buttons.append(prev)
-        if self.idx < n - 1:
-            nxt = Button(("next",), 480 - M - 110, py, 110, 40)
-            bevel(d, pal, nxt.x, nxt.y, nxt.w, nxt.h, pal.btn)
-            text_center(d, pal, "Next >", nxt.x + 55, nxt.y + 12, 2, pal.tan)
-            self.buttons.append(nxt)
-        text_center(d, pal, "stage %d of %d" % (self.idx + 1, n), 240, py + 12, 2, pal.muted)
+        self._nav(d, pal, pages)
 
     def on_button(self, btn):
         k = btn.id[0]
         if k == "close":
             return "close"
-        if k == "tips":
-            if self._tips_data:
-                self.tips_open = not self.tips_open
-                return "redraw"
-            return None
+        if k == "back":
+            self.detail = None
+            return "redraw"
         if not self.stages:
             return None
-        n = len(self.stages)
-        if k == "next":
-            if self.idx < n - 1:
-                self.idx += 1
-                self.card = 0
+        if k == "tips":
+            if self._tips_data:
+                self.detail = "tips"
                 return "redraw"
             return None
-        if k == "prev":
-            if self.idx > 0:
-                self.idx -= 1
-                self.card = 0
-                return "redraw"
-            return None
-        if k == "alt":
-            cards = self.stages[self.idx]["cards"]
-            if len(cards) > 1:
-                self.card = (self.card + 1) % len(cards)
-                return "redraw"
-            return None
+        if k == "more_text":
+            self.detail = "text"
+            return "redraw"
+        n = len(self._pages())
+        if k == "next" and self.page < n - 1:
+            self.page += 1
+            return "redraw"
+        if k == "prev" and self.page > 0:
+            self.page -= 1
+            return "redraw"
         return None
+
 
 
 def _sq_radio(d, pal, cx, cy, on):
