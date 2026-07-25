@@ -52,9 +52,10 @@ Then relaunch and **check the output for tracebacks before declaring success**
 
 Exercise every surface added since the last device deploy:
 
-1. **First run** — the intro should appear on a fresh install; page through all
-   three pages, confirm the legend rows render (icons + tokens, not blanks),
-   tap Start. Reopen it later via Settings → "How to read this HUD".
+1. **Boot** — a fresh install must land on the **boot menu**, not on help.
+   Then Settings → **Help**: page through all three pages, confirm the legend
+   rows render (icons + tokens, not blanks), and that both Done and the header
+   close return to Settings.
 2. **New game** → Player Setup → Scenario Source → Official → Core Set →
    **Passage Through Mirkwood**.
 3. **Scenario Options** — confirm the three encounter sets list *with icons*,
