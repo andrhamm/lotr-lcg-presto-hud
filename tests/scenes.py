@@ -930,7 +930,34 @@ def _refresh_danger(g):
     g.players[1].threat = 39
 
 
+
+def _firstrun(page=0):
+    def build():
+        from ui.screen_firstrun import FirstRunScreen
+        hw = FakeHardware()
+        pal = Palette(hw.display)
+        g = _game()
+        s = FirstRunScreen()
+        s.page = page
+        s.draw(hw, g, pal)
+        return hw, s
+    return build
+
+
+def _legend():
+    from ui.screen_firstrun import LegendScreen
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    s = LegendScreen()
+    s.draw(hw, g, pal)
+    return hw, s
+
+
 SCENES = {
+    "firstrun_1": _firstrun(0),
+    "firstrun_3": _firstrun(2),
+    "legend": _legend,
     "boot": _boot({"round": 3, "phase": "Combat (Enemy Attacks)", "saved_at": "2026-07-21 19:04"}),
     "boot_fresh": _boot(None),
     "setup": _setup([25]),
