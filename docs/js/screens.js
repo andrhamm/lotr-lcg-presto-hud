@@ -1149,6 +1149,216 @@ export class StageCompleteModal {
   }
 }
 
+// Guided post-edit/post-success resolution: location -> quest advance
+// (branch/reveal/flip) -> side quests, one explicit step at a time,
+// re-deriving what's next from live game state after every action. Opened
+// only for catalog games (game.stages non-empty) - custom games keep the
+// legacy StageCompleteModal. See docs/superpowers/plans/
+// 2026-07-24-quest-picker-bresolve.md for the full rationale, including why
+// at most one stage advance can ever happen per pass.
+export class ResolutionModal {
+  constructor(game, forceAdvance = false) {
+    this.game = game;
+    this.buttons = [];
+    this.branchPick = null;
+    this.forceAdvance = forceAdvance;
+    this._skippedSideQuests = [];   // object refs (identity, not value) - see _derive
+    this.step = this._derive();
+  }
+
+  _questStep() {
+    const g = this.game;
+    if (g.quest.side === "A") {
+      const card = g.stages[g.stage_idx].cards[g.card_idx];
+      const faceA = card.faces.find(f => f.side === "A") ?? {};
+      return { kind: "reveal", stage_n: g.quest.stage_n, face_a: faceA,
+               next_points: card.questPoints };
+    }
+    const nxtIdx = g.stage_idx + 1;
+    if (nxtIdx >= g.stages.length) {
+      return { kind: "victory", cleared: g.questLabel() };
+    }
+    const nxt = g.stages[nxtIdx];
+    if (nxt.cards.length > 1 && this.branchPick === null) {
+      return { kind: "branch", cards: nxt.cards, mode: nxt.branch ?? "choice" };
+    }
+    const cardIdx = this.branchPick || 0;
+    return { kind: "advance", cleared: g.questLabel(), card_idx: cardIdx,
+             next_stage: nxt.stage,
+             underfilled: g.quest.points > 0 && g.quest.progress < g.quest.points };
+  }
+
+  _derive() {
+    const g = this.game;
+    if (g.stages.length && g.quest.side === "A") {
+      return this._questStep();      // finish an interrupted reveal/flip first
+    }
+    const loc = g.active_location;
+    if (loc && loc.points > 0 && loc.progress >= loc.points) {
+      return { kind: "location", progress: loc.progress, points: loc.points };
+    }
+    if ((g.quest.points > 0 && g.quest.progress >= g.quest.points) || this.forceAdvance) {
+      return this._questStep();
+    }
+    for (let i = 0; i < g.side_quests.length; i++) {
+      const s = g.side_quests[i];
+      if (this._skippedSideQuests.some(skipped => s === skipped)) continue;
+      if (s.points > 0 && s.progress >= s.points) {
+        return { kind: "side_quest", idx: i,
+                 name: s.name || `Side Quest ${i + 1}`,
+                 progress: s.progress, points: s.points };
+      }
+    }
+    return null;
+  }
+
+  draw(ctx) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    modalHeader(ctx, this.game, "Resolve", this.buttons);
+    const st = this.step;
+    if (st === null) this._drawDone(ctx);
+    else if (st.kind === "reveal") this._drawReveal(ctx, st);
+    else if (st.kind === "location") this._drawLocation(ctx, st);
+    else if (st.kind === "branch") this._drawBranch(ctx, st);
+    else if (st.kind === "advance") this._drawAdvance(ctx, st);
+    else if (st.kind === "victory") this._drawVictory(ctx, st);
+    else if (st.kind === "side_quest") this._drawSideQuest(ctx, st);
+  }
+
+  // -- per-step draw helpers (layout bands per the plan's Layout section) --
+  _cta(ctx, label, id, y = 404, h = 56, ok = true) {
+    const b = new Button(id, 24, y, 432, h);
+    bevel(ctx, b.x, b.y, b.w, b.h, ok ? pal.btn_ok : pal.btn_no, false, 3);
+    textCenter(ctx, label, 240, y + Math.floor(h / 2) - 10, 2, ok ? pal.ok_fg : pal.no_fg);
+    this.buttons.push(b);
+  }
+
+  _drawDone(ctx) {
+    textCenter(ctx, "All resolved", 240, 200, 3, pal.gold);
+    this._cta(ctx, "Continue", ["close"]);
+  }
+
+  _drawReveal(ctx, st) {
+    textCenter(ctx, `STAGE ${st.stage_n} REVEALED`, 240, 64, 2, pal.amber);
+    const name = truncateText(st.face_a.name || "", 3, 432);
+    textCenter(ctx, name, 240, 92, 3, pal.gold);
+    const tipX = 24, tipW = 432, tipY = 130;
+    const ribbonH = 22, padTop = 10, lineH = 24, padBottom = 10, maxLines = 5;
+    const raw = st.face_a.text;
+    const body = raw ? raw : "No setup instructions for this stage.";
+    const lines = wrapText(body, 2, tipW - 28).slice(0, maxLines);
+    const tipH = ribbonH + padTop + lines.length * lineH + padBottom;
+    rect(ctx, tipX, tipY, tipW, tipH, pal.border_gold);
+    rect(ctx, tipX + 2, tipY + 2, tipW - 4, tipH - 4, pal.bg);
+    rect(ctx, tipX + 4, tipY + 4, tipW - 8, tipH - 8, pal.border_gold);
+    rect(ctx, tipX + 6, tipY + 6, tipW - 12, tipH - 12, pal.scroll);
+    rect(ctx, tipX, tipY, tipW, ribbonH, pal.border_gold);
+    textLeft(ctx, "STAGE ADVANCE - resolve now", tipX + 10, tipY + 6, 1, pal.bg, false);
+    let ly = tipY + ribbonH + padTop;
+    for (const ln of lines) {
+      textLeft(ctx, ln, tipX + 14, ly, 2, pal.tan);
+      ly += lineH;
+    }
+    this._cta(ctx, `Flip to Side B  ->  ${st.next_points} qp`, ["do_flip"]);
+  }
+
+  _drawLocation(ctx, st) {
+    textCenter(ctx, "Location Explored", 240, 90, 3, pal.gold);
+    textCenter(ctx, `${st.progress}/${st.points} progress`, 240, 130, 2, pal.tan);
+    const excess = st.progress - st.points;
+    if (excess) {
+      textCenter(ctx, `${excess} excess -> quest card`, 240, 160, 2, pal.amber);
+    }
+    this._cta(ctx, "Continue", ["resolve_location"]);
+  }
+
+  _drawBranch(ctx, st) {
+    textCenter(ctx, "Choose a path", 240, 56, 3, pal.gold);
+    textCenter(ctx, st.mode !== "random" ? "First player chooses" : "Random", 240, 86, 1, pal.dim);
+    let y = 116;
+    st.cards.forEach((card, i) => {
+      const bFace = card.faces.find(f => f.side === "B") ?? {};
+      const b = new Button(["pick_branch", i], 24, y, 432, 64);
+      const sel = this.branchPick === i;
+      bevel(ctx, b.x, b.y, b.w, b.h, sel ? pal.btn_ok : pal.btn, false, 3);
+      textLeft(ctx, bFace.name || "?", b.x + 14, y + 10, 2, sel ? pal.ok_fg : pal.tan);
+      const preview = truncateText(bFace.text || "", 1, 400);
+      textLeft(ctx, preview, b.x + 14, y + 38, 1, pal.dim);
+      this.buttons.push(b);
+      y += 74;
+    });
+    if (st.mode === "random") {
+      const r = new Button(["randomize_branch"], 24, y, 432, 40);
+      bevel(ctx, r.x, r.y, r.w, r.h, pal.card, false, 2);
+      textCenter(ctx, "Randomize for me", 240, y + 10, 2, pal.tan);
+      this.buttons.push(r);
+    }
+  }
+
+  _drawAdvance(ctx, st) {
+    textCenter(ctx, `Quest ${st.cleared} cleared`, 240, 90, 3, pal.gold);
+    if (st.underfilled) {
+      textCenter(ctx, "Progress hasn't reached target - confirm", 240, 130, 1, pal.red);
+    }
+    this._cta(ctx, `Reveal Stage ${st.next_stage}`, ["do_advance"]);
+  }
+
+  _drawVictory(ctx, st) {
+    textCenter(ctx, `Quest ${st.cleared} cleared`, 240, 70, 2, pal.tan);
+    textCenter(ctx, "That was the final stage!", 240, 110, 3, pal.gold);
+    this._cta(ctx, "Declare Victory", ["declare_victory"], 340);
+    this._cta(ctx, "Not yet - keep playing", ["continue_without_victory"], 404, 56, false);
+  }
+
+  _drawSideQuest(ctx, st) {
+    textCenter(ctx, st.name, 240, 90, 3, pal.gold);
+    textCenter(ctx, `${st.progress}/${st.points}`, 240, 130, 2, pal.tan);
+    this._cta(ctx, "Mark Complete", ["resolve_side_quest"], 340);
+    this._cta(ctx, "Leave as-is", ["skip_side_quest"], 404, 56, false);
+  }
+
+  onButton(btn) {
+    const g = this.game;
+    const k = btn.id[0];
+    if (k === "do_flip") { g.flipToB(); this.step = this._derive(); return "redraw"; }
+    if (k === "resolve_location") {
+      g.resolveLocationOverflow();
+      this.step = this._derive();
+      return "redraw";
+    }
+    if (k === "pick_branch") { this.branchPick = btn.id[1]; this.step = this._derive(); return "redraw"; }
+    if (k === "randomize_branch") {
+      this.branchPick = Math.floor(Math.random() * this.step.cards.length);
+      this.step = this._derive();
+      return "redraw";
+    }
+    if (k === "do_advance") {
+      g.clearAndAdvance(this.step.card_idx);
+      this.forceAdvance = false;
+      this.branchPick = null;
+      this.step = this._derive();
+      return "redraw";
+    }
+    if (k === "declare_victory") { g.setGameOver("victory"); return "close"; }
+    if (k === "continue_without_victory") { this.step = this._derive(); return "redraw"; }
+    if (k === "resolve_side_quest") {
+      const i = this.step.idx;
+      g.logEvent(`Side quest ${i + 1} completed (resolution)`);
+      g.side_quests.splice(i, 1);
+      this.step = this._derive();
+      return "redraw";
+    }
+    if (k === "skip_side_quest") {
+      this._skippedSideQuests.push(g.side_quests[this.step.idx]);
+      this.step = this._derive();
+      return "redraw";
+    }
+    if (k === "close") return "close";
+    return null;
+  }
+}
+
 export class QuestConfigModal {
   constructor(game) {
     this.game = game;

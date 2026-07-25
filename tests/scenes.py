@@ -753,6 +753,134 @@ def _quest_card_modal_empty():
     return hw, m
 
 
+def _resolution_game(flip=True):
+    # Shared base for every ResolutionModal scene below: Passage Through
+    # Mirkwood's real 3-stage tree (same _MIRKWOOD_STAGES the QuestCardModal
+    # branch/tips scenes above use) - stage 1 "Flies and Spiders" (8qp, real
+    # setup text), stage 2 "A Fork in the Road" (2qp, single card - no branch
+    # in the way), stage 3 the real random branch ("Don't Leave the Path!"
+    # 0qp / "Beorn's Path" 10qp). flip=False leaves stage 1 on side A (pre-
+    # round-1), the precondition the "reveal" step scene wants.
+    g = GameState(4, 25)
+    g.preload_scenario(
+        {"slug": "passage-through-mirkwood", "name": "Passage Through Mirkwood",
+         "pack": "Core Set", "cycle": "Core Set", "source": "official",
+         "kind": "quest", "nightmare": False, "mode": "Standard"},
+        _MIRKWOOD_STAGES)
+    if flip:
+        g.flip_to_b()
+    return g
+
+
+def _resolution_reveal():
+    # "reveal" step: stage 1A's real setup text (Flies and Spiders) - the
+    # same source text the quest_setup scene shows, so this doubles as a
+    # visual parity check against ScreenPlay's own scroll-tip look.
+    from ui.modals import ResolutionModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game(flip=False)
+    m = ResolutionModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _resolution_location():
+    # "location" step: active location 1 progress over its 2 points - the
+    # excess (1) will be credited to the quest card on Continue.
+    from ui.modals import ResolutionModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game()
+    g.active_location = {"points": 2, "progress": 3}
+    m = ResolutionModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _resolution_branch():
+    # "branch" step: stage 3's real random 2-way split ("Don't Leave the
+    # Path!" 0qp / "Beorn's Path" 10qp) - exercises the Randomize button
+    # (mode "random") alongside the two picker rows.
+    from ui.modals import ResolutionModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game()
+    g.stage_idx = 1
+    g.quest.update({"stage_n": 2, "side": "B", "points": 2, "progress": 2})
+    m = ResolutionModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _resolution_advance():
+    # "advance" step: stage 1 cleared exactly on target (8/8) -> stage 2
+    # ("A Fork in the Road", a single card - no branch step in the way).
+    from ui.modals import ResolutionModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game()
+    g.quest["progress"] = 8
+    m = ResolutionModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _resolution_advance_underfilled():
+    # "advance" step reached via force_advance (the quest row's chevron,
+    # Task 3) without the numeric target actually met - the underfilled
+    # caution banner.
+    from ui.modals import ResolutionModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game()
+    g.quest["progress"] = 3   # 8 needed
+    m = ResolutionModal(g, force_advance=True)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _resolution_victory():
+    # "victory" step: stage 3 (the final catalogued stage) cleared - no next
+    # stage to advance to.
+    from ui.modals import ResolutionModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game()
+    g.stage_idx = 2
+    g.card_idx = 1
+    g.quest.update({"stage_n": 3, "side": "B", "points": 10, "progress": 10})
+    m = ResolutionModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _resolution_side_quest():
+    # "side_quest" step: one side quest at target, one still short - only
+    # the completed one is offered.
+    from ui.modals import ResolutionModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game()
+    g.side_quests = [{"points": 4, "progress": 4, "name": "Gather Information"},
+                      {"points": 6, "progress": 2, "name": "Scout Ahead"}]
+    m = ResolutionModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _resolution_done():
+    # None step: nothing over target anywhere - the plain "All resolved"
+    # confirmation.
+    from ui.modals import ResolutionModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game()
+    m = ResolutionModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
 def _gameover(result):
     def build():
         from ui.screen_gameover import GameOverScreen
@@ -832,6 +960,14 @@ SCENES = {
     "side_quest_pick_empty": _side_quest_pick_empty,
     "sailing_modal": _sailing_modal,
     "stage_complete_modal": _stage_complete_modal,
+    "resolution_reveal": _resolution_reveal,
+    "resolution_location": _resolution_location,
+    "resolution_branch": _resolution_branch,
+    "resolution_advance": _resolution_advance,
+    "resolution_advance_underfilled": _resolution_advance_underfilled,
+    "resolution_victory": _resolution_victory,
+    "resolution_side_quest": _resolution_side_quest,
+    "resolution_done": _resolution_done,
     "quest_config_modal": _quest_config_modal,
     "quest_card_modal": _quest_card_modal,
     "quest_card_modal_branch": _quest_card_modal_branch,

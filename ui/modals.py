@@ -5,6 +5,8 @@ Each modal mutates the passed GameState directly on confirm. Protocol:
   on_button(btn)       -> "close" (save+dismiss), "cancel" (dismiss), or None
 """
 
+import random
+
 from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         stepper, draw_weather, token, circ_btn, disc, arc_runs,
                         ring, wx_small, wrap_text, truncate_text)
@@ -1421,6 +1423,201 @@ class StageCompleteModal:
         if k == "win":
             self.game.pending_stage = None
             self.game.set_game_over("victory")
+            return "close"
+        return None
+
+
+class ResolutionModal:
+    """Guided post-edit/post-success resolution: location -> quest advance
+    (branch/reveal/flip) -> side quests, one explicit step at a time,
+    re-deriving what's next from live game state after every action. Opened
+    only for catalog games (game.stages non-empty) - custom games keep the
+    legacy StageCompleteModal. See docs/superpowers/plans/
+    2026-07-24-quest-picker-bresolve.md for the full rationale, including
+    why at most one stage advance can ever happen per pass."""
+
+    def __init__(self, game, force_advance=False):
+        self.game = game
+        self.buttons = []
+        self.branch_pick = None
+        self.force_advance = force_advance
+        self._skipped_side_quests = []   # dict refs (identity, not value) - see _derive
+        self.step = self._derive()
+
+    def _quest_step(self):
+        g = self.game
+        if g.quest["side"] == "A":
+            card = g.stages[g.stage_idx]["cards"][g.card_idx]
+            face_a = next((f for f in card["faces"] if f["side"] == "A"), {})
+            return {"kind": "reveal", "stage_n": g.quest["stage_n"], "face_a": face_a,
+                    "next_points": card["questPoints"]}
+        nxt_idx = g.stage_idx + 1
+        if nxt_idx >= len(g.stages):
+            return {"kind": "victory", "cleared": g.quest_label()}
+        nxt = g.stages[nxt_idx]
+        if len(nxt["cards"]) > 1 and self.branch_pick is None:
+            return {"kind": "branch", "cards": nxt["cards"], "mode": nxt.get("branch", "choice")}
+        card_idx = self.branch_pick or 0
+        return {"kind": "advance", "cleared": g.quest_label(), "card_idx": card_idx,
+                "next_stage": nxt["stage"],
+                "underfilled": g.quest["points"] > 0 and g.quest["progress"] < g.quest["points"]}
+
+    def _derive(self):
+        g = self.game
+        if g.stages and g.quest["side"] == "A":
+            return self._quest_step()      # finish an interrupted reveal/flip first
+        loc = g.active_location
+        if loc and loc["points"] > 0 and loc["progress"] >= loc["points"]:
+            return {"kind": "location", "progress": loc["progress"], "points": loc["points"]}
+        if (g.quest["points"] > 0 and g.quest["progress"] >= g.quest["points"]) or self.force_advance:
+            return self._quest_step()
+        for i, s in enumerate(g.side_quests):
+            if any(s is skipped for skipped in self._skipped_side_quests):
+                continue
+            if s["points"] > 0 and s["progress"] >= s["points"]:
+                return {"kind": "side_quest", "idx": i,
+                        "name": s.get("name") or "Side Quest %d" % (i + 1),
+                        "progress": s["progress"], "points": s["points"]}
+        return None
+
+    def draw(self, hw, game, pal):
+        from ui.header import modal_header
+        d = hw.display
+        self.buttons = []
+        d.set_pen(pal.bg)
+        d.clear()
+        modal_header(d, pal, game, "Resolve", self.buttons)
+        st = self.step
+        if st is None:
+            self._draw_done(d, pal)
+        elif st["kind"] == "reveal":
+            self._draw_reveal(d, pal, st)
+        elif st["kind"] == "location":
+            self._draw_location(d, pal, st)
+        elif st["kind"] == "branch":
+            self._draw_branch(d, pal, st)
+        elif st["kind"] == "advance":
+            self._draw_advance(d, pal, st)
+        elif st["kind"] == "victory":
+            self._draw_victory(d, pal, st)
+        elif st["kind"] == "side_quest":
+            self._draw_side_quest(d, pal, st)
+
+    # -- per-step draw helpers (layout bands per the plan's Layout section) --
+    def _cta(self, d, pal, label, id_, y=404, h=56, ok=True):
+        b = Button(id_, 24, y, 432, h)
+        bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn_ok if ok else pal.btn_no, t=3)
+        text_center(d, pal, label, 240, y + h // 2 - 10, 2, pal.ok_fg if ok else pal.no_fg)
+        self.buttons.append(b)
+
+    def _draw_done(self, d, pal):
+        text_center(d, pal, "All resolved", 240, 200, 3, pal.gold)
+        self._cta(d, pal, "Continue", ("close",))
+
+    def _draw_reveal(self, d, pal, st):
+        text_center(d, pal, "STAGE %d REVEALED" % st["stage_n"], 240, 64, 2, pal.amber)
+        name = truncate_text(st["face_a"].get("name") or "", 3, 432, d.measure_text)
+        text_center(d, pal, name, 240, 92, 3, pal.gold)
+        tip_x, tip_w, tip_y = 24, 432, 130
+        ribbon_h, pad_top, line_h, pad_bottom, max_lines = 22, 10, 24, 10, 5
+        raw = st["face_a"].get("text")
+        body = raw if raw else "No setup instructions for this stage."
+        lines = wrap_text(body, 2, tip_w - 28, measure=d.measure_text)[:max_lines]
+        tip_h = ribbon_h + pad_top + len(lines) * line_h + pad_bottom
+        d.set_pen(pal.border_gold); d.rectangle(tip_x, tip_y, tip_w, tip_h)
+        d.set_pen(pal.bg); d.rectangle(tip_x + 2, tip_y + 2, tip_w - 4, tip_h - 4)
+        d.set_pen(pal.border_gold); d.rectangle(tip_x + 4, tip_y + 4, tip_w - 8, tip_h - 8)
+        d.set_pen(pal.scroll); d.rectangle(tip_x + 6, tip_y + 6, tip_w - 12, tip_h - 12)
+        d.set_pen(pal.border_gold); d.rectangle(tip_x, tip_y, tip_w, ribbon_h)
+        text_left(d, pal, "STAGE ADVANCE - resolve now", tip_x + 10, tip_y + 6, 1, pal.bg, shadow=False)
+        ly = tip_y + ribbon_h + pad_top
+        for ln in lines:
+            text_left(d, pal, ln, tip_x + 14, ly, 2, pal.tan)
+            ly += line_h
+        self._cta(d, pal, "Flip to Side B  ->  %d qp" % st["next_points"], ("do_flip",))
+
+    def _draw_location(self, d, pal, st):
+        text_center(d, pal, "Location Explored", 240, 90, 3, pal.gold)
+        text_center(d, pal, "%d/%d progress" % (st["progress"], st["points"]), 240, 130, 2, pal.tan)
+        excess = st["progress"] - st["points"]
+        if excess:
+            text_center(d, pal, "%d excess -> quest card" % excess, 240, 160, 2, pal.amber)
+        self._cta(d, pal, "Continue", ("resolve_location",))
+
+    def _draw_branch(self, d, pal, st):
+        text_center(d, pal, "Choose a path", 240, 56, 3, pal.gold)
+        text_center(d, pal, "First player chooses" if st["mode"] != "random" else "Random",
+                   240, 86, 1, pal.dim)
+        y = 116
+        for i, card in enumerate(st["cards"]):
+            b_face = next((f for f in card["faces"] if f["side"] == "B"), {})
+            b = Button(("pick_branch", i), 24, y, 432, 64)
+            sel = self.branch_pick == i
+            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn_ok if sel else pal.btn, t=3)
+            text_left(d, pal, b_face.get("name") or "?", b.x + 14, y + 10, 2,
+                      pal.ok_fg if sel else pal.tan)
+            preview = truncate_text(b_face.get("text") or "", 1, 400, d.measure_text)
+            text_left(d, pal, preview, b.x + 14, y + 38, 1, pal.dim)
+            self.buttons.append(b)
+            y += 74
+        if st["mode"] == "random":
+            r = Button(("randomize_branch",), 24, y, 432, 40)
+            bevel(d, pal, r.x, r.y, r.w, r.h, pal.card, t=2)
+            text_center(d, pal, "Randomize for me", 240, y + 10, 2, pal.tan)
+            self.buttons.append(r)
+
+    def _draw_advance(self, d, pal, st):
+        text_center(d, pal, "Quest %s cleared" % st["cleared"], 240, 90, 3, pal.gold)
+        if st["underfilled"]:
+            text_center(d, pal, "Progress hasn't reached target - confirm", 240, 130, 1, pal.red)
+        self._cta(d, pal, "Reveal Stage %d" % st["next_stage"], ("do_advance",))
+
+    def _draw_victory(self, d, pal, st):
+        text_center(d, pal, "Quest %s cleared" % st["cleared"], 240, 70, 2, pal.tan)
+        text_center(d, pal, "That was the final stage!", 240, 110, 3, pal.gold)
+        self._cta(d, pal, "Declare Victory", ("declare_victory",), y=340)
+        self._cta(d, pal, "Not yet - keep playing", ("continue_without_victory",), y=404, ok=False)
+
+    def _draw_side_quest(self, d, pal, st):
+        text_center(d, pal, st["name"], 240, 90, 3, pal.gold)
+        text_center(d, pal, "%d/%d" % (st["progress"], st["points"]), 240, 130, 2, pal.tan)
+        self._cta(d, pal, "Mark Complete", ("resolve_side_quest",), y=340)
+        self._cta(d, pal, "Leave as-is", ("skip_side_quest",), y=404, ok=False)
+
+    def on_button(self, btn):
+        g = self.game
+        k = btn.id[0]
+        if k == "do_flip":
+            g.flip_to_b(); self.step = self._derive(); return "redraw"
+        if k == "resolve_location":
+            g.resolve_location_overflow(); self.step = self._derive(); return "redraw"
+        if k == "pick_branch":
+            self.branch_pick = btn.id[1]; self.step = self._derive(); return "redraw"
+        if k == "randomize_branch":
+            self.branch_pick = random.randrange(len(self.step["cards"]))
+            self.step = self._derive(); return "redraw"
+        if k == "do_advance":
+            g.clear_and_advance(card_idx=self.step["card_idx"])
+            self.force_advance = False
+            self.branch_pick = None
+            self.step = self._derive()
+            return "redraw"
+        if k == "declare_victory":
+            g.set_game_over("victory")
+            return "close"
+        if k == "continue_without_victory":
+            self.step = self._derive(); return "redraw"
+        if k == "resolve_side_quest":
+            i = self.step["idx"]
+            g.log_event("Side quest %d completed (resolution)" % (i + 1))
+            g.side_quests.pop(i)
+            self.step = self._derive()
+            return "redraw"
+        if k == "skip_side_quest":
+            self._skipped_side_quests.append(g.side_quests[self.step["idx"]])
+            self.step = self._derive()
+            return "redraw"
+        if k == "close":
             return "close"
         return None
 
