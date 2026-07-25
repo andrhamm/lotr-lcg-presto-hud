@@ -733,9 +733,13 @@ def test_mode_tip_uses_the_cards_own_printed_text():
 
 
 def test_easy_keeps_the_general_rule_copy():
-    s = _opts_screen()
+    """Easy is a general rule, so it uses the authored copy even on a scenario
+    that prints its own Mode cards - it never falls through to card text."""
+    s = _opts_screen(modes=["Easy Mode", "Hard Mode"],
+                     mode_cards=[{"name": "Easy Mode",
+                                  "faces": [{"side": "A", "text": "Some printed text."}]}])
     s.difficulty = "Easy"
-    assert any("gold ring" in m for m in s._tip_messages())
+    assert any("gold-bordered" in m for m in s._tip_messages())
 
 
 def test_standard_shows_no_tip():
@@ -768,14 +772,27 @@ def test_only_one_tip_can_ever_show():
         assert len(s._tip_messages()) <= 1, d
 
 
-def test_authored_tip_copy_still_fits_two_lines_at_full_scale():
-    """The tips only stay at scale 2 because the copy is short enough. If
-    someone lengthens it, fail here rather than overflow into the CTA."""
-    from ui.screen_quest import ScenarioOptionsScreen
-    from ui.widgets import wrap_text
-    from ui import icons
+def test_authored_tip_copy_is_never_clipped_in_the_tightest_layout():
+    """These tips state rules, so a truncated one is a wrong one. The panel is
+    shortest when the scenario fills all four sets-to-gather rows - assert the
+    copy still survives _clip_to_height there, rather than asserting some line
+    count I picked. Lengthen the copy past what fits and this fails."""
+    from ui.screen_quest import ScenarioOptionsScreen as S
     hw = FakeHardware()
-    usable = 448 - 16 - 12 - (len(icons.PIPE) + 14)   # note_panel's own geometry
-    for label, text in ScenarioOptionsScreen.TIP_TEXT.items():
-        lines = wrap_text(text, 2, usable, hw.display.measure_text)
-        assert len(lines) <= 2, "%s tip wraps to %d lines: %r" % (label, len(lines), lines)
+    worst_dd_y = S.GATHER_Y0 + S.MAX_GATHER_ROWS * S.GATHER_ROW_H + 6
+    avail = S.CTA_Y - 10 - (worst_dd_y + 62)          # exactly what draw() computes
+    s = _opts_screen()
+    for label, text in S.TIP_TEXT.items():
+        kept = s._clip_to_height(hw.display, [text], 2, avail)
+        assert kept == [text], "%s tip gets clipped: %r" % (label, kept)
+
+
+def test_easy_tip_states_both_halves_of_the_rule():
+    """Easy mode is two steps (Learn to Play p.28): add a resource to each
+    hero AND remove the gold-bordered cards. Shipping only the removal - which
+    this did - is half a rule, which is a wrong rule."""
+    s = _opts_screen()
+    s.difficulty = "Easy"
+    tip = s._tip_messages()[0].lower()
+    assert "resource" in tip and "hero" in tip, "missing the +1 resource step"
+    assert "gold" in tip and "border" in tip, "missing the card-removal step"

@@ -705,11 +705,17 @@ export class ScenarioOptionsScreen {
   // Only Easy and Nightmare get authored copy, because only those two are
   // general rules. A scenario-specific mode (Hard, Epic Multiplayer) shows that
   // card's own printed setup text instead - the real rules, not a paraphrase.
-  // Kept short deliberately: each must wrap to at most 2 lines at scale 2 so
-  // the tip never has to shrink. There is a test for that.
+  // Both wordings follow FFG's own, not a paraphrase (CLAUDE.md Iron rule #4):
+  // Easy is TWO steps - Learn to Play p.28 / Easy Mode Rules (2013) p.1: add
+  // one resource to each hero's pool, AND remove any card with a gold border
+  // around its encounter set icon (FFG's "difficulty" indicator). Nightmare is
+  // a swap, per the printed Nightmare Setup card: remove the listed cards, then
+  // "shuffle the encounter cards in this Nightmare Deck into the remainder".
+  // Kept to at most 3 lines at scale 2 so the tip fits unclipped even with 4
+  // sets-to-gather rows. There is a test for that.
   static TIP_TEXT = {
-    Easy: "Easy: remove every encounter card whose set icon has a gold ring.",
-    Nightmare: "Nightmare: a separate, harder encounter deck, sold as its own product.",
+    Easy: "Easy: add 1 resource to each hero at setup, and remove every encounter card with a gold-bordered set icon.",
+    Nightmare: "Nightmare: a separately sold deck - remove the cards its setup card lists, then shuffle it into the rest.",
   };
 
   constructor(scenario, data, icons = {}, difficulty = "Standard") {

@@ -64,8 +64,31 @@ these rather than re-researching; correct them only with a better citation.
   points → remainder to the quest card.
 - **"Victory X" is a scoring keyword**, not an alternate win condition (p.24).
   Never treat a card's `victory` field as an auto-win trigger.
-- **Easy mode is general:** remove every encounter card whose set icon carries
-  the gold difficulty ring. It applies to any scenario.
+- **Easy mode is general, and it is TWO steps.** *Learn to Play* p.28 "Modes of
+  Play" (and the 2013 *Easy Mode Rules* p.1): **1.** add one resource to each
+  hero's resource pool; **2.** remove any card from the encounter deck that has
+  **a gold border surrounding its encounter set icon**. It applies to any
+  scenario. Two things to get right: FFG calls that marker the **"difficulty"
+  indicator** (not a "gold ring" — use their wording), and it marks **individual
+  copies, not card titles** (FFG's own list removes 2 of the 3 *Gladden Fields*),
+  so never treat "marked" as a property of a name. Scenarios before 2013 have no
+  printed marker and need the Guide's lookup list, which was never extended past
+  2013.
+- **Nightmare is a swap, not a substitution.** Per the printed Nightmare Setup
+  card: begin with the standard encounter deck, **remove the listed cards in the
+  listed quantities**, "then, shuffle the encounter cards in this Nightmare Deck
+  into the remainder". Do not describe it as replacing the deck.
+- **Easy + Nightmare is unaddressed by the rules** — the Rules Reference v1.0
+  contains no occurrence of "mode" at all, and the FAQ says nothing. Neither
+  permits nor forbids it. For at least one scenario the two setups are literally
+  incompatible: *Passage Through Mirkwood* has exactly 2 *Caught in a Web*, and
+  Easy mode and the Nightmare setup card each instruct removing 2. The UI folds
+  Nightmare into the single Difficulty ladder, so the pair can't be selected.
+- **DragnCards' Nightmare setup text is often a platform artifact.** 39 of 72
+  Nightmare setup cards carry an identical placeholder ("The Quest Deck has been
+  modified for Nightmare Mode. Flip this card over…") that is **not** printed on
+  the card — DragnCards pre-builds the deck, so it skips the instructions. Never
+  surface that string as card text.
 - **Hard / Epic Multiplayer are NOT general difficulties** — they are printed
   Mode cards that only a few scenarios ship (exactly 1 of 349 prints Hard;
   3 print Epic Multiplayer). Gate them on the catalog's per-scenario `modes`.

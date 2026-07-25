@@ -320,15 +320,29 @@ class ScenarioOptionsScreen:
     # general rules. A scenario-specific mode (Hard, Epic Multiplayer) shows
     # that card's own printed setup text instead - the real rules, not a
     # paraphrase (CLAUDE.md Iron rule #4).
-    # Kept short deliberately: each must wrap to at most 2 lines at scale 2
-    # (378px usable inside note_panel) so the tip never has to shrink. There
-    # is a test for that - lengthen these and it fails rather than silently
-    # overflowing into the CTA.
+    # Both wordings follow FFG's own, not a paraphrase (CLAUDE.md Iron rule #4):
+    #
+    #   Easy - Learn to Play p.28 "Modes of Play", and the Easy Mode Rules
+    #   (2013) p.1. It is TWO steps, and an earlier version of this tip shipped
+    #   only the second: "1. Add one resource to each hero's resource pool.
+    #   2. Remove any card from the encounter deck that has a gold border
+    #   surrounding its encounter set icon." FFG calls that marker the
+    #   "difficulty" indicator.
+    #
+    #   Nightmare - the printed Nightmare Setup card (wording consistent across
+    #   the setup cards that carry full text). It is a swap, not a substitution:
+    #   remove the listed cards from the standard encounter deck, "then, shuffle
+    #   the encounter cards in this Nightmare Deck into the remainder".
+    #
+    # Kept short deliberately: each must wrap to at most 3 lines at scale 2, so
+    # it still fits unclipped in the tightest layout (4 sets-to-gather rows).
+    # There is a test for that - lengthen these and it fails rather than
+    # silently truncating the rule.
     TIP_TEXT = {
-        "Easy": "Easy: remove every encounter card whose "
-                "set icon has a gold ring.",
-        "Nightmare": "Nightmare: a separate, harder encounter "
-                     "deck, sold as its own product.",
+        "Easy": "Easy: add 1 resource to each hero at setup, and remove "
+                "every encounter card with a gold-bordered set icon.",
+        "Nightmare": "Nightmare: a separately sold deck - remove the cards "
+                     "its setup card lists, then shuffle it into the rest.",
     }
 
     def __init__(self, scenario, data, icons=None, difficulty="Standard"):
