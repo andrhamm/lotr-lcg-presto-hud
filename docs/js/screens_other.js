@@ -2,7 +2,7 @@
 // screen_boot.py, screen_setup.py, screen_quest.py + LedModal (virtual LED
 // strip on web).
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
-         stepper, truncateText, ribbon, disc, arcRuns, notePanel, token } from "./ui.js";
+         stepper, truncateText, wrapText, ribbon, disc, arcRuns, notePanel, token } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { viewForStep, DEFAULT_START_THREAT, MAX_PLAYERS } from "./gamestate.js";
@@ -678,7 +678,13 @@ export class ScenarioOptionsScreen {
   // router loads it once alongside the catalog index and passes it
   // through, same as `data`; a miss/failure just means every iconSlot()
   // falls back to its placeholder triangle, never a crash).
-  static DIFFICULTY_OPTIONS = ["Easy", "Standard", "Hard"];
+  // Easy and Standard always apply: Easy is a general rule (drop every
+  // encounter card whose set icon carries the gold difficulty ring), not a
+  // per-scenario card. Anything else - Hard, Epic Multiplayer - only exists as
+  // a printed Mode card on the handful of scenarios that ship one, so it is
+  // offered only when this scenario's catalog entry lists it. Of 349 scenarios
+  // exactly one prints a Hard Mode card and three print Epic Multiplayer.
+  static BASE_DIFFICULTY_OPTIONS = ["Easy", "Standard"];
   static MODE_OPTIONS = ["Normal", "Nightmare"];
   static GATHER_Y0 = 116;
   static GATHER_ROW_H = 30;
@@ -690,9 +696,11 @@ export class ScenarioOptionsScreen {
   // Easy/Nightmare verbatim). Hard has no copy in the mock or spec - this
   // line is author-supplied and flagged in the Task 7 report for user
   // review against the FAQ/rulebook (CLAUDE.md Iron rule #4).
+  // Only Easy and Nightmare get authored copy, because only those two are
+  // general rules. A scenario-specific mode (Hard, Epic Multiplayer) shows that
+  // card's own printed setup text instead - the real rules, not a paraphrase.
   static TIP_TEXT = {
     Easy: "Easy mode: remove every encounter card whose set icon has a gold ring (the difficulty marker).",
-    Hard: "Hard mode: only a few quests ship a Hard Mode card - use it only if this one does.",
     Nightmare: "Nightmare swaps in a separate, harder encounter deck - sold as its own product.",
   };
 
@@ -730,10 +738,35 @@ export class ScenarioOptionsScreen {
     return [...shown.map(s => [s, false]), [`+${sets.length - shown.length} more`, true]];
   }
 
+  _scenarioModes() {
+    return (this.scenario.modes ?? [])
+      .map(n => n.replace(" Mode", "").replace(" Game", "").trim())
+      .filter(l => l && !["standard", "normal"].includes(l.toLowerCase()));
+  }
+
+  difficultyOptions() {
+    const extra = this._scenarioModes().filter(m => m.toLowerCase() !== "easy");
+    return [...ScenarioOptionsScreen.BASE_DIFFICULTY_OPTIONS, ...extra];
+  }
+
+  _modeCardText(label) {
+    for (const card of this.data.modes ?? []) {
+      const name = (card.name ?? "").replace(" Mode", "").replace(" Game", "").trim();
+      if (name === label) {
+        for (const face of card.faces ?? []) if (face.text) return face.text;
+      }
+    }
+    return null;
+  }
+
   _tipMessages() {
     const { TIP_TEXT } = ScenarioOptionsScreen;
     const msgs = [];
-    if (this.difficulty === "Easy" || this.difficulty === "Hard") msgs.push(TIP_TEXT[this.difficulty]);
+    if (this.difficulty === "Easy") msgs.push(TIP_TEXT.Easy);
+    else if (this.difficulty !== "Standard") {
+      msgs.push(this._modeCardText(this.difficulty)
+                ?? `${this.difficulty}: follow this quest's ${this.difficulty} Mode card.`);
+    }
     if (this.mode === "Nightmare") msgs.push(TIP_TEXT.Nightmare);
     return msgs;
   }
@@ -778,7 +811,7 @@ export class ScenarioOptionsScreen {
     this._dropdown(ctx, 16, ddY, 210, "Difficulty", this.difficulty, ["dd", "difficulty"]);
     this._dropdown(ctx, 254, ddY, 210, "Mode", this.mode, ["dd", "mode"]);
 
-    const msgs = this._tipMessages();
+    let msgs = this._tipMessages();
     if (msgs.length) {
       // Single-message tips render at the mock's scale (2); the rarer
       // combined case (both a non-standard difficulty AND Nightmare
@@ -786,7 +819,21 @@ export class ScenarioOptionsScreen {
       // the CTA (verified against the real wrap widths - see the Task 7
       // report).
       const scale = msgs.length === 1 ? 2 : 1;
-      notePanel(ctx, 16, ddY + 62, 448, msgs, scale);
+      const ty = ddY + 62;
+      // A scenario-specific mode card's own printed setup text can run several
+      // hundred characters. Clip it above the CTA rather than letting it run
+      // through - the full text is on the physical card in front of the player.
+      // Mirrors notePanel's own geometry (ui.js): lh = 10*scale+6, and the
+      // usable width subtracts the panel padding and the pipe-icon gutter.
+      const gutter = icons.PIPE[0] + 14;
+      const usable = 448 - 16 - 12 - gutter;
+      const lh = 10 * scale + 6;
+      const maxLines = Math.max(1, Math.floor((CTA_Y - 10 - ty - 16) / lh));
+      let lines = [];
+      for (const m of msgs) lines = lines.concat(wrapText(m, scale, usable));
+      const shown = lines.length <= maxLines
+        ? msgs : [lines.slice(0, maxLines).join(" ").trimEnd() + " ..."];
+      notePanel(ctx, 16, ty, 448, shown, scale);
     }
 
     const begin = new Button(["begin"], 16, CTA_Y, 448, CTA_H);
@@ -811,7 +858,7 @@ export class ScenarioOptionsScreen {
     if (k === "dd") {
       const which = btn.id[1];
       if (which === "difficulty") {
-        return ["modal", new OptionListModal(this, "difficulty", "Difficulty", ScenarioOptionsScreen.DIFFICULTY_OPTIONS)];
+        return ["modal", new OptionListModal(this, "difficulty", "Difficulty", this.difficultyOptions())];
       }
       return ["modal", new OptionListModal(this, "mode", "Mode", ScenarioOptionsScreen.MODE_OPTIONS)];
     }

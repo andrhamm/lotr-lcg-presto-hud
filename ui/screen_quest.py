@@ -10,7 +10,7 @@ and ChooseScenarioScreen(source, cycle, scenarios) from one group's
 
 from ui.header import draw_header
 from ui.widgets import (Button, panel, bevel, text_center, text_left,
-                         truncate_text, disc, arc_runs, note_panel)
+                         truncate_text, wrap_text, disc, arc_runs, note_panel)
 from ui import icons
 import quest_catalog
 
@@ -287,7 +287,14 @@ class ScenarioOptionsScreen:
     same as `data`; a miss/failure just means every icon_slot() falls back
     to its placeholder triangle, never a crash)."""
 
-    DIFFICULTY_OPTIONS = ("Easy", "Standard", "Hard")
+    # Easy and Standard always apply: Easy is a general rule (drop every
+    # encounter card whose set icon carries the gold difficulty ring), not a
+    # per-scenario card. Anything else - Hard, Epic Multiplayer - only exists
+    # as a printed Mode card on the handful of scenarios that ship one, so it
+    # is offered only when this scenario's catalog entry lists it. Of 349
+    # scenarios exactly one prints a Hard Mode card (The Hunt for the
+    # Dreadnaught) and three print an Epic Multiplayer Mode card.
+    BASE_DIFFICULTY_OPTIONS = ("Easy", "Standard")
     MODE_OPTIONS = ("Normal", "Nightmare")
 
     GATHER_Y0 = 116
@@ -297,15 +304,13 @@ class ScenarioOptionsScreen:
     CTA_Y = 410
     CTA_H = 54
 
-    # Difficulty/Nightmare rules copy (matches mock_quest.py's TIP dict for
-    # Easy/Nightmare verbatim). Hard has no copy in the mock or spec - this
-    # line is author-supplied and flagged in the Task 7 report for user
-    # review against the FAQ/rulebook (CLAUDE.md Iron rule #4).
+    # Only Easy and Nightmare get authored copy, because only those two are
+    # general rules. A scenario-specific mode (Hard, Epic Multiplayer) shows
+    # that card's own printed setup text instead - the real rules, not a
+    # paraphrase (CLAUDE.md Iron rule #4).
     TIP_TEXT = {
         "Easy": "Easy mode: remove every encounter card whose set icon has "
                 "a gold ring (the difficulty marker).",
-        "Hard": "Hard mode: only a few quests ship a Hard Mode card - use it "
-                "only if this one does.",
         "Nightmare": "Nightmare swaps in a separate, harder encounter deck "
                      "- sold as its own product.",
     }
@@ -343,10 +348,42 @@ class ScenarioOptionsScreen:
         return [(s, False) for s in shown] + \
             [("+%d more" % (len(sets) - len(shown)), True)]
 
+    def _scenario_modes(self):
+        """Mode-card names this scenario actually prints, from the catalog
+        index entry ("Easy Mode", "Hard Mode", "Epic Multiplayer Mode", ...).
+        Standard/Normal variants are dropped - they are the default, not a
+        choice worth listing."""
+        out = []
+        for name in self.scenario.get("modes") or []:
+            label = name.replace(" Mode", "").replace(" Game", "").strip()
+            if label.lower() in ("standard", "normal", ""):
+                continue
+            out.append(label)
+        return out
+
+    def difficulty_options(self):
+        """Easy/Standard always, plus any extra mode this scenario prints."""
+        extra = [m for m in self._scenario_modes() if m.lower() != "easy"]
+        return tuple(self.BASE_DIFFICULTY_OPTIONS) + tuple(extra)
+
+    def _mode_card_text(self, label):
+        """The chosen mode card's own printed setup text, if the loaded
+        scenario carries it - the actual rules rather than a paraphrase."""
+        for card in self.data.get("modes") or []:
+            if (card.get("name") or "").replace(" Mode", "").replace(" Game", "").strip() == label:
+                for face in card.get("faces") or []:
+                    if face.get("text"):
+                        return face["text"]
+        return None
+
     def _tip_messages(self):
         msgs = []
-        if self.difficulty in ("Easy", "Hard"):
-            msgs.append(self.TIP_TEXT[self.difficulty])
+        if self.difficulty == "Easy":
+            msgs.append(self.TIP_TEXT["Easy"])
+        elif self.difficulty != "Standard":
+            # a scenario-specific mode card: show what it actually says
+            msgs.append(self._mode_card_text(self.difficulty)
+                        or "%s: follow this quest's %s Mode card." % (self.difficulty, self.difficulty))
         if self.mode == "Nightmare":
             msgs.append(self.TIP_TEXT["Nightmare"])
         return msgs
@@ -403,12 +440,40 @@ class ScenarioOptionsScreen:
             # Task 7 report).
             scale = 2 if len(msgs) == 1 else 1
             ty = dd_y + 62
+            # A scenario-specific mode card's own setup text can run several
+            # hundred characters - far past the CTA. Clip to the lines that
+            # actually fit and mark the truncation rather than overflowing;
+            # the full text lives on the physical card in front of the player.
+            avail = self.CTA_Y - 10 - ty
+            msgs = self._clip_to_height(d, msgs, scale, avail)
             note_panel(d, pal, 16, ty, 448, msgs, scale)
 
         begin = Button(("begin",), 16, self.CTA_Y, 448, self.CTA_H)
         bevel(d, pal, begin.x, begin.y, begin.w, begin.h, pal.btn_ok, False, 3)
         text_center(d, pal, "Begin Setup", 240, self.CTA_Y + 18, 3, pal.ok_fg)
         self.buttons.append(begin)
+
+    def _clip_to_height(self, d, msgs, scale, avail):
+        """Trim wrapped tip lines to what fits above the CTA, appending an
+        ellipsis to the last kept line when anything was dropped."""
+        # Mirror note_panel's own geometry exactly (ui/widgets.py): line
+        # height is 10*scale+6 and the usable width is the panel minus its
+        # padding and the pipe-icon gutter. Guessing these numbers is how an
+        # earlier attempt at this clip still overflowed.
+        from ui import icons as _icons
+        gutter = len(_icons.PIPE) + 14
+        usable = 448 - 16 - 12 - gutter
+        line_h = 10 * scale + 6
+        max_lines = max(1, (avail - 16) // line_h)
+        lines = []
+        for m in msgs:
+            lines.extend(wrap_text(m, scale, usable, d.measure_text))
+        if len(lines) <= max_lines:
+            return msgs
+        # Rejoin into ONE message: note_panel treats each list entry as its
+        # own paragraph and adds spacing between them, so handing it the
+        # pre-split lines would grow the panel instead of shrinking it.
+        return [" ".join(lines[:max_lines]).rstrip() + " ..."]
 
     def _dropdown(self, d, pal, x, y, w, label, value, id):
         text_left(d, pal, label, x, y, 1, pal.muted)
@@ -427,7 +492,7 @@ class ScenarioOptionsScreen:
         if k == "dd":
             which = btn.id[1]
             if which == "difficulty":
-                return ("modal", OptionListModal(self, "difficulty", "Difficulty", self.DIFFICULTY_OPTIONS))
+                return ("modal", OptionListModal(self, "difficulty", "Difficulty", self.difficulty_options()))
             return ("modal", OptionListModal(self, "mode", "Mode", self.MODE_OPTIONS))
         if k == "begin":
             return ("begin_setup", self.difficulty, self.mode)

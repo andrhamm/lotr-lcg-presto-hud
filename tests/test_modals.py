@@ -691,3 +691,52 @@ def test_side_quest_pick_null_points_default_to_zero_and_pager_pages():
     assert m.on_button(_find(m, ("add",))) == "close"
     assert game.side_quests[-1]["points"] == 0
     assert game.side_quests[-1]["name"] == "Protect the Innocent"
+
+
+# --- Scenario Options: difficulty is data-driven ---------------------------
+# "Hard" is not a general difficulty in this game - it is a printed Mode card
+# that exactly one scenario of 349 ships (The Hunt for the Dreadnaught).
+# Easy IS general (drop the gold-ring cards), so it always applies.
+
+def _opts_screen(modes=None, mode_cards=None):
+    from ui.screen_quest import ScenarioOptionsScreen
+    entry = {"slug": "s", "name": "A Quest", "pack": "P", "modes": modes or []}
+    data = {"name": "A Quest", "modes": mode_cards or []}
+    return ScenarioOptionsScreen(entry, data)
+
+
+def test_plain_scenario_offers_only_easy_and_standard():
+    s = _opts_screen()
+    assert s.difficulty_options() == ("Easy", "Standard")
+
+
+def test_hard_offered_only_when_the_scenario_prints_a_hard_mode_card():
+    s = _opts_screen(modes=["Easy Mode", "Standard Mode", "Hard Mode"])
+    assert "Hard" in s.difficulty_options()
+
+
+def test_epic_multiplayer_offered_when_printed():
+    s = _opts_screen(modes=["Standard Game Mode", "Epic Multiplayer Mode"])
+    opts = s.difficulty_options()
+    assert "Epic Multiplayer" in opts
+    assert "Standard" in opts and "Hard" not in opts
+
+
+def test_mode_tip_uses_the_cards_own_printed_text():
+    s = _opts_screen(
+        modes=["Hard Mode"],
+        mode_cards=[{"name": "Hard Mode",
+                     "faces": [{"side": "A", "text": "Add 3 Tolfalas Landing locations."}]}])
+    s.difficulty = "Hard"
+    assert any("Tolfalas Landing" in m for m in s._tip_messages())
+
+
+def test_easy_keeps_the_general_rule_copy():
+    s = _opts_screen()
+    s.difficulty = "Easy"
+    assert any("gold ring" in m for m in s._tip_messages())
+
+
+def test_standard_shows_no_tip():
+    s = _opts_screen()
+    assert s._tip_messages() == []

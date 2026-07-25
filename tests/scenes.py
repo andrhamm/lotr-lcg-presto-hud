@@ -272,7 +272,7 @@ def _scenario_options_dropdown():
     hw = FakeHardware()
     pal = Palette(hw.display)
     s = ScenarioOptionsScreen(dict(_SCENARIO_OPTIONS_ENTRY), dict(_SCENARIO_OPTIONS_DATA))
-    m = OptionListModal(s, "difficulty", "Difficulty", ScenarioOptionsScreen.DIFFICULTY_OPTIONS)
+    m = OptionListModal(s, "difficulty", "Difficulty", s.difficulty_options())
     m.draw(hw, _game(), pal)
     return hw, m
 
