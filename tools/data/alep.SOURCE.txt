@@ -1,0 +1,36 @@
+# A Long Extended Party card data - see tools/alep.py.
+# The alep branch's per-pack TSVs; cardDb.tsv on that branch
+# duplicates main's and is deliberately not listed.
+url=https://raw.githubusercontent.com/seastan/dragncards-lotrlcg-plugin/{sha}/tsvs/{name}
+sha=2cdbb67d25b7e36bab01fa344b277c454d4515a2
+tsv=003325db-0819-4920-a52f-6090d7cda194.tsv
+tsv=0373f85e-32cd-479c-bbed-0aaf29d49242.tsv
+tsv=1191820f-fcf9-4261-ad81-c18b8ba0733c.tsv
+tsv=17b90ca1-7e3e-4891-99da-954a7833e88e.tsv
+tsv=1b3528b2-f856-4b6d-af03-5347871bd628.tsv
+tsv=1b8513ac-e5d9-43b6-b912-fa16cd1b7686.tsv
+tsv=1ea20f0a-adae-4690-ad0b-718b18d82e20.tsv
+tsv=210ae7aa-138e-4c65-a4d2-b3e1206f31d5.tsv
+tsv=3104cd2a-ccce-44a7-bc6e-e3433636c329.tsv
+tsv=340a1fa7-34a7-4477-a866-6f9442b7f81e.tsv
+tsv=3bc34620-a1a8-48b8-8005-7d62d3cf26a6.tsv
+tsv=3e7002fc-f723-4f86-a625-548347b1eaa4.tsv
+tsv=4e5f1524-4d7d-4abe-80e4-4ab76c2dfe61.tsv
+tsv=4eff45c3-8435-438f-bbbf-633483645dc6.tsv
+tsv=535a1083-330f-4bc5-a1bb-64c364da9e0a.tsv
+tsv=6890e6e4-fffb-4765-9fe0-0e6bce22c9a4.tsv
+tsv=6be6f7c7-ab86-4fe8-b88e-c86c71eaf43c.tsv
+tsv=71d62d8e-6cd6-4818-abb4-db3f5e091f27.tsv
+tsv=82d6a335-e773-4d22-9d91-f9aad0989467.tsv
+tsv=84865317-b076-400e-ac28-8e38cd43ac5b.tsv
+tsv=88e3bc43-b5a6-4f3f-a53a-10143be94498.tsv
+tsv=8a3273ca-1ccd-4e07-913b-766fcc49fe6f.tsv
+tsv=8a550501-d9d2-4763-8022-683336979974.tsv
+tsv=8f7d3e3f-2d5a-4faa-9e1d-b4e414a2c23a.tsv
+tsv=94e8ffe1-a17d-4d8a-ab89-adecd5da6088.tsv
+tsv=9d1d76e5-8d73-461f-97e0-9414d4224334.tsv
+tsv=9f73b7b7-5075-4177-80ff-419bd046072c.tsv
+tsv=be2d1577-aa7b-44f5-b7ca-fd45bcf75c78.tsv
+tsv=d5507648-6b1d-4d7d-8f51-09aa6147dd05.tsv
+tsv=f46e37df-4d8e-4e2d-a0ad-b95e7ed3a6f6.tsv
+tsv=f7bccfbd-a9f4-4456-ab27-341e512791ec.tsv

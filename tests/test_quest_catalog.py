@@ -30,11 +30,20 @@ SCENARIOS = [
 def test_cycle_order_constant():
     # Pin the exact order agreed in the plan (progress.md / Task 2 findings),
     # including the "Ered Mithrin" addition and the "Other" catch-all tail.
+    # The ALeP cycles follow the official ones and precede "Other"; their
+    # names and order come from the DragnCards plugin's own menu files (see
+    # tools/alep.py). They never interleave with the official cycles because
+    # group_by_cycle filters on `source` before it ever sorts.
     assert qc.CYCLE_ORDER == [
         "Core Set", "Shadows of Mirkwood", "The Dwarrowdelf", "Against the Shadow",
         "The Ring-maker", "The Angmar Awakened", "The Dream-chaser", "The Haradrim",
         "Ered Mithrin", "The Vengeance of Mordor", "Hobbit Saga", "LotR Saga",
-        "Standalone/PoD", "Other",
+        "Standalone/PoD",
+        "ALeP - Children of Eorl & Oaths of the Rohirrim",
+        "ALeP - The Shire's Reckoning & Fell Summer",
+        "ALeP - Print on Demand",
+        "ALeP - Other",
+        "Other",
     ]
 
 

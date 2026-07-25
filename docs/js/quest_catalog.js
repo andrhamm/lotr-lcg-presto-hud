@@ -14,7 +14,17 @@ export const CYCLE_ORDER = [
   "Core Set", "Shadows of Mirkwood", "The Dwarrowdelf", "Against the Shadow",
   "The Ring-maker", "The Angmar Awakened", "The Dream-chaser", "The Haradrim",
   "Ered Mithrin", "The Vengeance of Mordor", "Hobbit Saga", "LotR Saga",
-  "Standalone/PoD", "Other",
+  "Standalone/PoD",
+  // Fan-made (A Long Extended Party). These only ever appear under the
+  // Scenario Source screen's community option - groupByCycle filters on
+  // `source` first - so they never interleave with the official cycles
+  // above. Order and names come from the DragnCards plugin's own menu
+  // files; see tools/alep.py.
+  "ALeP - Children of Eorl & Oaths of the Rohirrim",
+  "ALeP - The Shire's Reckoning & Fell Summer",
+  "ALeP - Print on Demand",
+  "ALeP - Other",
+  "Other",
 ];
 
 // Sort key: CYCLE_ORDER position. A cycle name absent from the list

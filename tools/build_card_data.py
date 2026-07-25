@@ -3,6 +3,8 @@ player DB + rules). Source of truth is the pinned TSV; never hand-edit the
 output. See docs/superpowers/specs/2026-07-24-card-data-pipeline-design.md."""
 import csv, json, re, os, shutil, argparse, datetime, urllib.request, urllib.error, io
 
+import alep
+
 HEADER = ["databaseId","name","imageUrl","cardBack","type","packName",
           "deckbuilderQuantity","setUuid","numberInPack","encounterSet","unique",
           "sphere","traits","keywords","cost","side","engagementCost","threat",
@@ -388,10 +390,64 @@ def _scenario_kind(cards):
         return "campaign"
     return "encounter"
 
-def build_outputs(stream, meta=None, enrichment=None):
+def _pack_meta(pack):
+    """Curated metadata for a pack. PACK_META covers every official pack;
+    ALeP packs are described by tools/alep.py instead (its own cycles, and
+    source "alep" so quest_catalog.group_by_cycle files them under the
+    Scenario Source screen's community option). Anything else falls back to
+    cycle "Other" / source "official", as before."""
+    if pack in PACK_META:
+        return PACK_META[pack]
+    if (pack or "").startswith("ALeP - "):
+        return alep.pack_meta(pack)
+    return {}
+
+
+def _has_nightmare(enc, source, enc_groups, group_meta):
+    """Whether a Nightmare deck exists for encounter set `enc`, FROM THE SAME
+    SOURCE. Official and fan-made catalogues are kept apart everywhere else
+    (the Scenario Source screen, quest_catalog.group_by_cycle), and the
+    Nightmare toggle must not be the one place they leak into each other: an
+    official scenario offering a Nightmare mode has to mean an official
+    Nightmare deck. Pure, host-tested."""
+    nm = slugify(enc + " - Nightmare")
+    if nm not in enc_groups:
+        return False
+    nm_meta = group_meta.get(nm)
+    nm_source = nm_meta[1].get("source", "official") if nm_meta else "official"
+    return nm_source == source
+
+
+def _group_pack_meta(group):
+    """Metadata for a scenario, resolved over EVERY pack its cards come from
+    rather than just the first card's.
+
+    An encounter set is not confined to one pack: ALeP ships supplementary
+    packs ("ALeP - Backup", "ALeP - The Mirror of Galadriel 2") holding a few
+    cards for a scenario whose main pack is elsewhere, and whichever card
+    happens to sort first decides group[0]. Keying the cycle off that put The
+    Brandywine Pursuit and The Mirror of Galadriel under "ALeP - Other".
+
+    So prefer the first pack in the group that has curated metadata, and fall
+    back to the first card's pack. For official scenarios this is a no-op:
+    group[0]'s pack is already in PACK_META, so it wins on the first look."""
+    for c in group:
+        pack = c.get("pack")
+        if pack in PACK_META or pack in alep.PACK_CYCLE:
+            return pack, _pack_meta(pack)
+    pack = group[0]["pack"]
+    return pack, _pack_meta(pack)
+
+
+def build_outputs(stream, meta=None, enrichment=None, extra_rows=None):
+    """Compile the card DB. `extra_rows` are additional already-parsed TSV
+    rows to compile alongside the pinned cardDb.tsv - the ALeP branch's
+    per-pack TSVs (see tools/alep.py), errata already folded in by the
+    caller. They use the identical column set, so they simply join the row
+    list before grouping."""
     meta = meta or {"generated": "", "source": ""}
     enr_scenarios = (enrichment or {}).get("scenarios") or {}
-    cards = group_cards(parse_tsv(stream))
+    cards = group_cards(parse_tsv(stream) + list(extra_rows or []))
     enc_groups, enc_name, player_groups, player_name, rules = {}, {}, {}, {}, []
     for c in cards:
         if c["type"] == "Rules":
@@ -405,6 +461,11 @@ def build_outputs(stream, meta=None, enrichment=None):
             s = slugify(pk)
             player_groups.setdefault(s, []).append(c)
             player_name.setdefault(s, pk)
+
+    # Resolve each set's pack/cycle/source once up front: the hasNightmare
+    # probe below needs to know the SOURCE of a set other than the one being
+    # built, so it can't be computed lazily inside the loop.
+    group_meta = {s: _group_pack_meta(g) for s, g in enc_groups.items()}
 
     scenarios, index_scn = {}, []
     for slug, group in enc_groups.items():
@@ -420,18 +481,33 @@ def build_outputs(stream, meta=None, enrichment=None):
             encounter.setdefault(_type_key(c["type"]), []).append(c)
         quest = shape_quest(quest_cards) if quest_cards else None
         sailing = bool(quest_cards) and any(is_sailing(c) for c in quest_cards)
+        pack, pack_meta = group_meta[slug]
+        source = pack_meta.get("source", "official")
+        kind = _scenario_kind(group)
+        # ALeP names its Nightmare sets "<Scenario> Nightmare", without the
+        # " - " the official decks use, so the name-suffix rule the picker
+        # relies on doesn't catch them and they land as kind "quest" (their
+        # sets ship replacement quest cards - see _scenario_kind). Mark them
+        # here instead, from the pack name, so they surface via the Scenario
+        # Options Mode toggle like every other Nightmare deck rather than as
+        # their own pickable row.
+        if source == "alep" and alep.is_nightmare_pack(pack):
+            kind = "nightmare"
         scenarios[slug] = {
-            "slug": slug, "name": enc, "pack": group[0]["pack"],
-            "kind": _scenario_kind(group), "sailing": sailing,
+            "slug": slug, "name": enc, "pack": pack,
+            "kind": kind, "sailing": sailing,
             "quest": quest, "encounter": encounter, "modes": modes, "campaign": campaign,
         }
-        pack_meta = PACK_META.get(group[0]["pack"], {})
         index_entry = {
-            "slug": slug, "name": enc, "pack": group[0]["pack"],
+            "slug": slug, "name": enc, "pack": pack,
             "kind": scenarios[slug]["kind"],
             "stageCount": len(quest["stages"]) if quest else 0,
             "sailing": sailing,
-            "hasNightmare": slugify(enc + " - Nightmare") in enc_groups,
+            # Same-source only. ALeP's "The Withered Heath Nightmare" slugs
+            # identically to the official "The Withered Heath - Nightmare"
+            # that does not exist, so without this an official scenario would
+            # advertise a Nightmare mode that silently loads community cards.
+            "hasNightmare": _has_nightmare(enc, source, enc_groups, group_meta),
             "modes": [m["name"] for m in modes],
             "counts": {k: len(v) for k, v in encounter.items()},
             "cycle": pack_meta.get("cycle", "Other"),
@@ -557,6 +633,9 @@ def main(argv=None):
                      help="optional tools/build_hob_enrichment.py output to merge "
                           "in (default: %(default)s); a missing or corrupt file is "
                           "silently skipped - see CLAUDE.md's Card data section")
+    ap.add_argument("--no-alep", action="store_true",
+                     help="skip the fan-made A Long Extended Party packs "
+                          "(see tools/alep.py); official cards only")
     args = ap.parse_args(argv)
     if not os.path.exists(SOURCE_FILE) and not args.refresh:
         raise SystemExit("No pin file — run once with --refresh.")
@@ -567,6 +646,36 @@ def main(argv=None):
             text = resp.read().decode("utf-8")
     except urllib.error.URLError as e:
         raise SystemExit("Failed to fetch TSV at sha %s: %s\nTry --refresh to re-pin." % (sha, e))
+    # ALeP is fan-made content on a separate upstream branch, and it is
+    # ALL-OR-NOTHING: any failure drops it entirely rather than failing the
+    # build or emitting a half-catalog. A partial fetch is the dangerous
+    # case - the picker would offer scenarios whose cards never arrived -
+    # whereas dropping it cleanly just restores the Scenario Source screen's
+    # pre-existing "No community scenarios yet". The official card DB is the
+    # critical artifact and must never be held hostage to it (same posture as
+    # the optional enrichment above and icons in CI).
+    alep_rows, alep_sha = [], None
+    if not args.no_alep:
+        try:
+            alep_sha, alep_names = (alep.refresh_pin() if args.refresh
+                                    else alep.read_pin())
+            print("Fetching %d ALeP pack TSVs at %s ..."
+                  % (len(alep_names), alep_sha))
+            rows = alep.fetch_rows(alep_sha, alep_names)
+            rows, orphans = alep.apply_errata(rows)
+        except (SystemExit, OSError, ValueError) as e:
+            alep_rows, alep_sha = [], None
+            print("build_card_data: skipping ALeP community packs (%s) - the "
+                  "catalog will contain official cards only" % e)
+        else:
+            alep_rows = rows
+            print("build_card_data: %d ALeP rows after errata merge%s"
+                  % (len(alep_rows),
+                     "" if not orphans else
+                     " (%d errata row(s) matched no card and were dropped - the "
+                     "join key may have shifted upstream, see tools/alep.py)"
+                     % orphans))
+
     enrichment = _load_enrichment(args.enrichment)
     if enrichment is None:
         print("build_card_data: no sets-to-gather enrichment at %r - scenarios will "
@@ -575,10 +684,14 @@ def main(argv=None):
     else:
         print("build_card_data: merging sets-to-gather enrichment for %d scenarios "
               "from %r" % (len(enrichment.get("scenarios") or {}), args.enrichment))
+    src = "seastan/dragncards-lotrlcg-plugin@%s tsvs/cardDb.tsv" % sha
+    if alep_sha:
+        src += "; @%s (alep branch) tsvs/*.tsv" % alep_sha
     out = build_outputs(io.StringIO(text),
                         meta={"generated": datetime.date.today().isoformat(),
-                              "source": "seastan/dragncards-lotrlcg-plugin@%s tsvs/cardDb.tsv" % sha},
-                        enrichment=enrichment)
+                              "source": src},
+                        enrichment=enrichment,
+                        extra_rows=alep_rows)
     emit(out, args.out)
     print("Wrote %d scenarios, %d player packs, %d rules to %s"
           % (len(out["scenarios"]), len(out["players"]["packs"]), len(out["rules"]), args.out))
