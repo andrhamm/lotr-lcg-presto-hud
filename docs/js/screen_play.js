@@ -1,6 +1,6 @@
 // Port of ui/screen_play.py — the guided round.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
-         truncateText, ribbon, notePanel, drawHeart, drawFlag,
+         truncateText, ribbon, notePanel, phaseBlock, drawHeart, drawFlag,
          disc, arcRuns, wxSmall, token } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
@@ -193,8 +193,10 @@ export class ScreenPlay {
     } else if (view === "resource_planning") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
-      notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                ["Collect resources.", "Draw cards.", "Play allies and attachments."]);
+      phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+        { kind: "framework", text: "Collect resources. Draw cards." },
+        { kind: "window", text: "Play allies and attachments - your only window for permanents this round." },
+      ]);
       this._cta(ctx, `Next Phase: ${VIEW_LABELS[game.sailing ? "quest_sailing" : "quest_commit"]}`, ["advance"]);
     } else if (view === "quest_commit") {
       this._playersZone(ctx, game);

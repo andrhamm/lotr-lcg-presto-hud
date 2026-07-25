@@ -34,6 +34,16 @@ def test_resource_planning_advances_to_commit():
     assert game.view == "quest_commit"
 
 
+def test_resource_planning_shows_framework_and_window_blocks():
+    hw, pal, game, screen = _setup("resource_planning")
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "FRAMEWORK" in texts
+    assert "YOUR WINDOW" in texts
+    accents = [c[5] for c in hw.display.calls if c[0] == "rect" and c[1] == 8 and c[3] == 4]
+    assert pal.red in accents and pal.green in accents
+
+
 def test_commit_view_shows_willpower_tokens_in_players_matrix():
     # Willpower now lives inside the flipped players zone (one shared tap
     # target) rather than a per-player row of "commit" buttons.

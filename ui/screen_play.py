@@ -10,7 +10,7 @@ Mirror of docs/js/screen_play.js - keep the two in lockstep.
 from gamestate import VIEW_ORDER, VIEW_LABELS, SETUP_TIP
 from ui.header import draw_header, HEADER_H
 from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
-                        note_panel, wrap_text, truncate_text, draw_heart,
+                        note_panel, phase_block, wrap_text, truncate_text, draw_heart,
                         draw_flag, disc, arc_runs, token, wx_small)
 from ui.modal_counter import CounterModal
 from ui.modals import LocationPickModal
@@ -216,9 +216,10 @@ class ScreenPlay:
         elif view == "resource_planning":
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
-            note_panel(d, pal, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                       ["Collect resources.", "Draw cards.",
-                        "Play allies and attachments."])
+            phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+                ("framework", "Collect resources. Draw cards."),
+                ("window", "Play allies and attachments - your only window for permanents this round."),
+            ])
             nxt = "quest_sailing" if game.sailing else "quest_commit"
             self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS[nxt], ("advance",))
         elif view == "quest_commit":
