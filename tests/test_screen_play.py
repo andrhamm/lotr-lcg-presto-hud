@@ -302,7 +302,9 @@ def test_commit_view_shows_zones_then_note_at_content_y():
     progress = _find(screen, ("progress_detail",))
     assert players.y == ZONE_TOP - 2 and progress.y == ZONE_TOP - 2
     assert players.x == 8 and progress.x == 214
-    assert "Commit characters to the quest - exhaust them" in _texts(hw)
+    # RR 3.2 p.23: commitment is in player order - not simultaneous and not
+    # secret - so the copy has to say so. Joined: the line wraps.
+    assert "In player order, exhaust characters to commit" in " ".join(_texts(hw))
     assert "commit_tip" not in [b.id[0] for b in screen.buttons]
 
 
@@ -632,7 +634,14 @@ def test_enc_checks_shows_framework_and_first_player_caption():
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert "FRAMEWORK" in texts
-    assert any("clockwise" in t for t in texts)
+    # FFG's own term - Rules Reference p.10 glossary "In Player Order" - not
+    # "clockwise", and not the non-existent "turn order". Joined because the
+    # phrase wraps across drawn lines.
+    joined = " ".join(texts).lower()
+    assert "in player order" in joined
+    # RR 5.3 p.24: ONE enemy engages per check, the highest engagement cost
+    # that is <= your threat - not several enemies in descending cost order.
+    assert "one check engages one enemy" in joined
 
 
 def test_combat_shadow_shows_framework_only_ordering_text():
@@ -640,7 +649,10 @@ def test_combat_shadow_shows_framework_only_ordering_text():
     screen.draw(hw, game, pal)
     texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
     assert "FRAMEWORK" in texts
-    assert "highest cost first" in texts
+    # RR 6.2 p.24: dealt in player order, and within one player's enemies the
+    # highest ENGAGEMENT cost first. Both halves must reach the screen.
+    assert "in player order" in texts
+    assert "highest engagement cost first" in texts
 
 
 def test_combat_enemy_sailing_appends_ship_note_to_framework():

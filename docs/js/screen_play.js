@@ -23,13 +23,13 @@ const CTA_H = 58;
 // tied to the numbers already on screen (players-zone threat tokens), not a
 // fabricated cost comparison against data the app doesn't have.
 const PHASE_FRAMEWORK = {
-  enc_checks: "Enemies engage you if their cost is <= your threat - highest cost first.",
-  combat_shadow: "Deal 1 shadow card to each engaged enemy - first player's enemies first, highest cost first.",
-  combat_enemy: "Choose an enemy -> declare defender -> shadow effect -> damage, one at a time.",
-  combat_player: "Declare target and attackers -> total ATK -> damage, one enemy at a time.",
+  enc_checks: "One check engages one enemy: the highest engagement cost that is <= your threat.",
+  combat_shadow: "Deal 1 facedown shadow card to each engaged enemy, in player order - highest engagement cost first.",
+  combat_enemy: "Choose an enemy -> exhaust a defender (optional) -> shadow effect -> damage, one at a time.",
+  combat_player: "Choose an enemy -> exhaust attackers -> total ATK -> damage, one enemy at a time.",
 };
 const PHASE_WINDOW = {
-  enc_optional: "You may engage 1 enemy from the staging area, voluntarily.",
+  enc_optional: "In player order, each player may engage 1 enemy - engagement cost does not matter here.",
   enc_checks: "Responses.",
   combat_shadow: "Responses.",
   combat_enemy: "Responses at each step.",
@@ -37,9 +37,9 @@ const PHASE_WINDOW = {
 };
 const PHASE_CAPTION = {
   enc_optional: "Your threat decides which enemies can engage you next.",
-  enc_checks: "First player checks first, then clockwise, repeating until stable.",
-  combat_enemy: "First player resolves first, then clockwise. Undefended damage hits 1 hero.",
-  combat_player: "First player attacks first, then clockwise. 1 attack per engaged enemy.",
+  enc_checks: "In player order, repeating until no enemy in staging can engage anyone.",
+  combat_enemy: "In player order; each player resolves all their enemies before the next. Undefended: all damage to one of your heroes.",
+  combat_player: "In player order; each player makes all their attacks before the next. 1 attack per engaged enemy, and attacking is optional.",
 };
 
 export class ScreenPlay {
@@ -273,15 +273,15 @@ export class ScreenPlay {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-        { kind: "framework", text: "Collect resources. Draw cards." },
-        { kind: "window", text: "Play allies and attachments - your only window for permanents this round." },
+        { kind: "framework", text: "1 resource to each of your heroes, then each player draws 1 card - all at once." },
+        { kind: "window", text: "In player order, play allies and attachments from hand - the only step that allows it." },
       ]);
       this._cta(ctx, `Next: ${VIEW_LABELS[game.sailing ? "quest_sailing" : "quest_commit"]}`, ["advance"]);
     } else if (view === "quest_commit") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
-        [{ kind: "window", text: "Commit characters to the quest - exhaust them to add their willpower." }]);
+        [{ kind: "window", text: "In player order, exhaust characters to commit them and add their willpower." }]);
       const cy = this._drawConfirmAll(ctx, game, CONTENT_Y + bh + 8);
       this._totalsRow(ctx, game, cy, false, ["wp", "stg"]);
       this._cta(ctx, `Next: ${VIEW_LABELS.quest_staging}`, ["advance"]);
@@ -329,12 +329,16 @@ export class ScreenPlay {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-        { kind: "framework", text: "Reveal 1 encounter card per player." },
+        { kind: "framework", text: "1 card per player, one at a time - resolve each When Revealed before the next." },
         { kind: "window", text: "Responses to the reveal." },
       ]);
-      const my = CONTENT_Y + bh + 8;
+      // Gaps are 4, not 8: the framework line grew to two lines when it
+      // gained the "one at a time / resolve each When Revealed" rule, and the
+      // totals row has to stay clear of the CTA. Re-laid out rather than
+      // shrinking the text - see the design system.
+      const my = CONTENT_Y + bh + 4;
       const mh = willpowerStagingMeter(ctx, MARGIN, my, 480 - 2 * MARGIN, game.willpower, game.staging);
-      this._totalsRow(ctx, game, my + mh + 8, true);
+      this._totalsRow(ctx, game, my + mh + 4, true);
       this._cta(ctx, `Next: ${VIEW_LABELS.quest_resolution}`, ["stage_advance"]);
     } else if (view === "quest_resolution") {
       this._drawResolution(ctx, game);
@@ -346,7 +350,7 @@ export class ScreenPlay {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-        { kind: "framework", text: "Ready all cards. Each player's threat +1. Pass the first-player token." },
+        { kind: "framework", text: "Simultaneously ready all exhausted cards; each player's threat +1. Pass the token clockwise." },
         { kind: "window", text: "Responses." },
       ]);
       this._refreshThreatPreview(ctx, game, CONTENT_Y + bh + 8);
@@ -485,7 +489,7 @@ export class ScreenPlay {
     const loc = game.active_location;
     const fw = loc
       ? "No travel while a location is active - explore it first."
-      : "Travel to 1 location if none is active (some add a travel cost).";
+      : "The group may travel to 1 location - the first player has the final say.";
     const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
       [{ kind: "framework", text: fw }, { kind: "window", text: "Responses." }]);
     const y = CONTENT_Y + bh + 10;
