@@ -1,4 +1,4 @@
-"""M5 Task 1: first-run guidance + the conventions legend."""
+"""Help screen (Settings -> Help) + the conventions legend."""
 import os
 import sys
 
@@ -51,11 +51,40 @@ def test_back_clamps_at_the_first_page():
     assert s.page == 0
 
 
-def test_done_signals_the_router():
+def test_done_closes_back_to_settings():
+    """Help is opened from Settings, never at boot - Done returns there.
+
+    A bare ("close",) is the *modal* idiom; the screen router only understands
+    ("goto", "close") - returning the modal form left Done a dead button.
+    """
     hw, pal, game, s = _setup(FirstRunScreen)
     s.page = PAGES - 1
     s.draw(hw, game, pal)
-    assert s.on_button(next(b for b in s.buttons if b.id[0] == "fr_done")) == ("first_run_done",)
+    assert s.on_button(next(b for b in s.buttons if b.id[0] == "fr_done")) == ("goto", "close")
+    assert s.page == 0          # reopens at the start next time
+
+
+def test_header_close_also_exits():
+    hw, pal, game, s = _setup(FirstRunScreen)
+    s.draw(hw, game, pal)
+    close = [b for b in s.buttons if b.id[0] in ("close", "nav")]
+    assert close, "help header must offer a way out"
+    assert s.on_button(close[0]) == ("goto", "close")
+
+
+def test_both_twins_keep_help_on_the_nav_trail():
+    """("goto","close") pops the nav trail, so the router must have *pushed*
+    the caller when it opened Help - otherwise Done lands on the play screen
+    instead of Settings. The push list is inline in each twin's router."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for rel, marker in (("main.py", 'target in ("settings"'),
+                        ("docs/js/main.js", '].includes(target)')):
+        with open(os.path.join(root, rel)) as f:
+            src = f.read()
+        i = src.index(marker)
+        window = src[i - 200:i + 200]
+        for key in ("firstrun", "legend"):
+            assert '"%s"' % key in window, "%s: %s missing from the nav trail" % (rel, key)
 
 
 def test_legend_screen_explains_the_colour_convention():

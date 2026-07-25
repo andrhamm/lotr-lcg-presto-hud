@@ -54,7 +54,7 @@ class ScreenSettings:
         self.buttons.append(Button(("led",), 16, y, TILE, TILE))
         hb = Button(("legend",), 16 + TILE + TILE_GAP, y, 232, TILE)
         bevel(d, pal, hb.x, hb.y, hb.w, hb.h, pal.btn)
-        text_center(d, pal, "How to read this HUD", hb.x + 116, hb.y + TILE // 2 - 8,
+        text_center(d, pal, "Help", hb.x + 116, hb.y + TILE // 2 - 8,
                     2, pal.tan)
         self.buttons.append(hb)
 
@@ -73,7 +73,7 @@ class ScreenSettings:
             return ("goto", btn.id[1])
         if k == "legend":
             self.confirm_end = False
-            return ("goto", "legend")
+            return ("goto", "firstrun")
         if k == "led":
             from ui.modals import LedModal
             return ("modal", LedModal(self.prefs, game))

@@ -1,8 +1,7 @@
-"""First-run guidance + the HUD conventions legend (M5 beta hardening).
+"""Help: how the HUD works + the conventions legend.
 
-Shown once on a fresh install (prefs["seen_intro"]), and the legend page is
-re-openable on its own from Settings so the conventions are never a thing you
-had to memorise on day one. Mirror of the web classes in
+Reached from Settings -> Help. It is NOT shown automatically at boot - the
+boot menu is the first thing you see. Mirror of the web classes in
 docs/js/screens_other.js - keep the two in lockstep.
 """
 
@@ -66,12 +65,13 @@ class LegendScreen:
 
     def on_button(self, btn, game=None):
         if btn.id[0] in ("close", "nav"):
-            return ("close",)
+            return ("goto", "close")
         return None
 
 
 class FirstRunScreen:
-    """Three-page intro shown once on a fresh install. Page 3 is the legend."""
+    """Three-page help: what the HUD is, how a round flows, and the legend.
+    Opened from Settings -> Help; never shown automatically."""
 
     def __init__(self):
         self.page = 0
@@ -109,8 +109,7 @@ class FirstRunScreen:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        draw_header(d, pal, game, self.buttons, title="Welcome",
-                    round_label="R0")
+        draw_header(d, pal, game, self.buttons, title="Help", close=True)
         self._body(d, pal)
 
         if self.page > 0:
@@ -124,7 +123,7 @@ class FirstRunScreen:
         last = self.page == PAGES - 1
         b = Button(("fr_done",) if last else ("fr_next",), 328, 412, 140, 52)
         bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn_ok)
-        text_center(d, pal, "Start" if last else "Next", b.x + 70, b.y + 16, 2, pal.ok_fg)
+        text_center(d, pal, "Done" if last else "Next", b.x + 70, b.y + 16, 2, pal.ok_fg)
         self.buttons.append(b)
 
     def on_button(self, btn, game=None):
@@ -135,6 +134,7 @@ class FirstRunScreen:
         if k == "fr_back":
             self.page = max(0, self.page - 1)
             return "redraw"
-        if k == "fr_done":
-            return ("first_run_done",)
+        if k in ("fr_done", "close", "nav"):
+            self.page = 0          # reopen at the start next time
+            return ("goto", "close")   # pops the nav trail -> back to Settings
         return None

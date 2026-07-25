@@ -27,7 +27,7 @@ function loadPrefs() {
   try {
     const d = JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {};
     return { brightness: d.brightness ?? 100, scene: d.scene ?? "phase" };
-  } catch { return { brightness: 100, scene: "phase", seen_intro: false }; }
+  } catch { return { brightness: 100, scene: "phase" }; }
 }
 function savePrefs(prefs) { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }
 
@@ -102,14 +102,13 @@ function main() {
     about: new ScreenAbout(),
     firstrun: new FirstRunScreen(),
     legend: new LegendScreen(),
-    legend: new LegendScreen(),
     gameover: new GameOverScreen(),
     scenario_source: new ScenarioSourceScreen(),
     pick_cycle: new PickCycleScreen("official", []),
     choose_scenario: new ChooseScenarioScreen("official", "", []),
     scenario_options: new ScenarioOptionsScreen({}, {}),
   };
-  let active = prefs.seen_intro ? "boot" : "firstrun";
+  let active = "boot";
   let navStack = [];
   let modal = null;
   let dirty = true;
@@ -179,14 +178,10 @@ function main() {
   async function handleResult(result) {
     if (Array.isArray(result)) {
       const kind = result[0];
-      if (kind === "first_run_done") {
-        prefs.seen_intro = true;
-        savePrefs(prefs);
-        active = "boot";
-      } else if (kind === "goto") {
+      if (kind === "goto") {
         let target = result[1];
         if (target === "close") target = navStack.pop() ?? "play";
-        else if (["settings", "log", "phases", "about"].includes(target)) {
+        else if (["settings", "log", "phases", "about", "firstrun", "legend"].includes(target)) {
           if (active !== target) navStack.push(active);
         } else navStack = [];
         active = target;

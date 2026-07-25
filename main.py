@@ -29,7 +29,7 @@ import quest_catalog
 
 STATE_PATH = "/state.json"
 PREFS_PATH = "/device.json"
-DEFAULT_PREFS = {"brightness": 100, "scene": "phase", "seen_intro": False}
+DEFAULT_PREFS = {"brightness": 100, "scene": "phase"}
 
 # Pre-game screens with no live game to animate: LED/notification/elimination
 # per-tick housekeeping (below) is skipped while any of these is active.
@@ -42,8 +42,7 @@ def load_prefs():
         with open(PREFS_PATH) as f:
             d = json.load(f)
         return {"brightness": d.get("brightness", 100),
-                "scene": d.get("scene", "phase"),
-                "seen_intro": d.get("seen_intro", False)}
+                "scene": d.get("scene", "phase")}
     except Exception:
         return dict(DEFAULT_PREFS)
 
@@ -151,7 +150,7 @@ def main():
         "choose_scenario": ChooseScenarioScreen("official", "", []),
         "scenario_options": ScenarioOptionsScreen({}, {}),
     }
-    active = "firstrun" if not prefs.get("seen_intro") else "boot"
+    active = "boot"
     nav_stack = []  # origins to return to when overlay screens (log/settings) close
     modal = None
     dirty = True
@@ -327,15 +326,12 @@ def main():
                     result = screens[active].on_button(b, game)
                     if isinstance(result, tuple):
                         kind = result[0]
-                        if kind == "first_run_done":
-                            prefs["seen_intro"] = True
-                            save_prefs(prefs)
-                            active = "boot"
-                        elif kind == "goto":
+                        if kind == "goto":
                             target = result[1]
                             if target == "close":
                                 target = nav_stack.pop() if nav_stack else "play"
-                            elif target in ("settings", "log", "phases"):
+                            elif target in ("settings", "log", "phases",
+                                            "firstrun", "legend"):
                                 if active != target:
                                     nav_stack.append(active)
                             else:

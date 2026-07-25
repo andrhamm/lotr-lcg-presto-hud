@@ -199,6 +199,11 @@ export class ScreenSettings {
     icons.drawIcon(ctx, icons.LORE, ax + 26, y + 16, pal.gold, 2);
     textCenter(ctx, "About", ax + TILE / 2, y + TILE - 22, 1, pal.tan);
     this.buttons.push(new Button(["about"], ax, y, TILE, TILE));
+    const hx = ax + TILE + 16;
+    bevel(ctx, hx, y, TILE, TILE, pal.card);
+    icons.drawIcon(ctx, icons.PIPE, hx + 26, y + 16, pal.gold, 2);
+    textCenter(ctx, "Help", hx + TILE / 2, y + TILE - 22, 1, pal.tan);
+    this.buttons.push(new Button(["help"], hx, y, TILE, TILE));
     y += TILE + 24;
     textLeft(ctx, "APPS  (coming soon)", 16, y, 1, pal.dim);
     y += 18;
@@ -213,6 +218,7 @@ export class ScreenSettings {
   onButton(btn, game) {
     const k = btn.id[0];
     if (k === "nav") { this.confirmEnd = false; return ["goto", btn.id[1]]; }
+    if (k === "help") { this.confirmEnd = false; return ["goto", "firstrun"]; }
     if (k === "led") return ["modal", new LedModal(this.prefs, game)];
     if (k === "about") return ["goto", "about"];
     if (k === "save_quit") { this.confirmEnd = false; return ["save_quit"]; }
@@ -958,7 +964,7 @@ export class LegendScreen {
     drawLegendRows(ctx, HEADER_H + 34);
   }
   onButton(btn) {
-    if (btn.id[0] === "close" || btn.id[0] === "nav") return ["close"];
+    if (btn.id[0] === "close" || btn.id[0] === "nav") return ["goto", "close"];
     return null;
   }
 }
@@ -991,7 +997,7 @@ export class FirstRunScreen {
   draw(ctx, game) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    drawHeader(ctx, game, this.buttons, { title: "Welcome", roundLabel: "R0" });
+    drawHeader(ctx, game, this.buttons, { title: "Help", close: true });
     this._body(ctx);
     if (this.page > 0) {
       const b = new Button(["fr_back"], 12, 412, 140, 52);
@@ -1005,14 +1011,16 @@ export class FirstRunScreen {
     const last = this.page === FIRSTRUN_PAGES - 1;
     const b = new Button([last ? "fr_done" : "fr_next"], 328, 412, 140, 52);
     bevel(ctx, b.x, b.y, b.w, b.h, pal.btn_ok);
-    textCenter(ctx, last ? "Start" : "Next", b.x + 70, b.y + 16, 2, pal.ok_fg);
+    textCenter(ctx, last ? "Done" : "Next", b.x + 70, b.y + 16, 2, pal.ok_fg);
     this.buttons.push(b);
   }
   onButton(btn) {
     const k = btn.id[0];
     if (k === "fr_next") { this.page = Math.min(FIRSTRUN_PAGES - 1, this.page + 1); return "redraw"; }
     if (k === "fr_back") { this.page = Math.max(0, this.page - 1); return "redraw"; }
-    if (k === "fr_done") return ["first_run_done"];
+    // "goto close" pops the nav trail -> back to Settings (a bare ["close"] is
+    // the modal idiom; screens must use goto).
+    if (k === "fr_done" || k === "close" || k === "nav") { this.page = 0; return ["goto", "close"]; }
     return null;
   }
 }
