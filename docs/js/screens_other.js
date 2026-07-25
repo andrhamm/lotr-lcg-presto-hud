@@ -8,7 +8,7 @@ import * as icons from "./icons.js";
 import { viewForStep, DEFAULT_START_THREAT, MAX_PLAYERS } from "./gamestate.js";
 import { PHASES, STEPS } from "./phases.js";
 import { step as phaseStep } from "./phases.js";
-import { drawHeader, HEADER_H } from "./screens.js";
+import { drawHeader, HEADER_H, QuestCardModal } from "./screens.js";
 import { iconFor, slugify } from "./quest_catalog.js";
 
 export class ScreenPhases {
@@ -699,6 +699,13 @@ export class ScenarioOptionsScreen {
   static GATHER_Y0 = 116;
   static GATHER_ROW_H = 30;
   static MAX_GATHER_ROWS = 4;
+  // The Difficulty row: dropdown + "Quest card" button, together spanning the
+  // 16..464 content width. 124 leaves 14px either side of the label at scale 2
+  // (96px), and the dropdown still clears its widest value, "Epic Multiplayer"
+  // (150px), inside its 26px of chrome.
+  static CARD_BTN_W = 124;
+  static CARD_BTN_X = 480 - 16 - 124;
+  static DD_W = 480 - 16 - 124 - 8 - 16;
   static CTA_Y = 410;
   static CTA_H = 54;
 
@@ -821,7 +828,16 @@ export class ScenarioOptionsScreen {
     // 3-row fixture this reproduces mock_quest.py's y=212 exactly
     // (116 + 3*30 + 6).
     const ddY = gy + 6;
-    this._dropdown(ctx, 16, ddY, 448, "Difficulty", this.difficulty, ["dd", "difficulty"]);
+    const S = ScenarioOptionsScreen;
+    this._dropdown(ctx, 16, ddY, S.DD_W, "Difficulty", this.difficulty, ["dd", "difficulty"]);
+    // Same read-only card reference the Quest Setup view and the progress
+    // detail row open - reachable here so you can read the stages before
+    // committing to the scenario. Sits on the dropdown's row (its box starts
+    // 14px below the label), not under it.
+    const cb = new Button(["open_card_modal"], S.CARD_BTN_X, ddY + 14, S.CARD_BTN_W, 34);
+    bevel(ctx, cb.x, cb.y, cb.w, cb.h, pal.btn);
+    textCenter(ctx, "Quest card", cb.x + cb.w / 2, cb.y + 9, 2, pal.tan);
+    this.buttons.push(cb);
 
     let msgs = this._tipMessages();
     if (msgs.length) {
@@ -863,12 +879,17 @@ export class ScenarioOptionsScreen {
     this.buttons.push(new Button(id, x, yy, w, 34));
   }
 
-  onButton(btn) {
+  onButton(btn, game) {
     const k = btn.id[0];
     if (k === "nav") return ["goto", btn.id[1]];
     if (k === "retitle") return ["choose_scenario_list", this.scenario.source, this.scenario.cycle];
     if (k === "dd") {
       return ["modal", new OptionListModal(this, "difficulty", "Difficulty", this.difficultyOptions())];
+    }
+    if (k === "open_card_modal") {
+      const stages = this.data?.quest?.stages ?? [];
+      if (!stages.length) return null;   // nothing loaded, nothing to show
+      return ["modal", new QuestCardModal(game, null, stages, this.scenario)];
     }
     if (k === "begin") return ["begin_setup", this.difficulty];
     return null;

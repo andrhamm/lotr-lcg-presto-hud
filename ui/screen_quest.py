@@ -313,6 +313,14 @@ class ScenarioOptionsScreen:
     GATHER_ROW_H = 30
     MAX_GATHER_ROWS = 4
 
+    # The Difficulty row: dropdown + "Quest card" button, together spanning
+    # the 16..464 content width. 124 leaves 14px either side of the label at
+    # scale 2 (96px), and the dropdown still clears its widest value,
+    # "Epic Multiplayer" (150px), inside its 26px of chrome.
+    CARD_BTN_W = 124
+    CARD_BTN_X = 480 - 16 - CARD_BTN_W
+    DD_W = CARD_BTN_X - 8 - 16
+
     CTA_Y = 410
     CTA_H = 54
 
@@ -461,7 +469,16 @@ class ScenarioOptionsScreen:
         # with the 3-row fixture this reproduces mock_quest.py's y=212
         # exactly (116 + 3*30 + 6).
         dd_y = gy + 6
-        self._dropdown(d, pal, 16, dd_y, 448, "Difficulty", self.difficulty, ("dd", "difficulty"))
+        self._dropdown(d, pal, 16, dd_y, self.DD_W, "Difficulty", self.difficulty,
+                       ("dd", "difficulty"))
+        # Same read-only card reference the Quest Setup view and the progress
+        # detail row open - reachable here so you can read the stages before
+        # committing to the scenario. Sits on the dropdown's row (its box
+        # starts 14px below the label), not under it.
+        cb = Button(("open_card_modal",), self.CARD_BTN_X, dd_y + 14, self.CARD_BTN_W, 34)
+        bevel(d, pal, cb.x, cb.y, cb.w, cb.h, pal.btn)
+        text_center(d, pal, "Quest card", cb.x + cb.w // 2, cb.y + 9, 2, pal.tan)
+        self.buttons.append(cb)
 
         msgs = self._tip_messages()
         if msgs:
@@ -524,6 +541,12 @@ class ScenarioOptionsScreen:
         if k == "dd":
             return ("modal", OptionListModal(self, "difficulty", "Difficulty",
                                              self.difficulty_options()))
+        if k == "open_card_modal":
+            stages = (self.data.get("quest") or {}).get("stages") or []
+            if not stages:
+                return None    # nothing loaded for this scenario, nothing to show
+            from ui.modals import QuestCardModal
+            return ("modal", QuestCardModal(game, stages=stages, scenario=self.scenario))
         if k == "begin":
             return ("begin_setup", self.difficulty)
         return None

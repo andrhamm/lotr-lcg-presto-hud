@@ -1683,10 +1683,20 @@ class QuestCardModal:
     # gets far more than the old flat 3-line cap when the other side is short.
     BOTTOM_Y0 = 380
 
-    def __init__(self, game, tips=None):
+    def __init__(self, game, tips=None, stages=None, scenario=None):
         self.game = game
-        self.idx = game.stage_idx if game.stages else 0
-        self.card = game.card_idx if game.stages else 0
+        # Preview mode: Scenario Options opens this BEFORE the scenario is
+        # preloaded into the game, so it passes the picked scenario's stages
+        # and index entry directly. Everything below reads these, never the
+        # game - the modal was already read-only, this just names its source.
+        self.stages = game.stages if stages is None else stages
+        self.scenario = (game.scenario or {}) if scenario is None else (scenario or {})
+        # Which stage is live. In preview there is no live stage yet, and
+        # stage 1 is where the game will start, so 0 marks the same card the
+        # Quest Setup view would.
+        self.current_idx = game.stage_idx if stages is None else 0
+        self.idx = self.current_idx if self.stages else 0
+        self.card = (game.card_idx if stages is None else 0) if self.stages else 0
         self.buttons = []
         self.tips = tips or {}          # loaded tips.json "scenarios" map (M4-B tips)
         self.tips_open = False          # toggled by the Tips/Back button
@@ -1789,14 +1799,14 @@ class QuestCardModal:
         modal_header(d, pal, game, "QUEST CARD", self.buttons)
         M, W = self.MARGIN, 480 - 2 * self.MARGIN
 
-        if not game.stages:
+        if not self.stages:
             text_center(d, pal, "No quest loaded", 240, 200, 2, pal.dim)
             text_center(d, pal, "Start a scenario to see stage cards.", 240, 226, 1, pal.dim)
             return
 
-        n = len(game.stages)
+        n = len(self.stages)
         self.idx = max(0, min(self.idx, n - 1))
-        stage = game.stages[self.idx]
+        stage = self.stages[self.idx]
         cards = stage["cards"]
         self.card = max(0, min(self.card, len(cards) - 1))
         card = cards[self.card]
@@ -1817,7 +1827,7 @@ class QuestCardModal:
         text_left(d, pal, "STAGE %d" % stage["stage"], M, y, 2, pal.amber)
         ab_hint = "A / B"
         text_left(d, pal, ab_hint, 480 - M - d.measure_text(ab_hint, 1), y + 4, 1, pal.dim)
-        if self.idx == game.stage_idx:
+        if self.idx == self.current_idx:
             pw = d.measure_text("CURRENT", 1) + 14
             px = 240 - pw // 2
             d.set_pen(pal.gold)
@@ -1868,7 +1878,7 @@ class QuestCardModal:
 
         # -- SIDE A/B card text, or (M4-B tips) the tips panel in its place --
         self._tips_data = tips_for(
-            (self.game.scenario or {}).get("slug"), stage["stage"], self.tips)
+            self.scenario.get("slug"), stage["stage"], self.tips)
         if self.tips_open and self._tips_data:
             y += self._tips_panel(d, pal, M, y, W, self._tips_data, self.BOTTOM_Y0 - y) + 6
         else:
@@ -1917,9 +1927,9 @@ class QuestCardModal:
                 self.tips_open = not self.tips_open
                 return "redraw"
             return None
-        if not self.game.stages:
+        if not self.stages:
             return None
-        n = len(self.game.stages)
+        n = len(self.stages)
         if k == "next":
             if self.idx < n - 1:
                 self.idx += 1
@@ -1933,7 +1943,7 @@ class QuestCardModal:
                 return "redraw"
             return None
         if k == "alt":
-            cards = self.game.stages[self.idx]["cards"]
+            cards = self.stages[self.idx]["cards"]
             if len(cards) > 1:
                 self.card = (self.card + 1) % len(cards)
                 return "redraw"

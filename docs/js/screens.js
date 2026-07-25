@@ -1489,10 +1489,20 @@ export class QuestCardModal {
   // gets far more than the old flat 3-line cap when the other side is short.
   static BOTTOM_Y0 = 380;
 
-  constructor(game, tips = null) {
+  // stages/scenario override the game's own: Scenario Options opens this
+  // BEFORE the scenario is preloaded into the game, so it passes the picked
+  // scenario's stages and index entry directly. Everything below reads these,
+  // never the game - the modal was already read-only, this just names its
+  // source. Mirrors ui/modals.py.
+  constructor(game, tips = null, stages = null, scenario = null) {
     this.game = game;
-    this.idx = game.stages.length ? game.stage_idx : 0;
-    this.card = game.stages.length ? game.card_idx : 0;
+    this.stages = stages ?? game.stages;
+    this.scenario = (stages === null ? game.scenario : scenario) ?? {};
+    // Which stage is live. In preview there is no live stage yet, and stage 1
+    // is where the game will start, so 0 marks the same card Quest Setup would.
+    this.currentIdx = stages === null ? game.stage_idx : 0;
+    this.idx = this.stages.length ? this.currentIdx : 0;
+    this.card = this.stages.length ? (stages === null ? game.card_idx : 0) : 0;
     this.buttons = [];
     this.tips = tips ?? {};      // loaded tips.json "scenarios" map (M4-B tips)
     this.tipsOpen = false;       // toggled by the Tips/Back button
@@ -1591,15 +1601,15 @@ export class QuestCardModal {
     modalHeader(ctx, game, "QUEST CARD", this.buttons);
     const M = QuestCardModal.MARGIN, W = 480 - 2 * M;
 
-    if (!game.stages.length) {
+    if (!this.stages.length) {
       textCenter(ctx, "No quest loaded", 240, 200, 2, pal.dim);
       textCenter(ctx, "Start a scenario to see stage cards.", 240, 226, 1, pal.dim);
       return;
     }
 
-    const n = game.stages.length;
+    const n = this.stages.length;
     this.idx = Math.max(0, Math.min(this.idx, n - 1));
-    const stage = game.stages[this.idx];
+    const stage = this.stages[this.idx];
     const cards = stage.cards;
     this.card = Math.max(0, Math.min(this.card, cards.length - 1));
     const card = cards[this.card];
@@ -1618,7 +1628,7 @@ export class QuestCardModal {
     textLeft(ctx, `STAGE ${stage.stage}`, M, y, 2, pal.amber);
     const abHint = "A / B";
     textLeft(ctx, abHint, 480 - M - measureText(abHint, 1), y + 4, 1, pal.dim);
-    if (this.idx === game.stage_idx) {
+    if (this.idx === this.currentIdx) {
       const pw = measureText("CURRENT", 1) + 14;
       const px = 240 - Math.floor(pw / 2);
       rect(ctx, px, y, pw, 18, pal.gold);
@@ -1670,7 +1680,7 @@ export class QuestCardModal {
     }
 
     // -- SIDE A/B card text, or (M4-B tips) the tips panel in its place -------
-    this._tipsData = tipsFor(this.game.scenario?.slug, stage.stage, this.tips);
+    this._tipsData = tipsFor(this.scenario?.slug, stage.stage, this.tips);
     if (this.tipsOpen && this._tipsData) {
       y += this._tipsPanel(ctx, M, y, W, this._tipsData, QuestCardModal.BOTTOM_Y0 - y) + 6;
     } else {
@@ -1722,8 +1732,8 @@ export class QuestCardModal {
       if (this._tipsData) { this.tipsOpen = !this.tipsOpen; return "redraw"; }
       return null;
     }
-    if (!this.game.stages.length) return null;
-    const n = this.game.stages.length;
+    if (!this.stages.length) return null;
+    const n = this.stages.length;
     if (k === "next") {
       if (this.idx < n - 1) { this.idx += 1; this.card = 0; return "redraw"; }
       return null;
@@ -1733,7 +1743,7 @@ export class QuestCardModal {
       return null;
     }
     if (k === "alt") {
-      const cards = this.game.stages[this.idx].cards;
+      const cards = this.stages[this.idx].cards;
       if (cards.length > 1) { this.card = (this.card + 1) % cards.length; return "redraw"; }
       return null;
     }

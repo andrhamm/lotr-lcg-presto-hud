@@ -773,6 +773,21 @@ def _quest_card_modal_empty():
     return hw, m
 
 
+def _quest_card_modal_preview():
+    # The Scenario Options "Quest card" button: opened BEFORE the scenario is
+    # preloaded, so the modal renders from the stages it is handed while
+    # game.stages is still empty. Same real Mirkwood tree as the scenes above.
+    from ui.modals import QuestCardModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = GameState(2, 25)
+    assert not g.stages, "the point of this scene: nothing preloaded yet"
+    m = QuestCardModal(g, stages=_MIRKWOOD_STAGES,
+                       scenario=dict(_SCENARIO_OPTIONS_ENTRY))
+    m.draw(hw, g, pal)
+    return hw, m
+
+
 def _resolution_game(flip=True):
     # Shared base for every ResolutionModal scene below: Passage Through
     # Mirkwood's real 3-stage tree (same _MIRKWOOD_STAGES the QuestCardModal
@@ -1032,6 +1047,7 @@ SCENES = {
     "quest_card_modal_long_text": _quest_card_modal_long_text,
     "quest_card_modal_tips": _quest_card_modal_tips,
     "quest_card_modal_empty": _quest_card_modal_empty,
+    "quest_card_modal_preview": _quest_card_modal_preview,
     "gameover_victory": _gameover("victory"),
     "gameover_defeat": _gameover("defeat"),
     "about": _about,

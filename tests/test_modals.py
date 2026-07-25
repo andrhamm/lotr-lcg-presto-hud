@@ -14,6 +14,11 @@ def _find(m, id):
     return [b for b in m.buttons if b.id == id][0]
 
 
+def _btn(id):
+    """A bare button stand-in for handler tests that don't need a draw()."""
+    return type("B", (), {"id": id})()
+
+
 def test_all_modals_draw_without_error():
     hw = FakeHardware()
     pal = Palette(hw.display)
@@ -785,6 +790,35 @@ def test_authored_tip_copy_is_never_clipped_in_the_tightest_layout():
     for label, text in S.TIP_TEXT.items():
         kept = s._clip_to_height(hw.display, [text], 2, avail)
         assert kept == [text], "%s tip gets clipped: %r" % (label, kept)
+
+
+def test_quest_card_button_previews_the_picked_scenario_before_it_is_loaded():
+    """Scenario Options opens the card reference BEFORE preload_scenario, so
+    the modal has to read the stages it is handed rather than the game's
+    (which are still empty at that point)."""
+    from ui.modals import QuestCardModal
+    stages = [{"stage": 1, "cards": [{"questPoints": 8, "faces": [
+        {"side": "A", "name": "Flies and Spiders", "text": "Setup text."},
+        {"side": "B", "name": "Flies and Spiders", "text": "8 quest points."}]}]}]
+    s = _opts_screen()
+    s.data = {"name": "A Quest", "quest": {"stages": stages}}
+    game = GameState()
+    assert not game.stages, "precondition: nothing preloaded yet"
+    result = s.on_button(_btn(("open_card_modal",)), game)
+    assert result[0] == "modal" and isinstance(result[1], QuestCardModal)
+    m = result[1]
+    assert m.stages == stages
+    hw = FakeHardware()
+    m.draw(hw, game, Palette(hw.display))
+    joined = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "Flies and Spiders" in joined
+    assert "No quest loaded" not in joined
+
+
+def test_quest_card_button_does_nothing_without_stages():
+    s = _opts_screen()
+    s.data = {"name": "A Quest"}
+    assert s.on_button(_btn(("open_card_modal",)), GameState()) is None
 
 
 def test_easy_tip_states_both_halves_of_the_rule():
