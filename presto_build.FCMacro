@@ -1,0 +1,131 @@
+# Presto bent-sheet, built from TRUE line+arc primitives at the trace's real scale.
+# Shaper Trace SVG is 1:1 real scale (0.13229 mm/unit); all lengths below come from it.
+# FreeCAD 1.1.x. Edit params, then Macro > Execute.
+import FreeCAD as App, FreeCADGui as Gui, Draft, Part, math
+from FreeCAD import Vector as V
+
+# ---- parameters (mm / deg), from trace at true scale ----
+LEAN   = 0.0      # back-panel lean from vertical (trace ~0 -> vertical)
+STRUT  = 21.8     # strut (kickstand) angle below horizontal
+LB     = 94.6     # back-panel straight length
+LS     = 68.4     # strut straight length (anchored: bend-front to strut-tip = 80mm caliper)
+RB     = 10.6     # bend radius (centerline)
+T      = 2.0      # sheet thickness (measured)
+WIDTH  = 92.22    # body width (measured) -> extrude depth
+RSTRUT = 9.0      # strut-tip (base) corner radius  (test-print match)
+RTOP   = 5.0      # panel-top (front) corner radius  (narrower - PLACEHOLDER, give real #)
+half   = T / 2.0
+# strut-flat pose: ground-to-top ~104mm (caliper 106, ~2% trace error). Front=panel face.
+
+def rot(v, a):
+    c, s = math.cos(a), math.sin(a)
+    return V(c*v.x - s*v.y, s*v.x + c*v.y, 0)
+
+# ---- centerline + offset band (2D: x right, y up) ----
+th = math.radians(90 + LEAN); hb = V(math.cos(th), math.sin(th), 0)
+B0 = V(0,0,0); B1 = B0 + hb*LB
+nb = V(-math.sin(th), math.cos(th), 0); C = B1 - nb*RB
+turn = math.radians((90 + LEAN) - (-STRUT))
+E = C + rot(B1 - C, -turn)
+hs = V(math.cos(math.radians(-STRUT)), math.sin(math.radians(-STRUT)), 0); S = E + hs*LS
+nbo = (B1 - C).normalize(); nso = (E - C).normalize()
+OB0, OB1 = B0 + nbo*half, B1 + nbo*half
+RB0_, RB1 = B0 - nbo*half, B1 - nbo*half
+OE, OS = E + nso*half, S + nso*half
+RE, RS = E - nso*half, S - nso*half
+
+# ---- strut-flat orientation: strut lies flat on ground (Z=0), back-panel rises &
+# leans back; base at Z=0; extrude along X. Front view sees the tall back-panel face.
+Rr = math.radians(STRUT)
+def _rm(p):                                  # rotate +STRUT (strut horizontal) then flip
+    c, s = math.cos(Rr), math.sin(Rr)
+    return V(c*p.x - s*p.y, -(s*p.x + c*p.y), 0)
+pts = dict(OB0=OB0, OB1=OB1, RB0=RB0_, RB1=RB1, OE=OE, OS=OS, RE=RE, RS=RS, C=C)
+pts = {k: _rm(p) for k, p in pts.items()}
+offy = min(p.y for p in pts.values()); offx = min(p.x for p in pts.values())
+pts = {k: V(p.x-offx, p.y-offy, 0) for k, p in pts.items()}
+OB0,OB1,RB0_,RB1,OE,OS,RE,RS,C = (pts['OB0'],pts['OB1'],pts['RB0'],pts['RB1'],
+                                   pts['OE'],pts['OS'],pts['RE'],pts['RS'],pts['C'])
+def M(p): return V(0.0, p.x, p.y)            # -> YZ plane, extrude along X
+
+def arcmid(a, b, cen, r):
+    aa = math.atan2(a.y-cen.y, a.x-cen.x); ab = math.atan2(b.y-cen.y, b.x-cen.x)
+    d = (ab - aa + math.pi) % (2*math.pi) - math.pi
+    m = aa + d/2.0
+    return V(cen.x + r*math.cos(m), cen.y + r*math.sin(m), 0)
+def line(a, b): return Part.LineSegment(M(a), M(b)).toShape()
+def arc(a, b, cen, r): return Part.Arc(M(a), M(arcmid(a,b,cen,r)), M(b)).toShape()
+
+edges = [line(OB0,OB1), arc(OB1,OE,C,RB+half), line(OE,OS), line(OS,RS),
+         line(RS,RE), arc(RE,RB1,C,RB-half), line(RB1,RB0_), line(RB0_,OB0)]
+wire = Part.Wire(edges)
+App.Console.PrintMessage(f"closed={wire.isClosed()} edges={len(wire.Edges)} "
+                         f"height={wire.BoundBox.ZLength:.1f}mm depth={wire.BoundBox.YLength:.1f}mm\n")
+
+doc = App.ActiveDocument or App.newDocument("Presto")
+CLEAN = ("PrestoSolid","PrestoExtrude","PrestoProfile","PrestoEdges",
+         "GroundPlane","TopPlane","HeightDim","WallPlane","BaseDepthDim")
+to_remove = [o.Name for o in doc.Objects if o.Name in CLEAN or o.Label in CLEAN]
+for nm in to_remove:
+    if doc.getObject(nm) is not None: doc.removeObject(nm)
+feat = doc.addObject("Part::Feature","PrestoEdges"); feat.Shape = wire; doc.recompute()
+sk = Draft.make_sketch([feat], autoconstraints=True, name="PrestoProfile")
+doc.removeObject(feat.Name); doc.recompute()
+App.Console.PrintMessage(f"Sketch geoms={sk.GeometryCount} constraints={len(sk.Constraints)}\n")
+
+ext = doc.addObject("Part::Extrusion","PrestoExtrude")
+ext.Base = sk; ext.DirMode = "Custom"; ext.Dir = V(1,0,0)
+ext.LengthFwd = WIDTH; ext.Solid = True; sk.Visibility = False
+doc.recompute()
+
+# round the 4 flat-sheet corners: free-end caps (len~T) at X=0 and X=WIDTH,
+# split by height -> strut-tip (near ground) = RSTRUT, panel-top (up high) = RTOP
+sh = ext.Shape; tol = 0.05; zmax = sh.BoundBox.ZMax; top_ids = []; strut_ids = []
+for i, e in enumerate(sh.Edges):
+    if isinstance(e.Curve, Part.Line) and abs(e.Length - T) < 0.3:
+        xa, xb = e.Vertexes[0].Point.x, e.Vertexes[1].Point.x
+        if (abs(xa) < tol and abs(xb) < tol) or (abs(xa-WIDTH) < tol and abs(xb-WIDTH) < tol):
+            zmid = (e.Vertexes[0].Point.z + e.Vertexes[1].Point.z) / 2
+            (top_ids if zmid > zmax/2 else strut_ids).append(i + 1)
+App.Console.PrintMessage(f"corners: panel-top={len(top_ids)} strut-tip={len(strut_ids)} (expect 2,2)\n")
+fl = doc.addObject("Part::Fillet","PrestoSolid")
+fl.Base = ext
+fl.Edges = [(i, RTOP, RTOP) for i in top_ids] + [(i, RSTRUT, RSTRUT) for i in strut_ids]
+ext.Visibility = False; doc.recompute()
+if fl.Shape.isNull():
+    App.Console.PrintError("Fillet failed — a radius is too big; lower RTOP/RSTRUT.\n")
+else:
+    App.Console.PrintMessage(f"Solid volume: {fl.Shape.Volume:.1f} mm^3\n")
+
+# ground/top construction planes + ground-to-top dimension
+res = fl if not fl.Shape.isNull() else ext
+bb = res.Shape.BoundBox
+try:
+    for z, nm in ((bb.ZMin, "GroundPlane"), (bb.ZMax, "TopPlane")):
+        r = Draft.make_rectangle(WIDTH + 40, bb.YLength + 40)
+        r.Label = nm; r.Placement.Base = V(-20, bb.YMin - 20, z)
+        r.ViewObject.Transparency = 82
+        r.ViewObject.LineColor = (0.2, 0.6, 1.0) if nm == "GroundPlane" else (1.0, 0.5, 0.1)
+    dim = Draft.make_dimension(V(bb.XMin, bb.YMax, bb.ZMin),
+                               V(bb.XMin, bb.YMax, bb.ZMax),
+                               V(bb.XMin, bb.YMax + 25, (bb.ZMin + bb.ZMax) / 2))
+    dim.Label = "HeightDim"
+    # WallPlane: vertical plane (perp to table) tangent to frontmost bend point
+    wp = Draft.make_rectangle(WIDTH + 40, bb.ZLength + 40)
+    wp.Label = "WallPlane"
+    wp.Placement.Base = V(-20, bb.YMin, -20)
+    wp.Placement.Rotation = App.Rotation(V(1, 0, 0), 90)
+    wp.ViewObject.Transparency = 82; wp.ViewObject.LineColor = (0.1, 0.8, 0.3)
+    # base-depth dimension: wall (front) to strut tip, along the ground
+    bd = Draft.make_dimension(V(WIDTH/2, bb.YMin, 0.2),
+                              V(WIDTH/2, bb.YMax, 0.2),
+                              V(WIDTH + 20, (bb.YMin + bb.YMax)/2, 0.2))
+    bd.Label = "BaseDepthDim"
+    doc.recompute()
+    App.Console.PrintMessage(f"ground-to-top = {bb.ZLength:.2f} mm  (caliper 106)\n")
+    App.Console.PrintMessage(f"bend-front to strut-tip = {bb.YLength:.2f} mm  (caliper 80)\n")
+except Exception as e:
+    App.Console.PrintWarning(f"annotation skipped: {e}\n")
+
+Gui.activeDocument().activeView().viewAxonometric(); Gui.SendMsgToActiveView("ViewFit")
+App.Console.PrintMessage("Done.\n")
