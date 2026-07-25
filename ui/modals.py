@@ -911,7 +911,8 @@ class QuestingProgressModal:
 
     def _items(self):
         g = self.game
-        items = [{"kind": "q", "name": "Quest %s" % g.quest_label(), "removable": False}]
+        items = [{"kind": "q", "name": "Quest %s" % g.quest_label(), "removable": False,
+                  "advanceable": bool(g.stages)}]
         items.append({"kind": "l", "name": "Location", "removable": True}
                      if g.active_location else {"kind": "l_add"})
         for i, s in enumerate(g.side_quests):
@@ -938,9 +939,16 @@ class QuestingProgressModal:
 
     def _icon_btn(self, d, pal, cx, cy, r, kind, id):
         """Small circular action: 'x' = remove (red X, reuses circ_btn),
-        'done' = mark complete (green pennant flag)."""
+        'done' = mark complete (green pennant flag), 'adv' = manually trigger
+        the guided resolution flow (gold chevron - conditional/0-point
+        stages have no numeric gate to cross, so this is the only way in)."""
         if kind == "x":
             circ_btn(d, pal, cx, cy, r, "X", pal.red)
+        elif kind == "adv":
+            disc(d, cx, cy, r, pal.btn)
+            arc_runs(d, cx, cy, r, r - 2, 0, 360, pal.bevel_l)
+            d.set_pen(pal.gold)
+            d.triangle(cx - 3, cy - 5, cx - 3, cy + 5, cx + 5, cy)
         else:
             disc(d, cx, cy, r, pal.btn)
             arc_runs(d, cx, cy, r, r - 2, 0, 360, pal.bevel_l)
@@ -989,6 +997,8 @@ class QuestingProgressModal:
         if it.get("removable"):
             self._icon_btn(d, pal, 400, cy, 11, "done", (pfx + "done", idx))
             self._icon_btn(d, pal, 436, cy, 11, "x", (pfx + "X", idx))
+        if it.get("advanceable"):
+            self._icon_btn(d, pal, 400, cy, 11, "adv", ("qAdv",))
         if quest_card_tappable:
             self.buttons.append(Button(("quest_card",), 12, y, 118, self.ROW_H))
 
@@ -1200,8 +1210,19 @@ class QuestingProgressModal:
             g.pending_quest_card = True
             self._log_changes()
             return "close"
+        if k == "qAdv":
+            # Manually trigger the guided resolution flow even though the
+            # numeric target hasn't been reached - the only way in for
+            # conditional/0-point stages, which have no gate to cross. See
+            # main.py's loop, which checks pending_resolution once modal is
+            # None (same pending-flag pattern as pending_quest_card above).
+            g.pending_resolution = "forced"
+            self._log_changes()
+            return "close"
         if k == "close":
             self._log_changes()
+            if g.stages and g.needs_resolution():
+                g.pending_resolution = "auto"
             return "close"
         return None
 

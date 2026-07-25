@@ -8,7 +8,8 @@ import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
          LedModal, ScreenAbout, GameOverScreen, ScenarioSourceScreen,
          PickCycleScreen, ChooseScenarioScreen,
          ScenarioOptionsScreen } from "./screens_other.js";
-import { EliminationModal, QuestCardModal, SideQuestPickModal } from "./screens.js";
+import { EliminationModal, QuestCardModal, SideQuestPickModal,
+         StageCompleteModal, ResolutionModal } from "./screens.js";
 import { loadIndex, loadScenario, cyclesFor, groupByCycle, loadPlayerSideQuests,
          loadIcons, loadTips } from "./quest_catalog.js";
 
@@ -353,6 +354,25 @@ function main() {
         modal = new QuestCardModal(game, tips);
         dirty = true;
       });
+    }
+    // Manual progress-edit overflow (QuestingProgressModal close, or the
+    // quest row's "Advance" icon): same pending-flag pattern as
+    // pending_quest_card above - the modal that detected it had to close
+    // first (router holds one modal at a time). No fetch needed here,
+    // unlike pending_quest_card above - this path never reads the catalog,
+    // since game.stages is already loaded on the model.
+    if (!modal && active === "play" && game.pending_resolution) {
+      const forced = game.pending_resolution === "forced";
+      game.pending_resolution = false;
+      if (game.stages.length) {
+        modal = new ResolutionModal(game, forced);
+      } else {
+        const excess = game.quest.points > 0
+          ? Math.max(0, game.quest.progress - game.quest.points) : 0;
+        game.pending_stage = { cleared: game.questLabel(), excess };
+        modal = new StageCompleteModal(game);
+      }
+      dirty = true;
     }
     // Progress-detail "+ Side quest" tap (SideQuestPickModal entry point):
     // same pending-flag pattern as pending_quest_card above - the picker

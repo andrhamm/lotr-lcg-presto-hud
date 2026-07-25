@@ -673,7 +673,8 @@ export class QuestingProgressModal {
 
   _items() {
     const g = this.game;
-    const items = [{ kind: "q", name: `Quest ${g.questLabel()}`, removable: false }];
+    const items = [{ kind: "q", name: `Quest ${g.questLabel()}`, removable: false,
+      advanceable: g.stages.length > 0 }];
     items.push(g.active_location
       ? { kind: "l", name: "Location", removable: true }
       : { kind: "l_add" });
@@ -705,10 +706,23 @@ export class QuestingProgressModal {
   }
 
   // Small circular action: "x" = remove (red X, reuses circBtn), "done" =
-  // mark complete (green pennant flag - a target reached its max).
+  // mark complete (green pennant flag - a target reached its max), "adv" =
+  // manually trigger the guided resolution flow (gold chevron -
+  // conditional/0-point stages have no numeric gate to cross, so this is
+  // the only way in).
   _iconBtn(ctx, cx, cy, r, kind, id) {
     if (kind === "x") {
       circBtn(ctx, cx, cy, r, "X", pal.red);
+    } else if (kind === "adv") {
+      disc(ctx, cx, cy, r, pal.btn);
+      arcRuns(ctx, cx, cy, r, r - 2, 0, 360, pal.bevel_l);
+      ctx.fillStyle = pal.gold;
+      ctx.beginPath();
+      ctx.moveTo(cx - 3, cy - 5);
+      ctx.lineTo(cx - 3, cy + 5);
+      ctx.lineTo(cx + 5, cy);
+      ctx.closePath();
+      ctx.fill();
     } else {
       disc(ctx, cx, cy, r, pal.btn);
       arcRuns(ctx, cx, cy, r, r - 2, 0, 360, pal.bevel_l);
@@ -758,6 +772,9 @@ export class QuestingProgressModal {
     if (it.removable) {
       this._iconBtn(ctx, 400, cy, 11, "done", [pfx + "done", idx]);
       this._iconBtn(ctx, 436, cy, 11, "x", [pfx + "X", idx]);
+    }
+    if (it.advanceable) {
+      this._iconBtn(ctx, 400, cy, 11, "adv", ["qAdv"]);
     }
     if (questCardTappable) {
       this.buttons.push(new Button(["quest_card"], 12, y, 118, QuestingProgressModal.ROW_H));
@@ -952,7 +969,21 @@ export class QuestingProgressModal {
       this._logChanges();
       return "close";
     }
-    if (k === "close") { this._logChanges(); return "close"; }
+    if (k === "qAdv") {
+      // Manually trigger the guided resolution flow even though the
+      // numeric target hasn't been reached - the only way in for
+      // conditional/0-point stages, which have no gate to cross. See
+      // main.js's setInterval, which checks pending_resolution once modal
+      // is null (same pending-flag pattern as pending_quest_card above).
+      g.pending_resolution = "forced";
+      this._logChanges();
+      return "close";
+    }
+    if (k === "close") {
+      this._logChanges();
+      if (g.stages.length && g.needsResolution()) g.pending_resolution = "auto";
+      return "close";
+    }
     return null;
   }
 

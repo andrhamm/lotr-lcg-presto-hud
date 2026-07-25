@@ -243,6 +243,25 @@ def main():
             dirty = True
             continue
 
+        # Manual progress-edit overflow (QuestingProgressModal close, or the
+        # quest row's "Advance" icon): same pending-flag pattern as
+        # pending_quest_card above - the modal that detected it had to
+        # close first (router holds one modal at a time).
+        if modal is None and active == "play" and game.pending_resolution:
+            forced = game.pending_resolution == "forced"
+            game.pending_resolution = False
+            if game.stages:
+                from ui.modals import ResolutionModal
+                modal = ResolutionModal(game, force_advance=forced)
+            else:
+                excess = max(0, game.quest["progress"] - game.quest["points"]) \
+                    if game.quest["points"] > 0 else 0
+                game.pending_stage = {"cleared": game.quest_label(), "excess": excess}
+                from ui.modals import StageCompleteModal
+                modal = StageCompleteModal(game)
+            dirty = True
+            continue
+
         # Progress-detail "+ Side quest" tap (SideQuestPickModal entry
         # point): same pending-flag pattern as pending_quest_card above -
         # the picker needs a catalog read (flash I/O) that

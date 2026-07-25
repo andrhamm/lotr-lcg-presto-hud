@@ -716,6 +716,15 @@ class ScreenPlay:
             if game.pending_stage:
                 from ui.modals import StageCompleteModal
                 return ("modal", StageCompleteModal(game))
+            if game.pending_resolution:
+                # Catalog game: place_progress() (gamestate.py, B-resolve
+                # Task 1) deferred the actual advance mechanics here rather
+                # than doing them synchronously - open the guided flow now
+                # that the allocation is applied and the view has moved on.
+                forced = game.pending_resolution == "forced"
+                game.pending_resolution = False
+                from ui.modals import ResolutionModal
+                return ("modal", ResolutionModal(game, force_advance=forced))
             return True
         if k == "travel_new":
             return ("modal", LocationPickModal(game, mode="new"))

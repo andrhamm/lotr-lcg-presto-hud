@@ -451,6 +451,23 @@ def _questing_progress_modal_loc_contrib():
     return hw, m
 
 
+def _questing_progress_modal_catalog():
+    # Catalog game (has stages): the quest row gains the "adv" (Advance)
+    # icon at x=400, the same slot "done" occupies on removable rows - the
+    # quest row is never removable, so there's no collision by construction,
+    # but this scene renders it for real (plus a location + named side
+    # quest row, to confirm no overlap with the quest_card tap target or
+    # the Current/Target editors either) - B-resolve Task 3.
+    from ui.modals import QuestingProgressModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game()
+    g.side_quests = [{"points": 5, "progress": 2, "name": "Gather Information"}]
+    m = QuestingProgressModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
 def _sailing_modal():
     from ui.modals import SailingModal
     hw = FakeHardware()
@@ -956,6 +973,7 @@ SCENES = {
     "questing_progress_modal_loc_choose": _questing_progress_modal_loc_choose,
     "questing_progress_modal_loc_pts": _questing_progress_modal_loc_pts,
     "questing_progress_modal_loc_contrib": _questing_progress_modal_loc_contrib,
+    "questing_progress_modal_catalog": _questing_progress_modal_catalog,
     "side_quest_pick": _side_quest_pick,
     "side_quest_pick_empty": _side_quest_pick_empty,
     "sailing_modal": _sailing_modal,

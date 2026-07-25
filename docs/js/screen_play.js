@@ -8,7 +8,7 @@ import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP } from "./gamestate.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal, CommitModal,
          PlayersDetailModal, RemindersModal, LocationPickModal, SideQuestsModal,
          QuestConfigModal, StageCompleteModal, SailingModal,
-         QuestingProgressModal, QuestCardModal } from "./screens.js";
+         QuestingProgressModal, QuestCardModal, ResolutionModal } from "./screens.js";
 
 const MARGIN = 8;
 const ZONE_TOP = HEADER_H + 6;            // top of the players/progress zones
@@ -647,6 +647,15 @@ export class ScreenPlay {
       this.alloc = null;
       game.enterView("travel");
       if (game.pending_stage) return ["modal", new StageCompleteModal(game)];
+      if (game.pending_resolution) {
+        // Catalog game: placeProgress() (gamestate.js, B-resolve Task 1)
+        // deferred the actual advance mechanics here rather than doing them
+        // synchronously - open the guided flow now that the allocation is
+        // applied and the view has moved on.
+        const forced = game.pending_resolution === "forced";
+        game.pending_resolution = false;
+        return ["modal", new ResolutionModal(game, forced)];
+      }
       return true;
     }
     if (k === "travel_new") return ["modal", new LocationPickModal(game, "new")];
