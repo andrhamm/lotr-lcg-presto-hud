@@ -1151,7 +1151,15 @@ class QuestingProgressModal:
             return None
         if k in ("lP-", "lP+"):
             g.active_location["progress"] = self._clamp_adj(g.active_location["progress"], 1 if up else -1)
-            g.explore_location_if_done()
+            if not g.stages:
+                # Catalog games defer this to the guided resolution flow
+                # (close-time needs_resolution() check + ResolutionModal's
+                # "location" step, B-resolve Task 3) so overflow excess gets
+                # credited to the quest card (rulebook p.15) via
+                # resolve_location_overflow() instead of silently discarded.
+                # Custom games have no guided flow to defer to, so they keep
+                # the immediate auto-explore they've always had.
+                g.explore_location_if_done()
             return None
         if k in ("lT-", "lT+"):
             g.active_location["points"] = self._clamp_adj(g.active_location["points"], 1 if up else -1)
@@ -1221,7 +1229,21 @@ class QuestingProgressModal:
             return "close"
         if k == "close":
             self._log_changes()
-            if g.stages and g.needs_resolution():
+            # Catalog games: any overflow (location/quest/side-quest) is
+            # safe to defer to ResolutionModal, since every one of its
+            # steps has a real close/dismiss escape hatch. Custom games
+            # have no ResolutionModal - their only fallback is the legacy
+            # StageCompleteModal, which has no safe "cancel" (only "go",
+            # committing a stage/side/points change, or "win") - so their
+            # trigger must stay scoped to the quest itself overflowing
+            # (what StageCompleteModal has always been opened for), not
+            # needs_resolution()'s broader check. A side-quest-only
+            # overflow must not force a custom-game player into that
+            # advance-or-victory dilemma.
+            if g.stages:
+                if g.needs_resolution():
+                    g.pending_resolution = "auto"
+            elif g.quest["points"] > 0 and g.quest["progress"] >= g.quest["points"]:
                 g.pending_resolution = "auto"
             return "close"
         return None

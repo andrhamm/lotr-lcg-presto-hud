@@ -914,7 +914,13 @@ export class QuestingProgressModal {
     if (k === "qT-" || k === "qT+") { g.quest.points = this._clampAdj(g.quest.points, k.endsWith("+") ? 1 : -1); return null; }
     if (k === "lP-" || k === "lP+") {
       g.active_location.progress = this._clampAdj(g.active_location.progress, k.endsWith("+") ? 1 : -1);
-      g.exploreLocationIfDone();
+      // Catalog games defer this to the guided resolution flow (close-time
+      // needsResolution() check + ResolutionModal's "location" step,
+      // B-resolve Task 3) so overflow excess gets credited to the quest
+      // card (rulebook p.15) via resolveLocationOverflow() instead of
+      // silently discarded. Custom games have no guided flow to defer to,
+      // so they keep the immediate auto-explore they've always had.
+      if (!g.stages.length) g.exploreLocationIfDone();
       return null;
     }
     if (k === "lT-" || k === "lT+") { g.active_location.points = this._clampAdj(g.active_location.points, k.endsWith("+") ? 1 : -1); return null; }
@@ -981,7 +987,21 @@ export class QuestingProgressModal {
     }
     if (k === "close") {
       this._logChanges();
-      if (g.stages.length && g.needsResolution()) g.pending_resolution = "auto";
+      // Catalog games: any overflow (location/quest/side-quest) is safe to
+      // defer to ResolutionModal, since every one of its steps has a real
+      // close/dismiss escape hatch. Custom games have no ResolutionModal -
+      // their only fallback is the legacy StageCompleteModal, which has no
+      // safe "cancel" (only "go", committing a stage/side/points change, or
+      // "win") - so their trigger must stay scoped to the quest itself
+      // overflowing (what StageCompleteModal has always been opened for),
+      // not needsResolution()'s broader check. A side-quest-only overflow
+      // must not force a custom-game player into that advance-or-victory
+      // dilemma.
+      if (g.stages.length) {
+        if (g.needsResolution()) g.pending_resolution = "auto";
+      } else if (g.quest.points > 0 && g.quest.progress >= g.quest.points) {
+        g.pending_resolution = "auto";
+      }
       return "close";
     }
     return null;
