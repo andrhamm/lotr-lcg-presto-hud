@@ -710,11 +710,30 @@ _SIDE_QUEST_SAMPLE = [
 
 
 def _side_quest_pick():
+    # Step 1: the sphere list (name + quest count + chevron), which is what
+    # the picker now opens on.
     from ui.modals import SideQuestPickModal
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
     m = SideQuestPickModal(g, list(_SIDE_QUEST_SAMPLE))
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _side_quest_pick_quests():
+    # Step 2: the radio list inside one sphere, with the "< Spheres" back
+    # button and Add. State is set directly rather than via on_button - a
+    # second draw() on the same FakeHardware would accumulate both steps'
+    # text calls into one collision check.
+    from ui.modals import SideQuestPickModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    m = SideQuestPickModal(g, list(_SIDE_QUEST_SAMPLE))
+    m.sphere = m.spheres()[0][0]
+    quests = m.in_sphere()
+    m.selected = quests[0]["id"] if quests else None
     m.draw(hw, g, pal)
     return hw, m
 
@@ -1059,6 +1078,7 @@ SCENES = {
     "questing_progress_modal_loc_contrib": _questing_progress_modal_loc_contrib,
     "questing_progress_modal_catalog": _questing_progress_modal_catalog,
     "side_quest_pick": _side_quest_pick,
+    "side_quest_pick_quests": _side_quest_pick_quests,
     "side_quest_pick_empty": _side_quest_pick_empty,
     "sailing_modal": _sailing_modal,
     "stage_complete_modal": _stage_complete_modal,

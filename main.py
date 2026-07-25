@@ -291,6 +291,16 @@ def main():
             dirty = True
             continue
 
+        # Coming back from the side-quest picker: reopen the Progress modal
+        # you tapped "+ Side quest" from, rather than dropping you on the
+        # play screen. Same pending-flag pattern as the two above.
+        if modal is None and active == "play" and game.pending_progress_detail:
+            game.pending_progress_detail = False
+            from ui.modals import QuestingProgressModal
+            modal = QuestingProgressModal(game)
+            dirty = True
+            continue
+
         # game over: all players eliminated -> defeat (victory is set via the
         # stage-complete modal). Route to the game-over screen from play.
         if modal is None and active == "play" and not game.game_over \

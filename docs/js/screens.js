@@ -1820,6 +1820,14 @@ function sqRadio(ctx, cx, cy, on) {
   if (on) disc(ctx, cx, cy, 5, pal.gold);
 }
 
+// Two-step picker over the player side-quest catalog: sphere first, then the
+// quest, mirroring the Pick Cycle -> Choose Scenario drill. Sphere order
+// follows the Rules Reference's "Spheres of Influence" diagram (Leadership,
+// Lore, Spirit, Tactics), then Neutral, then anything else; cards whose
+// sphere the catalog does not carry are grouped last under NO_SPHERE rather
+// than guessed into one. On the way out it sets game.pending_progress_detail
+// so the router reopens the Progress modal you came from.
+// Mirror of ui/modals.py - keep the two in lockstep.
 export class SideQuestPickModal {
   static PER_PAGE = 6;
   static ROW_H = 44;
@@ -1828,85 +1836,158 @@ export class SideQuestPickModal {
   static NAME_MAX_W = 300;
   static FOOTER_Y = 404;
   static FOOTER_H = 64;
+  static NO_SPHERE = "No sphere";
+  static SPHERE_ORDER = ["Leadership", "Lore", "Spirit", "Tactics", "Neutral"];
 
   constructor(game, entries) {
     this.game = game;
     this.entries = entries;
-    this.selected = entries.length ? entries[0].id : null;
+    this.sphere = null;          // null = step 1 (pick a sphere)
+    this.selected = null;
     this.page = 0;
     this.buttons = [];
   }
 
-  _pages() { return Math.max(1, Math.ceil(this.entries.length / SideQuestPickModal.PER_PAGE)); }
+  _sphereOf(e) { return e.sphere || SideQuestPickModal.NO_SPHERE; }
 
-  draw(ctx) {
-    const { PER_PAGE, ROW_H, ROW_STRIDE, LIST_Y0, NAME_MAX_W, FOOTER_Y, FOOTER_H } = SideQuestPickModal;
+  spheres() {
+    const S = SideQuestPickModal;
+    const counts = new Map();
+    for (const e of this.entries) {
+      const k = this._sphereOf(e);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const out = S.SPHERE_ORDER.filter(k => counts.has(k)).map(k => [k, counts.get(k)]);
+    const rest = [...counts.keys()]
+      .filter(k => !S.SPHERE_ORDER.includes(k) && k !== S.NO_SPHERE).sort();
+    for (const k of rest) out.push([k, counts.get(k)]);
+    if (counts.has(S.NO_SPHERE)) out.push([S.NO_SPHERE, counts.get(S.NO_SPHERE)]);
+    return out;
+  }
+
+  inSphere() { return this.entries.filter(e => this._sphereOf(e) === this.sphere); }
+
+  _rows() { return this.sphere === null ? this.spheres() : this.inSphere(); }
+
+  _pages() {
+    return Math.max(1, Math.ceil(this._rows().length / SideQuestPickModal.PER_PAGE));
+  }
+
+  draw(ctx, game) {
+    const S = SideQuestPickModal;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    modalHeader(ctx, this.game, "Add Side Quest", this.buttons);
+    modalHeader(ctx, game, "Add Side Quest", this.buttons);
 
     if (!this.entries.length) {
       textCenter(ctx, "No side-quest catalog data available.", 240, 140, BODY, pal.dim);
       textCenter(ctx, "Use Manual entry below.", 240, 168, BODY, pal.dim);
+    } else if (this.sphere === null) {
+      this._drawSpheres(ctx);
     } else {
-      textLeft(ctx, "Pick a side quest, then Add - or enter manually.", 12, 46, BODY, pal.dim);
-      const pages = this._pages();
-      this.page = Math.min(this.page, pages - 1);
-      const chunk = this.entries.slice(this.page * PER_PAGE, (this.page + 1) * PER_PAGE);
-      let y = LIST_Y0;
-      for (const e of chunk) {
-        const on = e.id === this.selected;
-        if (on) rect(ctx, 8, y, 456, ROW_H, pal.card_hi);
-        sqRadio(ctx, 30, y + 22, on);
-        const name = truncateText(e.name ?? "", BODY, NAME_MAX_W);
-        textLeft(ctx, name, 52, y + 13, BODY, on ? pal.tan : pal.muted);
-        const ptsS = `${e.points ?? 0} pts`;
-        const pw = measureText(ptsS, BODY);
-        textLeft(ctx, ptsS, 456 - pw, y + 4, BODY, on ? pal.gold : pal.tan);
-        // ASCII hyphen, not an em-dash - matches ui/modals.py's device-safe
-        // choice: PicoGraphics' "bitmap8" font only covers standard ASCII.
-        const sphereS = e.sphere || "-";
-        const sw = measureText(sphereS, BODY);
-        textLeft(ctx, sphereS, 456 - sw, y + 26, BODY, pal.dim);
-        rect(ctx, 8, y + ROW_H, 456, 1, pal.border);
-        this.buttons.push(new Button(["row", e.id], 8, y, 456, ROW_H));
-        y += ROW_STRIDE;
-      }
-      if (pages > 1) {
-        const up = new Button(["older"], 12, 352, 150, 46);
-        const dn = new Button(["newer"], 318, 352, 150, 46);
-        bevel(ctx, up.x, up.y, up.w, up.h, pal.btn);
-        textCenter(ctx, "Up", up.x + 75, up.y + 14, BODY, pal.tan);
-        bevel(ctx, dn.x, dn.y, dn.w, dn.h, pal.btn);
-        textCenter(ctx, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan);
-        textCenter(ctx, `${this.page + 1}/${pages}`, 240, 366, BODY, pal.muted);
-        this.buttons.push(up, dn);
-      }
+      this._drawQuests(ctx);
     }
 
-    const manual = new Button(["manual"], 24, FOOTER_Y, 200, FOOTER_H);
+    const manual = new Button(["manual"], 24, S.FOOTER_Y, 200, S.FOOTER_H);
     bevel(ctx, manual.x, manual.y, manual.w, manual.h, pal.btn, false, 3);
     textCenter(ctx, "Manual", manual.x + manual.w / 2, manual.y + 20, BODY, pal.tan);
     this.buttons.push(manual);
 
-    if (this.entries.length) {
-      const add = new Button(["add"], 256, FOOTER_Y, 200, FOOTER_H);
+    if (this.entries.length && this.sphere !== null) {
+      const add = new Button(["add"], 256, S.FOOTER_Y, 200, S.FOOTER_H);
       bevel(ctx, add.x, add.y, add.w, add.h, pal.btn_ok, false, 3);
       textCenter(ctx, "Add", add.x + add.w / 2, add.y + 20, BODY, pal.ok_fg);
       this.buttons.push(add);
     }
   }
 
+  _pager(ctx, pages) {
+    if (pages <= 1) return;
+    const up = new Button(["older"], 12, 352, 150, 46);
+    const dn = new Button(["newer"], 318, 352, 150, 46);
+    bevel(ctx, up.x, up.y, up.w, up.h, pal.btn);
+    textCenter(ctx, "Up", up.x + 75, up.y + 14, BODY, pal.tan);
+    bevel(ctx, dn.x, dn.y, dn.w, dn.h, pal.btn);
+    textCenter(ctx, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan);
+    textCenter(ctx, `${this.page + 1}/${pages}`, 240, 366, BODY, pal.muted);
+    this.buttons.push(up, dn);
+  }
+
+  _drawSpheres(ctx) {
+    const S = SideQuestPickModal;
+    textLeft(ctx, "Pick a sphere - or enter manually.", 12, 46, BODY, pal.dim);
+    const rows = this.spheres();
+    const pages = this._pages();
+    this.page = Math.min(this.page, pages - 1);
+    const chunk = rows.slice(this.page * S.PER_PAGE, (this.page + 1) * S.PER_PAGE);
+    let y = S.LIST_Y0;
+    for (const [sphere, count] of chunk) {
+      textLeft(ctx, truncateText(sphere, BODY, 320), 20, y + 13, BODY, pal.tan);
+      const right = `${count} quest${count === 1 ? "" : "s"}`;
+      textLeft(ctx, right, 436 - measureText(right, LABEL), y + 16, LABEL, pal.dim);
+      ctx.fillStyle = pal.dim;
+      ctx.beginPath();
+      ctx.moveTo(450, y + 17); ctx.lineTo(450, y + 27); ctx.lineTo(455, y + 22);
+      ctx.closePath(); ctx.fill();
+      rect(ctx, 8, y + S.ROW_H, 456, 1, pal.border);
+      this.buttons.push(new Button(["sphere", sphere], 8, y, 456, S.ROW_H));
+      y += S.ROW_STRIDE;
+    }
+    this._pager(ctx, pages);
+  }
+
+  _drawQuests(ctx) {
+    const S = SideQuestPickModal;
+    textLeft(ctx, truncateText(`${this.sphere} - pick one, then Add.`, BODY, 456),
+             12, 46, BODY, pal.dim);
+    const rows = this.inSphere();
+    const pages = this._pages();
+    this.page = Math.min(this.page, pages - 1);
+    const chunk = rows.slice(this.page * S.PER_PAGE, (this.page + 1) * S.PER_PAGE);
+    let y = S.LIST_Y0;
+    for (const e of chunk) {
+      const on = e.id === this.selected;
+      if (on) rect(ctx, 8, y, 456, S.ROW_H, pal.card_hi);
+      sqRadio(ctx, 30, y + 22, on);
+      textLeft(ctx, truncateText(e.name ?? "", BODY, S.NAME_MAX_W), 52, y + 13, BODY,
+               on ? pal.tan : pal.muted);
+      const pts = `${e.points ?? 0} pts`;
+      textLeft(ctx, pts, 456 - measureText(pts, BODY), y + 13, BODY, on ? pal.gold : pal.tan);
+      rect(ctx, 8, y + S.ROW_H, 456, 1, pal.border);
+      this.buttons.push(new Button(["row", e.id], 8, y, 456, S.ROW_H));
+      y += S.ROW_STRIDE;
+    }
+    this._pager(ctx, pages);
+    const back = new Button(["back"], 12, S.FOOTER_Y - 56, 200, 44);
+    bevel(ctx, back.x, back.y, back.w, back.h, pal.btn);
+    textCenter(ctx, "< Spheres", back.x + back.w / 2, back.y + 14, BODY, pal.tan);
+    this.buttons.push(back);
+  }
+
+  // Every exit reopens the Progress modal this was launched from.
+  _leave() {
+    this.game.pending_progress_detail = true;
+    return "close";
+  }
+
   onButton(btn) {
     const k = btn.id[0];
-    if (k === "close") return "close";
+    if (k === "close") return this._leave();
+    if (k === "sphere") {
+      this.sphere = btn.id[1];
+      const quests = this.inSphere();
+      this.selected = quests.length ? quests[0].id : null;
+      this.page = 0;
+      return "redraw";
+    }
+    if (k === "back") { this.sphere = null; this.selected = null; this.page = 0; return "redraw"; }
     if (k === "row") { this.selected = btn.id[1]; return "redraw"; }
     if (k === "older") { this.page = Math.max(0, this.page - 1); return "redraw"; }
     if (k === "newer") { this.page = Math.min(this._pages() - 1, this.page + 1); return "redraw"; }
     if (k === "manual") {
       this.game.side_quests.push({ points: 0, progress: 0 });
       this.game.logEvent("Side quest added manually (progress view)");
-      return "close";
+      return this._leave();
     }
     if (k === "add") {
       const e = this.entries.find(x => x.id === this.selected);
@@ -1915,7 +1996,7 @@ export class SideQuestPickModal {
         this.game.side_quests.push({ points: pts, progress: 0, name: e.name });
         this.game.logEvent(`Side quest added: ${e.name} (${pts} pts, progress view)`);
       }
-      return "close";
+      return this._leave();
     }
     return null;
   }

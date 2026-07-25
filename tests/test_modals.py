@@ -645,12 +645,18 @@ def test_side_quest_pick_adds_selected_with_points():
                {"id": "b", "name": "Keep Watch", "points": 6, "sphere": "Tactics", "pack": "p"}]
     m = modals.SideQuestPickModal(game, entries)
     m.draw(hw, game, pal)
+    # Step 1 is spheres, not quests - there is no row to tap yet.
+    assert not any(b.id[0] == "row" for b in m.buttons)
+    assert m.on_button(_find(m, ("sphere", "Tactics"))) == "redraw"
+    m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("row", "b"))) == "redraw"     # select "Keep Watch"
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("add",))) == "close"
     assert game.side_quests[-1]["points"] == 6
     assert game.side_quests[-1]["name"] == "Keep Watch"
     assert game.side_quests[-1]["progress"] == 0
+    # and we go back to the Progress modal we came from, not the play screen
+    assert game.pending_progress_detail is True
 
 
 def test_side_quest_pick_manual_falls_back_to_blank_entry():
@@ -662,6 +668,7 @@ def test_side_quest_pick_manual_falls_back_to_blank_entry():
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("manual",))) == "close"
     assert game.side_quests[-1]["points"] == 0 and game.side_quests[-1]["progress"] == 0
+    assert game.pending_progress_detail is True    # Manual returns there too
 
 
 def test_side_quest_pick_empty_entries_renders_and_offers_manual():
@@ -690,12 +697,48 @@ def test_side_quest_pick_null_points_default_to_zero_and_pager_pages():
                "sphere": "Lore", "pack": "p"} for i in range(7)]
     m = modals.SideQuestPickModal(game, entries)
     m.draw(hw, game, pal)
-    assert any(b.id == ("older",) for b in m.buttons) or any(b.id == ("newer",) for b in m.buttons)
+    # A sphere-less card lands in its own group rather than being guessed
+    # into one (the campaign side quests really have no sphere in the DB).
+    assert m.on_button(_find(m, ("sphere", modals.SideQuestPickModal.NO_SPHERE))) == "redraw"
+    m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("row", "x0"))) == "redraw"
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("add",))) == "close"
     assert game.side_quests[-1]["points"] == 0
     assert game.side_quests[-1]["name"] == "Protect the Innocent"
+
+
+def test_side_quest_pick_groups_spheres_in_rulebook_order_unknown_last():
+    """Rules Reference "Spheres of Influence": Leadership, Lore, Spirit,
+    Tactics. Neutral follows, and anything the catalog has no sphere for is
+    grouped last rather than guessed into a real sphere."""
+    game = GameState()
+    entries = [{"id": "n", "name": "N", "points": 1, "sphere": None, "pack": "p"},
+               {"id": "t", "name": "T", "points": 1, "sphere": "Tactics", "pack": "p"},
+               {"id": "l", "name": "L", "points": 1, "sphere": "Leadership", "pack": "p"},
+               {"id": "u", "name": "U", "points": 1, "sphere": "Neutral", "pack": "p"},
+               {"id": "o", "name": "O", "points": 1, "sphere": "Lore", "pack": "p"},
+               {"id": "l2", "name": "L2", "points": 1, "sphere": "Leadership", "pack": "p"}]
+    m = modals.SideQuestPickModal(game, entries)
+    assert m.spheres() == [("Leadership", 2), ("Lore", 1), ("Tactics", 1),
+                           ("Neutral", 1), (modals.SideQuestPickModal.NO_SPHERE, 1)]
+
+
+def test_side_quest_pick_back_returns_to_the_sphere_list():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    entries = [{"id": "a", "name": "Scout Ahead", "points": 4, "sphere": "Lore", "pack": "p"}]
+    m = modals.SideQuestPickModal(game, entries)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("sphere", "Lore")))
+    m.draw(hw, game, pal)
+    assert m.selected == "a"                       # first in the sphere preselected
+    assert m.on_button(_find(m, ("back",))) == "redraw"
+    assert m.sphere is None and m.selected is None
+    m.draw(hw, game, pal)
+    assert any(b.id[0] == "sphere" for b in m.buttons)
+    assert not any(b.id[0] == "add" for b in m.buttons)   # nothing picked yet
 
 
 # --- Scenario Options: difficulty is data-driven ---------------------------

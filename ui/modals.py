@@ -2022,22 +2022,32 @@ def _sq_radio(d, pal, cx, cy, on):
 
 
 class SideQuestPickModal:
-    """Picker over the player side-quest catalog (M4-B sidequest, Task 2):
-    radio-select list (name / points / sphere), Up/Down pager (mirrors
-    ChooseScenarioScreen/PickCycleScreen in ui/screen_quest.py - same row
-    stride/pager geometry, same radio glyph), plus Add (commits the
-    selection) and Manual (today's blank-entry fallback, unchanged shape).
+    """Two-step picker over the player side-quest catalog: **sphere first,
+    then the quest**, mirroring the Pick Cycle -> Choose Scenario drill in
+    ui/screen_quest.py (same row stride, pager geometry and radio glyph).
+
+    Step 1 lists each sphere present in the catalog with its quest count and
+    a chevron; step 2 is the radio list for that sphere, with a "< Spheres"
+    back button, Add (commits) and Manual (blank-entry fallback). Manual is
+    reachable from both steps.
+
+    Sphere order follows the Rules Reference's own "Spheres of Influence"
+    diagram (Leadership, Lore, Spirit, Tactics), then Neutral, then anything
+    else. Cards whose sphere the catalog does not carry are grouped last
+    under NO_SPHERE rather than guessed into one: the four campaign side
+    quests from the Angmar Awakened Campaign Expansion have no sphere in the
+    card DB (that pack reuses the column for Boon/Burden), and inventing a
+    sphere for them would be a rules claim we cannot source.
 
     Opened from QuestingProgressModal's "+ Side quest" button via the
     pending_side_quest_pick flag (see main.py's loop) - constructed with the
     already-loaded catalog entries (quest_catalog.side_quests(...) shape:
     {"id","name","points","sphere","pack"}), never reads the catalog itself.
+    On the way out it sets game.pending_progress_detail so the router reopens
+    the Progress modal you came from.
 
     Empty `entries` (no catalog data) still renders and offers Manual rather
-    than raising - defense in depth. The call site is expected to skip
-    opening this modal entirely when load_player_side_quests() comes back
-    empty and append directly instead (today's behavior, Global Constraints:
-    catalog data is optional at runtime), but nothing here assumes that."""
+    than raising - defense in depth."""
 
     PER_PAGE = 6
     ROW_H = 44
@@ -2046,17 +2056,45 @@ class SideQuestPickModal:
     NAME_MAX_W = 300
     FOOTER_Y = 404
     FOOTER_H = 64
+    NO_SPHERE = "No sphere"
+    SPHERE_ORDER = ("Leadership", "Lore", "Spirit", "Tactics", "Neutral")
 
     def __init__(self, game, entries):
         self.game = game
         self.entries = entries
-        self.selected = entries[0]["id"] if entries else None
+        self.sphere = None          # None = step 1 (pick a sphere)
+        self.selected = None
         self.page = 0
         self.buttons = []
 
-    def _pages(self):
-        return max(1, -(-len(self.entries) // self.PER_PAGE))
+    # -- grouping --------------------------------------------------------
+    def _sphere_of(self, e):
+        return e.get("sphere") or self.NO_SPHERE
 
+    def spheres(self):
+        """[(sphere, count), ...] in the rulebook's order, unknown last."""
+        counts = {}
+        for e in self.entries:
+            k = self._sphere_of(e)
+            counts[k] = counts.get(k, 0) + 1
+        out = [(s, counts[s]) for s in self.SPHERE_ORDER if s in counts]
+        rest = sorted(k for k in counts
+                      if k not in self.SPHERE_ORDER and k != self.NO_SPHERE)
+        out += [(k, counts[k]) for k in rest]
+        if self.NO_SPHERE in counts:
+            out.append((self.NO_SPHERE, counts[self.NO_SPHERE]))
+        return out
+
+    def in_sphere(self):
+        return [e for e in self.entries if self._sphere_of(e) == self.sphere]
+
+    def _rows(self):
+        return self.spheres() if self.sphere is None else self.in_sphere()
+
+    def _pages(self):
+        return max(1, -(-len(self._rows()) // self.PER_PAGE))
+
+    # -- draw ------------------------------------------------------------
     def draw(self, hw, game, pal):
         from ui.header import modal_header
         d = hw.display
@@ -2068,64 +2106,107 @@ class SideQuestPickModal:
         if not self.entries:
             text_center(d, pal, "No side-quest catalog data available.", 240, 140, BODY, pal.dim)
             text_center(d, pal, "Use Manual entry below.", 240, 168, BODY, pal.dim)
+        elif self.sphere is None:
+            self._draw_spheres(d, pal)
         else:
-            text_left(d, pal, "Pick a side quest, then Add - or enter manually.",
-                      12, 46, BODY, pal.dim)
-            pages = self._pages()
-            self.page = min(self.page, pages - 1)
-            chunk = self.entries[self.page * self.PER_PAGE:(self.page + 1) * self.PER_PAGE]
-            y = self.LIST_Y0
-            for e in chunk:
-                on = e["id"] == self.selected
-                if on:
-                    d.set_pen(pal.card_hi)
-                    d.rectangle(8, y, 456, self.ROW_H)
-                _sq_radio(d, pal, 30, y + 22, on)
-                name = truncate_text(e.get("name") or "", BODY, self.NAME_MAX_W, d.measure_text)
-                text_left(d, pal, name, 52, y + 13, BODY, pal.tan if on else pal.muted)
-                pts_s = "%d pts" % (e.get("points") or 0)
-                pw = d.measure_text(pts_s, BODY)
-                text_left(d, pal, pts_s, 456 - pw, y + 4, BODY, pal.gold if on else pal.tan)
-                # ASCII hyphen, not an em-dash - the device pins PicoGraphics'
-                # "bitmap8" font (hardware.py), which only covers the
-                # standard-ASCII glyphs verified in tests/fake_hardware.py's
-                # BITMAP8_W table; a real dash character risks a blank/tofu
-                # glyph on hardware even though it renders fine in this host
-                # preview (PIL/Menlo has full Unicode coverage, masking it).
-                sphere_s = e.get("sphere") or "-"
-                sw = d.measure_text(sphere_s, BODY)
-                text_left(d, pal, sphere_s, 456 - sw, y + 26, BODY, pal.dim)
-                d.set_pen(pal.border)
-                d.rectangle(8, y + self.ROW_H, 456, 1)
-                self.buttons.append(Button(("row", e["id"]), 8, y, 456, self.ROW_H))
-                y += self.ROW_STRIDE
-
-            if pages > 1:
-                up = Button(("older",), 12, 352, 150, 46)
-                dn = Button(("newer",), 318, 352, 150, 46)
-                bevel(d, pal, up.x, up.y, up.w, up.h, pal.btn)
-                text_center(d, pal, "Up", up.x + 75, up.y + 14, BODY, pal.tan)
-                bevel(d, pal, dn.x, dn.y, dn.w, dn.h, pal.btn)
-                text_center(d, pal, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan)
-                text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 366, BODY, pal.muted)
-                self.buttons.append(up)
-                self.buttons.append(dn)
+            self._draw_quests(d, pal)
 
         manual = Button(("manual",), 24, self.FOOTER_Y, 200, self.FOOTER_H)
         bevel(d, pal, manual.x, manual.y, manual.w, manual.h, pal.btn, t=3)
         text_center(d, pal, "Manual", manual.x + manual.w / 2, manual.y + 20, BODY, pal.tan)
         self.buttons.append(manual)
 
-        if self.entries:
+        if self.entries and self.sphere is not None:
             add = Button(("add",), 256, self.FOOTER_Y, 200, self.FOOTER_H)
             bevel(d, pal, add.x, add.y, add.w, add.h, pal.btn_ok, t=3)
             text_center(d, pal, "Add", add.x + add.w / 2, add.y + 20, BODY, pal.ok_fg)
             self.buttons.append(add)
 
+    def _pager(self, d, pal, pages):
+        if pages <= 1:
+            return
+        up = Button(("older",), 12, 352, 150, 46)
+        dn = Button(("newer",), 318, 352, 150, 46)
+        bevel(d, pal, up.x, up.y, up.w, up.h, pal.btn)
+        text_center(d, pal, "Up", up.x + 75, up.y + 14, BODY, pal.tan)
+        bevel(d, pal, dn.x, dn.y, dn.w, dn.h, pal.btn)
+        text_center(d, pal, "Down", dn.x + 75, dn.y + 14, BODY, pal.tan)
+        text_center(d, pal, "%d/%d" % (self.page + 1, pages), 240, 366, BODY, pal.muted)
+        self.buttons.append(up)
+        self.buttons.append(dn)
+
+    def _draw_spheres(self, d, pal):
+        text_left(d, pal, "Pick a sphere - or enter manually.", 12, 46, BODY, pal.dim)
+        rows = self.spheres()
+        pages = self._pages()
+        self.page = min(self.page, pages - 1)
+        chunk = rows[self.page * self.PER_PAGE:(self.page + 1) * self.PER_PAGE]
+        y = self.LIST_Y0
+        for sphere, count in chunk:
+            text_left(d, pal, truncate_text(sphere, BODY, 320, d.measure_text),
+                      20, y + 13, BODY, pal.tan)
+            right = "%d quest%s" % (count, "" if count == 1 else "s")
+            rw = d.measure_text(right, LABEL)
+            text_left(d, pal, right, 436 - rw, y + 16, LABEL, pal.dim)
+            d.set_pen(pal.dim)
+            d.triangle(450, y + 17, 450, y + 27, 455, y + 22)
+            d.set_pen(pal.border)
+            d.rectangle(8, y + self.ROW_H, 456, 1)
+            self.buttons.append(Button(("sphere", sphere), 8, y, 456, self.ROW_H))
+            y += self.ROW_STRIDE
+        self._pager(d, pal, pages)
+
+    def _draw_quests(self, d, pal):
+        text_left(d, pal, truncate_text("%s - pick one, then Add." % self.sphere,
+                                        BODY, 456, d.measure_text),
+                  12, 46, BODY, pal.dim)
+        rows = self.in_sphere()
+        pages = self._pages()
+        self.page = min(self.page, pages - 1)
+        chunk = rows[self.page * self.PER_PAGE:(self.page + 1) * self.PER_PAGE]
+        y = self.LIST_Y0
+        for e in chunk:
+            on = e["id"] == self.selected
+            if on:
+                d.set_pen(pal.card_hi)
+                d.rectangle(8, y, 456, self.ROW_H)
+            _sq_radio(d, pal, 30, y + 22, on)
+            name = truncate_text(e.get("name") or "", BODY, self.NAME_MAX_W, d.measure_text)
+            text_left(d, pal, name, 52, y + 13, BODY, pal.tan if on else pal.muted)
+            pts_s = "%d pts" % (e.get("points") or 0)
+            pw = d.measure_text(pts_s, BODY)
+            text_left(d, pal, pts_s, 456 - pw, y + 13, BODY, pal.gold if on else pal.tan)
+            d.set_pen(pal.border)
+            d.rectangle(8, y + self.ROW_H, 456, 1)
+            self.buttons.append(Button(("row", e["id"]), 8, y, 456, self.ROW_H))
+            y += self.ROW_STRIDE
+        self._pager(d, pal, pages)
+        back = Button(("back",), 12, self.FOOTER_Y - 56, 200, 44)
+        bevel(d, pal, back.x, back.y, back.w, back.h, pal.btn)
+        text_center(d, pal, "< Spheres", back.x + back.w / 2, back.y + 14, BODY, pal.tan)
+        self.buttons.append(back)
+
+    # -- input -----------------------------------------------------------
+    def _leave(self):
+        """Every exit reopens the Progress modal this was launched from."""
+        self.game.pending_progress_detail = True
+        return "close"
+
     def on_button(self, btn):
         k = btn.id[0]
         if k == "close":
-            return "close"
+            return self._leave()
+        if k == "sphere":
+            self.sphere = btn.id[1]
+            quests = self.in_sphere()
+            self.selected = quests[0]["id"] if quests else None
+            self.page = 0
+            return "redraw"
+        if k == "back":
+            self.sphere = None
+            self.selected = None
+            self.page = 0
+            return "redraw"
         if k == "row":
             self.selected = btn.id[1]
             return "redraw"
@@ -2138,7 +2219,7 @@ class SideQuestPickModal:
         if k == "manual":
             self.game.side_quests.append({"points": 0, "progress": 0})
             self.game.log_event("Side quest added manually (progress view)")
-            return "close"
+            return self._leave()
         if k == "add":
             e = next((x for x in self.entries if x["id"] == self.selected), None)
             if e:
@@ -2147,5 +2228,5 @@ class SideQuestPickModal:
                                               "name": e.get("name")})
                 self.game.log_event("Side quest added: %s (%d pts, progress view)"
                                     % (e.get("name"), pts))
-            return "close"
+            return self._leave()
         return None

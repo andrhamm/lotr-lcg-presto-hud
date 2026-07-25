@@ -9,7 +9,8 @@ import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
          PickCycleScreen, ChooseScenarioScreen,
          ScenarioOptionsScreen, FirstRunScreen, LegendScreen } from "./screens_other.js";
 import { EliminationModal, QuestCardModal, SideQuestPickModal,
-         StageCompleteModal, ResolutionModal } from "./screens.js";
+         StageCompleteModal, ResolutionModal,
+         QuestingProgressModal } from "./screens.js";
 import { loadIndex, loadScenario, cyclesFor, groupByCycle, loadPlayerSideQuests,
          loadIcons, loadTips } from "./quest_catalog.js";
 
@@ -407,6 +408,14 @@ function main() {
         }
         dirty = true;
       });
+    }
+    // Coming back from the side-quest picker: reopen the Progress modal you
+    // tapped "+ Side quest" from, rather than dropping you on the play
+    // screen. Same pending-flag pattern as the one above.
+    if (!modal && active === "play" && game.pending_progress_detail) {
+      game.pending_progress_detail = false;
+      modal = new QuestingProgressModal(game);
+      dirty = true;
     }
     // defeat: every player eliminated
     if (!modal && active === "play" && game.pending_elim === null &&

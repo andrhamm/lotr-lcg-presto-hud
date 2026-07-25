@@ -173,6 +173,11 @@ class GameState:
                                            # (router replaces one modal at a
                                            # time - see main.py's loop)
         self.pending_side_quest_pick = False  # Progress-detail "+ Side quest"
+        # Set by SideQuestPickModal on the way out so the router reopens the
+        # Progress modal you tapped "+ Side quest" from, instead of dropping
+        # you back on the play screen. Same pending-flag pattern - a modal
+        # cannot open another modal directly.
+        self.pending_progress_detail = False
                                            # tap wants SideQuestPickModal
                                            # opened once the Progress-detail
                                            # modal has closed (same
@@ -645,6 +650,7 @@ class GameState:
             "pending_elim": self.pending_elim,
             "pending_quest_card": self.pending_quest_card,
             "pending_side_quest_pick": self.pending_side_quest_pick,
+            "pending_progress_detail": self.pending_progress_detail,
             "reminders": dict(self.reminders),
             "quest_resolved": self.quest_resolved,
             "quest_outcome": self.quest_outcome,
@@ -692,6 +698,7 @@ class GameState:
         g.pending_elim = d.get("pending_elim", None)
         g.pending_quest_card = d.get("pending_quest_card", False)
         g.pending_side_quest_pick = d.get("pending_side_quest_pick", False)
+        g.pending_progress_detail = d.get("pending_progress_detail", False)
         g.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         saved_rem = d.get("reminders", {})
         for k in g.reminders:

@@ -127,6 +127,10 @@ export class GameState {
                                         // (router replaces one modal at a
                                         // time - see main.js's setInterval)
     this.pending_side_quest_pick = false;  // Progress-detail "+ Side quest"
+    // Set by SideQuestPickModal on the way out so the router reopens the
+    // Progress modal you tapped "+ Side quest" from, instead of dropping you
+    // back on the play screen. Same pending-flag pattern.
+    this.pending_progress_detail = false;
                                         // tap wants SideQuestPickModal opened
                                         // once the Progress-detail modal has
                                         // closed (same pending-flag pattern
@@ -529,6 +533,7 @@ export class GameState {
       pending_budget: this.pending_budget, pending_elim: this.pending_elim,
       pending_quest_card: this.pending_quest_card,
       pending_side_quest_pick: this.pending_side_quest_pick,
+      pending_progress_detail: this.pending_progress_detail,
       reminders: { ...this.reminders },
       elimination_threat: this.elimination_threat,
       quest_resolved: this.quest_resolved,
@@ -573,6 +578,7 @@ export class GameState {
     g.pending_elim = d.pending_elim ?? null;
     g.pending_quest_card = d.pending_quest_card ?? false;
     g.pending_side_quest_pick = d.pending_side_quest_pick ?? false;
+    g.pending_progress_detail = d.pending_progress_detail ?? false;
     g.reminders = Object.fromEntries(REMINDER_DEFS.map(dd => [dd[0], false]));
     for (const k of Object.keys(g.reminders)) {
       if (d.reminders && k in d.reminders) g.reminders[k] = d.reminders[k];
