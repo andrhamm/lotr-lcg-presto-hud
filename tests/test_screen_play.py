@@ -540,3 +540,21 @@ def test_quest_setup_no_setup_text_shows_fallback():
     game.preload_scenario(_QS_SCN, stages)
     screen.draw(hw, game, pal)
     assert any("No setup instructions for this stage." in t for t in _texts(hw))
+
+
+def test_travel_no_location_shows_framework_and_travel_button():
+    hw, pal, game, screen = _setup("travel")
+    game.active_location = None
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "FRAMEWORK" in texts
+    assert "travel_new" in _ids(screen)
+
+
+def test_travel_with_location_shows_explore_first_framework():
+    hw, pal, game, screen = _setup("travel")
+    game.active_location = {"points": 3, "progress": 1}
+    screen.draw(hw, game, pal)
+    assert "travel_change" in _ids(screen)
+    texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "explore" in texts.lower()

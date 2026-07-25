@@ -434,17 +434,17 @@ class ScreenPlay:
 
     def _draw_travel(self, d, pal, game):
         loc = game.active_location
-        y = CONTENT_Y + 4
+        fw = ("No travel while a location is active - explore it first." if loc else
+              "Travel to 1 location if none is active (some add a travel cost).")
+        bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+                         [("framework", fw), ("window", "Responses.")])
+        y = CONTENT_Y + bh + 10
         if loc is None:
-            y += note_panel(d, pal, MARGIN, y, 480 - 2 * MARGIN,
-                            "Players may travel to 1 location. It becomes the active location.") + 10
             tb = Button(("travel_new",), MARGIN, y, 480 - 2 * MARGIN, 56)
             bevel(d, pal, tb.x, tb.y, tb.w, tb.h, pal.btn)
             text_center(d, pal, "Travel to location", 240, y + 18, 2, pal.tan)
             self.buttons.append(tb)
         else:
-            y += note_panel(d, pal, MARGIN, y, 480 - 2 * MARGIN,
-                            "Travel is only possible while there is no active location (rulebook).") + 10
             cb = Button(("travel_change",), MARGIN, y, 480 - 2 * MARGIN, 48)
             panel(d, pal, cb.x, cb.y, cb.w, cb.h, fill=pal.card)
             text_center(d, pal, "Replace location (card effect)", 240, y + 14, 2, pal.muted)

@@ -392,17 +392,18 @@ export class ScreenPlay {
 
   _drawTravel(ctx, game) {
     const loc = game.active_location;
-    let y = CONTENT_Y + 4;
+    const fw = loc
+      ? "No travel while a location is active - explore it first."
+      : "Travel to 1 location if none is active (some add a travel cost).";
+    const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+      [{ kind: "framework", text: fw }, { kind: "window", text: "Responses." }]);
+    const y = CONTENT_Y + bh + 10;
     if (!loc) {
-      y += notePanel(ctx, MARGIN, y, 480 - 2 * MARGIN,
-        "Players may travel to 1 location. It becomes the active location.") + 10;
       const tb = new Button(["travel_new"], MARGIN, y, 480 - 2 * MARGIN, 56);
       bevel(ctx, tb.x, tb.y, tb.w, tb.h, pal.btn);
       textCenter(ctx, "Travel to location", 240, y + 18, 2, pal.tan);
       this.buttons.push(tb);
     } else {
-      y += notePanel(ctx, MARGIN, y, 480 - 2 * MARGIN,
-        "Travel is only possible while there is no active location (rulebook).") + 10;
       const cb = new Button(["travel_change"], MARGIN, y, 480 - 2 * MARGIN, 48);
       panel(ctx, cb.x, cb.y, cb.w, cb.h);
       textCenter(ctx, "Replace location (card effect)", 240, y + 14, 2, pal.muted);
