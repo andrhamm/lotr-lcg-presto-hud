@@ -23,6 +23,31 @@ CONTENT_Y = 150                        # zones end ~136; tips start below
 CTA_Y = 410
 CTA_H = 58
 
+# Threat-as-risk framing for Encounter & Combat (M2 Task 6): the app tracks
+# each player's live threat but not individual enemy cards or their
+# engagement costs, so the risk framing is rules-verified explanatory copy
+# tied to the numbers already on screen (players-zone threat tokens), not a
+# fabricated cost comparison against data the app doesn't have.
+PHASE_FRAMEWORK = {
+    "enc_checks": "Enemies engage you if their cost is <= your threat - highest cost first.",
+    "combat_shadow": "Deal 1 shadow card to each engaged enemy - first player's enemies first, highest cost first.",
+    "combat_enemy": "Choose an enemy -> declare defender -> shadow effect -> damage, one at a time.",
+    "combat_player": "Declare target and attackers -> total ATK -> damage, one enemy at a time.",
+}
+PHASE_WINDOW = {
+    "enc_optional": "You may engage 1 enemy from the staging area, voluntarily.",
+    "enc_checks": "Responses.",
+    "combat_shadow": "Responses.",
+    "combat_enemy": "Responses at each step.",
+    "combat_player": "Responses at each step.",
+}
+PHASE_CAPTION = {
+    "enc_optional": "Your threat decides which enemies can engage you next.",
+    "enc_checks": "First player checks first, then clockwise, repeating until stable.",
+    "combat_enemy": "First player resolves first, then clockwise. Undefended damage hits 1 hero.",
+    "combat_player": "First player attacks first, then clockwise. 1 attack per engaged enemy.",
+}
+
 
 def draw_notif_pie(d, pal, cx, cy, r, frac, color="amber"):
     """Countdown indicator: full disc that loses a growing pac-man mouth as
@@ -251,13 +276,6 @@ class ScreenPlay:
             self._cta(d, pal, "End round (raise threat, pass token)", ("endround",))
         else:
             self._players_zone(d, pal, game)
-            notes = {
-                "enc_optional": "Each player may engage one enemy in the staging area (optional).",
-                "enc_checks": "Engagement checks: enemies engage players whose threat >= their cost.",
-                "combat_shadow": "Deal 1 shadow card to each engaged enemy.",
-                "combat_enemy": "Enemies attack. Declare defenders, resolve shadow effects, apply damage.",
-                "combat_player": "Players attack engaged enemies.",
-            }
             ship_notes = {
                 "combat_enemy": "Ships: only a ship can defend a ship-enemy. Undefended ship attacks must damage a ship you control.",
                 "combat_player": "Ships: your ships attack only ship-enemies - but any character may attack a ship-enemy.",
@@ -265,14 +283,22 @@ class ScreenPlay:
             flavor = {"combat_enemy": (icons.DEFENSE, pal.green),
                       "combat_player": (icons.ATTACK, pal.tan)}.get(view)
             self._progress_zone(d, pal, game)
-            note_text = notes.get(view, "")
-            if game.sailing and view in ship_notes:
-                note_text = [note_text, ship_notes[view]]
-            h = note_panel(d, pal, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                           note_text, reserve_right=34 if flavor else 0)
+            sections = []
+            if PHASE_FRAMEWORK.get(view):
+                fw = PHASE_FRAMEWORK[view]
+                if game.sailing and view in ship_notes:
+                    fw = [fw, ship_notes[view]]
+                sections.append(("framework", fw))
+            if PHASE_WINDOW.get(view):
+                sections.append(("window", PHASE_WINDOW[view]))
+            bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, sections,
+                             34 if flavor else 0)
             if flavor:
                 icons.draw(d, flavor[0], 480 - MARGIN - 34,
-                           CONTENT_Y + 6 + (h - 20) // 2, flavor[1])
+                           CONTENT_Y + (bh - 20) // 2, flavor[1])
+            if PHASE_CAPTION.get(view):
+                text_left(d, pal, PHASE_CAPTION[view], MARGIN + 4,
+                          CONTENT_Y + bh + 10, 1, pal.dim)
             i = VIEW_ORDER.index(view)
             nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
             self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS.get(nxt, nxt), ("advance",))

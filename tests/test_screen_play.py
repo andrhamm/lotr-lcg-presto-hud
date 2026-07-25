@@ -558,3 +558,52 @@ def test_travel_with_location_shows_explore_first_framework():
     assert "travel_change" in _ids(screen)
     texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
     assert "explore" in texts.lower()
+
+
+def test_enc_optional_has_no_framework_block_but_has_risk_caption():
+    hw, pal, game, screen = _setup("enc_optional")
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "FRAMEWORK" not in texts
+    assert "YOUR WINDOW" in texts
+    joined = " ".join(texts)
+    assert "engage you" in joined
+
+
+def test_enc_checks_shows_framework_and_first_player_caption():
+    hw, pal, game, screen = _setup("enc_checks")
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "FRAMEWORK" in texts
+    assert any("clockwise" in t for t in texts)
+
+
+def test_combat_shadow_shows_framework_only_ordering_text():
+    hw, pal, game, screen = _setup("combat_shadow")
+    screen.draw(hw, game, pal)
+    texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "FRAMEWORK" in texts
+    assert "highest cost first" in texts
+
+
+def test_combat_enemy_sailing_appends_ship_note_to_framework():
+    hw, pal, game, screen = _setup("combat_enemy")
+    game.sailing = True
+    screen.draw(hw, game, pal)
+    texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "ship-enemy" in texts.lower()
+
+
+def test_combat_enemy_flavor_icon_still_drawn():
+    hw, pal, game, screen = _setup("combat_enemy")
+    screen.draw(hw, game, pal)
+    icon_rows = [c for c in hw.display.calls if c[0] == "rect" and c[4] == 1
+                 and c[1] >= 480 - 8 - 34]
+    assert icon_rows
+
+
+def test_combat_player_caption_mentions_one_attack_per_enemy():
+    hw, pal, game, screen = _setup("combat_player")
+    screen.draw(hw, game, pal)
+    texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "1 attack per engaged enemy" in texts

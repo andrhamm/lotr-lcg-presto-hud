@@ -16,6 +16,31 @@ const CONTENT_Y = 150;                    // zones end ~136; tips start below
 const CTA_Y = 410;
 const CTA_H = 58;
 
+// Threat-as-risk framing for Encounter & Combat (M2 Task 6): the app tracks
+// each player's live threat but not individual enemy cards or their
+// engagement costs, so the risk framing is rules-verified explanatory copy
+// tied to the numbers already on screen (players-zone threat tokens), not a
+// fabricated cost comparison against data the app doesn't have.
+const PHASE_FRAMEWORK = {
+  enc_checks: "Enemies engage you if their cost is <= your threat - highest cost first.",
+  combat_shadow: "Deal 1 shadow card to each engaged enemy - first player's enemies first, highest cost first.",
+  combat_enemy: "Choose an enemy -> declare defender -> shadow effect -> damage, one at a time.",
+  combat_player: "Declare target and attackers -> total ATK -> damage, one enemy at a time.",
+};
+const PHASE_WINDOW = {
+  enc_optional: "You may engage 1 enemy from the staging area, voluntarily.",
+  enc_checks: "Responses.",
+  combat_shadow: "Responses.",
+  combat_enemy: "Responses at each step.",
+  combat_player: "Responses at each step.",
+};
+const PHASE_CAPTION = {
+  enc_optional: "Your threat decides which enemies can engage you next.",
+  enc_checks: "First player checks first, then clockwise, repeating until stable.",
+  combat_enemy: "First player resolves first, then clockwise. Undefended damage hits 1 hero.",
+  combat_player: "First player attacks first, then clockwise. 1 attack per engaged enemy.",
+};
+
 export class ScreenPlay {
   constructor() {
     this.buttons = [];
@@ -272,13 +297,6 @@ export class ScreenPlay {
       this._cta(ctx, "End round (raise threat, pass token)", ["endround"]);
     } else {
       this._playersZone(ctx, game);
-      const notes = {
-        enc_optional: "Each player may engage one enemy in the staging area (optional).",
-        enc_checks: "Engagement checks: enemies engage players whose threat >= their cost.",
-        combat_shadow: "Deal 1 shadow card to each engaged enemy.",
-        combat_enemy: "Enemies attack. Declare defenders, resolve shadow effects, apply damage.",
-        combat_player: "Players attack engaged enemies.",
-      };
       const flavor = { combat_enemy: [icons.DEFENSE, pal.green],
                        combat_player: [icons.ATTACK, pal.tan] }[view];
       this._progressZone(ctx, game);
@@ -286,14 +304,21 @@ export class ScreenPlay {
         combat_enemy: "Ships: only a ship can defend a ship-enemy. Undefended ship attacks must damage a ship you control.",
         combat_player: "Ships: your ships attack only ship-enemies - but any character may attack a ship-enemy.",
       };
-      let noteText = notes[view] ?? "";
-      if (game.sailing && shipNotes[view]) noteText = [noteText, shipNotes[view]];
+      const sections = [];
+      if (PHASE_FRAMEWORK[view]) {
+        const fw = game.sailing && shipNotes[view]
+          ? [PHASE_FRAMEWORK[view], shipNotes[view]] : PHASE_FRAMEWORK[view];
+        sections.push({ kind: "framework", text: fw });
+      }
+      if (PHASE_WINDOW[view]) sections.push({ kind: "window", text: PHASE_WINDOW[view] });
       const reserve = flavor ? 34 : 0;
-      const h = notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                          noteText, 2, reserve);
+      const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, sections, reserve);
       if (flavor) {
         icons.drawIcon(ctx, flavor[0], 480 - MARGIN - 34,
-                       CONTENT_Y + 6 + Math.floor((h - 20) / 2), flavor[1]);
+                       CONTENT_Y + Math.floor((bh - 20) / 2), flavor[1]);
+      }
+      if (PHASE_CAPTION[view]) {
+        textLeft(ctx, PHASE_CAPTION[view], MARGIN + 4, CONTENT_Y + bh + 10, 1, pal.dim);
       }
       const i = VIEW_ORDER.indexOf(view);
       const nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
