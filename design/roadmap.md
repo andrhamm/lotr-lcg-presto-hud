@@ -61,6 +61,15 @@ Web and firmware stay in lockstep. See [[design-review]] and [[stat-system]].
 5. **M5 · Beta hardening** — first-run guidance + a legend for HUD conventions;
    copy/tone pass (incl. the Sailing "discarded" fix); accessibility + touch;
    full tests + on-device soak.
+   **Status: code complete, soak PENDING.** Shipped: the three-page first-run
+   intro + a conventions legend (re-openable from Settings) whose rows draw the
+   real primitives so it can't drift; the Sailing copy fix ("looks at **and
+   discards**"); and a WCAG pass — `pal.dim` failed AA at every background it
+   was drawn on (2.04-2.85), so the secondary ramp lifted (`dim` and `muted`;
+   `tan` unchanged) and `tests/test_contrast.py` locks both the contrast and
+   the ramp separation. **Remaining: the on-device soak** — see
+   `docs/superpowers/specs/2026-07-25-soak-protocol.md`. Nothing in this
+   project has ever run on the Presto.
 
 ## Definition of beta (acceptance)
 1. A **new player** completes a full game guided by the HUD alone.
