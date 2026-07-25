@@ -931,6 +931,13 @@ def _about():
     return hw, s
 
 
+def _refresh_danger(g):
+    # current threat (39) is NOT yet flagged danger by _players_zone's own rule
+    # (39 < 50-10); the refresh preview's projection (+1 = 40) crosses it -
+    # proving the preview surfaces upcoming risk before anything else does.
+    g.players[1].threat = 39
+
+
 SCENES = {
     "boot": _boot({"round": 3, "phase": "Combat (Enemy Attacks)", "saved_at": "2026-07-21 19:04"}),
     "boot_fresh": _boot(None),
@@ -957,6 +964,7 @@ SCENES = {
     "play_combat_enemy": _play("combat_enemy"),
     "play_combat_player": _play("combat_player"),
     "play_refresh": _play("refresh"),
+    "play_refresh_danger": _play("refresh", mutate=_refresh_danger),
     "quest_setup": _quest_setup,
     "scenario_source": _scenario_source,
     "pick_cycle": _pick_cycle,

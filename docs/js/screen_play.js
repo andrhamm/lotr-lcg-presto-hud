@@ -135,6 +135,25 @@ export class ScreenPlay {
     if (frac > 0) rect(ctx, x, by, Math.max(1, Math.round(w * Math.min(1, frac))), 2, color);
   }
 
+  // Live "current -> projected" threat per living player, flagged red when the
+  // projected value crosses the same danger threshold _playersZone uses
+  // (proj >= elimination - 10). Eliminated players are skipped: their threat is
+  // capped at their elimination level and does not keep rising. Height: 40.
+  _refreshThreatPreview(ctx, game, y) {
+    textLeft(ctx, "After +1 threat:", MARGIN + 4, y, 1, pal.dim);
+    let x = MARGIN + 4;
+    const ly = y + 14;
+    game.players.forEach((p, i) => {
+      if (p.eliminated) return;
+      const proj = p.threat + p.threat_per_round;
+      const danger = proj >= p.elimination - 10;
+      const seg = `P${i + 1} ${p.threat}->${proj}${danger ? "!" : ""}`;
+      textLeft(ctx, seg, x, ly, 2, danger ? pal.red : pal.value);
+      x += measureText(seg, 2) + 16;
+    });
+    return 40;
+  }
+
   _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
     const half = Math.floor((480 - 3 * MARGIN) / 2);
     const defs = [
@@ -291,9 +310,11 @@ export class ScreenPlay {
     } else if (view === "refresh") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
-      notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                ["Ready all exhausted cards.", "Threat increases (automatic).",
-                 "Pass the first player token."]);
+      const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+        { kind: "framework", text: "Ready all cards. Each player's threat +1. Pass the first-player token." },
+        { kind: "window", text: "Responses." },
+      ]);
+      this._refreshThreatPreview(ctx, game, CONTENT_Y + bh + 8);
       this._cta(ctx, "End round (raise threat, pass token)", ["endround"]);
     } else {
       this._playersZone(ctx, game);

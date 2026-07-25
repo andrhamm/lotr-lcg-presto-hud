@@ -607,3 +607,32 @@ def test_combat_player_caption_mentions_one_attack_per_enemy():
     screen.draw(hw, game, pal)
     texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
     assert "1 attack per engaged enemy" in texts
+
+
+def test_refresh_shows_framework_window_and_threat_preview():
+    hw, pal, game, screen = _setup("refresh")
+    for i, p in enumerate(game.players):
+        p.threat = 20 + i
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "FRAMEWORK" in texts and "YOUR WINDOW" in texts
+    assert any(t.startswith("P1 20->21") for t in texts)
+
+
+def test_refresh_flags_projected_danger_even_if_not_yet_flagged():
+    hw, pal, game, screen = _setup("refresh")
+    game.players[1].threat = 39   # not yet danger (39 < 50-10=40); +1 crosses it
+    screen.draw(hw, game, pal)
+    danger_texts = [c for c in hw.display.calls
+                    if c[0] == "text" and str(c[1]).startswith("P2") and c[5] == pal.red]
+    assert danger_texts
+    assert danger_texts[0][1].endswith("!")
+
+
+def test_refresh_skips_eliminated_players_in_preview():
+    hw, pal, game, screen = _setup("refresh")
+    game.players[2].eliminated = True
+    game.players[2].threat = 50
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert not any(t.startswith("P3 ") for t in texts)

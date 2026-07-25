@@ -269,10 +269,11 @@ class ScreenPlay:
         elif view == "refresh":
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
-            note_panel(d, pal, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                       ["Ready all exhausted cards.",
-                        "Threat increases (automatic).",
-                        "Pass the first player token."])
+            bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+                ("framework", "Ready all cards. Each player's threat +1. Pass the first-player token."),
+                ("window", "Responses."),
+            ])
+            self._refresh_threat_preview(d, pal, game, CONTENT_Y + bh + 8)
             self._cta(d, pal, "End round (raise threat, pass token)", ("endround",))
         else:
             self._players_zone(d, pal, game)
@@ -457,6 +458,25 @@ class ScreenPlay:
         self.buttons.append(card_btn)
 
         self._cta(d, pal, "Flip to Side B  ->  %d qp" % card["questPoints"], ("flip_to_b",))
+
+    def _refresh_threat_preview(self, d, pal, game, y):
+        """Live "current -> projected" threat per living player, flagged red
+        when the projected value crosses the same danger threshold
+        _players_zone uses (proj >= elimination - 10). Eliminated players are
+        skipped - their threat is capped at their elimination level and does
+        not keep rising. Fixed height: 40."""
+        text_left(d, pal, "After +1 threat:", MARGIN + 4, y, 1, pal.dim)
+        x = MARGIN + 4
+        ly = y + 14
+        for i, p in enumerate(game.players):
+            if p.eliminated:
+                continue
+            proj = p.threat + p.threat_per_round
+            danger = proj >= p.elimination - 10
+            seg = "P%d %d->%d%s" % (i + 1, p.threat, proj, "!" if danger else "")
+            text_left(d, pal, seg, x, ly, 2, pal.red if danger else pal.value)
+            x += d.measure_text(seg, 2) + 16
+        return 40
 
     def _draw_travel(self, d, pal, game):
         loc = game.active_location
