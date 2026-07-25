@@ -267,3 +267,37 @@ def test_setup_has_tip_and_no_checklist():
     assert not hasattr(g, "setup_checks")
     assert any("mulligan" in s.lower() for s in SETUP_TIP)
     assert any("before" in s.lower() or "then" in s.lower() for s in SETUP_TIP)
+
+
+# --- pending-modal handoffs must resolve before anything is drawn ----------
+# A modal that hands off to another closes itself first and raises a flag
+# (the router holds one modal at a time). If the flag were consumed AFTER the
+# frame is drawn, the play screen would paint in the gap - the visible flash
+# when tapping "+ Side quest" from the Progress modal. Both twins are checked
+# by source order, since the loop itself needs hardware to run.
+
+def _src(rel):
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, rel)) as f:
+        return f.read()
+
+
+def test_firmware_resolves_pending_modals_before_the_draw():
+    s = _src("main.py")
+    draw_at = s.index("        if dirty:\n            if modal is not None:")
+    for flag in ("pending_elim", "pending_quest_card", "pending_side_quest_pick",
+                 "pending_progress_detail"):
+        at = s.index("game.%s" % flag)
+        assert at < draw_at, (
+            "%s is consumed after the draw - the screen underneath will flash"
+            % flag)
+
+
+def test_web_twin_holds_the_frame_while_a_modal_handoff_is_in_flight():
+    s = _src("docs/js/main.js")
+    # The two async handoffs (both need a catalog fetch) must bracket
+    # themselves with modalPending, and the draw must honour it.
+    assert s.count("modalPending += 1") == 2
+    assert s.count("modalPending -= 1") == 2
+    assert "if (dirty && !(modalPending && !modal))" in s

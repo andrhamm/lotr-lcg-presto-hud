@@ -120,6 +120,12 @@ function main() {
   let navStack = [];
   let modal = null;
   let dirty = true;
+  // A modal handing off to another modal closes itself first (the router
+  // holds one at a time), and some handoffs need a catalog fetch before the
+  // replacement exists. Without this the play screen paints in the gap - a
+  // visible flash when you tap "+ Side quest" from the Progress modal. While
+  // a handoff is in flight the last frame simply stays on screen.
+  let modalPending = 0;
   let tick = 0;
   let prevView = game.view;
   const NOTIF_TICKS = 200;
@@ -361,9 +367,11 @@ function main() {
       // tipsCache may still be cold if this session never visited the
       // picker (e.g. a resumed game) - fetch once, same cache-or-fetch
       // idiom as the side-quest-pick block below, then open the modal.
+      modalPending += 1;
       (tipsCache ? Promise.resolve(tipsCache) : loadTips()).then(tips => {
         tipsCache = tips;
         modal = new QuestCardModal(game, tips);
+        modalPending -= 1;
         dirty = true;
       });
     }
@@ -398,6 +406,7 @@ function main() {
     // empty list.
     if (!modal && active === "play" && game.pending_side_quest_pick) {
       game.pending_side_quest_pick = false;
+      modalPending += 1;
       loadPlayerSideQuests().then(entries => {
         if (entries.length) {
           modal = new SideQuestPickModal(game, entries);
@@ -406,6 +415,7 @@ function main() {
           game.logEvent(`Side quest ${game.side_quests.length} added (progress view)`);
           saveState(game);
         }
+        modalPending -= 1;
         dirty = true;
       });
     }
@@ -435,7 +445,10 @@ function main() {
       if (tick % 10 === 0) updateLeds(game, prefs, tick);
     }
     tick += 1;
-    if (dirty) { draw(); dirty = false; }
+    // Hold the last frame while an async modal handoff is in flight, rather
+    // than flashing the screen underneath it. dirty stays set, so the redraw
+    // happens as soon as the replacement modal exists.
+    if (dirty && !(modalPending && !modal)) { draw(); dirty = false; }
   }, 20);
 
   draw();

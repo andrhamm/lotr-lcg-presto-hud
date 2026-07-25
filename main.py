@@ -210,25 +210,11 @@ def main():
                                play.notif_edge)
                 hw.partial_update(cx - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4)
 
-        if dirty:
-            if modal is not None:
-                modal.draw(hw, game, pal)
-            else:
-                screens[active].draw(hw, game, pal)
-                if active not in PREGAME_ACTIVE:
-                    update_leds(hw, game, prefs, tick)
-            hw.update()
-            dirty = False
-
-        # torchlight flickers ~5x/sec without needing a redraw
-        if prefs["scene"] == "torch" and active not in PREGAME_ACTIVE:
-            torch_t += 1
-            if torch_t >= 10:  # ~0.2 s at the 0.02 s loop sleep
-                torch_t = 0
-                tick += 1
-                update_leds(hw, game, prefs, tick)
-
-        # a threat change crossed someone's elimination level -> confirm
+        # Pending-modal resolution runs BEFORE the draw. A modal that wants
+        # to hand off to another one closes itself and raises a flag (the
+        # router holds one modal at a time), so if these ran after the draw
+        # the play screen would paint for one frame in between - a visible
+        # flash when you tap "+ Side quest" from the Progress modal.
         if modal is None and active not in PREGAME_ACTIVE \
                 and game.pending_elim is not None:
             from ui.modals import EliminationModal
@@ -301,6 +287,26 @@ def main():
             dirty = True
             continue
 
+
+        if dirty:
+            if modal is not None:
+                modal.draw(hw, game, pal)
+            else:
+                screens[active].draw(hw, game, pal)
+                if active not in PREGAME_ACTIVE:
+                    update_leds(hw, game, prefs, tick)
+            hw.update()
+            dirty = False
+
+        # torchlight flickers ~5x/sec without needing a redraw
+        if prefs["scene"] == "torch" and active not in PREGAME_ACTIVE:
+            torch_t += 1
+            if torch_t >= 10:  # ~0.2 s at the 0.02 s loop sleep
+                torch_t = 0
+                tick += 1
+                update_leds(hw, game, prefs, tick)
+
+        # a threat change crossed someone's elimination level -> confirm
         # game over: all players eliminated -> defeat (victory is set via the
         # stage-complete modal). Route to the game-over screen from play.
         if modal is None and active == "play" and not game.game_over \
