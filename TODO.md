@@ -34,6 +34,12 @@ across columns, and surface blockers here.
 
 ## Ready
 
+- [ ] Commit derived enrichment instead of fetching it in CI
+  - notes: the Pages deploy went from ~30s to 9min+ once `main` gained the Hall of Beorn sets-to-gather step, because a cold run fetches ~123 scenarios at ~20s each (40+ min worst case). It's `continue-on-error` so it can't fail the deploy, and `actions/cache` covers warm runs, but a cold cache is painful.
+  - policy (user, 2026-07-25): **derived insights, summaries and aggregated metadata from HoB / Vision of the Palantir CAN be committed** — they are not verbatim copies. Verbatim card text stays generated-only.
+  - so: un-gitignore `tools/data/enrichment.json` (aggregated set lists) and `docs/data/tips.json` (our own summaries), commit them, and drop the fetch step from CI — the build just merges what's already in the repo. Keep `tools/data/hob_cache/` (raw third-party responses) ignored.
+  - also revisit: `docs/data/` is currently ignored wholesale, which sweeps up tips.json; that needs splitting so the verbatim card DB stays generated but derived files can live in git.
+
 ## In Progress
 
 ## Blocked

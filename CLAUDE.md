@@ -76,6 +76,25 @@ these rather than re-researching; correct them only with a better citation.
 - **Side quests are not a Core Set mechanic**; the rulebook says nothing about
   excess progress on one. Don't assert a rule there.
 
+## What may be committed (data policy)
+
+Decided by the user, 2026-07-25. The line is **verbatim vs derived**, not
+"third-party vs ours":
+
+- **Never committed — verbatim third-party content.** The compiled card
+  database (`docs/data/` card text, names, stats) and raw API/HTML caches
+  (`tools/data/hob_cache/`, `tools/data/tips_cache/`). These are regenerated
+  from pinned sources and exist only in build artifacts (the Pages site, the
+  device flash).
+- **Fine to commit — derived insight and aggregated metadata.** Summaries we
+  wrote ourselves (stage tips), and facts we aggregated across sources (which
+  encounter sets a scenario draws from, release dates, cycle groupings). A set
+  list or a one-line tip in our own words is not a copy of anyone's work.
+
+Practical consequence: prefer committing derived data over re-fetching it at
+build time. A slow third-party fetch in CI (see the Hall of Beorn enrichment)
+is a smell — commit the derived output and let the build merge it.
+
 ## Card data (generated, never committed)
 
 `tools/build_card_data.py` compiles the full DragnCards card DB into
