@@ -127,67 +127,6 @@ def test_quest_config_save_persists_points():
     assert game.quest["points"] == 8
 
 
-def test_commit_modal_cycles_from_tapped_player():
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    m = modals.CommitModal(game, 2)  # started at P3
-    assert [i + 1 for i in m.order] == [3, 4, 1, 2]
-    assert m.final is False
-    m.draw(hw, game, pal)
-    m.state.tap(3)
-    m.on_button(_find(m, ("next",)))
-    assert game.players[2].commit == 3
-    assert m.idx == 3                      # P4
-    m.on_button(_find(m, ("next",)))       # P4 commits 0 (unchanged)
-    m.on_button(_find(m, ("next",)))       # P1
-    assert m.final is True
-    # Next inert on final player
-    assert m.on_button(_find(m, ("next",))) is None
-    assert m.idx == 1                      # still P2
-    m.state.tap(4)
-    assert m.on_button(_find(m, ("done",))) == "close"
-    assert game.players[1].commit == 4
-    assert game.willpower == 7
-
-
-def test_commit_modal_skips_eliminated():
-    game = GameState()
-    game.adjust_threat(1, 50)
-    game.pending_elim = None
-    m = modals.CommitModal(game, 0)
-    assert [i + 1 for i in m.order] == [1, 3, 4]
-
-
-def test_commit_modal_reset_button_zeroes():
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    game.set_commit(0, 5)
-    m = modals.CommitModal(game, 0)
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("step", "zero")))
-    assert m.state.preview == 0
-    m.on_button(_find(m, ("done",)))
-    assert game.players[0].commit == 0
-
-
-def test_commit_modal_shows_value_without_party_labels():
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    for i, c in enumerate((3, 4, 2, 2)):
-        game.set_commit(i, c)
-    m = modals.CommitModal(game, 2)   # P3 current (2)
-    m.state.tap(2)                    # preview 4
-    m.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "4" in texts               # big willpower value shown
-    # committed/uncommitted party totals were dropped (web parity)
-    assert not any(t.startswith("committed") for t in texts)
-    assert not any(t.startswith("uncommitted") for t in texts)
-
-
 def test_reminders_modal_toggles_and_persists():
     hw = FakeHardware()
     pal = Palette(hw.display)

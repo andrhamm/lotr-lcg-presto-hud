@@ -298,19 +298,6 @@ def _led_modal():
     return hw, m
 
 
-def _commit_modal():
-    from ui.modals import CommitModal
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    g = _game()
-    for i, c in enumerate((3, 4, 2, 2)):
-        g.set_commit(i, c)
-    m = CommitModal(g, 2)
-    m.state.tap(2)
-    m.draw(hw, g, pal)
-    return hw, m
-
-
 def _reminders_modal():
     from ui.modals import RemindersModal
     hw = FakeHardware()
@@ -347,6 +334,11 @@ def _many_side_sailing(g):
     g.sailing = True
     g.heading = 1
     g.side_quests = [{"points": 4, "progress": 1} for _ in range(8)]
+
+
+def _partial_confirm(g):
+    g.players[0].commit_touched = False
+    g.players[2].commit_touched = False
 
 
 def _resolution_fail(g):
@@ -949,6 +941,7 @@ SCENES = {
     "play_resource_planning": _play("resource_planning"),
     "play_quest_sailing": _play("quest_sailing", mutate=_sailing_on),
     "play_quest_commit": _play("quest_commit"),
+    "play_quest_commit_partial_confirm": _play("quest_commit", mutate=_partial_confirm),
     "play_quest_commit_sailing": _play("quest_commit", mutate=_sailing_on),
     "play_quest_commit_manyside": _play("quest_commit", mutate=_many_side_sailing),
     "play_quest_staging": _play("quest_staging"),
@@ -981,7 +974,6 @@ SCENES = {
     "settings": _screen("ui.screen_settings", "ScreenSettings"),
     "counter": _counter,
     "elim_modal": _elim_modal,
-    "commit_modal": _commit_modal,
     "players_detail_modal": _players_detail_modal,
     "players_detail_edit_modal": _players_detail_edit_modal,
     "reminders_modal": _reminders_modal,

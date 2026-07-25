@@ -196,21 +196,20 @@ class ScreenPlay:
                 if key == "wp":
                     self.buttons.append(Button(("wp",), x + 64, y, half - 128, 84))
             elif key in tappable:
+                # thin inset dividers + tan ± glyphs (matches the mock - no
+                # button chrome). Left/right strips tap ±; centre = big editor
+                # (direct total entry for "wp", the staging counter for "stg").
+                d.set_pen(pal.border)
+                d.rectangle(x + 36, y + 8, 1, 56)
+                d.rectangle(x + half - 36, y + 8, 1, 56)
+                text_center(d, pal, "-", x + 18, y + 32, 3, pal.tan)
+                text_center(d, pal, "+", x + half - 18, y + 32, 3, pal.tan)
+                self.buttons.append(Button((key + "-",), x, y, 36, 84))
+                self.buttons.append(Button((key,), x + 36, y, half - 72, 84))
+                self.buttons.append(Button((key + "+",), x + half - 36, y, 36, 84))
                 if key == "stg":
-                    # thin inset dividers + tan ± glyphs (matches the mock — no
-                    # button chrome). Left/right strips tap ±; centre = big editor.
-                    d.set_pen(pal.border)
-                    d.rectangle(x + 36, y + 8, 1, 56)
-                    d.rectangle(x + half - 36, y + 8, 1, 56)
-                    text_center(d, pal, "-", x + 18, y + 32, 3, pal.tan)
-                    text_center(d, pal, "+", x + half - 18, y + 32, 3, pal.tan)
-                    self.buttons.append(Button(("stg-",), x, y, 36, 84))
-                    self.buttons.append(Button(("stg",), x + 36, y, half - 72, 84))
-                    self.buttons.append(Button(("stg+",), x + half - 36, y, 36, 84))
                     text_center(d, pal, "+%d reveal estimate" % game.staging_reveal_estimate(),
                                 x + half / 2, y + 64, 2, pal.dim)
-                else:
-                    self.buttons.append(Button((key,), x, y, half, 84))
 
     # -- draw --------------------------------------------------------------
     def draw(self, hw, game, pal):
@@ -262,8 +261,8 @@ class ScreenPlay:
             self._progress_zone(d, pal, game)
             bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
                              [("window", "Commit characters to the quest - exhaust them to add their willpower.")])
-            self.buttons.append(Button(("commit_tip",), MARGIN, CONTENT_Y, 480 - 2 * MARGIN, bh))
-            self._totals_row(d, pal, game, CONTENT_Y + bh + 8, tappable=("wp", "stg"))
+            cy = self._draw_confirm_all(d, pal, game, CONTENT_Y + bh + 8)
+            self._totals_row(d, pal, game, cy, tappable=("wp", "stg"))
             self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_staging"], ("advance",))
         elif view == "quest_sailing":
             self._draw_sailing(d, pal, game)
@@ -468,6 +467,24 @@ class ScreenPlay:
 
         self._cta(d, pal, "Flip to Side B  ->  %d qp" % card["questPoints"], ("flip_to_b",))
 
+    def _draw_confirm_all(self, d, pal, game, y):
+        """One-tap 'everyone's commit is reviewed' button for the commit view -
+        replaces the old per-player CommitModal round-trip. Caption counts
+        confirmed living players; once all are confirmed it reads as done and
+        the button goes inert. Returns the y for whatever follows."""
+        living = [p for p in game.players if not p.eliminated]
+        done = [p for p in living if p.commit_touched]
+        all_done = len(done) == len(living) and living
+        b = Button(("confirm_all",), MARGIN, y, 480 - 2 * MARGIN, 40)
+        bevel(d, pal, b.x, b.y, b.w, b.h, pal.card if all_done else pal.btn)
+        label = ("All players confirmed" if all_done else
+                 "Confirm all commits (%d/%d)" % (len(done), len(living)))
+        text_center(d, pal, label, 240, y + 12, 2,
+                    pal.dim if all_done else pal.tan)
+        if not all_done:
+            self.buttons.append(b)
+        return y + 48
+
     def _refresh_threat_preview(self, d, pal, game, y):
         """Live "current -> projected" threat per living player, flagged red
         when the projected value crosses the same danger threshold
@@ -661,12 +678,15 @@ class ScreenPlay:
             if after != before:
                 game.log_event("P%d threat %d -> %d" % (i + 1, before, after))
             return True
-        if k == "commit_tip":
-            from ui.modals import CommitModal
-            return ("modal", CommitModal(game, 0))
+        if k == "confirm_all":
+            game.confirm_all_commits()
+            game.log_event("Confirmed all player commits")
+            return True
         if k == "wp":
-            from ui.modals import PlayersDetailModal
-            return ("modal", PlayersDetailModal(game))
+            def set_wp(v, game=game):
+                game.willpower = v
+            return ("modal", CounterModal("Questing willpower total", game.willpower,
+                                          on_commit=set_wp, icon="willpower"))
         if k == "enc_rem":
             from ui.modals import RemindersModal
             return ("modal", RemindersModal(game))

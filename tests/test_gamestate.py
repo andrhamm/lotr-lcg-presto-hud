@@ -185,3 +185,21 @@ def test_quest_history_caps_at_20():
     for _ in range(25):
         g.resolve_quest(5, 3)
     assert len(g.quest_history) == 20
+
+
+def test_confirm_all_commits_touches_only_living_players():
+    g = GameState()
+    g.adjust_threat(1, 50)                     # P2 eliminated (default elimination 50)
+    g.confirm_all_commits()
+    assert g.players[0].commit_touched is True
+    assert g.players[1].commit_touched is False
+    assert g.players[2].commit_touched is True
+    assert g.players[3].commit_touched is True
+
+
+def test_confirm_all_commits_does_not_change_values():
+    g = GameState()
+    g.set_commit(0, 3)
+    g.confirm_all_commits()
+    assert g.players[0].commit == 3
+    assert g.players[1].commit == 0

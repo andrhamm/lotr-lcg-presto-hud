@@ -199,6 +199,12 @@ export class GameState {
     this.players[i].commit_touched = true;
   }
 
+  confirmAllCommits() {
+    // One-tap "same as last round": marks every living player's willpower
+    // commit as reviewed (ring goes gold) without changing any value.
+    this.players.forEach(p => { if (!p.eliminated) p.commit_touched = true; });
+  }
+
   _totalProgress() {
     let n = this.quest.progress;
     if (this.active_location) n += this.active_location.progress;

@@ -5,7 +5,7 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP } from "./gamestate.js";
-import { drawHeader, drawNotifPie, HEADER_H, CounterModal, CommitModal,
+import { drawHeader, drawNotifPie, HEADER_H, CounterModal,
          PlayersDetailModal, RemindersModal, LocationPickModal, SideQuestsModal,
          QuestConfigModal, StageCompleteModal, SailingModal,
          QuestingProgressModal, QuestCardModal, ResolutionModal } from "./screens.js";
@@ -143,6 +143,23 @@ export class ScreenPlay {
     if (frac > 0) rect(ctx, x, by, Math.max(1, Math.round(w * Math.min(1, frac))), 2, color);
   }
 
+  // One-tap "everyone's commit is reviewed" button for the commit view -
+  // replaces the old per-player CommitModal round-trip. Caption counts
+  // confirmed living players; once all are confirmed it reads as done and the
+  // button goes inert. Returns the y for whatever follows.
+  _drawConfirmAll(ctx, game, y) {
+    const living = game.players.filter(p => !p.eliminated);
+    const done = living.filter(p => p.commit_touched);
+    const allDone = living.length > 0 && done.length === living.length;
+    const b = new Button(["confirm_all"], MARGIN, y, 480 - 2 * MARGIN, 40);
+    bevel(ctx, b.x, b.y, b.w, b.h, allDone ? pal.card : pal.btn);
+    const label = allDone ? "All players confirmed"
+                          : `Confirm all commits (${done.length}/${living.length})`;
+    textCenter(ctx, label, 240, y + 12, 2, allDone ? pal.dim : pal.tan);
+    if (!allDone) this.buttons.push(b);
+    return y + 48;
+  }
+
   // Live "current -> projected" threat per living player, flagged red when the
   // projected value crosses the same danger threshold _playersZone uses
   // (proj >= elimination - 10). Eliminated players are skipped: their threat is
@@ -187,20 +204,19 @@ export class ScreenPlay {
         if (key === "stg") this.buttons.push(new Button(["enc_rem"], x + 64, y, half - 128, 84));
         if (key === "wp") this.buttons.push(new Button(["wp"], x + 64, y, half - 128, 84));
       } else if (tappable.includes(key)) {
+        // thin inset dividers + tan +/- glyphs (matches the mock — no button
+        // chrome). Left/right strips tap +/-; centre = big editor (direct
+        // total entry for "wp", the staging counter for "stg").
+        rect(ctx, x + 36, y + 8, 1, 56, pal.border);
+        rect(ctx, x + half - 36, y + 8, 1, 56, pal.border);
+        textCenter(ctx, "-", x + 18, y + 32, 3, pal.tan);
+        textCenter(ctx, "+", x + half - 18, y + 32, 3, pal.tan);
+        this.buttons.push(new Button([key + "-"], x, y, 36, 84));
+        this.buttons.push(new Button([key], x + 36, y, half - 72, 84));
+        this.buttons.push(new Button([key + "+"], x + half - 36, y, 36, 84));
         if (key === "stg") {
-          // thin inset dividers + tan ± glyphs (matches the mock — no button
-          // chrome). Left/right strips tap ±; the centre taps the big editor.
-          rect(ctx, x + 36, y + 8, 1, 56, pal.border);
-          rect(ctx, x + half - 36, y + 8, 1, 56, pal.border);
-          textCenter(ctx, "-", x + 18, y + 32, 3, pal.tan);
-          textCenter(ctx, "+", x + half - 18, y + 32, 3, pal.tan);
-          this.buttons.push(new Button(["stg-"], x, y, 36, 84));
-          this.buttons.push(new Button(["stg"], x + 36, y, half - 72, 84));
-          this.buttons.push(new Button(["stg+"], x + half - 36, y, 36, 84));
           textCenter(ctx, `+${game.stagingRevealEstimate()} reveal estimate`,
                      x + half / 2, y + 64, 2, pal.dim);
-        } else {
-          this.buttons.push(new Button([key], x, y, half, 84));
         }
       }
     });
@@ -255,8 +271,8 @@ export class ScreenPlay {
       this._progressZone(ctx, game);
       const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
         [{ kind: "window", text: "Commit characters to the quest - exhaust them to add their willpower." }]);
-      this.buttons.push(new Button(["commit_tip"], MARGIN, CONTENT_Y, 480 - 2 * MARGIN, bh));
-      this._totalsRow(ctx, game, CONTENT_Y + bh + 8, false, ["wp", "stg"]);
+      const cy = this._drawConfirmAll(ctx, game, CONTENT_Y + bh + 8);
+      this._totalsRow(ctx, game, cy, false, ["wp", "stg"]);
       this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_staging}`, ["advance"]);
     } else if (view === "quest_sailing") {
       this._playersZone(ctx, game);
@@ -623,8 +639,15 @@ export class ScreenPlay {
       if (after !== before) game.logEvent(`P${i + 1} threat ${before} -> ${after}`);
       return true;
     }
-    if (k === "commit_tip") return ["modal", new CommitModal(game, 0)];
-    if (k === "wp") return ["modal", new PlayersDetailModal(game)];
+    if (k === "confirm_all") {
+      game.confirmAllCommits();
+      game.logEvent("Confirmed all player commits");
+      return true;
+    }
+    if (k === "wp") {
+      return ["modal", new CounterModal("Questing willpower total", game.willpower,
+        v => { game.willpower = v; }, "willpower")];
+    }
     if (k === "enc_rem") return ["modal", new RemindersModal(game)];
     if (k === "stg") {
       return ["modal", new CounterModal("Staging area threat", game.staging,

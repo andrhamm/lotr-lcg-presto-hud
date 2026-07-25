@@ -262,6 +262,14 @@ class GameState:
         """Mark a player's commit as touched this round (willpower ring visual)."""
         self.players[index].commit_touched = True
 
+    def confirm_all_commits(self):
+        """One-tap 'same as last round' - marks every living player's
+        willpower commit as reviewed (ring goes gold) without changing any
+        value."""
+        for p in self.players:
+            if not p.eliminated:
+                p.commit_touched = True
+
     # -- view flow ---------------------------------------------------------
     def _total_progress(self):
         n = self.quest["progress"]

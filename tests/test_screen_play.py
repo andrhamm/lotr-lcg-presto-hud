@@ -150,14 +150,36 @@ def test_banner_does_not_leak_to_other_views():
     assert not any("failed" in str(t) for t in texts)
 
 
-def test_commit_view_wp_tappable_stg_has_inline_thirds():
+def test_commit_view_wp_and_stg_have_inline_thirds():
     hw, pal, game, screen = _setup("quest_commit")
     screen.draw(hw, game, pal)
     ids = [b.id[0] for b in screen.buttons]
-    assert "wp" in ids                          # opens the Questing for modal
-    assert "wp-" not in ids and "wp+" not in ids  # wp stays a single tap target
-    assert "stg" in ids                         # centre third -> counter modal
-    assert "stg-" in ids and "stg+" in ids       # left/right thirds adjust inline
+    assert "wp" in ids and "wp-" in ids and "wp+" in ids
+    assert "stg" in ids and "stg-" in ids and "stg+" in ids
+
+
+def test_commit_wp_thirds_geometry_flanks_centre():
+    hw, pal, game, screen = _setup("quest_commit")
+    screen.draw(hw, game, pal)
+    minus = _find(screen, ("wp-",))
+    centre = _find(screen, ("wp",))
+    plus = _find(screen, ("wp+",))
+    for b in (minus, centre, plus):
+        assert b.h == 84 and b.w >= 24
+    assert minus.x < centre.x < plus.x
+    assert minus.x + minus.w == centre.x
+    assert centre.x + centre.w == plus.x
+    assert minus.w == plus.w
+
+
+def test_commit_wp_thirds_step_and_floor_at_zero():
+    hw, pal, game, screen = _setup("quest_commit")
+    game.willpower = 0
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("wp-",)), game)
+    assert game.willpower == 0
+    screen.on_button(_find(screen, ("wp+",)), game)
+    assert game.willpower == 1
 
 
 def test_commit_staging_thirds_geometry_flanks_centre():
@@ -280,10 +302,8 @@ def test_commit_view_shows_zones_then_note_at_content_y():
     progress = _find(screen, ("progress_detail",))
     assert players.y == ZONE_TOP - 2 and progress.y == ZONE_TOP - 2
     assert players.x == 8 and progress.x == 214
-    commit_tip = _find(screen, ("commit_tip",))
-    # willpower now lives in the matrix -> no commit row -> note starts right
-    # after the zones, at CONTENT_Y (not offset further down)
-    assert commit_tip.y == CONTENT_Y
+    assert "Commit characters to the quest - exhaust them" in _texts(hw)
+    assert "commit_tip" not in [b.id[0] for b in screen.buttons]
 
 
 def test_zone_geometry_widened_for_inline_threat():
@@ -379,41 +399,33 @@ def test_staging_tied_shows_dim_tie_message():
     assert any("Tied" in t for t in texts)
 
 
-def test_commit_tip_opens_commit_modal_from_p1():
-    from ui.modals import CommitModal
+def test_commit_tip_button_is_gone():
     hw, pal, game, screen = _setup("quest_commit")
     screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("commit_tip",)), game)
-    assert isinstance(result[1], CommitModal)
-    assert result[1].idx == 0
+    assert "commit_tip" not in [b.id[0] for b in screen.buttons]
 
 
-def test_commit_view_window_only_no_framework_block():
+def test_confirm_all_button_marks_every_living_player_touched():
     hw, pal, game, screen = _setup("quest_commit")
+    game.adjust_threat(1, 50)                  # P2 eliminated
     screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "YOUR WINDOW" in texts
-    assert "FRAMEWORK" not in texts
+    screen.on_button(_find(screen, ("confirm_all",)), game)
+    assert game.players[0].commit_touched is True
+    assert game.players[1].commit_touched is False
+    assert game.players[2].commit_touched is True
+    assert game.players[3].commit_touched is True
 
 
-def test_commit_tip_button_still_opens_commit_modal_at_new_geometry():
-    from ui.modals import CommitModal
+def test_confirm_all_button_caption_reflects_progress():
     hw, pal, game, screen = _setup("quest_commit")
+    game.players[0].commit_touched = True
+    game.players[1].commit_touched = True
     screen.draw(hw, game, pal)
-    tip = _find(screen, ("commit_tip",))
-    assert tip.w >= 24 and tip.h >= 24
-    result = screen.on_button(tip, game)
-    assert isinstance(result[1], CommitModal)
-
-
-def test_commit_totals_row_moves_with_tip_height():
-    hw, pal, game, screen = _setup("quest_commit")
+    assert "Confirm all commits (2/4)" in _texts(hw)
+    for p in game.players:
+        p.commit_touched = True
     screen.draw(hw, game, pal)
-    tip = _find(screen, ("commit_tip",))
-    ids = _ids(screen)
-    assert "wp" in ids and "stg" in ids
-    wp_button = _find(screen, ("wp",))
-    assert wp_button.y >= tip.y + tip.h   # totals row starts at/after the tip's bottom
+    assert "All players confirmed" in _texts(hw)
 
 
 def test_notification_overlay_draws_with_pie_and_dismiss():
@@ -506,13 +518,18 @@ def test_progress_detail_edits_quest_and_logs_on_close():
     assert any("(progress view)" in e["text"] for e in game.log)
 
 
-def test_questing_for_card_taps_open_modal_on_both_views():
-    from ui.modals import PlayersDetailModal
+def test_questing_for_card_taps_open_direct_total_editor_on_both_views():
     for view in ("quest_commit", "quest_staging"):
         hw, pal, game, screen = _setup(view)
+        game.willpower = 5
         screen.draw(hw, game, pal)
         result = screen.on_button(_find(screen, ("wp",)), game)
-        assert isinstance(result[1], PlayersDetailModal), view
+        assert result[0] == "modal", view
+        modal = result[1]
+        modal.state.tap(1)
+        modal.state.confirm()
+        modal.on_commit(modal.state.value)
+        assert game.willpower == 6, view
 
 
 # -- Task 8: Quest Setup (R0 pre-round-1) ----------------------------------
