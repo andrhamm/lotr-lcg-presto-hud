@@ -354,6 +354,14 @@ def _resolution_fail(g):
     g.quest_outcome_n = 3
 
 
+def _staging_behind(g):
+    g.willpower, g.staging = 5, 9
+
+
+def _staging_tied(g):
+    g.willpower, g.staging = 7, 7
+
+
 def _players_detail_modal():
     from ui.modals import PlayersDetailModal
     hw = FakeHardware()
@@ -937,6 +945,8 @@ SCENES = {
     "play_quest_commit_sailing": _play("quest_commit", mutate=_sailing_on),
     "play_quest_commit_manyside": _play("quest_commit", mutate=_many_side_sailing),
     "play_quest_staging": _play("quest_staging"),
+    "play_quest_staging_behind": _play("quest_staging", mutate=_staging_behind),
+    "play_quest_staging_tied": _play("quest_staging", mutate=_staging_tied),
     "play_quest_resolution": _play("quest_resolution"),
     "play_quest_resolution_fail": _play("quest_resolution", mutate=_resolution_fail),
     "play_travel": _play("travel"),

@@ -310,6 +310,35 @@ def test_staging_center_tap_opens_reminders():
     assert isinstance(result[1], RemindersModal)
 
 
+def test_staging_shows_framework_window_and_meter():
+    hw, pal, game, screen = _setup("quest_staging")
+    game.willpower, game.staging = 11, 7
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "FRAMEWORK" in texts and "YOUR WINDOW" in texts
+    fills = [c for c in hw.display.calls if c[0] == "rect" and c[4] == 10
+             and c[5] in (pal.gold, pal.outline)]
+    assert len(fills) == 2
+
+
+def test_staging_meter_and_totals_row_both_clear_of_cta():
+    from ui.screen_play import CTA_Y
+    hw, pal, game, screen = _setup("quest_staging")
+    screen.draw(hw, game, pal)
+    ids = _ids(screen)
+    assert "stg-" in ids and "wp-" in ids     # totals_row steppers still present
+    stepper = _find(screen, ("stg-",))
+    assert stepper.y + stepper.h <= CTA_Y
+
+
+def test_staging_tied_shows_dim_tie_message():
+    hw, pal, game, screen = _setup("quest_staging")
+    game.willpower = game.staging = 7
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert any("Tied" in t for t in texts)
+
+
 def test_commit_tip_opens_commit_modal_from_p1():
     from ui.modals import CommitModal
     hw, pal, game, screen = _setup("quest_commit")

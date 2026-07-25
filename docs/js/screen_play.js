@@ -1,7 +1,7 @@
 // Port of ui/screen_play.py — the guided round.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
-         truncateText, ribbon, notePanel, phaseBlock, drawHeart, drawFlag,
-         disc, arcRuns, wxSmall, token } from "./ui.js";
+         truncateText, ribbon, notePanel, phaseBlock, willpowerStagingMeter,
+         drawHeart, drawFlag, disc, arcRuns, wxSmall, token } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP } from "./gamestate.js";
@@ -249,31 +249,13 @@ export class ScreenPlay {
     } else if (view === "quest_staging") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
-      // tip: reveal reminder, then a live preview of the resolution outcome
-      const tw = 480 - 2 * MARGIN, gutt = 28 + 14, lh = 26;
-      const tx = MARGIN + 12 + gutt, usable = tw - 12 - gutt;
-      const lines = wrapText(
-        "Reveal 1 encounter card per player and adjust staging area threat accordingly.",
-        2, usable);
-      const ty0 = CONTENT_Y + 2, th = (lines.length + 1) * lh + 16;
-      rect(ctx, MARGIN, ty0, tw, th, pal.card_hi);
-      rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
-      icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold);
-      let ly = ty0 + 8;
-      for (const ln of lines) { textLeft(ctx, ln, tx, ly, 2, pal.muted); ly += lh; }
-      const diff = game.willpower - game.staging;
-      if (diff !== 0) {
-        // success places shared progress ("You"); a fail raises each player's threat
-        const pre = `${diff > 0 ? "You" : "Each player"} will gain ${Math.abs(diff)} `;
-        textLeft(ctx, pre, tx, ly, 2, pal.muted);
-        const px = tx + measureText(pre, 2);
-        const ic = diff > 0 ? icons.TRAIL : icons.THREAT_SM;
-        icons.drawIcon(ctx, ic, px, ly - 1, diff > 0 ? pal.gold : pal.red);
-        textLeft(ctx, "at resolution.", px + ic[0] + 6, ly, 2, pal.muted);
-      } else {
-        textLeft(ctx, "No change at resolution (tie).", tx, ly, 2, pal.muted);
-      }
-      this._totalsRow(ctx, game, ty0 + th + 8, true);
+      const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+        { kind: "framework", text: "Reveal 1 encounter card per player." },
+        { kind: "window", text: "Responses to the reveal." },
+      ]);
+      const my = CONTENT_Y + bh + 8;
+      const mh = willpowerStagingMeter(ctx, MARGIN, my, 480 - 2 * MARGIN, game.willpower, game.staging);
+      this._totalsRow(ctx, game, my + mh + 8, true);
       this._cta(ctx, `Next Phase: ${VIEW_LABELS.quest_resolution}`, ["stage_advance"]);
     } else if (view === "quest_resolution") {
       this._drawResolution(ctx, game);

@@ -10,8 +10,9 @@ Mirror of docs/js/screen_play.js - keep the two in lockstep.
 from gamestate import VIEW_ORDER, VIEW_LABELS, SETUP_TIP
 from ui.header import draw_header, HEADER_H
 from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
-                        note_panel, phase_block, wrap_text, truncate_text, draw_heart,
-                        draw_flag, disc, arc_runs, token, wx_small)
+                        note_panel, phase_block, willpower_staging_meter, wrap_text,
+                        truncate_text, draw_heart, draw_flag, disc, arc_runs, token,
+                        wx_small)
 from ui.modal_counter import CounterModal
 from ui.modals import LocationPickModal
 from ui import icons
@@ -367,33 +368,14 @@ class ScreenPlay:
     def _draw_staging(self, d, pal, game):
         self._players_zone(d, pal, game)
         self._progress_zone(d, pal, game)
-        tw, gutt, lh = 480 - 2 * MARGIN, 28 + 14, 26
-        tx, usable = MARGIN + 12 + gutt, tw - 12 - gutt
-        lines = wrap_text(
-            "Reveal 1 encounter card per player and adjust staging area threat accordingly.",
-            2, usable, d.measure_text)
-        ty0 = CONTENT_Y + 2
-        th = (len(lines) + 1) * lh + 16
-        d.set_pen(pal.card_hi)
-        d.rectangle(MARGIN, ty0, tw, th)
-        d.set_pen(pal.border_gold)
-        d.rectangle(MARGIN, ty0, 4, th)
-        icons.draw(d, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold)
-        ly = ty0 + 8
-        for ln in lines:
-            text_left(d, pal, ln, tx, ly, 2, pal.muted)
-            ly += lh
-        diff = game.willpower - game.staging
-        if diff != 0:
-            pre = "%s will gain %d " % ("You" if diff > 0 else "Each player", abs(diff))
-            text_left(d, pal, pre, tx, ly, 2, pal.muted)
-            px = tx + d.measure_text(pre, 2)
-            ic = icons.TRAIL if diff > 0 else icons.THREAT_SM
-            icons.draw(d, ic, px, ly - 1, pal.gold if diff > 0 else pal.red)
-            text_left(d, pal, "at resolution.", px + len(ic) + 6, ly, 2, pal.muted)
-        else:
-            text_left(d, pal, "No change at resolution (tie).", tx, ly, 2, pal.muted)
-        self._totals_row(d, pal, game, ty0 + th + 8, with_steppers=True)
+        bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+            ("framework", "Reveal 1 encounter card per player."),
+            ("window", "Responses to the reveal."),
+        ])
+        my = CONTENT_Y + bh + 8
+        mh = willpower_staging_meter(d, pal, MARGIN, my, 480 - 2 * MARGIN,
+                                     game.willpower, game.staging)
+        self._totals_row(d, pal, game, my + mh + 8, with_steppers=True)
         self._cta(d, pal, "Next Phase: %s" % VIEW_LABELS["quest_resolution"],
                   ("stage_advance",))
 
