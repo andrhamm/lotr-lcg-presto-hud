@@ -89,11 +89,24 @@ title centre, settings link right (`Set.`)** — not a "SETUP" label.
    date**. Back → Pick Cycle. Submit → Scenario Options.
 5. **Scenario Options** — the scenario title (tap → re-open the chooser modal) +
    **scenario icon** (slot); **SETS TO GATHER above the form** (each set name +
-   icon slot); **Difficulty** dropdown (default Standard) + **Mode** dropdown
-   (Normal | Nightmare); a **conditional/contextual tip** shown only for a
-   non-standard choice — Easy → "remove every encounter card whose set icon has a
-   gold ring (the difficulty marker)" (verified); Nightmare → "swaps in a
-   separate, harder encounter deck — sold as its own product". CTA → Quest Setup.
+   icon slot); a single full-width **Difficulty** dropdown (default Standard);
+   a **conditional/contextual tip** shown only for a non-standard choice — Easy
+   → "remove every encounter card whose set icon has a gold ring" (verified);
+   Nightmare → "a separate, harder encounter deck, sold as its own product".
+   CTA → Quest Setup.
+
+   > [!note] Amended 2026-07-25 — one dropdown, not two
+   > This shipped as **Difficulty + Mode (Normal | Nightmare)**. The split was
+   > wrong on two counts. It offered Nightmare for all 349 scenarios when the
+   > catalog's `hasNightmare` says only **68** have a Nightmare deck; and since
+   > no scenario ships both a printed Mode card and a Nightmare deck, the only
+   > pairing the second dropdown ever produced was **Easy + Nightmare** — which
+   > also forced the tip panel to render two messages at a smaller size than
+   > one. Nightmare is now the top rung of the single Difficulty ladder
+   > (`Easy · Standard · [printed modes] · Nightmare`), gated on `hasNightmare`.
+   > The tip is therefore always exactly one message at one fixed size.
+   > The model is unchanged: `nightmare` is derived (`difficulty ==
+   > "Nightmare"`), so saves and `scenario.mode` keep their shape.
 6. **Quest Setup** — the **R0 pre-round-1 phase screen** (not a modal): the
    standard **Players & Progress zones** (quest shows stage 1A), a **distinct
    scroll-style tip** (double gold border + ribbon, unlike the normal note tips)

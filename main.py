@@ -434,14 +434,17 @@ def main():
                                     entry, data, catalog_icons)
                                 active = "scenario_options"
                         elif kind == "begin_setup":
-                            difficulty, mode = result[1], result[2]
+                            # One picker now: Nightmare is a rung on the
+                            # difficulty ladder, not a separate Mode.
+                            difficulty = result[1]
                             opts = screens["scenario_options"]
                             scn = opts.scenario
                             scenario_meta = {
                                 "slug": scn.get("slug"), "name": scn.get("name"),
                                 "pack": scn.get("pack"), "cycle": scn.get("cycle"),
                                 "source": scn.get("source"), "kind": scn.get("kind"),
-                                "nightmare": mode == "Nightmare", "mode": difficulty,
+                                "nightmare": difficulty == "Nightmare",
+                                "mode": difficulty,
                             }
                             stages = opts.data.get("quest", {}).get("stages", [])
                             game.preload_scenario(scenario_meta, stages)

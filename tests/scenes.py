@@ -190,6 +190,9 @@ def _choose_scenario():
 _SCENARIO_OPTIONS_ENTRY = {
     "slug": "passage-through-mirkwood", "name": "Passage Through Mirkwood",
     "pack": "Core Set", "cycle": "Core Set", "source": "official", "kind": "quest",
+    # Passage really does have a Nightmare deck, so "Nightmare" appears in
+    # this fixture's difficulty ladder (see test_card_data.py).
+    "hasNightmare": True,
 }
 _SCENARIO_OPTIONS_DATA = {
     "slug": "passage-through-mirkwood", "name": "Passage Through Mirkwood",
@@ -212,13 +215,13 @@ _SCENARIO_OPTIONS_ENTRY_NO_ENRICHMENT = {
 }
 
 
-def _scenario_options(difficulty="Standard", mode="Normal"):
+def _scenario_options(difficulty="Standard"):
     def build():
         from ui.screen_quest import ScenarioOptionsScreen
         hw = FakeHardware()
         pal = Palette(hw.display)
         s = ScenarioOptionsScreen(dict(_SCENARIO_OPTIONS_ENTRY), dict(_SCENARIO_OPTIONS_DATA),
-                                  difficulty=difficulty, mode=mode)
+                                  difficulty=difficulty)
         s.draw(hw, _game(), pal)
         return hw, s
     return build
@@ -990,9 +993,9 @@ SCENES = {
     "pick_cycle": _pick_cycle,
     "pick_cycle_empty": _pick_cycle_empty,
     "choose_scenario": _choose_scenario,
-    "scenario_options_std": _scenario_options("Standard", "Normal"),
-    "scenario_options_easy": _scenario_options("Easy", "Normal"),
-    "scenario_options_nm": _scenario_options("Standard", "Nightmare"),
+    "scenario_options_std": _scenario_options("Standard"),
+    "scenario_options_easy": _scenario_options("Easy"),
+    "scenario_options_nm": _scenario_options("Nightmare"),
     "scenario_options_dropdown": _scenario_options_dropdown,
     "scenario_options_icons": _scenario_options_icons,
     "scenario_options_no_enrichment": _scenario_options_no_enrichment,

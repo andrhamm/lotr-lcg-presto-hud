@@ -698,9 +698,10 @@ def test_side_quest_pick_null_points_default_to_zero_and_pager_pages():
 # that exactly one scenario of 349 ships (The Hunt for the Dreadnaught).
 # Easy IS general (drop the gold-ring cards), so it always applies.
 
-def _opts_screen(modes=None, mode_cards=None):
+def _opts_screen(modes=None, mode_cards=None, nightmare=False):
     from ui.screen_quest import ScenarioOptionsScreen
-    entry = {"slug": "s", "name": "A Quest", "pack": "P", "modes": modes or []}
+    entry = {"slug": "s", "name": "A Quest", "pack": "P", "modes": modes or [],
+             "hasNightmare": nightmare}
     data = {"name": "A Quest", "modes": mode_cards or []}
     return ScenarioOptionsScreen(entry, data)
 
@@ -740,3 +741,41 @@ def test_easy_keeps_the_general_rule_copy():
 def test_standard_shows_no_tip():
     s = _opts_screen()
     assert s._tip_messages() == []
+
+
+# --- Nightmare is a rung on the same ladder, not a second dropdown ---------
+# It is also per-scenario: a Nightmare deck is a separately sold product and
+# only 68 of the 349 catalogued scenarios have one. The catalog says which
+# (`hasNightmare`); offering it everywhere was the same bug as offering Hard
+# everywhere.
+
+def test_nightmare_offered_only_when_the_scenario_has_a_nightmare_deck():
+    assert "Nightmare" not in _opts_screen().difficulty_options()
+    assert "Nightmare" in _opts_screen(nightmare=True).difficulty_options()
+
+
+def test_nightmare_sits_last_on_the_ladder():
+    s = _opts_screen(modes=["Hard Mode"], nightmare=True)
+    assert s.difficulty_options() == ("Easy", "Standard", "Hard", "Nightmare")
+
+
+def test_only_one_tip_can_ever_show():
+    """The panel renders at a single fixed scale, so it must never be handed
+    two messages - that is what used to make the tip shrink."""
+    s = _opts_screen(modes=["Hard Mode"], nightmare=True)
+    for d in s.difficulty_options():
+        s.difficulty = d
+        assert len(s._tip_messages()) <= 1, d
+
+
+def test_authored_tip_copy_still_fits_two_lines_at_full_scale():
+    """The tips only stay at scale 2 because the copy is short enough. If
+    someone lengthens it, fail here rather than overflow into the CTA."""
+    from ui.screen_quest import ScenarioOptionsScreen
+    from ui.widgets import wrap_text
+    from ui import icons
+    hw = FakeHardware()
+    usable = 448 - 16 - 12 - (len(icons.PIPE) + 14)   # note_panel's own geometry
+    for label, text in ScenarioOptionsScreen.TIP_TEXT.items():
+        lines = wrap_text(text, 2, usable, hw.display.measure_text)
+        assert len(lines) <= 2, "%s tip wraps to %d lines: %r" % (label, len(lines), lines)

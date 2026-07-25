@@ -258,13 +258,15 @@ function main() {
           console.error(`quest catalog: loadScenario(${slug}) failed - staying on chooser`, e);
         }
       } else if (kind === "begin_setup") {
-        const [, difficulty, mode] = result;
+        // One picker now: Nightmare is a rung on the difficulty ladder,
+        // not a separate Mode.
+        const [, difficulty] = result;
         const opts = screens.scenario_options;
         const scn = opts.scenario;
         const scenarioMeta = {
           slug: scn.slug, name: scn.name, pack: scn.pack, cycle: scn.cycle,
           source: scn.source, kind: scn.kind,
-          nightmare: mode === "Nightmare", mode: difficulty,
+          nightmare: difficulty === "Nightmare", mode: difficulty,
         };
         game.preloadScenario(scenarioMeta, opts.data?.quest?.stages ?? []);
         game.view = "quest_setup";

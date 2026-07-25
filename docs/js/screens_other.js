@@ -690,32 +690,33 @@ export class ScenarioOptionsScreen {
   // a printed Mode card on the handful of scenarios that ship one, so it is
   // offered only when this scenario's catalog entry lists it. Of 349 scenarios
   // exactly one prints a Hard Mode card and three print Epic Multiplayer.
+  // Nightmare is a rung on this ladder, not a second dropdown: no scenario
+  // ships both a printed Mode card and a Nightmare deck, so splitting them
+  // bought exactly one combination (Easy + Nightmare) and forced the tip
+  // panel to shrink its text whenever both showed. It is per-scenario too -
+  // only 68 of 349 have a Nightmare deck (`hasNightmare`).
   static BASE_DIFFICULTY_OPTIONS = ["Easy", "Standard"];
-  static MODE_OPTIONS = ["Normal", "Nightmare"];
   static GATHER_Y0 = 116;
   static GATHER_ROW_H = 30;
   static MAX_GATHER_ROWS = 4;
   static CTA_Y = 410;
   static CTA_H = 54;
 
-  // Difficulty/Nightmare rules copy (matches mock_quest.py's TIP dict for
-  // Easy/Nightmare verbatim). Hard has no copy in the mock or spec - this
-  // line is author-supplied and flagged in the Task 7 report for user
-  // review against the FAQ/rulebook (CLAUDE.md Iron rule #4).
   // Only Easy and Nightmare get authored copy, because only those two are
   // general rules. A scenario-specific mode (Hard, Epic Multiplayer) shows that
   // card's own printed setup text instead - the real rules, not a paraphrase.
+  // Kept short deliberately: each must wrap to at most 2 lines at scale 2 so
+  // the tip never has to shrink. There is a test for that.
   static TIP_TEXT = {
-    Easy: "Easy mode: remove every encounter card whose set icon has a gold ring (the difficulty marker).",
-    Nightmare: "Nightmare swaps in a separate, harder encounter deck - sold as its own product.",
+    Easy: "Easy: remove every encounter card whose set icon has a gold ring.",
+    Nightmare: "Nightmare: a separate, harder encounter deck, sold as its own product.",
   };
 
-  constructor(scenario, data, icons = {}, difficulty = "Standard", mode = "Normal") {
+  constructor(scenario, data, icons = {}, difficulty = "Standard") {
     this.scenario = scenario;
     this.data = data || {};
     this.icons = icons ?? {};
     this.difficulty = difficulty;
-    this.mode = mode;
     this.buttons = [];
   }
 
@@ -752,7 +753,9 @@ export class ScenarioOptionsScreen {
 
   difficultyOptions() {
     const extra = this._scenarioModes().filter(m => m.toLowerCase() !== "easy");
-    return [...ScenarioOptionsScreen.BASE_DIFFICULTY_OPTIONS, ...extra];
+    const opts = [...ScenarioOptionsScreen.BASE_DIFFICULTY_OPTIONS, ...extra];
+    if (this.scenario.hasNightmare) opts.push("Nightmare");
+    return opts;
   }
 
   _modeCardText(label) {
@@ -765,16 +768,14 @@ export class ScenarioOptionsScreen {
     return null;
   }
 
+  // At most one message - the tip always renders at the same size, so it must
+  // never have to fit two (see the scale note in draw()).
   _tipMessages() {
     const { TIP_TEXT } = ScenarioOptionsScreen;
-    const msgs = [];
-    if (this.difficulty === "Easy") msgs.push(TIP_TEXT.Easy);
-    else if (this.difficulty !== "Standard") {
-      msgs.push(this._modeCardText(this.difficulty)
-                ?? `${this.difficulty}: follow this quest's ${this.difficulty} Mode card.`);
-    }
-    if (this.mode === "Nightmare") msgs.push(TIP_TEXT.Nightmare);
-    return msgs;
+    if (TIP_TEXT[this.difficulty]) return [TIP_TEXT[this.difficulty]];
+    if (this.difficulty === "Standard") return [];
+    return [this._modeCardText(this.difficulty)
+            ?? `${this.difficulty}: follow this quest's ${this.difficulty} Mode card.`];
   }
 
   // -- draw -------------------------------------------------------------
@@ -814,17 +815,16 @@ export class ScenarioOptionsScreen {
     // 3-row fixture this reproduces mock_quest.py's y=212 exactly
     // (116 + 3*30 + 6).
     const ddY = gy + 6;
-    this._dropdown(ctx, 16, ddY, 210, "Difficulty", this.difficulty, ["dd", "difficulty"]);
-    this._dropdown(ctx, 254, ddY, 210, "Mode", this.mode, ["dd", "mode"]);
+    this._dropdown(ctx, 16, ddY, 448, "Difficulty", this.difficulty, ["dd", "difficulty"]);
 
     let msgs = this._tipMessages();
     if (msgs.length) {
-      // Single-message tips render at the mock's scale (2); the rarer
-      // combined case (both a non-standard difficulty AND Nightmare
-      // selected) drops to scale 1 so the panel reliably stays clear of
-      // the CTA (verified against the real wrap widths - see the Task 7
-      // report).
-      const scale = msgs.length === 1 ? 2 : 1;
+      // Always the mock's scale (2). The tip used to shrink to scale 1
+      // whenever two messages showed at once, which read as a bug - the same
+      // panel rendering at two different sizes. There is only ever one
+      // message now (see _tipMessages), and the authored copy is kept short
+      // enough to wrap to 2 lines at this scale.
+      const scale = 2;
       const ty = ddY + 62;
       // A scenario-specific mode card's own printed setup text can run several
       // hundred characters. Clip it above the CTA rather than letting it run
@@ -862,13 +862,9 @@ export class ScenarioOptionsScreen {
     if (k === "nav") return ["goto", btn.id[1]];
     if (k === "retitle") return ["choose_scenario_list", this.scenario.source, this.scenario.cycle];
     if (k === "dd") {
-      const which = btn.id[1];
-      if (which === "difficulty") {
-        return ["modal", new OptionListModal(this, "difficulty", "Difficulty", this.difficultyOptions())];
-      }
-      return ["modal", new OptionListModal(this, "mode", "Mode", ScenarioOptionsScreen.MODE_OPTIONS)];
+      return ["modal", new OptionListModal(this, "difficulty", "Difficulty", this.difficultyOptions())];
     }
-    if (k === "begin") return ["begin_setup", this.difficulty, this.mode];
+    if (k === "begin") return ["begin_setup", this.difficulty];
     return null;
   }
 }

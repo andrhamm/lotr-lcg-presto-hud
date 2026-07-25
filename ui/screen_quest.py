@@ -287,6 +287,14 @@ class ScenarioOptionsScreen:
     same as `data`; a miss/failure just means every icon_slot() falls back
     to its placeholder triangle, never a crash)."""
 
+    # ONE dropdown, not two. Difficulty and Mode were separate until it turned
+    # out the only combination the split allowed was Easy + Nightmare - no
+    # scenario ships both a printed Mode card and a Nightmare deck (the one
+    # Hard scenario and all three Epic Multiplayer ones have hasNightmare
+    # False), so the second dropdown bought exactly one pairing. Folding
+    # Nightmare in as a difficulty rung also means the tip panel never has to
+    # show two messages, which is what forced it to shrink its own text.
+    #
     # Easy and Standard always apply: Easy is a general rule (drop every
     # encounter card whose set icon carries the gold difficulty ring), not a
     # per-scenario card. Anything else - Hard, Epic Multiplayer - only exists
@@ -294,8 +302,12 @@ class ScenarioOptionsScreen:
     # is offered only when this scenario's catalog entry lists it. Of 349
     # scenarios exactly one prints a Hard Mode card (The Hunt for the
     # Dreadnaught) and three print an Epic Multiplayer Mode card.
+    #
+    # Nightmare is likewise per-scenario: it is a separately sold encounter
+    # deck, and only 68 of the 349 scenarios have one. The catalog already
+    # knows which (`hasNightmare`, from build_card_data.py) - offering it
+    # everywhere was the same bug as offering Hard everywhere.
     BASE_DIFFICULTY_OPTIONS = ("Easy", "Standard")
-    MODE_OPTIONS = ("Normal", "Nightmare")
 
     GATHER_Y0 = 116
     GATHER_ROW_H = 30
@@ -308,19 +320,22 @@ class ScenarioOptionsScreen:
     # general rules. A scenario-specific mode (Hard, Epic Multiplayer) shows
     # that card's own printed setup text instead - the real rules, not a
     # paraphrase (CLAUDE.md Iron rule #4).
+    # Kept short deliberately: each must wrap to at most 2 lines at scale 2
+    # (378px usable inside note_panel) so the tip never has to shrink. There
+    # is a test for that - lengthen these and it fails rather than silently
+    # overflowing into the CTA.
     TIP_TEXT = {
-        "Easy": "Easy mode: remove every encounter card whose set icon has "
-                "a gold ring (the difficulty marker).",
-        "Nightmare": "Nightmare swaps in a separate, harder encounter deck "
-                     "- sold as its own product.",
+        "Easy": "Easy: remove every encounter card whose "
+                "set icon has a gold ring.",
+        "Nightmare": "Nightmare: a separate, harder encounter "
+                     "deck, sold as its own product.",
     }
 
-    def __init__(self, scenario, data, icons=None, difficulty="Standard", mode="Normal"):
+    def __init__(self, scenario, data, icons=None, difficulty="Standard"):
         self.scenario = scenario
         self.data = data or {}
         self.icons = icons or {}
         self.difficulty = difficulty
-        self.mode = mode
         self.buttons = []
 
     # -- data shaping --------------------------------------------------
@@ -362,9 +377,14 @@ class ScenarioOptionsScreen:
         return out
 
     def difficulty_options(self):
-        """Easy/Standard always, plus any extra mode this scenario prints."""
+        """Easy/Standard always, then any extra mode this scenario prints,
+        then Nightmare if a Nightmare deck exists for it. Ordered easiest
+        first so the list reads as one difficulty ladder."""
         extra = [m for m in self._scenario_modes() if m.lower() != "easy"]
-        return tuple(self.BASE_DIFFICULTY_OPTIONS) + tuple(extra)
+        opts = tuple(self.BASE_DIFFICULTY_OPTIONS) + tuple(extra)
+        if self.scenario.get("hasNightmare"):
+            opts += ("Nightmare",)
+        return opts
 
     def _mode_card_text(self, label):
         """The chosen mode card's own printed setup text, if the loaded
@@ -377,16 +397,15 @@ class ScenarioOptionsScreen:
         return None
 
     def _tip_messages(self):
-        msgs = []
-        if self.difficulty == "Easy":
-            msgs.append(self.TIP_TEXT["Easy"])
-        elif self.difficulty != "Standard":
-            # a scenario-specific mode card: show what it actually says
-            msgs.append(self._mode_card_text(self.difficulty)
-                        or "%s: follow this quest's %s Mode card." % (self.difficulty, self.difficulty))
-        if self.mode == "Nightmare":
-            msgs.append(self.TIP_TEXT["Nightmare"])
-        return msgs
+        """At most one message - the tip always renders at the same size, so
+        it must never have to fit two (see the scale note in draw())."""
+        if self.difficulty in self.TIP_TEXT:
+            return [self.TIP_TEXT[self.difficulty]]
+        if self.difficulty == "Standard":
+            return []
+        # a scenario-specific mode card: show what it actually says
+        return [self._mode_card_text(self.difficulty)
+                or "%s: follow this quest's %s Mode card." % (self.difficulty, self.difficulty)]
 
     # -- draw --------------------------------------------------------------
     def draw(self, hw, game, pal):
@@ -428,17 +447,16 @@ class ScenarioOptionsScreen:
         # with the 3-row fixture this reproduces mock_quest.py's y=212
         # exactly (116 + 3*30 + 6).
         dd_y = gy + 6
-        self._dropdown(d, pal, 16, dd_y, 210, "Difficulty", self.difficulty, ("dd", "difficulty"))
-        self._dropdown(d, pal, 254, dd_y, 210, "Mode", self.mode, ("dd", "mode"))
+        self._dropdown(d, pal, 16, dd_y, 448, "Difficulty", self.difficulty, ("dd", "difficulty"))
 
         msgs = self._tip_messages()
         if msgs:
-            # Single-message tips render at the mock's scale (2); the rarer
-            # combined case (both a non-standard difficulty AND Nightmare
-            # selected) drops to scale 1 so the panel reliably stays clear
-            # of the CTA (verified against the real wrap widths - see the
-            # Task 7 report).
-            scale = 2 if len(msgs) == 1 else 1
+            # Always the mock's scale (2). The tip used to shrink to scale 1
+            # whenever two messages showed at once, which read as a bug - the
+            # same panel rendering at two different sizes. There is only ever
+            # one message now (see _tip_messages), and the authored copy is
+            # kept short enough to wrap to 2 lines at this scale.
+            scale = 2
             ty = dd_y + 62
             # A scenario-specific mode card's own setup text can run several
             # hundred characters - far past the CTA. Clip to the lines that
@@ -490,12 +508,10 @@ class ScenarioOptionsScreen:
         if k == "retitle":
             return ("choose_scenario_list", self.scenario.get("source"), self.scenario.get("cycle"))
         if k == "dd":
-            which = btn.id[1]
-            if which == "difficulty":
-                return ("modal", OptionListModal(self, "difficulty", "Difficulty", self.difficulty_options()))
-            return ("modal", OptionListModal(self, "mode", "Mode", self.MODE_OPTIONS))
+            return ("modal", OptionListModal(self, "difficulty", "Difficulty",
+                                             self.difficulty_options()))
         if k == "begin":
-            return ("begin_setup", self.difficulty, self.mode)
+            return ("begin_setup", self.difficulty)
         return None
 
 
