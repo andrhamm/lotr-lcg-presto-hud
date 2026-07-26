@@ -42,7 +42,7 @@ across columns, and surface blockers here.
 - [x] Back button — delta replay at DragnCards parity
   - notes: `docs/superpowers/plans/2026-07-26-delta-replay-parity.md`. Bidirectional structural diff, `replay_step` cursor, jump-to-any-point retcon, round-granularity stepping. Bottom nav bar replaces the full-width CTA; Log screen gains the transport. Both twins, 1136 tests green.
   - notes: found and fixed two bugs — history navigation was being recorded as an action (browser-only, no test caught it), and a pre-existing `setup_game` overflow (y=412 vs CTA at 410) that the nav rule exposed; layout linter gained rule L5 to guard the class.
-  - done: staged, awaiting commit (1Password SSH agent locked)
+  - done: aa34862
 
 - [x] Data-driven location picker
   - notes: plan `docs/superpowers/plans/2026-07-25-location-picker.md` (status: done, records how the three open questions were answered). Travel and "+ Add location" used to guess 3 quest points / 2 threat; both now pick from the scenario's own cards, with the printed quest points AND threat filled in from the card. Needs a union across `includedSets` — a scenario's own file only holds its own encounter set, so Passage's own file has 2 of its 6 locations.
