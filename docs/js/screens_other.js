@@ -92,10 +92,14 @@ export class ScreenPhases {
   }
 }
 
+const REPLAY_Y = 348, REPLAY_H = 46, REPLAY_BTN_W = 56;
+
 export class ScreenLog {
   constructor() { this.buttons = []; this.page = 0; }
   draw(ctx, game) {
-    const PER_PAGE = 13, ROW_H = 26;
+    // PER_PAGE dropped 13 -> 11 to free the transport row below (rows now end
+    // at 336, transport 348..394, pager untouched at 420).
+    const PER_PAGE = 11, ROW_H = 26;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     drawHeader(ctx, game, this.buttons, { title: "Game Log", close: true });
@@ -116,8 +120,16 @@ export class ScreenLog {
                  76, y, LABEL, pal.dim);
       }
       textLeft(ctx, truncateText(e.text, LABEL, 480 - 122 - 12), 122, y, LABEL, pal.tan);
+      // Rows produced by a recorded action carry a delta_i stamp (see
+      // GameState.addDelta) and become jump targets. Setup entries and
+      // anything logged outside an action have none, and stay inert.
+      const di = e.delta_i;
+      if (di !== undefined && di >= 0 && di < game.deltas.length) {
+        this.buttons.push(new Button(["replay_jump", di], 12, y, 480 - 24, ROW_H));
+      }
       y += ROW_H;
     }
+    this._replayTransport(ctx, game);
     if (pages > 1) {
       const up = new Button(["older"], 12, 420, 150, 46);
       const dn = new Button(["newer"], 318, 420, 150, 46);
@@ -129,11 +141,55 @@ export class ScreenLog {
       this.buttons.push(up, dn);
     }
   }
-  onButton(btn) {
+  // Cursor transport. Parity: frontend/src/features/messages/LogButtons.js -
+  // the same five controls and the same n/total readout, plus the
+  // round-granularity step the reference only binds to Shift+Arrow
+  // (useDragnHotkeys.js), because the Presto has no keyboard.
+  //
+  // Always drawn, even with no history, so the row does not appear and
+  // disappear under the log and shift the pager. "Step" prefixes the readout
+  // so it cannot be misread as the pager's own "n/N" below it.
+  _replayTransport(ctx, game) {
+    const backOn = game.canUndo(), fwdOn = game.canRedo();
+    const specs = [
+      [["replay", "first"],      "|<", 12,  backOn],
+      [["replay", "round_back"], "<<", 74,  backOn],
+      [["replay", "undo"],       "<",  136, backOn],
+      [["replay", "redo"],       ">",  350, fwdOn],
+      [["replay", "last"],       ">|", 412, fwdOn],
+    ];
+    for (const [id, label, x, on] of specs) {
+      const b = new Button(id, x, REPLAY_Y, REPLAY_BTN_W, REPLAY_H);
+      bevel(ctx, b.x, b.y, b.w, b.h, on ? pal.btn : pal.card);
+      textCenter(ctx, label, b.x + REPLAY_BTN_W / 2, REPLAY_Y + 14, BODY,
+                 on ? pal.tan : pal.dim);
+      this.buttons.push(b);
+    }
+    textCenter(ctx, `Step ${game.replay_step + 1}/${game.deltas.length}`,
+               271, REPLAY_Y + 14, BODY, pal.muted);
+  }
+
+  onButton(btn, game) {
     const k = btn.id[0];
     if (k === "nav") return ["goto", btn.id[1]];
     if (k === "older") { this.page += 1; return true; }
     if (k === "newer") { this.page = Math.max(0, this.page - 1); return true; }
+    // `|| null` turns the dispatcher's false into the router's
+    // "nothing happened, do not save" convention.
+    if (k === "replay") {
+      const which = btn.id[1];
+      if (which === "first") return game.stepThrough({ size: "index", index: -1 }) || null;
+      if (which === "last") {
+        return game.stepThrough({ size: "index", index: game.deltas.length - 1 }) || null;
+      }
+      if (which === "round_back") {
+        return game.stepThrough({ size: "round", direction: "undo" }) || null;
+      }
+      return game.stepThrough({ size: "single", direction: which }) || null;
+    }
+    if (k === "replay_jump") {
+      return game.stepThrough({ size: "index", index: btn.id[1] }) || null;
+    }
     return null;
   }
 }

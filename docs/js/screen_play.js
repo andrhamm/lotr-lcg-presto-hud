@@ -2,6 +2,7 @@
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
          truncateText, ribbon, notePanel, phaseBlock, willpowerStagingMeter,
          drawHeart, drawFlag, disc, arcRuns, wxSmall, token,
+         arrowLeft, arrowRight,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
@@ -16,6 +17,10 @@ const ZONE_TOP = HEADER_H + 6;            // top of the players/progress zones
 const CONTENT_Y = 150;                    // zones end ~136; tips start below
 const CTA_Y = 410;
 const CTA_H = 58;
+const NAV_W = CTA_H;      // back / forward are matching squares, CTA_H a side
+const NAV_RULE_Y = 400;   // 1px rule dividing the content area from the nav
+const ARROW = 22;         // arrow glyph size inside a nav square
+const NAV_PAD = 8;        // clearance between a nav square and the label
 
 // Threat-as-risk framing for Encounter & Combat (M2 Task 6): the app tracks
 // each player's live threat but not individual enemy cards or their
@@ -131,16 +136,43 @@ export class ScreenPlay {
     this.buttons.push(new Button(["progress_detail"], 214, ZONE_TOP - 2, 258, 90));
   }
 
-  _cta(ctx, label, id, fill = pal.btn_ok, fg = pal.gold) {
-    const b = new Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H);
-    bevel(ctx, b.x, b.y, b.w, b.h, fill, false, 3);
-    // The primary CTA is DISPLAY - the biggest reading size, for the one
-    // control you tap every phase. It only fits because the labels were cut
-    // to earn it ("Next Phase:" -> "Next:", and "End round (raise threat,
-    // pass token)" -> "End Round"): the longest is now "Next: Combat (Player
-    // Attacks)" at 408px against 424px of usable button.
-    textCenter(ctx, label, 240, CTA_Y + 16, DISPLAY, fg);
-    this.buttons.push(b);
+  // The bottom nav bar: a 1px rule, then matching square arrow buttons at each
+  // edge with the destination label between them.
+  //
+  // The label sits OUTSIDE both buttons so the two arrows stay identically
+  // sized. It is still part of the forward button's hit area, though - that
+  // control is tapped every phase, so its target spans label + arrow rather
+  // than the 58px square alone. Back's target is only its square, so a
+  // mis-reach for the label can never undo.
+  _cta(ctx, game, label, id, fill = pal.btn_ok, fg = pal.gold) {
+    rect(ctx, 0, NAV_RULE_Y, 480, 1, pal.border);
+    const cy = CTA_Y + CTA_H / 2;
+    const fwdX = 480 - MARGIN - NAV_W;
+
+    if (game.canUndo()) {
+      const back = new Button(["back"], MARGIN, CTA_Y, NAV_W, CTA_H);
+      bevel(ctx, back.x, back.y, back.w, back.h, pal.btn, false, 3);
+      arrowLeft(ctx, MARGIN + NAV_W / 2, cy, ARROW, pal.tan);
+      this.buttons.push(back);
+    }
+
+    bevel(ctx, fwdX, CTA_Y, NAV_W, CTA_H, fill, false, 3);
+    arrowRight(ctx, fwdX + NAV_W / 2, cy, ARROW, fg);
+
+    // Label centred in the span between the squares - a fixed frame, so the
+    // text does not shift when Back appears.
+    const lx = MARGIN + NAV_W + NAV_PAD, rx = fwdX - NAV_PAD;
+    const tcx = Math.floor((lx + rx) / 2);
+    // Phase advances read as a kicker over the destination; every other CTA
+    // ("End Round", "Flip to Side B ...") is a single centred line.
+    if (label.startsWith("Next: ")) {
+      textCenter(ctx, "NEXT PHASE", tcx, CTA_Y + 10, LABEL, pal.muted);
+      textCenter(ctx, label.slice(6), tcx, CTA_Y + 24, DISPLAY, fg);
+    } else {
+      textCenter(ctx, label, tcx, CTA_Y + 16, DISPLAY, fg);
+    }
+    // one hit area: the label span plus the arrow square
+    this.buttons.push(new Button(id, lx, CTA_Y, 480 - MARGIN - lx, CTA_H));
   }
 
   // 2px progress bar along a card's bottom edge (threat/elimination,
@@ -245,26 +277,32 @@ export class ScreenPlay {
 
     if (view === "setup_game") {
       const th = notePanel(ctx, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP);
-      const y = 56 + th + 18;
-      textLeft(ctx, "Stage 1B quest points", MARGIN + 8, y + 16, BODY, pal.tan);
-      const mn = new Button(["qp", -1], 300, y, 52, 48);
-      const pl = new Button(["qp", 1], 412, y, 52, 48);
+      // This view's two rows are the tallest stack on any play screen and used
+      // to run to y=412 - 2px PAST the old CTA at 410, an overlap the layout
+      // linter never caught because it compares text, not rects. The nav rule
+      // at NAV_RULE_Y makes it visible, so the rows were tightened by 20px
+      // total (gap 18->8, rows 48->42 and 38->34) and now end at 392, clearing
+      // the rule by 8px. Every target stays >=24px.
+      const y = 56 + th + 8;
+      textLeft(ctx, "Stage 1B quest points", MARGIN + 8, y + 13, BODY, pal.tan);
+      const mn = new Button(["qp", -1], 300, y, 52, 42);
+      const pl = new Button(["qp", 1], 412, y, 52, 42);
       for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
         bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-        textCenter(ctx, s, b.x + 26, b.y + 12, DISPLAY, pal.tan);
+        textCenter(ctx, s, b.x + 26, b.y + 9, DISPLAY, pal.tan);
         this.buttons.push(b);
       }
-      textCenter(ctx, String(game.quest.points), 382, y + 12, DISPLAY, pal.gold);
-      const sy = y + 50;
-      textLeft(ctx, "Sailing quest", MARGIN + 8, sy + 11, BODY, pal.tan);
-      icons.drawIcon(ctx, icons.WHEEL, 160, sy + 7,
+      textCenter(ctx, String(game.quest.points), 382, y + 9, DISPLAY, pal.gold);
+      const sy = y + 44;
+      textLeft(ctx, "Sailing quest", MARGIN + 8, sy + 9, BODY, pal.tan);
+      icons.drawIcon(ctx, icons.WHEEL, 160, sy + 6,
                      game.sailing ? pal.gold : pal.dim);
-      const sb = new Button(["sail_toggle"], 300, sy, 164, 38);
+      const sb = new Button(["sail_toggle"], 300, sy, 164, 34);
       panel(ctx, sb.x, sb.y, sb.w, sb.h, game.sailing ? pal.gold : pal.btn);
-      textCenter(ctx, game.sailing ? "On" : "Off", sb.x + 82, sb.y + 12, BODY,
+      textCenter(ctx, game.sailing ? "On" : "Off", sb.x + 82, sb.y + 9, BODY,
                  game.sailing ? pal.bg : pal.tan, false);
       this.buttons.push(sb);
-      this._cta(ctx, "Begin Round 1", ["advance"]);
+      this._cta(ctx, game, "Begin Round 1", ["advance"]);
     } else if (view === "quest_setup") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
@@ -276,7 +314,7 @@ export class ScreenPlay {
         { kind: "framework", text: "1 resource to each of your heroes, then each player draws 1 card - all at once." },
         { kind: "window", text: "In player order, play allies and attachments from hand - the only step that allows it." },
       ]);
-      this._cta(ctx, `Next: ${VIEW_LABELS[game.sailing ? "quest_sailing" : "quest_commit"]}`, ["advance"]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS[game.sailing ? "quest_sailing" : "quest_commit"]}`, ["advance"]);
     } else if (view === "quest_commit") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
@@ -284,7 +322,7 @@ export class ScreenPlay {
         [{ kind: "window", text: "In player order, exhaust characters to commit them and add their willpower." }]);
       const cy = this._drawConfirmAll(ctx, game, CONTENT_Y + bh + 8);
       this._totalsRow(ctx, game, cy, false, ["wp", "stg"]);
-      this._cta(ctx, `Next: ${VIEW_LABELS.quest_staging}`, ["advance"]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_staging}`, ["advance"]);
     } else if (view === "quest_sailing") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
@@ -297,7 +335,7 @@ export class ScreenPlay {
         icons.drawIcon(ctx, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold);
         textCenter(ctx, "Enable Sailing", 254, CONTENT_Y + 96 + 16, BODY, pal.tan);
         this.buttons.push(eb);
-        this._cta(ctx, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
+        this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       } else {
         // tip (pipe medallion top-left; wheel glyph inline in the sentence)
         const tw = 480 - 2 * MARGIN, ty0 = CONTENT_Y + 6;
@@ -323,7 +361,7 @@ export class ScreenPlay {
         icons.drawIcon(ctx, icons.WHEEL, 150, sb.y + 14, pal.gold);
         textCenter(ctx, "Log sailing test", 262, sb.y + 16, BODY, pal.tan);
         this.buttons.push(sb);
-        this._cta(ctx, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
+        this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       }
     } else if (view === "quest_staging") {
       this._playersZone(ctx, game);
@@ -339,7 +377,7 @@ export class ScreenPlay {
       const my = CONTENT_Y + bh + 4;
       const mh = willpowerStagingMeter(ctx, MARGIN, my, 480 - 2 * MARGIN, game.willpower, game.staging);
       this._totalsRow(ctx, game, my + mh + 4, true);
-      this._cta(ctx, `Next: ${VIEW_LABELS.quest_resolution}`, ["stage_advance"]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_resolution}`, ["stage_advance"]);
     } else if (view === "quest_resolution") {
       this._drawResolution(ctx, game);
     } else if (view === "travel") {
@@ -354,7 +392,7 @@ export class ScreenPlay {
         { kind: "window", text: "Responses." },
       ]);
       this._refreshThreatPreview(ctx, game, CONTENT_Y + bh + 8);
-      this._cta(ctx, "End Round", ["endround"]);
+      this._cta(ctx, game, "End Round", ["endround"]);
     } else {
       this._playersZone(ctx, game);
       const flavor = { combat_enemy: [icons.DEFENSE, pal.green],
@@ -389,7 +427,7 @@ export class ScreenPlay {
       }
       const i = VIEW_ORDER.indexOf(view);
       const nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
-      this._cta(ctx, `Next: ${VIEW_LABELS[nxt] ?? nxt}`, ["advance"]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt] ?? nxt}`, ["advance"]);
     }
 
     if (this.notif) {
@@ -482,7 +520,7 @@ export class ScreenPlay {
     textCenter(ctx, "View quest card", 240, cardBtn.y + 14, BODY, pal.tan);
     this.buttons.push(cardBtn);
 
-    this._cta(ctx, `Flip to Side B  ->  ${card.questPoints} qp`, ["flip_to_b"]);
+    this._cta(ctx, game, `Flip to Side B  ->  ${card.questPoints} qp`, ["flip_to_b"]);
   }
 
   _drawTravel(ctx, game) {
@@ -504,7 +542,7 @@ export class ScreenPlay {
       textCenter(ctx, "Replace location (card effect)", 240, y + 14, BODY, pal.muted);
       this.buttons.push(cb);
     }
-    this._cta(ctx, `Next: ${VIEW_LABELS.enc_optional}`, ["advance"]);
+    this._cta(ctx, game, `Next: ${VIEW_LABELS.enc_optional}`, ["advance"]);
   }
 
   _outcomeToast(game) {
@@ -542,7 +580,7 @@ export class ScreenPlay {
       } else {
         textLeft(ctx, "No progress placed, no threat gained.", tx, y2, BODY, pal.muted);
       }
-      this._cta(ctx, `Next: ${VIEW_LABELS.travel}`, ["advance"]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS.travel}`, ["advance"]);
       return;
     }
     if (this.alloc === null) {
@@ -633,12 +671,19 @@ export class ScreenPlay {
     textCenter(ctx, "Reset", 240, y + 12, BODY, pal.tan);
     this.buttons.push(rb);
 
-    this._cta(ctx, `Next: ${VIEW_LABELS.travel}`, ["apply_alloc"]);
+    this._cta(ctx, game, `Next: ${VIEW_LABELS.travel}`, ["apply_alloc"]);
   }
 
   onButton(btn, game) {
     const k = btn.id[0];
     if (k === "nav") return ["goto", btn.id[1]];
+    if (k === "back") {
+      if (!game.undo()) return null;
+      // screen-local scratch describes the view we just left
+      this.alloc = null;
+      this.banner = null;
+      return true;
+    }
     if (k === "notif_dismiss") { this.notif = null; return true; }
     if (k === "qp") {
       game.quest.points = Math.max(0, Math.min(30, game.quest.points + btn.id[1]));

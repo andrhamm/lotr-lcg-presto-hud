@@ -5,6 +5,12 @@ Rules:
   L2  no two text runs overlap (catches label/value/icon-text collisions)
   L3  touch targets are at least MIN_TARGET px in each dimension
   L4  touch targets stay on-screen
+  L5  on play screens, no drawn rectangle crosses into the bottom nav band
+
+L5 exists because L1-L4 all reason about TEXT. setup_game's sailing toggle
+ran 2px past its CTA for as long as that view has existed and nothing caught
+it - it is a panel, not a label. The nav rule made it visible; this rule keeps
+it from coming back.
 """
 import os
 import sys
@@ -84,3 +90,22 @@ def test_touch_targets_min_size_and_on_screen(name):
             "%s: target %s too small (%dx%d)" % (name, b.id, b.w, b.h)
         assert b.x >= 0 and b.y >= 0 and b.x + b.w <= W and b.y + b.h <= H, \
             "%s: target %s off-screen" % (name, b.id)
+
+
+PLAY_SCENES = tuple(sorted(s for s in SCENES if s.startswith("play_")))
+
+
+@pytest.mark.parametrize("scene", PLAY_SCENES)
+def test_l5_play_content_clears_the_nav_rule(scene):
+    from ui.screen_play import NAV_RULE_Y
+    hw, _ = SCENES[scene]()
+    for c in hw.display.calls:
+        if c[0] != "rect":
+            continue
+        _, x, y, w, h, _pen = c
+        if w >= W and y == NAV_RULE_Y:
+            continue                      # the rule itself
+        if y < NAV_RULE_Y:
+            assert y + h <= NAV_RULE_Y, (
+                "%s: rect at y=%d h=%d crosses the nav rule at %d"
+                % (scene, y, h, NAV_RULE_Y))

@@ -48,6 +48,26 @@ def bevel(d, pal, x, y, w, h, fill, pressed=False, t=2):
     d.rectangle(x + w - t, y, t, h)
 
 
+def _arrow(d, pal, cx, cy, size, pen, left, shadow=True):
+    """Solid triangular arrow, drawn with d.triangle (device-safe - the same
+    primitive draw_notif_pie uses). size is the full width/height."""
+    h = size // 2
+    tip, base = (cx - h, cx + h) if left else (cx + h, cx - h)
+    if shadow:
+        d.set_pen(pal.shadow)
+        d.triangle(tip + 2, cy + 2, base + 2, cy - h + 2, base + 2, cy + h + 2)
+    d.set_pen(pen)
+    d.triangle(tip, cy, base, cy - h, base, cy + h)
+
+
+def arrow_left(d, pal, cx, cy, size, pen, shadow=True):
+    _arrow(d, pal, cx, cy, size, pen, True, shadow)
+
+
+def arrow_right(d, pal, cx, cy, size, pen, shadow=True):
+    _arrow(d, pal, cx, cy, size, pen, False, shadow)
+
+
 def text_left(d, pal, s, x, y, scale, pen, shadow=True):
     if shadow:
         off = 1 if scale == LABEL else 2

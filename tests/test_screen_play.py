@@ -743,15 +743,115 @@ def test_refresh_skips_eliminated_players_in_preview():
 # design system forbids the obvious "fix" of shrinking it back down - so the
 # ceiling is asserted here instead.
 
-def test_every_cta_label_fits_the_button_at_display_size():
+def test_every_label_fits_between_the_nav_squares():
+    """Replaces the old full-width CTA ceiling. Dropping the "Next: " prefix
+    took the longest label from 408px to 330px, and the label now lives in the
+    fixed span between the two nav squares - the same frame whether or not
+    Back is drawn."""
     import gamestate
-    from ui.screen_play import CTA_H, MARGIN
+    from ui.screen_play import MARGIN, NAV_W, NAV_PAD
     from ui.theme import DISPLAY
     hw = FakeHardware()
-    usable = 480 - 2 * MARGIN - 24          # button width minus padding
+    lx = MARGIN + NAV_W + NAV_PAD
+    usable = (480 - MARGIN - NAV_W - NAV_PAD) - lx
     labels = ["Begin Round 1", "End Round", "Confirm all commits",
-              "Flip to Side B  ->  10 qp"]
-    labels += ["Next: %s" % v for v in gamestate.VIEW_LABELS.values()]
+              "Flip to Side B  ->  10 qp"] + list(gamestate.VIEW_LABELS.values())
     over = [(s, hw.display.measure_text(s, DISPLAY)) for s in labels
             if hw.display.measure_text(s, DISPLAY) > usable]
-    assert not over, "CTA labels overflow %dpx at DISPLAY: %s" % (usable, over)
+    assert not over, "nav labels overflow %dpx at DISPLAY: %s" % (usable, over)
+
+
+def test_nav_rule_is_drawn_full_width():
+    from ui.screen_play import NAV_RULE_Y
+    hw, pal, game, screen = _setup("resource_planning")
+    screen.draw(hw, game, pal)
+    rules = [c for c in hw.display.calls
+             if c[0] == "rect" and c[2] == NAV_RULE_Y and c[3] == 480 and c[4] == 1]
+    assert len(rules) == 1
+
+
+def test_back_square_absent_with_no_history():
+    hw, pal, game, screen = _setup("resource_planning")
+    screen.draw(hw, game, pal)
+    assert "back" not in _ids(screen)
+
+
+def test_back_square_appears_with_history_and_undoes():
+    from ui.screen_play import NAV_W, CTA_H, CTA_Y, MARGIN
+    hw, pal, game, screen = _setup("resource_planning")
+    screen.draw(hw, game, pal)
+    snap = game.begin_action()
+    screen.on_button(_find(screen, ("advance",)), game)
+    game.add_delta(snap)
+    screen.draw(hw, game, pal)
+    back = _find(screen, ("back",))
+    assert (back.x, back.y, back.w, back.h) == (MARGIN, CTA_Y, NAV_W, CTA_H)
+    assert back.w == back.h == CTA_H          # square by construction
+    assert screen.on_button(back, game) is True
+    assert game.view == "resource_planning"
+
+
+def test_forward_hit_area_spans_label_and_arrow():
+    """The most-tapped control keeps a large target even though only the arrow
+    square is drawn as a button."""
+    from ui.screen_play import NAV_W, MARGIN, NAV_PAD, CTA_Y, CTA_H
+    hw, pal, game, screen = _setup("travel")
+    screen.draw(hw, game, pal)
+    fwd = _find(screen, ("advance",))
+    assert fwd.x == MARGIN + NAV_W + NAV_PAD
+    assert fwd.x + fwd.w == 480 - MARGIN
+    assert (fwd.y, fwd.h) == (CTA_Y, CTA_H)
+
+
+def test_label_frame_does_not_move_when_back_appears():
+    hw, pal, game, screen = _setup("travel")
+    screen.draw(hw, game, pal)
+    before = [c[2] for c in hw.display.calls
+              if c[0] == "text" and str(c[1]) == "Encounter (Opt. Engage)"]
+    snap = game.begin_action()
+    game.adjust_threat(0, 1)
+    game.add_delta(snap)
+    hw.display.calls.clear()
+    screen.draw(hw, game, pal)
+    after = [c[2] for c in hw.display.calls
+             if c[0] == "text" and str(c[1]) == "Encounter (Opt. Engage)"]
+    assert before and before == after
+
+
+def test_phase_advance_uses_a_kicker_and_the_bare_phase_name():
+    hw, pal, game, screen = _setup("combat_enemy")
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "NEXT PHASE" in texts
+    assert "Combat (Player Attacks)" in texts
+    assert "Next: Combat (Player Attacks)" not in texts
+
+
+def test_action_ctas_are_a_single_line_with_no_kicker():
+    hw, pal, game, screen = _setup("refresh")
+    screen.draw(hw, game, pal)
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "End Round" in texts
+    assert "NEXT PHASE" not in texts
+
+
+def test_back_is_a_noop_when_history_is_empty():
+    from ui.widgets import Button
+    hw, pal, game, screen = _setup("resource_planning")
+    screen.draw(hw, game, pal)
+    assert screen.on_button(Button(("back",), 0, 0, 1, 1), game) is None
+
+
+def test_back_clears_screen_local_allocation_and_banner():
+    hw, pal, game, screen = _setup("quest_staging")
+    game.willpower, game.staging = 11, 7
+    screen.draw(hw, game, pal)
+    snap = game.begin_action()
+    screen.on_button(_find(screen, ("stage_advance",)), game)
+    game.add_delta(snap)
+    screen.draw(hw, game, pal)
+    assert screen.alloc is not None
+    screen.on_button(_find(screen, ("back",)), game)
+    assert screen.alloc is None
+    assert screen.banner is None
+    assert game.view == "quest_staging"

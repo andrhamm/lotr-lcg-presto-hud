@@ -28,6 +28,7 @@ from ui.screen_quest import (ScenarioSourceScreen, PickCycleScreen,
 import quest_catalog
 
 STATE_PATH = "/state.json"
+REPLAY_PATH = "/replay.json"
 PREFS_PATH = "/device.json"
 DEFAULT_PREFS = {"brightness": 100, "scene": "phase"}
 
@@ -107,6 +108,36 @@ def clear_state():
         pass
 
 
+# -- delta replay store -----------------------------------------------------
+# Parity: the Replay schema's two columns (backend/lib/dragn/replay.ex).
+# Divergence D4 - two files rather than one row: state.json keeps its exact
+# shape and every-tap write path, and the history rides in its own file.
+# Losing the history must never cost you the game, so every failure here is
+# swallowed and simply leaves Back unavailable.
+def save_replay(game):
+    try:
+        with open(REPLAY_PATH, "w") as f:
+            json.dump(game.replay_to_dict(), f)
+    except Exception:
+        pass
+
+
+def load_replay(game):
+    try:
+        with open(REPLAY_PATH) as f:
+            game.replay_from_dict(json.load(f))
+    except Exception:
+        game.replay_from_dict(None)
+
+
+def clear_replay():
+    try:
+        import os
+        os.remove(REPLAY_PATH)
+    except Exception:
+        pass
+
+
 def press_feedback(hw, pal, b):
     """Video-game button press: invert the bevel edges for ~90 ms."""
     d = hw.display
@@ -136,6 +167,32 @@ def main():
     game = saved_game if saved_game else GameState()
     clock = getattr(time, "ticks_ms", None) or (lambda: int(time.time() * 1000))
     game.clock = clock
+    if saved_game:
+        load_replay(game)
+
+    # -- the record point ---------------------------------------------------
+    # One snapshot before a tap is dispatched, one diff after it settles -
+    # mirroring the reference's single process_update call site
+    # (game_ui_server.ex). No screen, modal or mutator learns anything about
+    # undo.
+    #
+    # pending[1] guards the handlers that REPLACE `game` (new game, end game):
+    # a delta diffed against a snapshot of a different object would be
+    # garbage, so those paths record nothing. `game` is read from the
+    # enclosing scope, so these see every rebinding below.
+    pending = [None, None]        # [snapshot, the game object it came from]
+
+    def begin_action():
+        pending[0] = game.begin_action()
+        pending[1] = game
+
+    def commit_action():
+        if pending[0] is not None and pending[1] is game:
+            game.add_delta(pending[0])
+        pending[0] = pending[1] = None
+        save_state(game)
+        save_replay(game)
+
     prefs = load_prefs()
 
     screens = {
@@ -276,9 +333,12 @@ def main():
                 from ui.modals import SideQuestPickModal
                 modal = SideQuestPickModal(game, entries)
             else:
+                snap = game.begin_action()
                 game.side_quests.append({"points": 4, "progress": 0})
                 game.log_event("Side quest %d added (progress view)" % len(game.side_quests))
+                game.add_delta(snap)
                 save_state(game)
+                save_replay(game)
             dirty = True
             continue
 
@@ -353,13 +413,14 @@ def main():
                 for b in modal.buttons:
                     if b.hit(x, y):
                         press_feedback(hw, pal, b)
+                        begin_action()
                         result = modal.on_button(b)
                         if result == "close":
                             from ui.modals import LedModal
                             if isinstance(modal, LedModal):
                                 save_prefs(prefs)
                             else:
-                                save_state(game)
+                                commit_action()
                             modal = None
                         elif result == "cancel":
                             modal = None
@@ -371,6 +432,7 @@ def main():
             for b in screens[active].buttons:
                 if b.hit(x, y):
                     press_feedback(hw, pal, b)
+                    begin_action()
                     result = screens[active].on_button(b, game)
                     if isinstance(result, tuple):
                         kind = result[0]
@@ -412,6 +474,7 @@ def main():
                             threats = result[1]
                             first = result[2] if len(result) > 2 else 0
                             clear_state()
+                            clear_replay()
                             game = GameState(player_count=len(threats))
                             for i, t in enumerate(threats):
                                 game.players[i].threat = t
@@ -505,19 +568,21 @@ def main():
                             active = "play"
                         elif kind == "save_quit":
                             save_state(game)
+                            save_replay(game)
                             _, meta = load_saved()
                             screens["boot"] = BootScreen(meta)
                             nav_stack = []
                             active = "boot"
                         elif kind == "end_game":
                             clear_state()
+                            clear_replay()
                             game = GameState()
                             game.clock = clock
                             screens["boot"] = BootScreen(None)
                             nav_stack = []
                             active = "boot"
                     elif result:
-                        save_state(game)
+                        commit_action()
                     dirty = True
                     break
         time.sleep(0.02)

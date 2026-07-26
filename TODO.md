@@ -25,7 +25,6 @@ across columns, and surface blockers here.
 * Game log data should be logged with full timestamp, log view should at least show the basic date and time with each entry. Logs should be latest at the bottom, like a terminal, need ability to scroll up and down and jump to oldest / latest (4 buttons on right side of screen where a scrollbar would normally be expected)
 * Feasibility report: could we add audio by taking advantage of the Qwiic port and something like this (with a small speaker(s)) https://www.adafruit.com/product/6258
 	* daisy chain qwiic to add haptic feedback driver?
-* back button. all stat changes / events are recorded for the given phase. if you click the back button and make a change, the "final" values for that page are adjusted, the next page always bases stat changes relative to the final values from the previous phase. 
 * action windows. interstitial screens for action windows. when you advance to the next phase, if there is an action window, you land on the action window view, which has a 3 second timer. when timer reaches 0, automatic movement to the next phase. "perform actions" button dismisses the timer. tip explains action window rules. allows adjusting players/progress zones, which get recorded as having been done in the action window. Next phase primary call to action button. this is a setting that can be disabled, which reverts to the action window toast reminder instead of the interstitial view.
 * long term: campaign mode tracking, long term historical game results, stats, sharing
 * feasibility report: how could a basic wireless camera be incorporated? low FPS / just occasional snapshots of the board state at the table. something easy to build with raspberry pi / xioa camera, battery just adequate for a single game session. 3d printed enclosure with 1/4-20 mount for gorillapod or similar. communicates with the presto / web app over wifi, images saved.
@@ -39,6 +38,11 @@ across columns, and surface blockers here.
 ## Blocked
 
 ## Done
+
+- [x] Back button — delta replay at DragnCards parity
+  - notes: `docs/superpowers/plans/2026-07-26-delta-replay-parity.md`. Bidirectional structural diff, `replay_step` cursor, jump-to-any-point retcon, round-granularity stepping. Bottom nav bar replaces the full-width CTA; Log screen gains the transport. Both twins, 1136 tests green.
+  - notes: found and fixed two bugs — history navigation was being recorded as an action (browser-only, no test caught it), and a pre-existing `setup_game` overflow (y=412 vs CTA at 410) that the nav rule exposed; layout linter gained rule L5 to guard the class.
+  - done: staged, awaiting commit (1Password SSH agent locked)
 
 - [x] Data-driven location picker
   - notes: plan `docs/superpowers/plans/2026-07-25-location-picker.md` (status: done, records how the three open questions were answered). Travel and "+ Add location" used to guess 3 quest points / 2 threat; both now pick from the scenario's own cards, with the printed quest points AND threat filled in from the card. Needs a union across `includedSets` — a scenario's own file only holds its own encounter set, so Passage's own file has 2 of its 6 locations.

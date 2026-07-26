@@ -55,6 +55,23 @@ function saveState(game) {
     JSON.stringify({ saved_at: Date.now(), state: game.toDict() }));
 }
 function clearState() { localStorage.removeItem(STATE_KEY); }
+
+// -- delta replay store ------------------------------------------------------
+// Parity: the Replay schema's two columns (backend/lib/dragn/replay.ex).
+// Divergence D4 - two stores rather than one row: state.json/STATE_KEY keeps
+// its exact shape and every-tap write path, and the history rides in its own
+// key. Losing the history must never cost you the game, so every failure here
+// is swallowed and simply leaves Back unavailable.
+const REPLAY_KEY = "lotr-hud-replay";
+function saveReplay(game) {
+  try { localStorage.setItem(REPLAY_KEY, JSON.stringify(game.replayToDict())); }
+  catch { /* history is expendable; the game is not */ }
+}
+function loadReplay(game) {
+  try { game.replayFromDict(JSON.parse(localStorage.getItem(REPLAY_KEY))); }
+  catch { game.replayFromDict(null); }
+}
+function clearReplay() { localStorage.removeItem(REPLAY_KEY); }
 function saveExists() { return localStorage.getItem(STATE_KEY) !== null; }
 
 // virtual LED strip (mirrors leds.py scenes)
@@ -94,6 +111,7 @@ function main() {
   let [savedGame, savedMeta] = loadSaved();
   let game = savedGame ?? new GameState();
   game.clock = clock;
+  if (savedGame) loadReplay(game);
   const prefs = loadPrefs();
 
   const bootImg = new Image();
@@ -161,16 +179,40 @@ function main() {
     rect(ctx, b.x + b.w - t, b.y, t, b.h, pal.bevel_l);
   }
 
+  // -- the record point ------------------------------------------------------
+  // One snapshot before a tap is dispatched, one diff after it settles -
+  // mirroring the reference's single process_update call site
+  // (game_ui_server.ex). No screen, modal or mutator learns anything about
+  // undo.
+  //
+  // pendingGame guards the handlers that REPLACE `game` (new game, end game):
+  // a delta diffed against a snapshot of a different object would be garbage,
+  // so those paths simply record nothing.
+  let pendingSnap = null, pendingGame = null;
+
+  function beginAction() {
+    pendingGame = game;
+    pendingSnap = game.beginAction();
+  }
+
+  function commitAction() {
+    if (pendingSnap && pendingGame === game) game.addDelta(pendingSnap);
+    pendingSnap = pendingGame = null;
+    saveState(game);
+    saveReplay(game);
+  }
+
   function handleTap(x, y) {
     if (modal) {
       for (const b of modal.buttons) {
         if (b.hit(x, y)) {
           pressFeedback(b);
+          beginAction();
           setTimeout(() => {
             const result = modal.onButton(b);
             if (result === "close") {
               if (modal instanceof LedModal) savePrefs(prefs);
-              else saveState(game);
+              else commitAction();
               modal = null;
             } else if (result === "cancel") modal = null;
             dirty = true;
@@ -183,6 +225,7 @@ function main() {
     for (const b of screens[active].buttons) {
       if (b.hit(x, y)) {
         pressFeedback(b);
+        beginAction();
         setTimeout(async () => {
           await handleResult(screens[active].onButton(b, game));
           dirty = true;
@@ -222,6 +265,7 @@ function main() {
       } else if (kind === "start_game") {
         const [, threats, first] = result;
         clearState();
+        clearReplay();
         game = new GameState(threats.length);
         threats.forEach((t, i) => {
           game.players[i].threat = t;
@@ -297,12 +341,14 @@ function main() {
         active = "play";
       } else if (kind === "save_quit") {
         saveState(game);
+        saveReplay(game);
         const [, meta] = loadSaved();
         screens.boot = new BootScreen(meta, bootImg);
         navStack = [];
         active = "boot";
       } else if (kind === "end_game") {
         clearState();
+        clearReplay();
         game = new GameState();
         game.clock = clock;
         screens.boot = new BootScreen(null, bootImg);
@@ -310,7 +356,7 @@ function main() {
         active = "boot";
       }
     } else if (result) {
-      saveState(game);
+      commitAction();
     }
   }
 
@@ -416,9 +462,12 @@ function main() {
         if (entries.length) {
           modal = new SideQuestPickModal(game, entries);
         } else {
+          const snap = game.beginAction();
           game.side_quests.push({ points: 4, progress: 0 });
           game.logEvent(`Side quest ${game.side_quests.length} added (progress view)`);
+          game.addDelta(snap);
           saveState(game);
+          saveReplay(game);
         }
         modalPending -= 1;
         dirty = true;
@@ -460,8 +509,11 @@ function main() {
     // defeat: every player eliminated
     if (!modal && active === "play" && game.pending_elim === null &&
         !game.game_over && game.players.length && game.allEliminated()) {
+      const snap = game.beginAction();
       game.setGameOver("defeat");
+      game.addDelta(snap);
       saveState(game);
+      saveReplay(game);
       dirty = true;
     }
     // game-over screen takes over the play surface

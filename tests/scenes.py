@@ -335,6 +335,29 @@ def _log_prep(g):
         g.log_event("P%d threat %d -> %d after a fairly long explanation" % ((i % 4) + 1, 20 + i, 21 + i))
 
 
+def _has_undo_history(g):
+    """Two recorded deltas that cancel out, so can_undo() is True while no
+    stat on screen differs from the no-history scene - the nav row is then the
+    only visual difference between the two mockups."""
+    for delta in (1, -1):
+        snap = g.begin_action()
+        g.adjust_threat(0, delta)
+        g.add_delta(snap)
+
+
+def _log_replay_prep(g):
+    """Log screen mid-history: six recorded deltas, cursor two steps back, so
+    the transport shows both halves live and a mid-list position."""
+    _log_prep(g)
+    for i in range(6):
+        snap = g.begin_action()
+        g.adjust_threat(0, 1)
+        g.log_event("P1 threat +1 (%d)" % i)
+        g.add_delta(snap)
+    g.undo()
+    g.undo()
+
+
 def _sailing_on(g):
     g.sailing = True
     g.heading = 2
@@ -1166,6 +1189,10 @@ SCENES = {
     "phases_screen_combat": _screen("ui.screen_phases", "ScreenPhases",
                                     prep=_step_prep("6.P")),
     "log": _screen("ui.screen_log", "ScreenLog", prep=_log_prep),
+    "log_replay": _screen("ui.screen_log", "ScreenLog", prep=_log_replay_prep),
+    "play_quest_staging_can_back": _play("quest_staging", mutate=_has_undo_history),
+    "play_combat_player_can_back": _play("combat_enemy", mutate=_has_undo_history),
+    "play_travel_can_back": _play("travel", mutate=_has_undo_history),
     "settings": _screen("ui.screen_settings", "ScreenSettings"),
     "counter": _counter,
     "elim_modal": _elim_modal,

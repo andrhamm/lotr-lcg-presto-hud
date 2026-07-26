@@ -78,6 +78,90 @@ export const REMINDER_DEFS = [
     "Battle/Siege: commit ATK/DEF instead of willpower", null],
 ];
 
+// ---------------------------------------------------------------------------
+// Delta replay engine.
+//
+// Ported at parity from DragnCards (seastan/DragnCards @ a79716f9),
+// backend/lib/dragncards_game/ui/game_ui.ex: get_delta/2, delta/2,
+// apply_delta/3, apply_delta_list/3. See
+// docs/superpowers/plans/2026-07-26-delta-replay-parity.md for the four
+// deliberate divergences.
+//
+// A delta mirrors the shape of the state it describes. Every changed leaf is a
+// two-element [old, new] pair, which is what lets ONE apply function serve both
+// directions: index 0 undoes, index 1 redoes.
+// ---------------------------------------------------------------------------
+
+export const REMOVED = ":removed";   // sentinel: key absent on this side
+export const MAX_SAVED_DELTAS = 500; // ~47 KB, ~31 rounds. The reference caps
+                                     // at 5 for non-supporters
+                                     // (game.ex trim_saved_deltas/2); we have
+                                     // no paywall, just a bound.
+
+function isMap(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((x, i) => deepEqual(x, b[i]));
+  }
+  if (isMap(a) && isMap(b)) {
+    const ka = Object.keys(a), kb = Object.keys(b);
+    return ka.length === kb.length && ka.every(k => k in b && deepEqual(a[k], b[k]));
+  }
+  return false;
+}
+
+// Recursion happens only when BOTH sides are maps. Elixir's map_diff has the
+// same guard (`when is_map(vala) and is_map(valb)`), so a list is an atomic
+// primitive and changes wholesale - which is why snapshot() keys its
+// collections instead of listing them, exactly as the reference models
+// everything as groupById/cardById/stackById.
+export function getDelta(old, cur) {
+  if (deepEqual(old, cur)) return null;
+  if (isMap(old) && isMap(cur)) {
+    const out = {};
+    for (const k of Object.keys(old)) {
+      if (!(k in cur)) out[k] = [old[k], REMOVED];
+      else {
+        const d = getDelta(old[k], cur[k]);
+        if (d !== null) out[k] = d;
+      }
+    }
+    for (const k of Object.keys(cur)) {
+      if (!(k in old)) out[k] = [REMOVED, cur[k]];
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  return [old, cur];
+}
+
+// direction "undo" takes each pair's index 0, "redo" its index 1. A chosen
+// value of REMOVED deletes the key. Mirrors the reference's
+// `if is_map(map) and is_map(delta)` guard by returning state untouched when
+// either side is not a map.
+export function applyDelta(state, delta, direction) {
+  if (!isMap(state) || !isMap(delta)) return state;
+  const idx = direction === "undo" ? 0 : 1;
+  for (const [k, v] of Object.entries(delta)) {
+    if (k === "_delta_metadata") continue;
+    if (isMap(v)) applyDelta(state[k], v, direction);
+    else {
+      const val = v[idx];
+      if (val === REMOVED) delete state[k];
+      else state[k] = val;
+    }
+  }
+  return state;
+}
+
+export function applyDeltaList(state, deltaList, direction) {
+  for (const d of deltaList) applyDelta(state, d, direction);
+  return state;
+}
+
 export class Player {
   constructor(label, startingThreat = 0) {
     this.label = label;
@@ -159,6 +243,15 @@ export class GameState {
                                        // pending_quest_card above)
     this.log = [];
     this._seq = 0;
+    // -- delta replay (parity: DragnCards gameui["deltas"]/["replayStep"])
+    this.deltas = [];        // oldest-first; getDelta output + _delta_metadata
+    this.replay_step = -1;   // cursor INTO deltas, not a stack pointer:
+                             // -1 = before the first delta, and deltas are
+                             // never popped
+    this.messages = [];      // this action's log text, drained into the delta.
+                             // Mirrors game["messages"].
+    this._replay_moved = false;  // a cursor move happened inside the current
+                                 // recording window - see addDelta
   }
 
   _now() { return this.clock ? this.clock() : null; }
@@ -167,6 +260,7 @@ export class GameState {
     this._seq += 1;
     this.log.push({ seq: this._seq, round: this.round, step: this.step,
                     text, t: this._now() });
+    this.messages.push(text);
   }
 
   adjustThreat(index, delta) {
@@ -535,6 +629,223 @@ export class GameState {
       this.quest_history = this.quest_history.slice(-20);
     }
     return result;
+  }
+
+  // -- delta replay ------------------------------------------------------
+  // The seam between our object graph and the reference's map model.
+  // DragnCards' `game` IS a map, so it diffs itself; snapshot()/loadSnapshot()
+  // are the one adapter parity requires.
+  //
+  // Collections become index-keyed maps because getDelta recurses into maps
+  // only - the same reason the reference models everything as
+  // groupById/cardById/stackById.
+
+  snapshot() {
+    const keyed = xs => Object.fromEntries(xs.map((x, i) => [String(i), { ...x }]));
+    return {
+      players: Object.fromEntries(this.players.map((p, i) => [String(i), {
+        threat: p.threat, eliminated: p.eliminated,
+        commit: p.commit, commit_touched: p.commit_touched }])),
+      quest: { ...this.quest },
+      active_location: this.active_location ? { ...this.active_location } : null,
+      side_quests: keyed(this.side_quests),
+      quest_history: keyed(this.quest_history),
+      willpower: this.willpower,
+      staging: this.staging,
+      sailing: this.sailing,
+      heading: this.heading,
+      pending_budget: this.pending_budget,
+      pending_stage: this.pending_stage ? { ...this.pending_stage } : null,
+      pending_elim: this.pending_elim,
+      round: this.round,
+      first_player: this.first_player,
+      view: this.view,
+      step: this.step,
+      stage_idx: this.stage_idx,
+      card_idx: this.card_idx,
+      quest_resolved: this.quest_resolved,
+      quest_outcome: this.quest_outcome,
+      quest_outcome_n: this.quest_outcome_n,
+      game_over: this.game_over ? { ...this.game_over } : null,
+    };
+  }
+
+  loadSnapshot(m) {
+    const unkeyed = o => Object.keys(o).sort((a, b) => a - b).map(k => ({ ...o[k] }));
+    this.players.forEach((p, i) => {
+      const pd = m.players[String(i)];
+      if (!pd) return;
+      p.threat = pd.threat;
+      p.eliminated = pd.eliminated;
+      p.commit = pd.commit;
+      p.commit_touched = pd.commit_touched;
+    });
+    this.quest = { ...m.quest };
+    this.active_location = m.active_location ? { ...m.active_location } : null;
+    this.side_quests = unkeyed(m.side_quests);
+    this.quest_history = unkeyed(m.quest_history);
+    this.willpower = m.willpower;
+    this.staging = m.staging;
+    this.sailing = m.sailing;
+    this.heading = m.heading;
+    this.pending_budget = m.pending_budget;
+    this.pending_stage = m.pending_stage ? { ...m.pending_stage } : null;
+    this.pending_elim = m.pending_elim;
+    this.round = m.round;
+    this.first_player = m.first_player;
+    this.view = m.view;
+    this.step = m.step;
+    this.stage_idx = m.stage_idx;
+    this.card_idx = m.card_idx;
+    this.quest_resolved = m.quest_resolved;
+    this.quest_outcome = m.quest_outcome;
+    this.quest_outcome_n = m.quest_outcome_n;
+    this.game_over = m.game_over ? { ...m.game_over } : null;
+  }
+
+  // Open a recording window: clear the message buffer and return the snapshot
+  // to hand back to addDelta().
+  //
+  // The clear matters. Without it, anything logged before the window opens
+  // (game setup, a round summary, a modal that logged and returned) would be
+  // drained into the next delta's metadata and stamped with its index - so the
+  // Log screen would offer a jump target that does not undo those lines. The
+  // reference has the same boundary: game_ui_server.ex zeroes game["messages"]
+  // before dispatching an action.
+  beginAction() {
+    this.messages = [];
+    this._replay_moved = false;
+    return this.snapshot();
+  }
+
+  // Parity: game_ui.ex add_delta/2. Returns true when a delta was recorded.
+  //
+  // Divergence D2: the reference advances replayStep before it knows whether
+  // the diff is non-nil, so a no-op action leaves the cursor one past the end
+  // and silently swallows the next undo. We only advance on a real delta.
+  //
+  // Navigating the history is NOT an action. If the window contained a cursor
+  // move, the "change" this would diff is the undo itself - which would append
+  // it as a fresh delta, destroy the redo future, and make the log claim an
+  // action happened that never did. The reference is immune by construction:
+  // step_through is a separate GenServer call from game_action, so its
+  // add_delta is never reached. We have one choke point, so we need the guard.
+  addDelta(prevSnapshot) {
+    if (this._replay_moved) {
+      this._replay_moved = false;
+      this.messages = [];
+      return false;
+    }
+    const d = getDelta(prevSnapshot, this.snapshot());
+    if (d === null) { this.messages = []; return false; }
+    d._delta_metadata = { unix_ms: this._now(), log_messages: this.messages };
+    // A fresh action after an undo discards the redo future.
+    this.deltas = this.deltas.slice(0, this.replay_step + 1);
+    this.deltas.push(d);
+    this.replay_step = this.deltas.length - 1;
+    // Stamp this action's log entries with their delta index so the Log screen
+    // can offer a jump target per row without matching on text. logEvent
+    // appends to log and messages together, so the last N entries are ours.
+    const n = this.messages.length;
+    if (n) for (const e of this.log.slice(-n)) e.delta_i = this.replay_step;
+    this.messages = [];
+    if (this.deltas.length > MAX_SAVED_DELTAS) {
+      const drop = this.deltas.length - MAX_SAVED_DELTAS;
+      this.deltas = this.deltas.slice(drop);
+      this.replay_step -= drop;
+      for (const e of this.log) {
+        if ("delta_i" in e) e.delta_i -= drop;   // may go negative: not a target
+      }
+    }
+    return true;
+  }
+
+  canUndo() { return this.replay_step >= 0; }
+  canRedo() { return this.replay_step < this.deltas.length - 1; }
+
+  undo() {                                   // parity: game_ui.ex undo/1
+    if (!this.canUndo()) return false;
+    const m = this.snapshot();
+    applyDelta(m, this.deltas[this.replay_step], "undo");
+    this.loadSnapshot(m);
+    this.replay_step -= 1;
+    this._replay_moved = true;
+    return true;
+  }
+
+  redo() {                                   // parity: game_ui.ex redo/1
+    if (!this.canRedo()) return false;
+    const m = this.snapshot();
+    applyDelta(m, this.deltas[this.replay_step + 1], "redo");
+    this.loadSnapshot(m);
+    this.replay_step += 1;
+    this._replay_moved = true;
+    return true;
+  }
+
+  // Named stepReplay, not step: `this.step` is already the phase step id and a
+  // method of that name would be shadowed by the constructor's assignment.
+  stepReplay(direction) {                    // parity: game_ui.ex step/2
+    if (direction === "undo") return this.undo();
+    if (direction === "redo") return this.redo();
+    return false;
+  }
+
+  applyDeltasUntilIndex(target) {
+    let moved = false;
+    while (this.replay_step > target && this.undo()) moved = true;
+    while (this.replay_step < target && this.redo()) moved = true;
+    return moved;
+  }
+
+  // Divergence D1: the reference reads roundNumber off the gameui wrapper
+  // (game_ui.ex:1017, :1027) where the key does not exist, so its halt
+  // condition compares nil to nil and never fires. We read the live round.
+  applyDeltasUntilRoundChange(direction) {
+    const roundInit = this.round;
+    let moved = false;
+    while (this.stepReplay(direction)) {
+      moved = true;
+      if (this.round !== roundInit) break;
+    }
+    return moved;
+  }
+
+  stepThrough(options) {                     // parity: game_ui.ex step_through/2
+    const size = options && options.size;
+    if (size === "single") return this.stepReplay(options.direction);
+    if (size === "round") return this.applyDeltasUntilRoundChange(options.direction);
+    if (size === "index") return this.applyDeltasUntilIndex(options.index);
+    return false;
+  }
+
+  // -- replay persistence ------------------------------------------------
+  // Parity: the Replay schema's two columns (backend/lib/dragn/replay.ex) -
+  // game_json and deltas. Divergence D4: two stores rather than one row,
+  // because the device writes flash, not Postgres, and state.json is rewritten
+  // on every tap. toDict()/fromDict() are untouched.
+  //
+  // Divergence D3: replay_step is written, not recomputed. The reference
+  // derives count(deltas)-1 on load while game_json holds whatever the current
+  // state was, so saving mid-undo reloads a cursor claiming end-of-history over
+  // a state several steps back.
+  replayToDict() {
+    return { deltas: this.deltas, replay_step: this.replay_step };
+  }
+
+  replayFromDict(d) {
+    this.deltas = [];
+    this.replay_step = -1;
+    if (!d || typeof d !== "object" || Array.isArray(d)) return;
+    const ds = d.deltas;
+    if (!Array.isArray(ds) || !ds.every(x => x && typeof x === "object" && !Array.isArray(x))) return;
+    this.deltas = ds;
+    const rs = d.replay_step;
+    if (typeof rs !== "number" || !Number.isInteger(rs)) {
+      this.replay_step = ds.length - 1;
+      return;
+    }
+    this.replay_step = Math.max(-1, Math.min(rs, ds.length - 1));
   }
 
   toDict() {

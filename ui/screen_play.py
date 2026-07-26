@@ -13,6 +13,7 @@ from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
                         note_panel, phase_block, willpower_staging_meter, wrap_text,
                         truncate_text, draw_heart, draw_flag, disc, arc_runs, token,
+                        arrow_left, arrow_right,
                         wx_small)
 from ui.modal_counter import CounterModal
 from ui.modals import LocationPickModal
@@ -23,6 +24,10 @@ ZONE_TOP = HEADER_H + 6                # top of the players/progress zones
 CONTENT_Y = 150                        # zones end ~136; tips start below
 CTA_Y = 410
 CTA_H = 58
+NAV_W = CTA_H          # back / forward are matching squares, CTA_H on a side
+NAV_RULE_Y = 400       # 1px rule dividing the content area from the bottom nav
+ARROW = 22             # arrow glyph size inside a nav square
+NAV_PAD = 8            # clearance between a nav square and the label between them
 
 # Threat-as-risk framing for Encounter & Combat (M2 Task 6): the app tracks
 # each player's live threat but not individual enemy cards or their
@@ -157,20 +162,45 @@ class ScreenPlay:
         text_left(d, pal, "quest points remaining", 214, ZONE_TOP + 66, BODY, pal.dim)
         self.buttons.append(Button(("progress_detail",), 214, ZONE_TOP - 2, 258, 90))
 
-    def _cta(self, d, pal, label, id, fill=None, fg=None):
-        b = Button(id, MARGIN, CTA_Y, 480 - 2 * MARGIN, CTA_H)
-        bevel(d, pal, b.x, b.y, b.w, b.h,
+    def _cta(self, d, pal, game, label, id, fill=None, fg=None):
+        """The bottom nav bar: a 1px rule, then matching square arrow buttons
+        at each edge with the destination label between them.
+
+        The label sits OUTSIDE both buttons so the two arrows stay identically
+        sized. It is still part of the forward button's hit area, though - that
+        control is tapped every phase, so its target spans label + arrow rather
+        than the 58px square alone. Back's target is only its square, so a
+        mis-reach for the label can never undo.
+        """
+        d.set_pen(pal.border)
+        d.rectangle(0, NAV_RULE_Y, 480, 1)
+        fgp = fg if fg is not None else pal.gold
+        cy = CTA_Y + CTA_H // 2
+        fwd_x = 480 - MARGIN - NAV_W
+
+        if game.can_undo():
+            back = Button(("back",), MARGIN, CTA_Y, NAV_W, CTA_H)
+            bevel(d, pal, back.x, back.y, back.w, back.h, pal.btn, t=3)
+            arrow_left(d, pal, MARGIN + NAV_W // 2, cy, ARROW, pal.tan)
+            self.buttons.append(back)
+
+        bevel(d, pal, fwd_x, CTA_Y, NAV_W, CTA_H,
               fill if fill is not None else pal.btn_ok, t=3)
-        # The primary CTA is DISPLAY - the biggest reading size, for the one
-        # control you tap every phase. It only fits because the labels were
-        # cut to earn it ("Next Phase:" -> "Next:", and "End round (raise
-        # threat, pass token)" -> "End Round"): the longest is now "Next:
-        # Combat (Player Attacks)" at 408px against 424px of usable button.
-        # tests/test_screen_play.py asserts that ceiling, so a longer label
-        # fails the suite instead of silently overflowing.
-        text_center(d, pal, label, 240, CTA_Y + 16, DISPLAY,
-                    fg if fg is not None else pal.gold)
-        self.buttons.append(b)
+        arrow_right(d, pal, fwd_x + NAV_W // 2, cy, ARROW, fgp)
+
+        # Label centred in the span between the squares - a fixed frame, so the
+        # text does not shift when Back appears.
+        lx, rx = MARGIN + NAV_W + NAV_PAD, fwd_x - NAV_PAD
+        tcx = (lx + rx) // 2
+        # Phase advances read as a kicker over the destination; every other CTA
+        # ("End Round", "Flip to Side B ...") is a single centred line.
+        if label.startswith("Next: "):
+            text_center(d, pal, "NEXT PHASE", tcx, CTA_Y + 10, LABEL, pal.muted)
+            text_center(d, pal, label[6:], tcx, CTA_Y + 24, DISPLAY, fgp)
+        else:
+            text_center(d, pal, label, tcx, CTA_Y + 16, DISPLAY, fgp)
+        # one hit area: the label span plus the arrow square
+        self.buttons.append(Button(id, lx, CTA_Y, 480 - MARGIN - lx, CTA_H))
 
     def _bottom_bar(self, d, pal, x, w, bottom_y, frac, color):
         """2px progress bar along a card's bottom edge. Dim track + fill."""
@@ -238,24 +268,31 @@ class ScreenPlay:
 
         if view == "setup_game":
             th = note_panel(d, pal, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP)
-            y = 56 + th + 18
-            text_left(d, pal, "Stage 1B quest points", MARGIN + 8, y + 16, BODY, pal.tan)
-            mn = Button(("qp", -1), 300, y, 52, 48)
-            pl = Button(("qp", 1), 412, y, 52, 48)
+            # This view's two rows are the tallest stack on any play screen and
+            # used to run to y=412 - 2px PAST the old CTA at 410, an overlap the
+            # layout linter never caught because it compares text, not rects.
+            # The nav rule at NAV_RULE_Y makes it visible, so the rows were
+            # tightened by 20px total (gap 18->8, rows 48->42 and 38->34) and
+            # now end at 392, clearing the rule by 8px. Every target stays
+            # >=24px. tests/test_layout.py's rect check now guards it.
+            y = 56 + th + 8
+            text_left(d, pal, "Stage 1B quest points", MARGIN + 8, y + 13, BODY, pal.tan)
+            mn = Button(("qp", -1), 300, y, 52, 42)
+            pl = Button(("qp", 1), 412, y, 52, 42)
             for b, s in ((mn, "-"), (pl, "+")):
                 bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-                text_center(d, pal, s, b.x + 26, b.y + 12, DISPLAY, pal.tan)
+                text_center(d, pal, s, b.x + 26, b.y + 9, DISPLAY, pal.tan)
                 self.buttons.append(b)
-            text_center(d, pal, str(game.quest["points"]), 382, y + 12, DISPLAY, pal.gold)
-            sy = y + 50
-            text_left(d, pal, "Sailing quest", MARGIN + 8, sy + 11, BODY, pal.tan)
-            icons.draw(d, icons.WHEEL, 160, sy + 7, pal.gold if game.sailing else pal.dim)
-            sb = Button(("sail_toggle",), 300, sy, 164, 38)
+            text_center(d, pal, str(game.quest["points"]), 382, y + 9, DISPLAY, pal.gold)
+            sy = y + 44
+            text_left(d, pal, "Sailing quest", MARGIN + 8, sy + 9, BODY, pal.tan)
+            icons.draw(d, icons.WHEEL, 160, sy + 6, pal.gold if game.sailing else pal.dim)
+            sb = Button(("sail_toggle",), 300, sy, 164, 34)
             panel(d, pal, sb.x, sb.y, sb.w, sb.h, fill=pal.gold if game.sailing else pal.btn)
-            text_center(d, pal, "On" if game.sailing else "Off", sb.x + 82, sb.y + 12, BODY,
+            text_center(d, pal, "On" if game.sailing else "Off", sb.x + 82, sb.y + 9, BODY,
                         pal.bg if game.sailing else pal.tan, shadow=False)
             self.buttons.append(sb)
-            self._cta(d, pal, "Begin Round 1", ("advance",))
+            self._cta(d, pal, game, "Begin Round 1", ("advance",))
         elif view == "quest_setup":
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
@@ -268,7 +305,7 @@ class ScreenPlay:
                 ("window", "In player order, play allies and attachments from hand - the only step that allows it."),
             ])
             nxt = "quest_sailing" if game.sailing else "quest_commit"
-            self._cta(d, pal, "Next: %s" % VIEW_LABELS[nxt], ("advance",))
+            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS[nxt], ("advance",))
         elif view == "quest_commit":
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
@@ -276,7 +313,7 @@ class ScreenPlay:
                              [("window", "In player order, exhaust characters to commit them and add their willpower.")])
             cy = self._draw_confirm_all(d, pal, game, CONTENT_Y + bh + 8)
             self._totals_row(d, pal, game, cy, tappable=("wp", "stg"))
-            self._cta(d, pal, "Next: %s" % VIEW_LABELS["quest_staging"], ("advance",))
+            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_staging"], ("advance",))
         elif view == "quest_sailing":
             self._draw_sailing(d, pal, game)
         elif view == "quest_staging":
@@ -295,7 +332,7 @@ class ScreenPlay:
                 ("window", "Responses."),
             ])
             self._refresh_threat_preview(d, pal, game, CONTENT_Y + bh + 8)
-            self._cta(d, pal, "End Round", ("endround",))
+            self._cta(d, pal, game, "End Round", ("endround",))
         else:
             self._players_zone(d, pal, game)
             ship_notes = {
@@ -328,7 +365,7 @@ class ScreenPlay:
                     cy += 24
             i = VIEW_ORDER.index(view)
             nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
-            self._cta(d, pal, "Next: %s" % VIEW_LABELS.get(nxt, nxt), ("advance",))
+            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS.get(nxt, nxt), ("advance",))
 
         self._draw_notif(d, pal)
 
@@ -387,7 +424,7 @@ class ScreenPlay:
             icons.draw(d, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold)
             text_center(d, pal, "Enable Sailing", 254, CONTENT_Y + 96 + 16, BODY, pal.tan)
             self.buttons.append(eb)
-            self._cta(d, pal, "Next: %s" % VIEW_LABELS["quest_commit"], ("advance",))
+            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_commit"], ("advance",))
             return
         # tip: pipe medallion top-left; wheel glyph inline in the sentence
         tw, ty0 = 480 - 2 * MARGIN, CONTENT_Y + 6
@@ -416,7 +453,7 @@ class ScreenPlay:
         icons.draw(d, icons.WHEEL, 150, sb.y + 14, pal.gold)
         text_center(d, pal, "Log sailing test", 262, sb.y + 16, BODY, pal.tan)
         self.buttons.append(sb)
-        self._cta(d, pal, "Next: %s" % VIEW_LABELS["quest_commit"], ("advance",))
+        self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_commit"], ("advance",))
 
     def _draw_staging(self, d, pal, game):
         self._players_zone(d, pal, game)
@@ -433,7 +470,7 @@ class ScreenPlay:
         mh = willpower_staging_meter(d, pal, MARGIN, my, 480 - 2 * MARGIN,
                                      game.willpower, game.staging)
         self._totals_row(d, pal, game, my + mh + 4, with_steppers=True)
-        self._cta(d, pal, "Next: %s" % VIEW_LABELS["quest_resolution"],
+        self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_resolution"],
                   ("stage_advance",))
 
     def _draw_quest_setup(self, d, pal, game):
@@ -491,7 +528,7 @@ class ScreenPlay:
         text_center(d, pal, "View quest card", 240, card_btn.y + 14, BODY, pal.tan)
         self.buttons.append(card_btn)
 
-        self._cta(d, pal, "Flip to Side B  ->  %d qp" % card["questPoints"], ("flip_to_b",))
+        self._cta(d, pal, game, "Flip to Side B  ->  %d qp" % card["questPoints"], ("flip_to_b",))
 
     def _draw_confirm_all(self, d, pal, game, y):
         """One-tap 'everyone's commit is reviewed' button for the commit view -
@@ -548,7 +585,7 @@ class ScreenPlay:
             panel(d, pal, cb.x, cb.y, cb.w, cb.h, fill=pal.card)
             text_center(d, pal, "Replace location (card effect)", 240, y + 14, BODY, pal.muted)
             self.buttons.append(cb)
-        self._cta(d, pal, "Next: %s" % VIEW_LABELS["enc_optional"], ("advance",))
+        self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["enc_optional"], ("advance",))
 
     def _outcome_toast(self, game):
         if game.quest_outcome == "success":
@@ -585,7 +622,7 @@ class ScreenPlay:
             else:
                 text_left(d, pal, "No progress placed, no threat gained.", tx, y2, BODY,
                           pal.muted)
-            self._cta(d, pal, "Next: %s" % VIEW_LABELS["travel"], ("advance",))
+            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["travel"], ("advance",))
             return
 
         if self.alloc is None:
@@ -672,13 +709,20 @@ class ScreenPlay:
         text_center(d, pal, "Reset", 240, y + 12, BODY, pal.tan)
         self.buttons.append(rb)
 
-        self._cta(d, pal, "Next: %s" % VIEW_LABELS["travel"], ("apply_alloc",))
+        self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["travel"], ("apply_alloc",))
 
     # -- interaction -------------------------------------------------------
     def on_button(self, btn, game):
         k = btn.id[0]
         if k == "nav":
             return ("goto", btn.id[1])
+        if k == "back":
+            if not game.undo():
+                return None
+            # screen-local scratch describes the view we just left
+            self.alloc = None
+            self.banner = None
+            return True
         if k == "notif_dismiss":
             self.notif = None
             return True

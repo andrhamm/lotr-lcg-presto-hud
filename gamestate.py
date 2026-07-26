@@ -128,6 +128,84 @@ REMINDER_DEFS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Delta replay engine.
+#
+# Ported at parity from DragnCards (seastan/DragnCards @ a79716f9),
+# backend/lib/dragncards_game/ui/game_ui.ex: get_delta/2, delta/2,
+# apply_delta/3, apply_delta_list/3. Names and semantics are the reference's;
+# see docs/superpowers/plans/2026-07-26-delta-replay-parity.md for the four
+# deliberate divergences.
+#
+# A delta mirrors the shape of the state it describes. Every changed leaf is a
+# two-element [old, new] pair, which is what lets ONE apply function serve both
+# directions: index 0 undoes, index 1 redoes.
+# ---------------------------------------------------------------------------
+
+REMOVED = ":removed"       # sentinel: the key does not exist on this side
+MAX_SAVED_DELTAS = 500     # ~47 KB, ~31 rounds. Reference caps at 5 for
+                           # non-supporters (game.ex trim_saved_deltas/2);
+                           # we have no paywall, just a bound.
+
+
+def get_delta(old, new):
+    """Recursive structural diff. Returns None when nothing changed.
+
+    Parity note: recursion happens only when BOTH sides are dicts. Elixir's
+    map_diff has the same guard (`when is_map(vala) and is_map(valb)`), so a
+    list is an atomic primitive and changes wholesale. That is why the
+    snapshot keys its collections instead of listing them.
+    """
+    if old == new:
+        return None
+    if isinstance(old, dict) and isinstance(new, dict):
+        out = {}
+        for k in old:
+            if k not in new:
+                out[k] = [old[k], REMOVED]
+            else:
+                d = get_delta(old[k], new[k])
+                if d is not None:
+                    out[k] = d
+        for k in new:
+            if k not in old:
+                out[k] = [REMOVED, new[k]]
+        return out or None
+    return [old, new]
+
+
+def apply_delta(state, delta, direction):
+    """Apply delta to state in place; returns state.
+
+    direction "undo" takes each pair's index 0, "redo" its index 1. A chosen
+    value of REMOVED deletes the key. Mirrors the reference's
+    `if is_map(map) and is_map(delta)` guard by returning state untouched when
+    either side is not a dict.
+    """
+    if not (isinstance(state, dict) and isinstance(delta, dict)):
+        return state
+    idx = 0 if direction == "undo" else 1
+    for k, v in delta.items():
+        if k == "_delta_metadata":
+            continue
+        if isinstance(v, dict):
+            apply_delta(state.get(k), v, direction)
+        else:
+            val = v[idx]
+            if val == REMOVED:
+                state.pop(k, None)
+            else:
+                state[k] = val
+    return state
+
+
+def apply_delta_list(state, delta_list, direction):
+    """Fold apply_delta over a list of deltas, in the given order."""
+    for d in delta_list:
+        apply_delta(state, d, direction)
+    return state
+
+
 class Player:
     def __init__(self, label, starting_threat=0):
         self.label = label
@@ -209,6 +287,17 @@ class GameState:
                                           # pending_quest_card above)
         self.log = []                # oldest-first list of {seq, round, step, text}
         self._seq = 0
+        # -- delta replay (parity: DragnCards gameui["deltas"]/["replayStep"])
+        self.deltas = []             # oldest-first; each is a get_delta result
+                                     # plus a "_delta_metadata" key
+        self.replay_step = -1        # cursor INTO deltas. -1 = before the
+                                     # first delta. Not a stack pointer:
+                                     # deltas are never popped.
+        self.messages = []           # log text produced by the current action,
+                                     # drained into the next delta's metadata.
+                                     # Mirrors game["messages"].
+        self._replay_moved = False   # a cursor move happened inside the current
+                                     # recording window - see add_delta
 
     # -- log ---------------------------------------------------------------
     def _now(self):
@@ -219,6 +308,7 @@ class GameState:
         self._seq += 1
         self.log.append({"seq": self._seq, "round": self.round,
                          "step": self.step, "text": text, "t": self._now()})
+        self.messages.append(text)
 
     def adjust_threat(self, index, delta):
         """Change a player's threat by delta, clamping at 0. Updates elimination."""
@@ -646,6 +736,259 @@ class GameState:
         if len(self.quest_history) > 20:
             self.quest_history = self.quest_history[-20:]
         return result
+
+    # -- delta replay ------------------------------------------------------
+    # The seam between our object graph and the reference's map model.
+    # DragnCards' `game` IS a map, so it diffs itself; snapshot()/
+    # load_snapshot() are the one adapter parity requires.
+    #
+    # Collections become index-keyed maps because get_delta recurses into
+    # dicts only - the same reason the reference models everything as
+    # groupById/cardById/stackById.
+
+    def snapshot(self):
+        """The diffable projection: everything a phase handler can change."""
+        return {
+            "players": {str(i): {"threat": p.threat,
+                                 "eliminated": p.eliminated,
+                                 "commit": p.commit,
+                                 "commit_touched": p.commit_touched}
+                        for i, p in enumerate(self.players)},
+            "quest": dict(self.quest),
+            "active_location": (dict(self.active_location)
+                                if self.active_location else None),
+            "side_quests": {str(i): dict(s)
+                            for i, s in enumerate(self.side_quests)},
+            "quest_history": {str(i): dict(e)
+                              for i, e in enumerate(self.quest_history)},
+            "willpower": self.willpower,
+            "staging": self.staging,
+            "sailing": self.sailing,
+            "heading": self.heading,
+            "pending_budget": self.pending_budget,
+            "pending_stage": (dict(self.pending_stage)
+                              if self.pending_stage else None),
+            "pending_elim": self.pending_elim,
+            "round": self.round,
+            "first_player": self.first_player,
+            "view": self.view,
+            "step": self.step,
+            "stage_idx": self.stage_idx,
+            "card_idx": self.card_idx,
+            "quest_resolved": self.quest_resolved,
+            "quest_outcome": self.quest_outcome,
+            "quest_outcome_n": self.quest_outcome_n,
+            "game_over": dict(self.game_over) if self.game_over else None,
+        }
+
+    def load_snapshot(self, m):
+        """Write a snapshot back onto the live object. Inverse of snapshot()."""
+        for i, p in enumerate(self.players):
+            pd = m["players"].get(str(i))
+            if pd is None:
+                continue
+            p.threat = pd["threat"]
+            p.eliminated = pd["eliminated"]
+            p.commit = pd["commit"]
+            p.commit_touched = pd["commit_touched"]
+        self.quest = dict(m["quest"])
+        self.active_location = (dict(m["active_location"])
+                                if m["active_location"] else None)
+        # keyed maps back to lists, in key order - the keys are positions
+        self.side_quests = [dict(m["side_quests"][k])
+                            for k in sorted(m["side_quests"], key=int)]
+        self.quest_history = [dict(m["quest_history"][k])
+                              for k in sorted(m["quest_history"], key=int)]
+        self.willpower = m["willpower"]
+        self.staging = m["staging"]
+        self.sailing = m["sailing"]
+        self.heading = m["heading"]
+        self.pending_budget = m["pending_budget"]
+        self.pending_stage = (dict(m["pending_stage"])
+                              if m["pending_stage"] else None)
+        self.pending_elim = m["pending_elim"]
+        self.round = m["round"]
+        self.first_player = m["first_player"]
+        self.view = m["view"]
+        self.step = m["step"]
+        self.stage_idx = m["stage_idx"]
+        self.card_idx = m["card_idx"]
+        self.quest_resolved = m["quest_resolved"]
+        self.quest_outcome = m["quest_outcome"]
+        self.quest_outcome_n = m["quest_outcome_n"]
+        self.game_over = dict(m["game_over"]) if m["game_over"] else None
+
+    def begin_action(self):
+        """Open a recording window: clear the message buffer and return the
+        snapshot to hand back to add_delta().
+
+        The clear matters. Without it, anything logged before the window opens
+        (game setup, a round summary, a modal that logged and returned) would
+        be drained into the next delta's metadata and stamped with its index -
+        so the Log screen would offer a jump target that does not undo those
+        lines. The reference has the same boundary: game_ui_server.ex zeroes
+        game["messages"] before dispatching an action.
+        """
+        self.messages = []
+        self._replay_moved = False
+        return self.snapshot()
+
+    def add_delta(self, prev_snapshot):
+        """Record the action that turned prev_snapshot into the current state.
+
+        Parity: game_ui.ex add_delta/2. Returns True when a delta was recorded.
+
+        Divergence D2: the reference advances replayStep before it knows
+        whether the diff is non-nil, so a no-op action leaves the cursor one
+        past the end and silently swallows the next undo. We only advance on a
+        real delta.
+
+        Navigating the history is NOT an action. If the window contained a
+        cursor move, the "change" this would diff is the undo itself - which
+        would append it as a fresh delta, destroy the redo future, and make the
+        log claim an action happened that never did. The reference is immune by
+        construction: step_through is a separate GenServer call from
+        game_action, so its add_delta is never reached. We have one choke
+        point, so we need the guard.
+        """
+        if self._replay_moved:
+            self._replay_moved = False
+            self.messages = []
+            return False
+        d = get_delta(prev_snapshot, self.snapshot())
+        if d is None:
+            self.messages = []
+            return False
+        d["_delta_metadata"] = {"unix_ms": self._now(),
+                                "log_messages": self.messages}
+        # A fresh action after an undo discards the redo future. Python's slice
+        # handles replay_step == -1 naturally; the reference needs an explicit
+        # guard there because Elixir's 0..-1 range means "to the end".
+        self.deltas = self.deltas[:self.replay_step + 1]
+        self.deltas.append(d)
+        self.replay_step = len(self.deltas) - 1
+        # Stamp this action's log entries with their delta index, so the Log
+        # screen can offer a jump target per row without matching on text.
+        # log_event appends to self.log and self.messages together, so the
+        # last len(messages) entries are exactly this action's.
+        n = len(self.messages)
+        if n:
+            for e in self.log[-n:]:
+                e["delta_i"] = self.replay_step
+        self.messages = []
+        if len(self.deltas) > MAX_SAVED_DELTAS:
+            drop = len(self.deltas) - MAX_SAVED_DELTAS
+            self.deltas = self.deltas[drop:]
+            self.replay_step -= drop
+            for e in self.log:
+                if "delta_i" in e:
+                    e["delta_i"] -= drop      # may go negative: not a target
+        return True
+
+    def can_undo(self):
+        return self.replay_step >= 0
+
+    def can_redo(self):
+        return self.replay_step < len(self.deltas) - 1
+
+    def undo(self):
+        """Parity: game_ui.ex undo/1."""
+        if not self.can_undo():
+            return False
+        m = self.snapshot()
+        apply_delta(m, self.deltas[self.replay_step], "undo")
+        self.load_snapshot(m)
+        self.replay_step -= 1
+        self._replay_moved = True
+        return True
+
+    def redo(self):
+        """Parity: game_ui.ex redo/1."""
+        if not self.can_redo():
+            return False
+        m = self.snapshot()
+        apply_delta(m, self.deltas[self.replay_step + 1], "redo")
+        self.load_snapshot(m)
+        self.replay_step += 1
+        self._replay_moved = True
+        return True
+
+    def step_replay(self, direction):
+        """Parity: game_ui.ex step/2.
+
+        Named step_replay, not step: `self.step` is already the phase step id
+        and a method of that name would be shadowed by __init__'s assignment.
+        """
+        if direction == "undo":
+            return self.undo()
+        if direction == "redo":
+            return self.redo()
+        return False
+
+    def apply_deltas_until_index(self, target):
+        """Walk the cursor to target. Parity: apply_deltas_until_index/2."""
+        moved = False
+        while self.replay_step > target and self.undo():
+            moved = True
+        while self.replay_step < target and self.redo():
+            moved = True
+        return moved
+
+    def apply_deltas_until_round_change(self, direction):
+        """Step until the round changes, or we run out.
+
+        Divergence D1: the reference reads roundNumber off the gameui wrapper
+        (game_ui.ex:1017, :1027) where the key does not exist, so its halt
+        condition compares nil to nil and never fires. We read the live round.
+        """
+        round_init = self.round
+        moved = False
+        while self.step_replay(direction):
+            moved = True
+            if self.round != round_init:
+                break
+        return moved
+
+    def step_through(self, options):
+        """Parity: game_ui.ex step_through/2."""
+        size = options.get("size")
+        if size == "single":
+            return self.step_replay(options.get("direction"))
+        if size == "round":
+            return self.apply_deltas_until_round_change(options.get("direction"))
+        if size == "index":
+            return self.apply_deltas_until_index(options.get("index"))
+        return False
+
+    # -- replay persistence ------------------------------------------------
+    # Parity: the Replay schema's two columns (backend/lib/dragn/replay.ex) -
+    # game_json and deltas. Divergence D4: two stores rather than one row,
+    # because the device writes flash, not Postgres, and state.json is
+    # rewritten on every tap. to_dict()/from_dict() are untouched.
+    #
+    # Divergence D3: replay_step is written, not recomputed. The reference
+    # derives it as count(deltas)-1 on load while game_json holds whatever the
+    # current state was, so saving mid-undo reloads a cursor that claims
+    # end-of-history over a state several steps back.
+
+    def replay_to_dict(self):
+        return {"deltas": self.deltas, "replay_step": self.replay_step}
+
+    def replay_from_dict(self, d):
+        """Load a replay blob. Anything malformed degrades to no history."""
+        self.deltas = []
+        self.replay_step = -1
+        if not isinstance(d, dict):
+            return
+        ds = d.get("deltas")
+        if not isinstance(ds, list) or not all(isinstance(x, dict) for x in ds):
+            return
+        self.deltas = ds
+        rs = d.get("replay_step")
+        if not isinstance(rs, int) or isinstance(rs, bool):
+            self.replay_step = len(ds) - 1
+            return
+        self.replay_step = max(-1, min(rs, len(ds) - 1))
 
     # -- persistence -------------------------------------------------------
     def to_dict(self):

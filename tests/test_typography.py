@@ -35,7 +35,7 @@ from ui.theme import DISPLAY, BODY, LABEL
 
 # Scenes that ARE a dense tabular readout: the log's whole job is to fit many
 # timestamped rows on one screen with its own pager. Prose does not live here.
-DENSE_SCENES = {"log", "log_page2", "log_empty"}
+DENSE_SCENES = {"log", "log_page2", "log_empty", "log_replay"}
 
 # Metadata shapes that stay LABEL wherever they appear: they are scanned, not
 # read, and they sit in the margins of a row rather than carrying meaning on

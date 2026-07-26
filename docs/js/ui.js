@@ -96,6 +96,33 @@ export function textCenter(ctx, s, cx, y, scale, color, shadow = true) {
   textLeft(ctx, s, Math.floor(cx - measureText(s, scale) / 2), y, scale, color, shadow);
 }
 
+// Solid triangular arrows for the bottom nav bar. The device draws these with
+// d.triangle - the same primitive draw_notif_pie already uses - so no new icon
+// mask is needed and the two twins stay pixel-faithful. size is the full
+// width and height.
+function arrowTri(ctx, cx, cy, size, color, left) {
+  const h = Math.floor(size / 2);
+  const tip = left ? cx - h : cx + h;
+  const base = left ? cx + h : cx - h;
+  ctx.beginPath();
+  ctx.moveTo(tip, cy);
+  ctx.lineTo(base, cy - h);
+  ctx.lineTo(base, cy + h);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+export function arrowLeft(ctx, cx, cy, size, color, shadow = true) {
+  if (shadow) arrowTri(ctx, cx + 2, cy + 2, size, pal.shadow, true);
+  arrowTri(ctx, cx, cy, size, color, true);
+}
+
+export function arrowRight(ctx, cx, cy, size, color, shadow = true) {
+  if (shadow) arrowTri(ctx, cx + 2, cy + 2, size, pal.shadow, false);
+  arrowTri(ctx, cx, cy, size, color, false);
+}
+
 export function button(ctx, buttons, btn, label, scale = 2, fill = pal.btn, fg = pal.tan) {
   bevel(ctx, btn.x, btn.y, btn.w, btn.h, fill);
   textCenter(ctx, label, btn.x + btn.w / 2, Math.floor(btn.y + (btn.h - 8 * scale) / 2), scale, fg);
