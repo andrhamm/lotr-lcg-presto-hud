@@ -36,6 +36,7 @@ INDEX_PATH = "/data/index.json"
 SCENARIO_PATH = "/data/scenarios/%s.json"
 PLAYERS_INDEX_PATH = "/data/players/index.json"
 PLAYERS_PACK_PATH = "/data/players/%s.json"
+PLAYERS_SIDE_QUESTS_PATH = "/data/players/side_quests.json"
 ICONS_PATH = "/data/icons.json"
 TIPS_PATH = "/data/tips.json"
 
@@ -169,7 +170,18 @@ def load_player_side_quests():
     or corrupt pack file, ...) returns [] so the side-quest picker's caller
     falls back to today's manual "+ Side quest" entry rather than erroring
     (per the plan's Global Constraints: catalog data is optional at
-    runtime)."""
+    runtime).
+
+    Reads the precomputed players/side_quests.json the build emits. The old
+    behaviour - open all 105 packs and flatten - is kept as a fallback for a
+    /data/ deploy predating that file, but it is NOT the fast path: on the
+    Presto it read 1.6 MB and took 6.4 SECONDS, every single tap.
+    """
+    try:
+        with open(PLAYERS_SIDE_QUESTS_PATH) as f:
+            return json.load(f)
+    except Exception:
+        pass
     try:
         with open(PLAYERS_INDEX_PATH) as f:
             index = json.load(f)

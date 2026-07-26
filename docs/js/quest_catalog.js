@@ -137,6 +137,12 @@ export function sideQuests(playerDb) {
 // than erroring (per the plan's Global Constraints: catalog data is
 // optional at runtime).
 export async function loadPlayerSideQuests() {
+  // Fast path: the precomputed list the build emits. The scan below is kept
+  // only for a data/ deploy predating that file - it fetches all 105 packs,
+  // which on the firmware twin's flash meant 1.6 MB and 6.4 SECONDS per tap.
+  try {
+    return await (await fetch("data/players/side_quests.json")).json();
+  } catch (e) { /* fall through to the scan */ }
   try {
     const index = await (await fetch("data/players/index.json")).json();
     const packs = await Promise.all(

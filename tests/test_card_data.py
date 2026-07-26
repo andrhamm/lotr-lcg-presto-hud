@@ -263,3 +263,31 @@ def test_needs_refresh_only_when_absent_or_asked_for(tmp_path):
     # that somehow lacks the file, or a --out pointed somewhere new).
     assert b.needs_refresh(str(absent), False) is True
     assert b.needs_refresh(str(absent), True) is True
+
+
+def test_emit_writes_a_precomputed_side_quest_list(tmp_path):
+    """The device used to find 15 side quests by opening and parsing all 105
+    player packs - 1.6 MB and 6.4 SECONDS of flash reads on the Presto, every
+    time you tapped "+ Side quest". The build knows the answer, so it emits
+    it: one small file, one read."""
+    import quest_catalog as qc
+    out = build()
+    b.emit(out, str(tmp_path))
+    p = tmp_path / "players" / "side_quests.json"
+    assert p.exists(), "build must precompute players/side_quests.json"
+    emitted = _json.loads(p.read_text(encoding="utf-8"))
+    # identical to what the old full scan produced, so behaviour is unchanged
+    assert emitted == qc.side_quests(out["players"]["packs"])
+    for e in emitted:
+        assert set(e) >= {"id", "name", "points", "sphere", "pack"}
+
+
+def test_emitted_side_quests_are_a_tiny_fraction_of_the_pack_bytes(tmp_path):
+    """Guards the reason this file exists: if it ever stopped being much
+    smaller than the packs it replaces, the read would be back to slow."""
+    out = build()
+    b.emit(out, str(tmp_path))
+    sq = (tmp_path / "players" / "side_quests.json").stat().st_size
+    packs = sum(f.stat().st_size for f in (tmp_path / "players").glob("*.json")
+                if f.name not in ("side_quests.json", "index.json"))
+    assert sq * 20 < packs, "side_quests.json is not buying enough (%d vs %d)" % (sq, packs)

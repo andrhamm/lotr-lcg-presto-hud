@@ -2,8 +2,16 @@
 player DB + rules). Source of truth is the pinned TSV; never hand-edit the
 output. See docs/superpowers/specs/2026-07-24-card-data-pipeline-design.md."""
 import csv, json, re, os, shutil, argparse, datetime, urllib.request, urllib.error, io
+import sys
+
+# The repo root, so `import quest_catalog` works when this is run as
+# `python3 tools/build_card_data.py`. emit() reuses that module's
+# side_quests() so the precomputed list is identical to what the runtime
+# scan produced - one source of truth, not a reimplementation.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import alep
+import quest_catalog
 
 HEADER = ["databaseId","name","imageUrl","cardBack","type","packName",
           "deckbuilderQuantity","setUuid","numberInPack","encounterSet","unique",
@@ -604,6 +612,14 @@ def emit(outputs, out_dir):
     _dump(outputs["players"]["index"], os.path.join(out_dir, "players", "index.json"))
     for slug, pack in outputs["players"]["packs"].items():
         _dump(pack, os.path.join(out_dir, "players", slug + ".json"))
+    # Precomputed side-quest list. The picker needs ~15 entries; finding them
+    # by opening all 105 packs cost 1.6 MB of reads and 6.4 SECONDS on the
+    # Presto's flash every time "+ Side quest" was tapped. The build already
+    # has every pack in memory, so it answers the question once, here.
+    # quest_catalog.side_quests() is the same pure function the runtime used
+    # for the scan, so the emitted list is identical by construction.
+    _dump(quest_catalog.side_quests(outputs["players"]["packs"]),
+          os.path.join(out_dir, "players", "side_quests.json"))
     _dump(outputs["rules"], os.path.join(out_dir, "rules.json"))
 
 def _read_pin():
