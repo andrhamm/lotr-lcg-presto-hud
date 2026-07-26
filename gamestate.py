@@ -4,6 +4,8 @@ No hardware imports — runs under CPython for host tests and under MicroPython
 on the device. UI and hardware live elsewhere; this module only models state.
 """
 
+import json
+
 import phases
 
 MAX_PLAYERS = 4
@@ -566,10 +568,18 @@ class GameState:
     # -- quest / progress --------------------------------------------------
     def preload_scenario(self, scn, stages):
         """Load a quest-picker scenario: scn is metadata (slug/name/pack/...),
-        stages is the stage/card tree. Resets quest to stage 1 side A."""
-        import copy
+        stages is the stage/card tree. Resets quest to stage 1 side A.
+
+        The deep copy is a JSON round-trip, not copy.deepcopy: MicroPython has
+        no `copy` module, so the deepcopy version raised ImportError on the
+        Presto the moment this screen became reachable there and froze the
+        panel. A round-trip is also what the twin does
+        (docs/js/gamestate.js: JSON.parse(JSON.stringify(stages))), and it is
+        honest about the data - `stages` comes straight out of the catalog's
+        JSON, so it has no non-serializable members to lose.
+        """
         self.scenario = scn
-        self.stages = copy.deepcopy(stages)
+        self.stages = json.loads(json.dumps(stages))
         self.stage_idx = 0
         self.card_idx = 0
         st = self.stages[0]

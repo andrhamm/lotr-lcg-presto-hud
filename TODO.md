@@ -42,7 +42,7 @@ across columns, and surface blockers here.
 - [x] Back button — delta replay at DragnCards parity
   - notes: `docs/superpowers/plans/2026-07-26-delta-replay-parity.md`. Bidirectional structural diff, `replay_step` cursor, jump-to-any-point retcon, round-granularity stepping. Bottom nav bar replaces the full-width CTA; Log screen gains the transport. Both twins, 1136 tests green.
   - notes: found and fixed two bugs — history navigation was being recorded as an action (browser-only, no test caught it), and a pre-existing `setup_game` overflow (y=412 vs CTA at 410) that the nav rule exposed; layout linter gained rule L5 to guard the class.
-  - done: aa34862
+  - done: aa34862 (flashed to the Presto 2026-07-26 — full firmware, since the device predated M4 and a partial copy would not boot)
 
 - [x] Data-driven location picker
   - notes: plan `docs/superpowers/plans/2026-07-25-location-picker.md` (status: done, records how the three open questions were answered). Travel and "+ Add location" used to guess 3 quest points / 2 threat; both now pick from the scenario's own cards, with the printed quest points AND threat filled in from the card. Needs a union across `includedSets` — a scenario's own file only holds its own encounter set, so Passage's own file has 2 of its 6 locations.
@@ -60,11 +60,11 @@ across columns, and surface blockers here.
   - notes: spec `docs/superpowers/specs/2026-07-24-card-data-pipeline-design.md` + `...-quest-picker-bcore-design.md`; plans for each piece under `docs/superpowers/plans/`. Picking Passage preloads 8 / 2 / {0,10} and lists its three sets with icons. ~594 host tests green; every flow verified in the browser.
   - notes(cont): **B-resolve** also shipped — guided resolution walks location→explore→overflow→quest→advance (reveal side A, flip to side B), incl. branch choice and player-confirmed advance for conditional stages. 660 host tests green.
   - done: on `feat/quest-picker` (local, **unsigned** commits — sign before pushing)
-  - follow-ups: deploy `docs/data/` + firmware to the Presto and soak; push + Pages deploy; per-quest threat warnings + chase track still unplanned
+  - follow-ups: ~~deploy `docs/data/` + firmware to the Presto and soak~~ done 2026-07-26 (full firmware + 6.4 MB / 508-file card data; 398 scenarios, 251 icons, 122 tip sets on device; 120s soak clean). Still open: push + Pages deploy; per-quest threat warnings + chase track unplanned
 - [x] **Stats redesign** — two flipped compact zones (Players matrix + Progress zone), circular arc/token primitives, Players + Progress detail views, DONE header convention, staging inline ±, `commit_touched` + `quest_history`
   - notes: spec [[stats-redesign]], plan `design/stats-redesign-plan.md`; web-first + firmware lockstep; 378 host tests green; verified device-faithful via `tools/preview.py`
   - done: squash-merged to `main` locally (one commit)
-  - follow-ups: push to remote (scheduled 5:30pm) → GitHub Pages deploy; deploy to Presto
+  - follow-ups: push to remote → GitHub Pages deploy. ~~deploy to Presto~~ done 2026-07-26
 - [x] Dream-chaser Sailing support + stage-completion flow + game-end transition
   - notes: heading on/off-course, wheel + weather glyphs, stage-complete + game-over screens; `SailingModal` is the sailing-test flow (reached from the quest_sailing view)
   - done: web 2e97817; firmware ported (parity work)
