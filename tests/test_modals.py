@@ -204,7 +204,14 @@ def test_players_detail_modal_grid_has_editor_buttons_for_each_player():
     close = _find(m, ("close",))
     assert (close.x, close.y, close.w, close.h) == (408, 4, 64, 32)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "Players" in texts and "THREAT" in texts and "WILLPOWER" in texts
+    assert "Players" in texts
+    # The column headers are now the threat helm and willpower star ICONS,
+    # matching the play screen, rather than ALL-CAPS LABEL text.
+    assert "THREAT" not in texts and "WILLPOWER" not in texts
+    from ui.modals import PlayersDetailModal as _M
+    for b in m.buttons:
+        if b.id[0] in ("t", "w"):
+            assert b.w >= _M.HIT and b.h >= _M.HIT, (b.id, b.w, b.h)
 
 
 def test_players_detail_modal_threat_step_adjusts_and_logs():

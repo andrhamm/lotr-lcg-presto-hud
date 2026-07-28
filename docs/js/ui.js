@@ -123,6 +123,20 @@ export function arrowRight(ctx, cx, cy, size, color, shadow = true) {
   arrowTri(ctx, cx, cy, size, color, false);
 }
 
+// First-player ribbon running in from the LEFT SCREEN EDGE, with a V-notch
+// bitten out of its right end - the horizontal banner reading of the same
+// marker `ribbon` hangs vertically. The label sits INSIDE it.
+export function ribbonH(ctx, y, w, h, notch = 10, fill = pal.gold) {
+  rect(ctx, 0, y, w, h, fill);
+  ctx.beginPath();
+  ctx.moveTo(w, y);
+  ctx.lineTo(w, y + h);
+  ctx.lineTo(w - notch, y + Math.floor(h / 2));
+  ctx.closePath();
+  ctx.fillStyle = pal.bg;
+  ctx.fill();
+}
+
 export function button(ctx, buttons, btn, label, scale = 2, fill = pal.btn, fg = pal.tan) {
   bevel(ctx, btn.x, btn.y, btn.w, btn.h, fill);
   textCenter(ctx, label, btn.x + btn.w / 2, Math.floor(btn.y + (btn.h - 8 * scale) / 2), scale, fg);

@@ -160,6 +160,17 @@ def ribbon(d, pal, x, y, w=12, h=22):
     d.triangle(x, y + h, x + w, y + h, x + w // 2, y + h - 7)
 
 
+def ribbon_h(d, pal, y, w, h, notch=10, fill=None):
+    """First-player ribbon running in from the LEFT SCREEN EDGE, with a V-notch
+    bitten out of its right end - the horizontal banner reading of the same
+    marker `ribbon` hangs vertically. The label sits INSIDE it, so the marker
+    and the name it marks are one object rather than two things side by side."""
+    d.set_pen(fill if fill is not None else pal.gold)
+    d.rectangle(0, y, w, h)
+    d.set_pen(pal.bg)
+    d.triangle(w, y, w, y + h, w - notch, y + h // 2)
+
+
 def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None):
     """Distinct style for phase reminder messages: dark panel, gold edge,
     muted text, and (by default) the hobbit-pipe hint medallion on the left.

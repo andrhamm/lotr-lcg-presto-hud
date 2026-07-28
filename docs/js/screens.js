@@ -2,7 +2,7 @@
 // Structure mirrors the Python: every screen/modal draws into ctx, rebuilds
 // .buttons, and handles taps in onButton returning the same protocol values.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
-         stepper, wrapText, truncateText, ribbon, notePanel, drawWeather,
+         stepper, wrapText, truncateText, ribbon, ribbonH, notePanel, drawWeather,
          disc, arcRuns, ring, token, wxSmall,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
@@ -464,6 +464,19 @@ export class LocationPickModal {
 // modals aren't supported - the main loop only holds one `modal` at a time)
 // that replaces the grid until OK/back, modeled on CounterModal.
 export class PlayersDetailModal {
+  // Row geometry - mirrors ui/modals.py's PlayersDetailModal. The old row was
+  // 56px tall with 24x24 targets (the bare legal minimum for the most-tapped
+  // control in the app) while leaving 252px of the screen empty. Proximity
+  // does the grouping: each cluster is tight and the columns are far apart,
+  // because at the old spacing the gap between clusters equalled the gap
+  // inside one and the row read as six loose buttons.
+  static ROW_H = 96;
+  static ROW_TOP = 124;
+  static STEP_DX = 52;
+  static STEP_R = 20;
+  static HIT = 52;
+  static TOKEN_R = 22;
+
   constructor(game) {
     this.game = game;
     this.buttons = [];
@@ -500,13 +513,15 @@ export class PlayersDetailModal {
   }
 
   _editorRow(ctx, i, key, cx, cy, value, frac, ringFill) {
-    circBtn(ctx, cx - 30, cy, 11, "-");
-    circBtn(ctx, cx + 30, cy, 11, "+");
-    token(ctx, cx, cy, 14, 2, value, pal.value, frac, ringFill, pal.dim);
+    const { STEP_DX, STEP_R, HIT, TOKEN_R } = PlayersDetailModal;
+    circBtn(ctx, cx - STEP_DX, cy, STEP_R, "-");
+    circBtn(ctx, cx + STEP_DX, cy, STEP_R, "+");
+    token(ctx, cx, cy, TOKEN_R, 3, value, pal.value, frac, ringFill, pal.dim, DISPLAY);
+    const h = HIT / 2;
     this.buttons.push(
-      new Button([key, i, -1], cx - 30 - 12, cy - 12, 24, 24),
-      new Button([key, i, "edit"], cx - 12, cy - 12, 24, 24),
-      new Button([key, i, 1], cx + 30 - 12, cy - 12, 24, 24),
+      new Button([key, i, -1], cx - STEP_DX - h, cy - h, HIT, HIT),
+      new Button([key, i, "edit"], cx - h, cy - h, HIT, HIT),
+      new Button([key, i, 1], cx + STEP_DX - h, cy - h, HIT, HIT),
     );
   }
 
@@ -515,17 +530,28 @@ export class PlayersDetailModal {
     rect(ctx, 0, 0, 480, 480, pal.bg);
     if (this.edit) { this._drawEdit(ctx); return; }
     modalHeader(ctx, game, "Players", this.buttons);
-    const threatX = 150, willX = 330, labelX = 32;
-    textCenter(ctx, "THREAT", threatX, 46, LABEL, pal.dim);
-    textCenter(ctx, "WILLPOWER", willX, 46, LABEL, pal.dim);
+    const { ROW_H, ROW_TOP } = PlayersDetailModal;
+    const threatX = 160, willX = 360, labelX = 33;
+    // Column headers are the same ICONS the play screen uses - the red threat
+    // helm and the gold willpower star - not ALL-CAPS LABEL text.
+    // 2x scale: at 1x (20px) they read as afterthoughts against 52px controls
+    // and DISPLAY numerals. The masks are 1-bit, so scaling is exact.
+    icons.drawIcon(ctx, icons.THREAT, threatX - 19, 49, pal.bevel_d, 2);
+    icons.drawIcon(ctx, icons.THREAT, threatX - 20, 48, pal.red, 2);
+    icons.drawIcon(ctx, icons.WILLPOWER, willX - 20, 48, pal.gold, 2);
+    // Hairline between the clusters - proximity alone was not enough to stop
+    // the row reading as six loose buttons.
+    rect(ctx, 260, 40, 1, ROW_TOP - 40 + game.players.length * ROW_H - 30, pal.border);
     game.players.forEach((p, i) => {
-      const cy = 66 + i * 56;
+      const cy = ROW_TOP + i * ROW_H;
       const label = `P${i + 1}`;
+      // The first-player marker is a ribbon running IN FROM THE LEFT EDGE
+      // with the label inside it, so marker and name are one object.
       if (i === game.first_player) {
-        rect(ctx, labelX - 18, cy - 11, 36, 22, pal.gold);
-        textCenter(ctx, label, labelX, cy - 8, BODY, pal.bg, false);
+        ribbonH(ctx, cy - 17, 76, 34);
+        textCenter(ctx, label, labelX, cy - 12, DISPLAY, pal.bg, false);
       } else {
-        textCenter(ctx, label, labelX, cy - 8, BODY, pal.tan);
+        textCenter(ctx, label, labelX, cy - 12, DISPLAY, pal.tan);
       }
       const danger = p.threat >= p.elimination - 10;
       const tfrac = p.elimination > 0 ? p.threat / p.elimination : 0;

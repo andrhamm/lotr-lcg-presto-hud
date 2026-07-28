@@ -9,7 +9,7 @@ import random
 
 from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         stepper, draw_weather, token, circ_btn, disc, arc_runs,
-                        ring, wx_small, wrap_text, truncate_text)
+                        ring, wx_small, wrap_text, truncate_text, ribbon, ribbon_h)
 from ui.counter import CounterState
 from ui import icons
 from gamestate import HEADINGS
@@ -311,13 +311,35 @@ class PlayersDetailModal:
                 game.log_event("P%d committed %d willpower" % (i + 1, after))
         self.edit = None
 
+    # Row geometry. The old row was 56px tall with 24x24 targets - the bare
+    # legal minimum for the most-tapped control in the app - while leaving
+    # 252px of the screen empty. There is no reason to be stingy here: this
+    # modal shows at most 4 rows on a 480px panel.
+    ROW_H = 96            # was 56
+    ROW_TOP = 124         # first row centre; 4 rows then fill to y=438
+    STEP_DX = 52          # -/+ offset from the token centre
+    STEP_R = 20           # drawn button radius (was 11)
+    HIT = 52              # tap target, both axes (was 24)
+    TOKEN_R = 22          # drawn token radius (was 14)
+    # Proximity has to do the grouping work: at STEP_DX 60 the gap BETWEEN
+    # the threat and willpower clusters was 8px - identical to the gap
+    # inside each cluster - so the row read as six loose buttons instead of
+    # two groups of three. Tightening each cluster and pushing the columns
+    # apart makes the grouping legible, and a hairline divider seals it (the
+    # same one the play screen draws between its two zones).
+
     def _editor_row(self, d, pal, i, key, cx, cy, value, frac, ring_fill):
-        circ_btn(d, pal, cx - 30, cy, 11, "-")
-        circ_btn(d, pal, cx + 30, cy, 11, "+")
-        token(d, pal, cx, cy, 14, 2, value, pal.value, frac, ring_fill, pal.dim)
-        self.buttons.append(Button((key, i, -1), cx - 30 - 12, cy - 12, 24, 24))
-        self.buttons.append(Button((key, i, "edit"), cx - 12, cy - 12, 24, 24))
-        self.buttons.append(Button((key, i, 1), cx + 30 - 12, cy - 12, 24, 24))
+        circ_btn(d, pal, cx - self.STEP_DX, cy, self.STEP_R, "-")
+        circ_btn(d, pal, cx + self.STEP_DX, cy, self.STEP_R, "+")
+        token(d, pal, cx, cy, self.TOKEN_R, 3, value, pal.value, frac,
+              ring_fill, pal.dim, vscale=DISPLAY)
+        h = self.HIT // 2
+        self.buttons.append(Button((key, i, -1), cx - self.STEP_DX - h, cy - h,
+                                   self.HIT, self.HIT))
+        self.buttons.append(Button((key, i, "edit"), cx - h, cy - h,
+                                   self.HIT, self.HIT))
+        self.buttons.append(Button((key, i, 1), cx + self.STEP_DX - h, cy - h,
+                                   self.HIT, self.HIT))
 
     def draw(self, hw, game, pal):
         d = hw.display
@@ -329,18 +351,33 @@ class PlayersDetailModal:
             return
         from ui.header import modal_header
         modal_header(d, pal, game, "Players", self.buttons)
-        threat_x, will_x, label_x = 150, 330, 32
-        text_center(d, pal, "THREAT", threat_x, 46, LABEL, pal.dim)
-        text_center(d, pal, "WILLPOWER", will_x, 46, LABEL, pal.dim)
+        threat_x, will_x, label_x = 160, 360, 33
+        # Column headers are the same ICONS the play screen uses - the red
+        # threat helm and the gold willpower star - not ALL-CAPS LABEL text.
+        # A player already reads these glyphs on the play screen; repeating
+        # them here is what makes this modal recognisably the same data.
+        # 2x scale: at 1x (20px) they read as afterthoughts against 52px
+        # controls and DISPLAY numerals. The masks are 1-bit, so scaling is
+        # exact - no resampling.
+        icons.draw(d, icons.THREAT, threat_x - 19, 49, pal.bevel_d, scale=2)
+        icons.draw(d, icons.THREAT, threat_x - 20, 48, pal.red, scale=2)
+        icons.draw(d, icons.WILLPOWER, will_x - 20, 48, pal.gold, scale=2)
+        n = len(game.players)
+        d.set_pen(pal.border)
+        d.rectangle(260, 40, 1, self.ROW_TOP - 40 + n * self.ROW_H - 30)
         for i, p in enumerate(game.players):
-            cy = 66 + i * 56
+            cy = self.ROW_TOP + i * self.ROW_H
             label = "P%d" % (i + 1)
+            # The first-player marker is a ribbon running IN FROM THE LEFT
+            # EDGE with the label inside it, so marker and name are one
+            # object. A separate glyph beside the label read as two unrelated
+            # things floating in the gutter.
             if i == game.first_player:
-                d.set_pen(pal.gold)
-                d.rectangle(label_x - 18, cy - 11, 36, 22)
-                text_center(d, pal, label, label_x, cy - 8, BODY, pal.bg, shadow=False)
+                ribbon_h(d, pal, cy - 17, 76, 34)
+                text_center(d, pal, label, label_x, cy - 12, DISPLAY,
+                            pal.bg, shadow=False)
             else:
-                text_center(d, pal, label, label_x, cy - 8, BODY, pal.tan)
+                text_center(d, pal, label, label_x, cy - 12, DISPLAY, pal.tan)
             danger = p.threat >= p.elimination - 10
             tfrac = p.threat / p.elimination if p.elimination > 0 else 0
             self._editor_row(d, pal, i, "t", threat_x, cy, p.threat, tfrac,
