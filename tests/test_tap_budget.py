@@ -3,8 +3,14 @@
 milestone's tap budget. If this ever needs to change, update the plan's
 before/after table in the same commit - the two must stay in sync.
 
-Before this milestone the identical scenario took 29 taps; this asserts the
-post-M3 flow never exceeds 22.
+Before this milestone the identical scenario took 29 taps. M3 got it to 22,
+2 of which came from inline threat +/- in the players zone.
+
+Those were REVERTED (2026-07-28): the players-zone tokens are read-only
+status, not controls - 24px halves were too small to hit deliberately and too
+easy to hit by accident. Threat now goes through the Players modal, which
+costs an open and a close, so the same round is 24 taps. That is the honest
+price of the revert, recorded here rather than hidden by relaxing the walk.
 """
 import os
 import sys
@@ -16,7 +22,7 @@ from ui.theme import Palette
 from ui.screen_play import ScreenPlay
 from gamestate import GameState
 
-TAP_BUDGET = 22
+TAP_BUDGET = 24
 
 
 def test_common_round_hits_tap_budget():
@@ -70,14 +76,18 @@ def test_common_round_hits_tap_budget():
     tap(("advance",))                               # 14: -> combat_shadow
     assert game.view == "combat_shadow"
 
-    for i in range(4):                              # 15-18: shadow effect, +1 each
-        tap(("threat", i, 1))
+    # shadow effect, +1 threat each. The players zone is read-only, so this
+    # is a modal round-trip: open, four taps, close.
+    tap(("players_detail",))                        # 15: open PlayersDetailModal
+    for i in range(4):                              # 16-19: +1 threat each
+        tap(("t", i, 1))
+    tap(("close",))                                 # 20: close modal
     assert [p.threat for p in game.players] == [1, 1, 1, 1]
 
-    tap(("advance",))                               # 19: -> combat_enemy
-    tap(("advance",))                               # 20: -> combat_player
-    tap(("advance",))                               # 21: -> refresh
-    tap(("endround",))                              # 22: end round
+    tap(("advance",))                               # 21: -> combat_enemy
+    tap(("advance",))                               # 22: -> combat_player
+    tap(("advance",))                               # 23: -> refresh
+    tap(("endround",))                              # 24: end round
 
     assert game.round == 2
     assert state["taps"] <= TAP_BUDGET, \

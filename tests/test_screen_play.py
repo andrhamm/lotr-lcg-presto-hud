@@ -86,44 +86,32 @@ def test_players_detail_tap_opens_players_detail_modal():
     assert isinstance(result[1], PlayersDetailModal)
 
 
-def test_inline_threat_targets_meet_min_size_and_tile_without_gaps():
+def test_players_zone_tokens_are_read_only():
+    """The threat and willpower tokens are STATUS READOUTS, not controls.
+
+    77f2e11 split each threat token into two 24px tap-halves (-1 / +1) to
+    skip a modal round-trip. Reverted: at 24px they were too small to hit
+    deliberately and too easy to hit by accident, and accommodating them cost
+    the zone 36px of width. Editing threat is the Players modal's job."""
     hw, pal, game, screen = _setup("combat_shadow")
     screen.draw(hw, game, pal)
-    for i in range(4):
-        mn = _find(screen, ("threat", i, -1))
-        pl = _find(screen, ("threat", i, 1))
-        assert mn.w >= 24 and mn.h >= 24
-        assert pl.w >= 24 and pl.h >= 24
-        assert mn.x + mn.w == pl.x                  # halves tile with no gap
-    p0_plus = _find(screen, ("threat", 0, 1))
-    p1_minus = _find(screen, ("threat", 1, -1))
-    assert p0_plus.x + p0_plus.w == p1_minus.x       # columns are contiguous too
+    ids = [b.id for b in screen.buttons]
+    assert not [i for i in ids if i[0] == "threat"], (
+        "players zone must expose no threat controls, got %s"
+        % [i for i in ids if i[0] == "threat"])
+    # the whole zone is one target, and it opens the modal
+    assert ("players_detail",) in ids
 
 
-def test_inline_threat_plus_adjusts_and_logs():
+def test_players_zone_is_a_single_tap_target_over_the_whole_zone():
     hw, pal, game, screen = _setup("combat_shadow")
     screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("threat", 1, 1)), game)
-    assert game.players[1].threat == 1
-    assert "P2 threat 0 -> 1" in game.log[-1]["text"]
-
-
-def test_inline_threat_minus_floors_at_zero_and_does_not_log():
-    hw, pal, game, screen = _setup("combat_shadow")
-    screen.draw(hw, game, pal)
-    before = len(game.log)
-    screen.on_button(_find(screen, ("threat", 0, -1)), game)
-    assert game.players[0].threat == 0
-    assert len(game.log) == before                  # no-op change, no log spam
-
-
-def test_inline_threat_plus_can_trigger_elimination():
-    hw, pal, game, screen = _setup("combat_shadow")
-    game.adjust_threat(0, 49)                        # one below the default 50
-    screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("threat", 0, 1)), game)
-    assert game.players[0].eliminated is True
-    assert game.pending_elim == 0
+    zone = [b for b in screen.buttons if b.id == ("players_detail",)]
+    assert len(zone) == 1
+    others = [b for b in screen.buttons
+              if b.id[0] in ("threat", "willpower", "commit")
+              and b.x < zone[0].x + zone[0].w and b.y < zone[0].y + zone[0].h]
+    assert not others, "nothing may sit on top of the players zone: %s" % [b.id for b in others]
 
 
 def test_staging_view_has_direct_steppers():
@@ -328,14 +316,16 @@ def test_commit_view_shows_zones_then_note_at_content_y():
     players = _find(screen, ("players_detail",))
     progress = _find(screen, ("progress_detail",))
     assert players.y == ZONE_TOP - 2 and progress.y == ZONE_TOP - 2
-    assert players.x == 8 and progress.x == 214
+    assert players.x == 8 and progress.x == 174
     # RR 3.2 p.23: commitment is in player order - not simultaneous and not
     # secret - so the copy has to say so. Joined: the line wraps.
     assert "In player order, exhaust characters to commit" in " ".join(_texts(hw))
     assert "commit_tip" not in [b.id[0] for b in screen.buttons]
 
 
-def test_zone_geometry_widened_for_inline_threat():
+def test_zone_geometry_is_the_narrow_read_only_layout():
+    """Back to 32px threat columns / 9 progress columns. The 48px columns
+    only existed to make room for inline threat taps, which are gone."""
     from ui.screen_play import ZONE_TOP
     hw, pal, game, screen = _setup("refresh")
     game.active_location = None
@@ -343,8 +333,8 @@ def test_zone_geometry_widened_for_inline_threat():
     screen.draw(hw, game, pal)
     players = _find(screen, ("players_detail",))
     progress = _find(screen, ("progress_detail",))
-    assert (players.x, players.y, players.w, players.h) == (8, ZONE_TOP - 2, 196, 90)
-    assert (progress.x, progress.y, progress.w, progress.h) == (214, ZONE_TOP - 2, 258, 90)
+    assert (players.x, players.y, players.w, players.h) == (8, ZONE_TOP - 2, 156, 90)
+    assert (progress.x, progress.y, progress.w, progress.h) == (174, ZONE_TOP - 2, 298, 90)
 
 
 def test_progress_zone_caps_columns_keeping_oldest_side_quests_and_sailing():
@@ -354,10 +344,10 @@ def test_progress_zone_caps_columns_keeping_oldest_side_quests_and_sailing():
     game.side_quests = [{"points": 5, "progress": 0} for _ in range(10)]
     screen.draw(hw, game, pal)
     texts = _texts(hw)
-    # maxCols = (472-214)//32 = 8; fixed = Q + L + sailing = 3 -> 5 sides kept
-    for lab in ("Q", "L", "S1", "S2", "S3", "S4", "S5"):
+    # maxCols = (472-174)//32 = 9; fixed = Q + L + sailing = 3 -> 6 sides kept
+    for lab in ("Q", "L", "S1", "S2", "S3", "S4", "S5", "S6"):
         assert lab in texts
-    for lab in ("S6", "S7", "S8", "S9", "S10"):
+    for lab in ("S7", "S8", "S9", "S10"):
         assert lab not in texts                      # newest sides dropped
 
 
@@ -370,7 +360,7 @@ def test_progress_zone_shows_sailing_column_regardless_of_view():
     game.sailing = True
     game.heading = 2
     screen.draw(hw, game, pal)
-    scx = 230 + 32                                   # Q is the only other column
+    scx = 190 + 32                                   # Q is the only other column
     well_disc_row = ("rect", scx - 14, ZONE_TOP + 40, 29, 1, pal.well)
     assert well_disc_row in hw.display.calls
 
