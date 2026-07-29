@@ -240,9 +240,13 @@ def main():
         # reminder notifications fire when the play view changes
         if game.view != prev_view:
             prev_view = game.view
+            # No "Action Window" toast here any more. It was the prototype's
+            # stand-in for a window screen, and it survived the real ones:
+            # arriving at travel (4.2) toasted, then advancing to aw_travel -
+            # which SHARES step 4.2 - toasted again. Twice per window, both
+            # times announcing a screen that either had not opened yet or was
+            # already on screen saying so itself in its own header.
             msgs = [(ic, t, "amber") for ic, t in game.due_notifications()]
-            if game.action_window_open():
-                msgs.append(("LEADERSHIP", "Action Window", "purple"))
             if msgs:
                 screens["play"].notif = msgs
                 screens["play"].notif_frac = 1.0

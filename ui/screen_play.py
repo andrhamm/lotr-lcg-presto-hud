@@ -35,7 +35,6 @@ NAV_W = CTA_H          # back / forward are matching squares, CTA_H on a side
 NAV_RULE_Y = 400       # 1px rule dividing the content area from the bottom nav
 ARROW = 22             # arrow glyph size inside a nav square
 NAV_PAD = 8            # clearance between a nav square and the label between them
-AW_TICKS = 150         # 3s at the 0.02s main-loop tick
 
 
 
@@ -64,7 +63,8 @@ class ScreenPlay:
         self.notif = None         # list of reminder lines, drawn as an overlay
         self.notif_frac = 1.0     # countdown fraction for the pie indicator
         self.notif_pie = None     # (cx, cy, r) of the pie, for partial updates
-        self.notif_edge = "amber" # banner/pie color (leadership purple for windows)
+        self.notif_edge = "amber" # banner/pie colour; every caller is amber
+                                  # now that the purple window toast is gone
         self.alloc = None         # resolution-view allocation state
         self.toast = None         # [(icon, text, color)] picked up by the main loop
 

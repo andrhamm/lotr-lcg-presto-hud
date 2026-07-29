@@ -376,8 +376,10 @@ function main() {
     // reminder + action-window notifications on view change
     if (game.view !== prevView) {
       prevView = game.view;
+      // No "Action Window" toast: it fired twice per window (the phase view
+      // and its window view share a step) and announced a screen that says so
+      // itself. See main.py.
       const msgs = game.dueNotifications().map(([ic, t]) => [ic, t, "amber"]);
-      if (game.actionWindowOpen()) msgs.push(["LEADERSHIP", "Action Window", "purple"]);
       if (msgs.length) {
         screens.play.notif = msgs;
         screens.play.notifFrac = 1.0;
