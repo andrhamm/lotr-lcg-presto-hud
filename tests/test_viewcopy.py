@@ -118,8 +118,6 @@ def test_copy_is_third_person():
     assert not bad, "second person in copy: %s" % [b[1][:70] for b in bad[:8]]
 
 
-@pytest.mark.xfail(strict=True, reason=
-    "'Forced engagement checks run next.' is rewritten in T5; strict=True so this flips to a real gate the moment it passes")
 def test_copy_does_not_reuse_bold_trigger_words_as_framework_prose():
     """`Action`, `Forced`, `Response`, `When Revealed`, `Travel`, `Surge` and
     `Doomed` name printed card abilities. A draft opened a framework step with

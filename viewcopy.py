@@ -169,38 +169,59 @@ COMBAT_FLOW = {
 # Per-window copy, keyed by the view whose step the window FOLLOWS.
 # --------------------------------------------------------------------------
 ACTION_WINDOW_TIPS = {
+    # Every one of these opened by narrating the step the player had just left
+    # ("Resources are gained and cards are drawn"). They pressed a button on
+    # that exact screen a second ago, so the recap read as though something
+    # new had happened. A window screen says what can be done NOW and what
+    # closes on leaving; a recap clause survives only where the advice depends
+    # on it.
+    #
+    # Shape: [positional, actionable]. The positional line says
+    # "This is the last action window before X" wherever that is the point, so
+    # the phrase means the same thing every time it appears.
+    #
+    # A phase-locked action type is named on the FIRST window of its phase -
+    # RR: such abilities "can only be initiated during an action window in the
+    # specified phase", which makes them the one thing genuinely lost when a
+    # phase ends. Counts are from the compiled card data.
     "resource": [
-        "Resources are gained and cards are drawn.",
-        "Anything played here happens before the planning phase begins.",
+        # No countdown here: this window closes nothing a player can lose, so
+        # inventing urgency would be false. Resource Action: is printed on 1
+        # card of 6,037 and is not worth a line.
+        "Anything played now happens before the planning phase begins.",
     ],
     "quest_commit": [
-        "Characters are committed. The encounter deck has not been revealed.",
-        "This is the last window before staging.",
+        "This is the last action window before staging.",
+        "Anything played now resolves before any encounter card is revealed. "
+        "\"Quest Action:\" abilities work anywhere in this phase.",
     ],
     "quest_staging": [
-        "Both totals are set.",
-        "Change them now - the comparison happens next and fixes the result.",
+        "This is the last action window before quest resolution.",
+        "Confirm the tracker matches the board.",
     ],
     "quest_resolution": [
-        "Progress has been placed.",
-        "The travel opportunity comes next.",
+        "This is the last action window before travel.",
     ],
     "travel": [
-        "The travel opportunity has passed.",
-        "\"Travel Action:\" abilities work only during this phase.",
+        "This is the last action window in the travel phase.",
+        "\"Travel Action:\" abilities work only here.",
     ],
     "enc_optional": [
-        "Optional engagement is over.",
-        "Forced engagement checks run next.",
+        "This is the last action window before engagement checks.",
+        "Lower threat now and fewer enemies can engage. "
+        "\"Encounter Action:\" abilities work only in this phase.",
     ],
     "enc_checks": [
-        "Engagements are settled.",
-        "The combat phase begins next.",
+        "This is the last action window before combat.",
+        "Questers are still exhausted, so ready defenders.",
     ],
     "refresh": [
-        "Cards are readied and threat has already gone up.",
-        "Reducing threat now cannot undo an elimination that already "
-        "happened.",
+        # The deliberate exception to the shape: its first line is a PAST
+        # fact, because here the door has already shut and the point is that
+        # acting now is too late.
+        "Last action window of the round. End of round effects resolve after "
+        "it.",
+        "\"Refresh Action:\" abilities work only here.",
     ],
 }
 
