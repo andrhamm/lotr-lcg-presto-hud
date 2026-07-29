@@ -195,7 +195,12 @@ export class ScreenLog {
 }
 
 export class LedModal {
-  constructor(prefs, game) { this.prefs = prefs; this.game = game; this.buttons = []; }
+  constructor(prefs, game) {
+    this.prefs = prefs; this.game = game; this.buttons = [];
+    // Taps mutate prefs in place so the LEDs can live-preview. Cancel has to
+    // put back what was there, or it would keep every previewed change.
+    this._restore = { brightness: prefs.brightness, scene: prefs.scene };
+  }
   draw(ctx) {
     const SCENES = ["phase", "danger", "torch", "off"];
     const LABELS = { phase: "Phase + danger", danger: "Danger only",
@@ -224,9 +229,15 @@ export class LedModal {
       textCenter(ctx, LABELS[key], x + half / 2, y + 20, BODY, on ? pal.gold : pal.muted);
       this.buttons.push(b);
     });
-    const done = new Button(["save"], 24, 396, 432, 62);
+    // Cancel alongside Save: this modal writes prefs, and a full-width Save
+    // was the only way out, so opening it to look meant committing.
+    const cancel = new Button(["cancel"], 24, 396, 208, 62);
+    bevel(ctx, cancel.x, cancel.y, cancel.w, cancel.h, pal.btn_no, false, 3);
+    textCenter(ctx, "Cancel", cancel.x + cancel.w / 2, cancel.y + 20, BODY, pal.no_fg);
+    this.buttons.push(cancel);
+    const done = new Button(["save"], 248, 396, 208, 62);
     bevel(ctx, done.x, done.y, done.w, done.h, pal.btn_ok, false, 3);
-    textCenter(ctx, "Done", 240, done.y + 20, BODY, pal.ok_fg);
+    textCenter(ctx, "Done", done.x + done.w / 2, done.y + 20, BODY, pal.ok_fg);
     this.buttons.push(done);
   }
   onButton(btn) {
@@ -234,6 +245,7 @@ export class LedModal {
     if (k === "bri") { this.prefs.brightness = btn.id[1]; return null; }
     if (k === "scene") { this.prefs.scene = btn.id[1]; return null; }
     if (k === "save") return "close";
+    if (k === "cancel") { Object.assign(this.prefs, this._restore); return "cancel"; }
     return null;
   }
 }
@@ -587,7 +599,11 @@ export class ScenarioSourceScreen {
   draw(ctx, game) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    drawHeader(ctx, game, this.buttons, { title: "SCENARIO SOURCE", roundLabel: "R0" });
+    // The back affordance takes the round-stamp slot: "R0" says nothing on a
+    // pre-game screen, and it is the slot PickCycle and ChooseScenario
+    // already put "< Source" in. This page had no way out at all.
+    drawHeader(ctx, game, this.buttons, { title: "SCENARIO SOURCE", roundLabel: "< Menu" });
+    this.buttons.push(new Button(["back"], 0, 0, 150, 40));
 
     const off = new Button(["choose_scenario", "official"], 24, 96, 432, 120);
     bevel(ctx, off.x, off.y, off.w, off.h, pal.btn);
@@ -888,7 +904,9 @@ export class ScenarioOptionsScreen {
     const { GATHER_Y0, GATHER_ROW_H, CTA_Y, CTA_H } = ScenarioOptionsScreen;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    drawHeader(ctx, game, this.buttons, { title: "SCENARIO OPTIONS", roundLabel: "R0" });
+    // Back in the round-stamp slot, as on the source page.
+    drawHeader(ctx, game, this.buttons, { title: "SCENARIO OPTIONS", roundLabel: "< Scenarios" });
+    this.buttons.push(new Button(["back"], 0, 0, 170, 40));
 
     const name = this.scenario.name ?? this.data.name ?? "Unknown scenario";
     const pack = this.scenario.pack ?? this.data.pack ?? "";
@@ -979,6 +997,12 @@ export class ScenarioOptionsScreen {
 
   onButton(btn, game) {
     const k = btn.id[0];
+      if (k === "back" || k === "retitle") {
+        // Same route as tapping the scenario name, which was the only way
+        // back before and is not discoverable.
+        return ["choose_scenario_list", this.scenario.source, this.scenario.cycle];
+      }
+      if (k === "back") return ["goto", "boot"];
     if (k === "nav") return ["goto", btn.id[1]];
     if (k === "retitle") return ["choose_scenario_list", this.scenario.source, this.scenario.cycle];
     if (k === "dd") {

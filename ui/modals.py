@@ -627,6 +627,11 @@ class LedModal:
     def __init__(self, prefs, game):
         self.prefs = prefs
         self.game = game
+        # Taps mutate prefs in place so the LEDs can live-preview. Cancel has
+        # to put back what was there, or "Cancel" would keep every change it
+        # previewed on the way.
+        self._restore = {"brightness": prefs.get("brightness"),
+                         "scene": prefs.get("scene")}
         self.buttons = []
 
     def draw(self, hw, game, pal):
@@ -664,9 +669,17 @@ class LedModal:
                         pal.gold if on else pal.muted)
             self.buttons.append(b)
 
-        done = Button(("save",), 24, 396, 432, 62)
+        # Cancel alongside Save: this modal writes prefs, and a full-width
+        # Save was the only way out - so opening it to look at the options
+        # meant committing whatever you had touched on the way.
+        cancel = Button(("cancel",), 24, 396, 208, 62)
+        bevel(d, pal, cancel.x, cancel.y, cancel.w, cancel.h, pal.btn_no, t=3)
+        text_center(d, pal, "Cancel", cancel.x + cancel.w // 2, cancel.y + 20,
+                    BODY, pal.no_fg)
+        self.buttons.append(cancel)
+        done = Button(("save",), 248, 396, 208, 62)
         panel(d, pal, done.x, done.y, done.w, done.h, fill=pal.btn_ok, border=pal.ok_fg)
-        text_center(d, pal, "Done", 240, done.y + 20, BODY, pal.ok_fg)
+        text_center(d, pal, "Done", done.x + done.w // 2, done.y + 20, BODY, pal.ok_fg)
         self.buttons.append(done)
 
         # live preview
@@ -686,6 +699,9 @@ class LedModal:
             return None
         if k == "save":
             return "close"
+        if k == "cancel":
+            self.prefs.update(self._restore)
+            return "cancel"
         return None
 
 
@@ -1664,9 +1680,21 @@ class StageCompleteModal:
         bevel(d, pal, win.x, win.y, win.w, win.h, pal.card_hi, t=3)
         text_center(d, pal, "That was the final stage - Victory!", 240, y + 20, BODY, pal.gold)
         self.buttons.append(win)
+        # A way out. The modal opens off game.pending_stage, so declining has
+        # to clear that flag or it reopens on the next draw - and without it
+        # a stage marked complete in error was unrecoverable: both other
+        # buttons advance the quest.
+        y += 66
+        no = Button(("not_yet",), 30, y, 420, 44)
+        bevel(d, pal, no.x, no.y, no.w, no.h, pal.btn_no, t=3)
+        text_center(d, pal, "Not yet - go back", 240, y + 12, BODY, pal.no_fg)
+        self.buttons.append(no)
 
     def on_button(self, btn):
         k = btn.id[0]
+        if k == "not_yet":
+            self.game.pending_stage = None
+            return "cancel"
         if k == "n":
             self.n = max(1, min(9, self.n + btn.id[1]))
             return None

@@ -68,8 +68,14 @@ class ScenarioSourceScreen:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
+        # The back affordance takes the round-stamp slot: "R0" says nothing on
+        # a pre-game screen, and it is the same slot PickCycle and
+        # ChooseScenario already put "< Source" in. This page was the entry
+        # point and had no way out at all, so a mis-tap on New Game committed
+        # you to picking a scenario.
         draw_header(d, pal, game, self.buttons, title="SCENARIO SOURCE",
-                    round_label="R0")
+                    round_label="< Menu")
+        self.buttons.append(Button(("back",), 0, 0, 150, 40))
 
         off = Button(("choose_scenario", "official"), 24, 96, 432, 120)
         bevel(d, pal, off.x, off.y, off.w, off.h, pal.btn)
@@ -85,6 +91,8 @@ class ScenarioSourceScreen:
 
     def on_button(self, btn, game):
         k = btn.id[0]
+        if k == "back":
+            return ("goto", "boot")
         if k == "nav":
             return ("goto", btn.id[1])
         if k == "choose_scenario":
@@ -440,8 +448,10 @@ class ScenarioOptionsScreen:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
+        # Back in the round-stamp slot, as on the source page.
         draw_header(d, pal, game, self.buttons, title="SCENARIO OPTIONS",
-                    round_label="R0")
+                    round_label="< Scenarios")
+        self.buttons.append(Button(("back",), 0, 0, 170, 40))
 
         name = self.scenario.get("name") or self.data.get("name", "Unknown scenario")
         pack = self.scenario.get("pack") or self.data.get("pack", "")
@@ -547,8 +557,13 @@ class ScenarioOptionsScreen:
         k = btn.id[0]
         if k == "nav":
             return ("goto", btn.id[1])
-        if k == "retitle":
-            return ("choose_scenario_list", self.scenario.get("source"), self.scenario.get("cycle"))
+        if k in ("back", "retitle"):
+            # Same route as tapping the scenario name, which was the only way
+            # back before and is not discoverable. Returns to the list this
+            # scenario came from rather than a bare goto, so the cycle and
+            # source survive the trip.
+            return ("choose_scenario_list", self.scenario.get("source"),
+                    self.scenario.get("cycle"))
         if k == "dd":
             return ("modal", OptionListModal(self, "difficulty", "Difficulty",
                                              self.difficulty_options()))

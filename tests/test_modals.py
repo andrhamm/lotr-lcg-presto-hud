@@ -1045,3 +1045,94 @@ def test_progress_modal_row_falls_back_to_location_without_a_name():
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     assert "Location" in _texts(hw)
+
+
+# --------------------------------------------------------------------------
+# Every modal and every new-game page must have a way out (2026-07-28)
+# --------------------------------------------------------------------------
+
+def _pal():
+    from tests.fake_hardware import FakeHardware
+    from ui.theme import Palette
+    return Palette(FakeHardware().display)
+
+
+def test_every_modal_state_can_be_dismissed():
+    """No modal may be a trap.
+
+    A "way out" means a button whose handler returns close or cancel, or one
+    that returns to a parent state which has one. Nested pages (the players
+    editor, the location sub-pages) count via their back button.
+    """
+    from tests.scenes import SCENES
+    stuck = []
+    for name in sorted(SCENES):
+        try:
+            hw, obj = SCENES[name]()
+        except Exception:
+            continue
+        if "Modal" not in type(obj).__name__:
+            continue
+        ways = 0
+        for b in list(obj.buttons):
+            try:
+                _hw2, probe = SCENES[name]()
+            except Exception:
+                continue
+            tgt = next((x for x in probe.buttons if x.id == b.id), None)
+            if tgt is None:
+                continue
+            try:
+                r = probe.on_button(tgt)
+            except Exception:
+                continue
+            if b.id[0] not in ("close", "cancel", "back", "no", "not_yet",
+                               "lp_cancel", "done", "ok", "save", "go", "win",
+                               "avert", "elim"):
+                continue
+            if r in ("close", "cancel", "redraw"):
+                ways += 1
+                continue
+            # A sub-page's back button navigates by mutating modal state and
+            # returns None; main redraws every tap regardless. That still
+            # leaves the sub-page, so it counts - detect it by the button set
+            # changing after the tap.
+            try:
+                before = {x.id for x in probe.buttons}
+                probe.draw(_hw2, getattr(probe, "game", None), _pal())
+                if {x.id for x in probe.buttons} != before:
+                    ways += 1
+            except Exception:
+                pass
+        if not ways:
+            stuck.append((name, sorted({b.id[0] for b in obj.buttons})))
+    assert not stuck, "modal states with no way out: %s" % stuck
+
+
+def test_every_new_game_page_can_be_backed_out_of():
+    """The new-game flow is a funnel, and every page of it must be
+    reversible - a mis-picked scenario should never mean restarting."""
+    from tests.fake_hardware import FakeHardware
+    from ui.theme import Palette
+    from ui.screen_quest import (ScenarioSourceScreen, PickCycleScreen,
+                                 ChooseScenarioScreen, ScenarioOptionsScreen)
+    from gamestate import GameState
+
+    pages = [
+        (ScenarioSourceScreen(), "boot"),
+        (PickCycleScreen("official", []), "scenario_source"),
+        (ChooseScenarioScreen("official", "c", []), None),
+        (ScenarioOptionsScreen({"slug": "x", "source": "official",
+                                "cycle": "c"}, {}), None),
+    ]
+    for screen, expect in pages:
+        hw = FakeHardware()
+        pal = Palette(hw.display)
+        g = GameState(4, 25)
+        screen.draw(hw, g, pal)
+        back = [b for b in screen.buttons if b.id[0] == "back"]
+        assert back, "%s has no back button" % type(screen).__name__
+        result = screen.on_button(back[0], g)
+        assert result is not None, type(screen).__name__
+        if expect:
+            assert result == ("goto", expect), (type(screen).__name__, result)
