@@ -9,9 +9,28 @@ export const MAX_PLAYERS = 4;
 export const DEFAULT_ELIMINATION = 50;
 export const DEFAULT_START_THREAT = 25;
 
-export const VIEW_ORDER = ["resource", "planning", "quest_commit", "quest_staging",
-  "quest_resolution", "travel", "enc_optional", "enc_checks",
-  "combat_shadow", "combat_enemy", "combat_player", "refresh"];
+// A window view is "aw_" + the view whose step it follows. They are real views
+// rather than screen-local state so that undo, save/resume and delta replay
+// all work on them for free - snapshot() already carries `view` and `step`.
+export const VIEW_ORDER = ["resource", "aw_resource",
+  "planning",
+  "quest_commit", "aw_quest_commit",
+  "quest_staging", "aw_quest_staging",
+  "quest_resolution", "aw_quest_resolution",
+  "travel", "aw_travel",
+  "enc_optional", "aw_enc_optional",
+  "enc_checks", "aw_enc_checks",
+  "combat_shadow", "combat_enemy", "combat_player",
+  "refresh", "aw_refresh"];
+
+export const WINDOW_PREFIX = "aw_";
+export const isWindowView = v => v.startsWith(WINDOW_PREFIX);
+export const phaseViewOf = v =>
+  isWindowView(v) ? v.slice(WINDOW_PREFIX.length) : v;
+// Single predicate so the frequency policy is one function. Every window is
+// always in the flow; "once per game" or "off" would be a change here alone.
+export const windowAfter = v =>
+  (WINDOW_PREFIX + v) in VIEW_STEP ? WINDOW_PREFIX + v : null;
 
 export const VIEW_STEP = {
   setup_game: "0.0", quest_setup: "0.0", resource: "1.R", planning: "2.P", quest_sailing: "3.1",
@@ -20,6 +39,13 @@ export const VIEW_STEP = {
   enc_optional: "5.2", enc_checks: "5.3", combat_shadow: "6.2",
   combat_enemy: "6.E", combat_player: "6.P", refresh: "7.R",
 };
+// Window views share the step they follow: the window IS that step's window.
+for (const pv of ["resource", "quest_commit", "quest_staging",
+                  "quest_resolution", "travel", "enc_optional",
+                  "enc_checks", "refresh"]) {
+  VIEW_STEP["aw_" + pv] = VIEW_STEP[pv];
+}
+
 
 
 const PHASE_VIEW = {
@@ -28,8 +54,11 @@ const PHASE_VIEW = {
   Encounter: "enc_optional", Combat: "combat_shadow", Refresh: "refresh",
   End: "refresh",
 };
+// Built from PHASE views only. A blanket inversion is last-wins, so the
+// window views would capture their shared step and a phases-screen jump to
+// 3.3 would land on the window instead of Staging.
 const STEP_VIEW = {};
-for (const [v, s] of Object.entries(VIEW_STEP)) STEP_VIEW[s] = v;
+for (const [v, s] of Object.entries(VIEW_STEP)) if (!isWindowView(v)) STEP_VIEW[s] = v;
 STEP_VIEW["5.3"] = "enc_checks";
 STEP_VIEW["5.4"] = "enc_checks";
 STEP_VIEW["6.11"] = "combat_player";
@@ -316,7 +345,39 @@ export class GameState {
   enterView(v) {
     this.view = v;
     this.step = VIEW_STEP[v];
-    this.logEvent(`Phase: ${VIEW_LABELS[v] ?? v}`);
+    // A window is not a new phase, so it does not claim to be one in the log:
+    // the "Phase:" lines are how a reader reconstructs a round, and eight
+    // extra false starts per round would drown them.
+    if (isWindowView(v)) {
+      this.logEvent(`Action window: ${VIEW_LABELS[phaseViewOf(v)] ?? v}`);
+    } else {
+      this.logEvent(`Phase: ${VIEW_LABELS[v] ?? v}`);
+    }
+  }
+
+  nextView() {
+    if (this.view === "quest_sailing") return "quest_commit";
+    const i = VIEW_ORDER.indexOf(this.view);
+    let nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
+    // Resolution is entered only by a successful resolve, so the staging
+    // window hands straight to travel.
+    if (this.view === "aw_quest_staging") nxt = "travel";
+    if (this.view === "planning" && this.sailing) nxt = "quest_sailing";
+    return nxt;
+  }
+
+  // nextView() drives navigation; this drives the CTA label. They differ
+  // because a phase view's button must still read "Next: Questing: Staging"
+  // even when the tap lands on that phase's window first.
+  nextPhaseView() {
+    let v = this.nextView(), seen = 0;
+    while (isWindowView(v) && seen < VIEW_ORDER.length) {
+      const i = VIEW_ORDER.indexOf(v);
+      v = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
+      if (v === "quest_resolution") v = "travel";
+      seen++;
+    }
+    return v;
   }
 
   advanceView() {
@@ -328,10 +389,7 @@ export class GameState {
       return;
     }
     if (this.view === "quest_sailing") { this.enterView("quest_commit"); return; }
-    const i = VIEW_ORDER.indexOf(this.view);
-    let nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
-    if (this.view === "quest_staging") nxt = "travel";
-    if (this.view === "resource_planning" && this.sailing) nxt = "quest_sailing";
+    const nxt = this.nextView();
     this.enterView(nxt);
     // a Sailing test begins by shifting one step off-course (rulebook p.6)
     if (nxt === "quest_sailing") this.shiftHeading(1, "winds shift");

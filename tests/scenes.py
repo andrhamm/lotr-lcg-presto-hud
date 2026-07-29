@@ -49,17 +49,21 @@ def _play(view, mutate=None):
 
 
 def _aw_scene(view):
-    """The static action-window screen for one view. Not a modal - transient
-    ScreenPlay state, so the zones still open their usual editors."""
+    """The action-window screen that follows `view`.
+
+    A window is a real view ("aw_" + the view it follows), so this is an
+    ordinary play scene - no screen-local state to prime. Named play_aw_* in
+    SCENES so the L5 nav-band rule covers it; PLAY_SCENES filters on the
+    "play_" prefix, and the windows escaped it while they were named aw_*.
+    """
     def build():
         from ui.screen_play import ScreenPlay
         hw = FakeHardware()
         pal = Palette(hw.display)
         g = _game()
-        g.view = view
-        g.step = VIEW_STEP[view]
+        g.view = "aw_" + view
+        g.step = VIEW_STEP[g.view]
         s = ScreenPlay()
-        s.open_action_window(g)
         s.draw(hw, g, pal)
         return hw, s
     return build
@@ -1217,14 +1221,14 @@ SCENES = {
     "log": _screen("ui.screen_log", "ScreenLog", prep=_log_prep),
     # One scene per action-window view - all ten, so the layout linter covers
     # every piece of copy, not just a sample.
-    "aw_resource": _aw_scene("resource"),
-    "aw_quest_commit": _aw_scene("quest_commit"),
-    "aw_quest_staging": _aw_scene("quest_staging"),
-    "aw_quest_resolution": _aw_scene("quest_resolution"),
-    "aw_travel": _aw_scene("travel"),
-    "aw_enc_optional": _aw_scene("enc_optional"),
-    "aw_enc_checks": _aw_scene("enc_checks"),
-    "aw_refresh": _aw_scene("refresh"),
+    "play_aw_resource": _aw_scene("resource"),
+    "play_aw_quest_commit": _aw_scene("quest_commit"),
+    "play_aw_quest_staging": _aw_scene("quest_staging"),
+    "play_aw_quest_resolution": _aw_scene("quest_resolution"),
+    "play_aw_travel": _aw_scene("travel"),
+    "play_aw_enc_optional": _aw_scene("enc_optional"),
+    "play_aw_enc_checks": _aw_scene("enc_checks"),
+    "play_aw_refresh": _aw_scene("refresh"),
     "log_replay": _screen("ui.screen_log", "ScreenLog", prep=_log_replay_prep),
     "play_quest_staging_can_back": _play("quest_staging", mutate=_has_undo_history),
     "play_combat_player_can_back": _play("combat_enemy", mutate=_has_undo_history),

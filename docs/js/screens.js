@@ -31,13 +31,18 @@ function doneButton(ctx) {
 
 export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
                                                  close = false, closeLeft = false,
-                                                 roundLabel = null } = {}) {
+                                                 roundLabel = null,
+                                                 titlePen = null } = {}) {
   const roundLbl = roundLabel ?? `R${game.round} ${game.step}`;
   textLeft(ctx, roundLbl, 10, 12, BODY,
            (closeLeft || highlight === "log") ? pal.gold : pal.muted);
   const center = title ?? (VIEW_LABELS[game.view] ?? phaseStep(game.step).phase);
   const scale = center.length > 12 ? BODY : DISPLAY;
-  textCenter(ctx, center, 240, scale === BODY ? 12 : 8, scale, pal.gold);
+  // titlePen lets a screen own its title colour. The action-window screens
+  // use pal.purple, the same ink their in-view window sections use, so the
+  // header says which KIND of screen this is rather than only its name.
+  textCenter(ctx, center, 240, scale === BODY ? 12 : 8, scale,
+             titlePen ?? pal.gold);
   if (close) {
     doneButton(ctx);
   } else {

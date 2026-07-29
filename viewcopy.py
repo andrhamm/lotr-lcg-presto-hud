@@ -63,6 +63,13 @@ VIEW_LABELS = {
     "refresh": "Refresh",
 }
 
+# Window views. These never appear in a CTA - a phase view's button names the
+# next PHASE, and the window's own button does too - so they are not bound by
+# the 332px CTA span. They are used by the log and by view_for_step fallbacks.
+for _pv in ("resource", "quest_commit", "quest_staging", "quest_resolution",
+            "travel", "enc_optional", "enc_checks", "refresh"):
+    VIEW_LABELS["aw_" + _pv] = "Action Window: " + VIEW_LABELS[_pv]
+
 # --------------------------------------------------------------------------
 # Setup. The real confusion is the ORDER of effects during quest setup:
 # resolve 1A's Setup text in printed order, keywords on setup reveals DO

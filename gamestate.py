@@ -19,11 +19,42 @@ DEFAULT_START_THREAT = 25  # varies by deck; editable per player at setup
 
 # Guided per-round flow. quest_resolution is entered only via a successful
 # resolve; advance_view otherwise skips from staging to travel.
-VIEW_ORDER = ["resource", "planning", "quest_commit", "quest_staging",
-              "quest_resolution", "travel",
-              "enc_optional", "enc_checks",
+# A window view is "aw_" + the view whose step it follows. They are real views
+# rather than screen-local state so that undo, save/resume and delta replay all
+# work on them for free - snapshot() already carries `view` and `step`.
+VIEW_ORDER = ["resource", "aw_resource",
+              "planning",
+              "quest_commit", "aw_quest_commit",
+              "quest_staging", "aw_quest_staging",
+              "quest_resolution", "aw_quest_resolution",
+              "travel", "aw_travel",
+              "enc_optional", "aw_enc_optional",
+              "enc_checks", "aw_enc_checks",
               "combat_shadow", "combat_enemy", "combat_player",
-              "refresh"]
+              "refresh", "aw_refresh"]
+
+WINDOW_PREFIX = "aw_"
+
+
+def is_window_view(v):
+    """True for the interstitial action-window screens."""
+    return v.startswith(WINDOW_PREFIX)
+
+
+def phase_view_of(v):
+    """The phase view a window view follows (identity for phase views)."""
+    return v[len(WINDOW_PREFIX):] if is_window_view(v) else v
+
+
+def window_after(v):
+    """The window view that follows `v`, or None.
+
+    Single predicate so the frequency policy is one function. Currently every
+    window is always in the flow; a "once per game" or "off" policy would be a
+    change here and nowhere else.
+    """
+    w = WINDOW_PREFIX + v
+    return w if w in VIEW_STEP else None
 
 # view -> representative step id (for the phases screen / log tags / LEDs)
 VIEW_STEP = {
@@ -43,6 +74,10 @@ VIEW_STEP = {
     "combat_player": "6.P",
     "refresh": "7.R",
 }
+# Window views share the step they follow: the window IS that step's window.
+for _pv in ("resource", "quest_commit", "quest_staging", "quest_resolution",
+            "travel", "enc_optional", "enc_checks", "refresh"):
+    VIEW_STEP["aw_" + _pv] = VIEW_STEP[_pv]
 
 
 _PHASE_VIEW = {
@@ -56,9 +91,13 @@ _PHASE_VIEW = {
     "Refresh": "refresh",
     "End": "refresh",
 }
+# Built from PHASE views only. A blanket inversion is last-wins, so the window
+# views would capture their shared step and a phases-screen jump to 3.3 would
+# land on the window instead of Staging.
 _STEP_VIEW = {}
 for _v, _s in VIEW_STEP.items():
-    _STEP_VIEW[_s] = _v
+    if not is_window_view(_v):
+        _STEP_VIEW[_s] = _v
 # encounter/combat later steps fall to the closest earlier view
 _STEP_VIEW["5.3"] = "enc_checks"
 _STEP_VIEW["5.4"] = "enc_checks"
@@ -373,7 +412,11 @@ class GameState:
         """Central view transition: sets the step and logs the phase start."""
         self.view = v
         self.step = VIEW_STEP[v]
-        self.log_event("Phase: %s" % VIEW_LABELS.get(v, v))
+        if is_window_view(v):
+            self.log_event("Action window: %s"
+                           % VIEW_LABELS.get(phase_view_of(v), v))
+        else:
+            self.log_event("Phase: %s" % VIEW_LABELS.get(v, v))
 
     def next_view(self):
         """Where advance_view() would go from here, without going there.
@@ -386,11 +429,31 @@ class GameState:
             return "quest_commit"
         i = VIEW_ORDER.index(self.view)
         nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
-        if self.view == "quest_staging":
+        # Resolution is entered only by a successful resolve, so the staging
+        # window hands straight to travel.
+        if self.view == "aw_quest_staging":
             nxt = "travel"
-        if self.view == "resource_planning" and self.sailing:
+        if self.view == "planning" and self.sailing:
             nxt = "quest_sailing"
         return nxt
+
+    def next_phase_view(self):
+        """The next PHASE view, skipping any window in between.
+
+        next_view() drives navigation; this drives the CTA label. They differ
+        because a phase view's button must still read "Next: Questing: Staging"
+        even when the tap lands on that phase's window first - the window is a
+        step on the way, not the destination being announced.
+        """
+        v = self.next_view()
+        seen = 0
+        while is_window_view(v) and seen < len(VIEW_ORDER):
+            i = VIEW_ORDER.index(v)
+            v = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
+            if v == "quest_resolution":
+                v = "travel"
+            seen += 1
+        return v
 
     def advance_view(self):
         """Move to the next view; staging skips resolution (that view is only

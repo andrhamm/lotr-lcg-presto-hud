@@ -5,9 +5,10 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
          arrowLeft, arrowRight,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
+import { step as phaseStep } from "./phases.js";
 import * as icons from "./icons.js";
-import { VIEW_ORDER } from "./gamestate.js";
-import { VIEW_LABELS, SETUP_TIP, PHASE_FRAMEWORK, PHASE_WINDOW,
+import { VIEW_ORDER, isWindowView, phaseViewOf } from "./gamestate.js";
+import { VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS, PHASE_FRAMEWORK, PHASE_WINDOW,
          PHASE_CAPTION, COMBAT_FLOW, SHIP_NOTES, STAGING, TRAVEL,
          OUTCOME, SAILING, QUEST_SETUP, CONFIRM, TOTALS,
          REFRESH } from "./viewcopy.js";
@@ -22,7 +23,9 @@ const CONTENT_Y = 150;                    // zones end ~136; tips start below
 const CTA_Y = 410;
 const CTA_H = 58;
 const NAV_W = CTA_H;      // back / forward are matching squares, CTA_H a side
-const NAV_RULE_Y = 400;   // 1px rule dividing the content area from the nav
+const NAV_RULE_Y = 400;
+const AW_Y0 = 146;                      // top of the copy band, under the zones
+const AW_MAX_BOTTOM = NAV_RULE_Y - 10;  // copy must clear the nav rule   // 1px rule dividing the content area from the nav
 const ARROW = 22;         // arrow glyph size inside a nav square
 const NAV_PAD = 8;        // clearance between a nav square and the label
 
@@ -131,6 +134,29 @@ export class ScreenPlay {
   // control is tapped every phase, so its target spans label + arrow rather
   // than the 58px square alone. Back's target is only its square, so a
   // mis-reach for the label can never undo.
+  _drawActionWindow(ctx, game) {
+    const y0 = AW_Y0, w = 480 - 2 * MARGIN;
+    const gutter = icons.LEADERSHIP[0] + 14;
+    const usable = w - 16 - 12 - gutter;
+    const lh = 10 * BODY + 6;
+    const bandTop = y0, bandBottom = AW_MAX_BOTTOM;
+    const maxLines = Math.max(1, Math.floor((bandBottom - bandTop - 16) / lh));
+    // Whole paragraphs only - clipping a sentence mid-clause is exactly what
+    // the design system forbids.
+    const lines = [];
+    for (const para of (ACTION_WINDOW_TIPS[phaseViewOf(game.view)] ?? [])) {
+      const wrapped = wrapText(para, BODY, usable, measureText);
+      if (lines.length + wrapped.length > maxLines) continue;
+      lines.push(...wrapped);
+    }
+    const ph = Math.max(lines.length * lh + 16, icons.LEADERSHIP[0] + 14);
+    const ty = bandTop + Math.max(0, Math.floor((bandBottom - bandTop - ph) / 2));
+    notePanel(ctx, MARGIN, ty, w, lines, BODY, 0, icons.LEADERSHIP);
+    // The window hands off to the NEXT step, so the CTA names it - the same
+    // "Next: X" every phase view uses.
+    this._cta(ctx, game, `Next: ${VIEW_LABELS[game.nextPhaseView()]}`, ["advance"]);
+  }
+
   _cta(ctx, game, label, id, fill = pal.btn_ok, fg = pal.gold) {
     rect(ctx, 0, NAV_RULE_Y, 480, 1, pal.border);
     const cy = CTA_Y + CTA_H / 2;
@@ -258,8 +284,23 @@ export class ScreenPlay {
     const view = game.view;
     if (view === "quest_setup") {
       drawHeader(ctx, game, this.buttons, { title: "QUEST SETUP", roundLabel: "R0" });
+    } else if (isWindowView(view)) {
+      // "ACTION WINDOW" is the screen's TITLE and belongs in the header,
+      // where every other screen puts its title - not floating in the
+      // content area competing with the copy.
+      drawHeader(ctx, game, this.buttons, {
+        title: `ACTION WINDOW - ${phaseStep(game.step).phase.toUpperCase()}`,
+        titlePen: pal.purple,
+      });
     } else {
       drawHeader(ctx, game, this.buttons);
+    }
+
+    if (isWindowView(view)) {
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
+      this._drawActionWindow(ctx, game);
+      return;
     }
 
     if (view === "setup_game") {
@@ -417,8 +458,9 @@ export class ScreenPlay {
           cy += 24;
         }
       }
-      const i = VIEW_ORDER.indexOf(view);
-      const nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
+      // nextPhaseView(), not raw VIEW_ORDER indexing: the very next view is
+      // this phase's action window, and a CTA must announce the next PHASE.
+      const nxt = game.nextPhaseView();
       this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt] ?? nxt}`, ["advance"]);
     }
 
@@ -774,7 +816,9 @@ export class ScreenPlay {
       game.logEvent(msg);
       game.pending_budget = 0;
       this.alloc = null;
-      game.enterView("travel");
+      // Through the resolution window, not past it: allocating progress is
+      // the 3.4 step, and 3.4's window follows it like any other.
+      game.enterView("aw_quest_resolution");
       if (game.pending_stage) return ["modal", new StageCompleteModal(game)];
       if (game.pending_resolution) {
         // Catalog game: placeProgress() (gamestate.js, B-resolve Task 1)

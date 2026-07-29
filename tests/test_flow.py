@@ -9,11 +9,22 @@ from gamestate import GameState, VIEW_ORDER
 # -- views ----------------------------------------------------------------
 
 def test_view_order():
-    assert VIEW_ORDER == ["resource", "planning", "quest_commit", "quest_staging",
-                          "quest_resolution", "travel",
-                          "enc_optional", "enc_checks",
+    assert VIEW_ORDER == ["resource", "aw_resource",
+                          "planning",
+                          "quest_commit", "aw_quest_commit",
+                          "quest_staging", "aw_quest_staging",
+                          "quest_resolution", "aw_quest_resolution",
+                          "travel", "aw_travel",
+                          "enc_optional", "aw_enc_optional",
+                          "enc_checks", "aw_enc_checks",
                           "combat_shadow", "combat_enemy", "combat_player",
-                          "refresh"]
+                          "refresh", "aw_refresh"]
+    # Planning has no window view: upstream words 2.2-2.3 "player actions
+    # THROUGHOUT", so its guidance lives in the phase view. Neither combat
+    # half has one either - both are "after each combat SUBSTEP", many windows
+    # inside the step rather than one following it.
+    assert "aw_planning" not in VIEW_ORDER
+    assert "aw_combat_enemy" not in VIEW_ORDER
 
 
 def test_round_flow_first_view_is_resource_planning():
@@ -24,15 +35,21 @@ def test_advance_view_walks_forward():
     g = GameState()
     g.advance_view()            # leaves setup
     g.advance_view()
+    assert g.view == "aw_resource"  # every phase view hands off to its window
+    g.advance_view()
     assert g.view == "planning"     # Resource -> Planning, now separate phases
     g.advance_view()
-    assert g.view == "quest_commit"
+    assert g.view == "quest_commit"  # Planning has no window of its own
 
 
 def test_advance_view_skips_resolution_without_success():
-    # staging -> travel directly when resolution not pending
+    # staging -> its window -> travel, skipping resolution when not pending.
+    # The skip moved onto the window view: resolution is entered only by a
+    # successful resolve, so it is the window that hands straight to travel.
     g = GameState()
     g.view = "quest_staging"
+    g.advance_view()
+    assert g.view == "aw_quest_staging"
     g.advance_view()
     assert g.view == "travel"
 
@@ -238,9 +255,14 @@ def test_entering_views_logs_phase_starts_with_time():
     starts = [e for e in g.log if e["text"].startswith("Phase:")]
     assert starts and starts[-1]["t"] == 5000
     t["v"] = 9000
+    g.advance_view()   # -> the Resource action window
+    # A window is not a new phase, so it does not claim to be one in the log.
+    # That matters: the log's "Phase:" lines are how a reader reconstructs the
+    # round, and eight extra false phase starts per round would drown it.
+    assert g.log[-1]["text"] == "Action window: Resource"
+    assert g.log[-1]["t"] == 9000
     g.advance_view()   # -> planning
     assert g.log[-1]["text"] == "Phase: Planning"
-    assert g.log[-1]["t"] == 9000
     g.advance_view()   # -> quest_commit
     assert g.log[-1]["text"] == "Phase: Questing: Commit"
 

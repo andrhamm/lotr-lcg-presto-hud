@@ -14,6 +14,15 @@ costs an open and a close, so the same round became 24 taps.
 Then Resource and Planning were split into their own views (2.P was the only
 action-window step with no view of its own), which adds one more advance:
 25. Both increases are recorded here rather than hidden by relaxing the walk.
+
+Then the eight action-window screens were wired into the flow (2026-07-28).
+They were a non-functional prototype before: nothing could enter or leave one.
+Always-in-flow was chosen deliberately over "once per game" - a checklist that
+only appears when the app is confident it is needed goes missing precisely
+when it matters. Six of the eight fall inside this walk (the Resource,
+Commit, Resolution, Travel, Opt. Engage and Checks windows), taking it to 31.
+The Staging window is skipped because a successful resolve jumps straight to
+the resolution view, and the Refresh window sits after End Round.
 """
 import os
 import sys
@@ -25,7 +34,7 @@ from ui.theme import Palette
 from ui.screen_play import ScreenPlay
 from gamestate import GameState
 
-TAP_BUDGET = 25
+TAP_BUDGET = 31
 
 
 def test_common_round_hits_tap_budget():
@@ -54,16 +63,20 @@ def test_common_round_hits_tap_budget():
             state["modal"] = None
         return result
 
-    tap(("advance",))                              # 1: resource -> planning
+    tap(("advance",))                              # 1: resource -> its window
+    assert game.view == "aw_resource"
+    tap(("advance",))                              # 2: -> planning
     assert game.view == "planning"
-    tap(("advance",))                              # 2: planning -> quest_commit
-    assert game.view == "quest_commit"
+    tap(("advance",))                              # 3: planning -> quest_commit
+    assert game.view == "quest_commit"             # Planning has no window
 
     tap(("players_detail",))                       # 2: open PlayersDetailModal
     tap(("w", 2, -1))                               # 3: P3 commit 2 -> 1
     tap(("close",))                                 # 4: close modal
     tap(("confirm_all",))                           # 5: mark P1/P2/P4 reviewed too
-    tap(("advance",))                               # 6: -> quest_staging
+    tap(("advance",))                               # -> the Commit window
+    assert game.view == "aw_quest_commit"
+    tap(("advance",))                               # -> quest_staging
     assert game.view == "quest_staging"
     assert game.willpower == 10                     # 3+4+1+2
     assert all(p.commit_touched for p in game.players)
@@ -73,12 +86,17 @@ def test_common_round_hits_tap_budget():
     assert game.view == "quest_resolution"
     assert game.quest_outcome == "success"
 
-    tap(("apply_alloc",))                           # 11: accept auto-split -> travel
+    tap(("apply_alloc",))                           # accept auto-split
+    assert game.view == "aw_quest_resolution"       # lands on 3.4's window
+    tap(("advance",))                               # -> travel
     assert game.view == "travel"
 
-    tap(("advance",))                               # 12: -> enc_optional
-    tap(("advance",))                               # 13: -> enc_checks
-    tap(("advance",))                               # 14: -> combat_shadow
+    tap(("advance",))                               # -> the Travel window
+    tap(("advance",))                               # -> enc_optional
+    tap(("advance",))                               # -> its window
+    tap(("advance",))                               # -> enc_checks
+    tap(("advance",))                               # -> its window
+    tap(("advance",))                               # -> combat_shadow
     assert game.view == "combat_shadow"
 
     # shadow effect, +1 threat each. The players zone is read-only, so this

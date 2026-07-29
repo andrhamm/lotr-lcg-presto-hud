@@ -416,3 +416,65 @@ def test_back_across_a_round_boundary_reverts_everything_end_round_did():
     assert g.redo() is True
     assert g.round == 2 and g.first_player == 1
     assert (g.players[0].threat, g.players[1].threat) == (26, 26)
+
+
+# --------------------------------------------------------------------------
+# Action-window views (2026-07-28)
+#
+# Window screens were made real views rather than screen-local ScreenPlay
+# state precisely so that undo, save/resume and replay would work on them.
+# These tests are the reason that choice was made, so they guard it.
+# --------------------------------------------------------------------------
+
+def _advance(g):
+    """One tap's worth of work, bracketed the way main.py brackets a tap."""
+    prev = g.begin_action()
+    g.advance_view()
+    g.add_delta(prev)
+
+
+def test_back_steps_through_a_window_view_not_over_it():
+    g = GameState(4, 25)
+    g.enter_view("resource")
+    _advance(g)                       # -> aw_resource
+    _advance(g)                       # -> planning
+    assert g.view == "planning"
+    g.undo()
+    assert g.view == "aw_resource", "back must land ON the window, not skip it"
+    g.undo()
+    assert g.view == "resource"
+    g.redo()
+    assert g.view == "aw_resource"
+    g.redo()
+    assert g.view == "planning"
+
+
+def test_window_views_carry_their_step_through_replay():
+    """A window shares the step it follows, so the header keeps reading 4.2
+    across the boundary rather than jumping ahead."""
+    g = GameState(4, 25)
+    g.enter_view("travel")
+    _advance(g)
+    assert (g.view, g.step) == ("aw_travel", "4.2")
+    g.undo()
+    assert (g.view, g.step) == ("travel", "4.2")
+
+
+def test_phases_screen_jump_still_lands_on_the_phase_view():
+    """_STEP_VIEW is a last-wins inversion of VIEW_STEP. Window views share a
+    step with the view they follow, so a blanket inversion would silently
+    repoint every jump at the window."""
+    from gamestate import view_for_step
+    for step, expected in (("1.R", "resource"), ("3.3", "quest_staging"),
+                           ("4.2", "travel"), ("5.3", "enc_checks"),
+                           ("7.R", "refresh")):
+        assert view_for_step(step) == expected, step
+
+
+def test_window_views_are_not_logged_as_phase_starts():
+    g = GameState(4, 25)
+    g.enter_view("travel")
+    _advance(g)
+    starts = [e for e in g.log if e["text"].startswith("Phase:")]
+    assert not any("aw_" in e["text"] for e in starts)
+    assert g.log[-1]["text"] == "Action window: Travel"

@@ -54,6 +54,12 @@ def test_resource_advances_to_planning():
     hw, pal, game, screen = _setup("resource")
     screen.draw(hw, game, pal)
     screen.on_button(_find(screen, ("advance",)), game)
+    # The Resource action window sits between them, so reaching Planning takes
+    # two taps now. The CTA reads "Next: Planning" on both, because a window
+    # announces the phase it hands off to rather than itself.
+    assert game.view == "aw_resource"
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("advance",)), game)
     assert game.view == "planning"
 
 
@@ -255,7 +261,11 @@ def test_resolution_apply_places_and_goes_to_travel():
     screen.draw(hw, game, pal)
     screen.on_button(_find(screen, ("apply_alloc",)), game)
     assert game.quest["progress"] == 4
-    assert game.view == "travel"
+    # Applying progress IS step 3.4, so it hands off to 3.4's action window
+    # rather than skipping past it to travel. That window is where a
+    # just-revealed location can still be dealt with before travel.
+    assert game.view == "aw_quest_resolution"
+    assert game.next_phase_view() == "travel"
     assert game.pending_budget == 0
 
 
@@ -760,7 +770,13 @@ def test_every_label_fits_between_the_nav_squares():
     lx = MARGIN + NAV_W + NAV_PAD
     usable = (480 - MARGIN - NAV_W - NAV_PAD) - lx
     labels = ["Begin Round 1", "End Round", "Confirm all commits",
-              "Flip to Side B  ->  10 qp"] + list(gamestate.VIEW_LABELS.values())
+              "Flip to Side B  ->  10 qp"] + [
+        # Window views are excluded on purpose: their label never reaches a
+        # CTA. A phase view's button names the next PHASE, and a window's own
+        # button does too, so "Action Window: Questing: Resolution" is a log
+        # string, not something that has to fit between the nav squares.
+        v for k, v in gamestate.VIEW_LABELS.items()
+        if not gamestate.is_window_view(k)]
     over = [(s, hw.display.measure_text(s, DISPLAY)) for s in labels
             if hw.display.measure_text(s, DISPLAY) > usable]
     assert not over, "nav labels overflow %dpx at DISPLAY: %s" % (usable, over)

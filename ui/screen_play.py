@@ -8,7 +8,7 @@ Mirror of docs/js/screen_play.js - keep the two in lockstep.
 """
 
 import phases
-from gamestate import VIEW_ORDER
+from gamestate import VIEW_ORDER, is_window_view, phase_view_of
 from viewcopy import (VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS,
                       PHASE_FRAMEWORK, PHASE_WINDOW, PHASE_CAPTION,
                       COMBAT_FLOW, SHIP_NOTES, STAGING, TRAVEL, OUTCOME,
@@ -65,7 +65,6 @@ class ScreenPlay:
         self.notif_edge = "amber" # banner/pie color (leadership purple for windows)
         self.alloc = None         # resolution-view allocation state
         self.toast = None         # [(icon, text, color)] picked up by the main loop
-        self.action_window = None # view whose window screen is showing, or None
 
     # -- shared pieces -----------------------------------------------------
     def _players_zone(self, d, pal, game):
@@ -152,11 +151,11 @@ class ScreenPlay:
     AW_Y0 = 146                       # top of the copy band, under the zones
     AW_MAX_BOTTOM = NAV_RULE_Y - 10   # copy must clear the nav rule
 
-    def open_action_window(self, game):
-        self.action_window = game.view
-
-    def close_action_window(self):
-        self.action_window = None
+    # There is no open/close pair: a window is a real view, so entering and
+    # leaving one is ordinary navigation. That is what makes undo, save/resume
+    # and delta replay work on window screens for free - screen-local state
+    # would have got none of it, and a Back tap would have moved game.view
+    # while the screen kept rendering a window for the view it had left.
 
     def _draw_action_window(self, d, pal, game):
         # "ACTION WINDOW" is the screen's TITLE and belongs in the header,
@@ -172,7 +171,7 @@ class ScreenPlay:
         # Whole paragraphs only - clipping a sentence mid-clause is exactly
         # what the design system forbids.
         lines = []
-        for para in ACTION_WINDOW_TIPS.get(game.view, ()):
+        for para in ACTION_WINDOW_TIPS.get(phase_view_of(game.view), ()):
             wrapped = wrap_text(para, BODY, usable, d.measure_text)
             if len(lines) + len(wrapped) > max_lines:
                 continue
@@ -184,8 +183,8 @@ class ScreenPlay:
         # The window hands off to the NEXT step, so the CTA names it - the same
         # "Next: X" every phase view uses, which the nav bar renders as the
         # NEXT PHASE kicker over the destination.
-        self._cta(d, pal, game, "Next: %s" % VIEW_LABELS[game.next_view()],
-                  ("aw_close",))
+        self._cta(d, pal, game, "Next: %s" % VIEW_LABELS[game.next_phase_view()],
+                  ("advance",))
 
     # Combat substeps, in resolution order. Both halves of the combat phase
     # are a LOOP - the substeps run once per enemy / per attack - and upstream
@@ -337,7 +336,7 @@ class ScreenPlay:
         d.set_pen(pal.bg)
         d.clear()
         view = game.view
-        if self.action_window:
+        if is_window_view(view):
             # Phase, not a coined position name: it comes straight from
             # phases.py and is accurate for all ten windows. The step id in
             # the round stamp (R1 3.2 vs R1 3.3) is what distinguishes two
@@ -350,7 +349,7 @@ class ScreenPlay:
         else:
             draw_header(d, pal, game, self.buttons)
 
-        if self.action_window:
+        if is_window_view(view):
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
             self._draw_action_window(d, pal, game)
@@ -436,8 +435,9 @@ class ScreenPlay:
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
             self._combat_flow(d, pal, game, CONTENT_Y + 6)
-            nxt = VIEW_ORDER[(VIEW_ORDER.index(view) + 1) % len(VIEW_ORDER)]
-            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS[nxt], ("advance",))
+            self._cta(d, pal, game,
+                      "Next: %s" % VIEW_LABELS[game.next_phase_view()],
+                      ("advance",))
         else:
             self._players_zone(d, pal, game)
             ship_notes = SHIP_NOTES
@@ -465,8 +465,12 @@ class ScreenPlay:
                 for ln in wrap_text(PHASE_CAPTION[view], BODY, cap_w, d.measure_text):
                     text_left(d, pal, ln, MARGIN + 4, cy, BODY, pal.dim)
                     cy += 24
-            i = VIEW_ORDER.index(view)
-            nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
+            # next_phase_view(), not raw VIEW_ORDER indexing: the very next
+            # view is this phase's action window, and a CTA must announce the
+            # next PHASE. Indexing directly put "Action Window: Encounter:
+            # Opt. Engage" in the button, which the layout linter caught by
+            # running it off the left edge.
+            nxt = game.next_phase_view()
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS.get(nxt, nxt), ("advance",))
 
         self._draw_notif(d, pal)
@@ -950,7 +954,9 @@ class ScreenPlay:
             game.log_event(msg)
             game.pending_budget = 0
             self.alloc = None
-            game.enter_view("travel")
+            # Through the resolution window, not past it: allocating progress
+            # is the 3.4 step, and 3.4's window follows it like any other.
+            game.enter_view("aw_quest_resolution")
             if game.pending_stage:
                 from ui.modals import StageCompleteModal
                 return ("modal", StageCompleteModal(game))
