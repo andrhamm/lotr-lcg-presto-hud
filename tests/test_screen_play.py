@@ -671,13 +671,21 @@ def test_travel_no_location_shows_framework_and_travel_button():
     assert "travel_new" in _ids(screen)
 
 
-def test_travel_with_location_shows_explore_first_framework():
+def test_travel_with_location_says_travel_is_blocked():
+    """"Explore it first" was CUT, not reworded.
+
+    A location is explored when progress on it reaches its quest points, and
+    progress lands at 3.4 - already over by the time this screen appears.
+    Exploring during travel needs a card effect placing progress out of
+    sequence, so the old copy advised something the player generally cannot
+    do at that moment."""
     hw, pal, game, screen = _setup("travel")
     game.active_location = {"points": 3, "progress": 1}
     screen.draw(hw, game, pal)
     assert "travel_change" in _ids(screen)
     texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
-    assert "explore" in texts.lower()
+    assert "no travel this phase" in texts.lower()
+    assert "explore" not in texts.lower()
 
 
 def test_enc_optional_has_no_framework_block_but_has_risk_caption():
@@ -699,9 +707,14 @@ def test_enc_checks_shows_framework_and_first_player_caption():
     # phrase wraps across drawn lines.
     joined = " ".join(texts).lower()
     assert "in player order" in joined
-    # RR 5.3 p.24: ONE enemy engages per check, the highest engagement cost
-    # that is <= your threat - not several enemies in descending cost order.
-    assert "one check engages one enemy" in joined
+    # RR 5.3: ONE enemy engages per player at a time, the highest engagement
+    # cost at or below that player's threat - not several in descending order.
+    # "check" itself is gone from the body: it is RR's name for one player
+    # comparing their threat against staging, and nothing on screen defines
+    # it, so every later reference inherited the debt.
+    assert "highest engagement cost" in joined
+    assert "not optional" in joined     # 5.2 was optional; 5.3 is not
+    assert "one check engages" not in joined
 
 
 def test_combat_shadow_shows_framework_only_ordering_text():
@@ -711,8 +724,13 @@ def test_combat_shadow_shows_framework_only_ordering_text():
     assert _has_framework(hw, pal)
     # RR 6.2 p.24: dealt in player order, and within one player's enemies the
     # highest ENGAGEMENT cost first. Both halves must reach the screen.
-    assert "in player order" in texts
-    assert "highest engagement cost first" in texts
+    joined = texts.lower()          # the phrase now LEADS the sentence
+    assert "in player order" in joined
+    assert "highest engagement cost" in joined
+    # The two orderings are NESTED, and "that player's" is the word that says
+    # so: player order picks WHOSE enemies, engagement cost orders WITHIN one
+    # player's. Side by side with no link they read as a contradiction.
+    assert "that player's" in joined
 
 
 def test_combat_enemy_sailing_appends_ship_note_to_framework():

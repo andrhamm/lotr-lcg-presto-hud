@@ -77,11 +77,10 @@ for _pv in ("resource", "quest_commit", "quest_staging", "quest_resolution",
 # resolve, then flip 1A -> 1B.
 # --------------------------------------------------------------------------
 SETUP_TIP = [
-    "Draw 6 cards - one mulligan, you keep the 2nd hand.",
+    "Draw 6 cards. One mulligan, and the second hand must be kept.",
     "Resolve stage 1A Setup text in printed order.",
     "Keywords on setup reveals (Surge/Doomed) do resolve.",
-    "Shuffle the encounter deck AFTER setup searches,",
-    "then flip 1A -> 1B and begin.",
+    "Then flip 1A to 1B and begin.",
 ]
 
 # --------------------------------------------------------------------------
@@ -90,15 +89,23 @@ SETUP_TIP = [
 PHASE_FRAMEWORK = {
     "round_end": "Resolve any \"at the end of the round\" effects. Anything "
                  "lasting \"until the end of the round\" expires now.",
-    "resource": "Each hero gains a resource and each player draws "
-                "a card (1 each normally) - all at once.",
+    "resource": "Each hero gains a resource and each player draws a card, "
+                "all at the same time. (1 each normally.)",
     "planning": "In player order, play allies and attachments from "
                 "hand - the only step that allows it.",
-    "enc_checks": "One check engages one enemy: the highest engagement cost that is <= your threat.",
-    "combat_shadow": "Deal 1 facedown shadow card to each engaged enemy, in player order - highest engagement cost first.",
+    "enc_checks": "Not optional. In player order, each player engages the "
+                  "staging enemy with the highest engagement cost at or below "
+                  "their threat. This repeats until no enemy in staging can "
+                  "engage anyone.",
+    "combat_shadow": "In player order, deal 1 facedown shadow card to each of "
+                     "that player's engaged enemies, highest engagement cost "
+                     "first. If the encounter deck runs out, those enemies "
+                     "get none this round.",
     "combat_enemy": "Choose an enemy -> exhaust a defender (optional) -> shadow effect -> damage, one at a time.",
     "combat_player": "Choose an enemy -> exhaust attackers -> total ATK -> damage, one enemy at a time.",
-    "refresh": "Simultaneously ready all exhausted cards; each player's threat +1. Pass the token clockwise.",
+    "refresh": "Simultaneously ready all exhausted cards. Pass the first "
+               "player token clockwise. The tracker already raised each "
+               "player's threat and passed the token.",
 }
 
 # The green "your window to act" section. Three phases get their action-window
@@ -110,8 +117,12 @@ PHASE_WINDOW = {
     "planning": "This whole phase is your window - actions may be taken "
                 "throughout it, not only at the end. Once you pass on playing "
                 "allies you cannot return to it this turn.",
-    "quest_commit": "In player order, exhaust characters to commit them and add their willpower.",
-    "enc_optional": "In player order, each player may engage 1 enemy - engagement cost does not matter here.",
+    "quest_commit": "In player order, exhaust characters to commit them and "
+                    "add their willpower. They stay committed for the whole "
+                    "phase and do not ready at resolution.",
+    "enc_optional": "In player order, each player may engage 1 enemy in the "
+                    "staging area. Engagement cost is ignored here, so a "
+                    "player can engage an enemy far above their threat.",
     "enc_checks": "Responses.",
     "combat_shadow": "Responses.",
     "combat_enemy": "A window opens after each substep of every enemy attack, "
@@ -197,14 +208,19 @@ ACTION_WINDOW_TIPS = {
 # Per-view prose that sits outside the framework/window bands.
 # --------------------------------------------------------------------------
 STAGING = {
-    "framework": "1 card per player, one at a time - resolve each When Revealed before the next.",
+    # The deck-empty reshuffle (RR 3.3) was cut from this band, not forgotten:
+    # a third sentence pushed the staging view's content past the nav rule.
+    # Saying less is the design system's answer to running out of room.
+    "framework": "1 encounter card per player, one at a time. Resolve keywords "
+                 "and When Revealed effects.",
     "window": "Responses to the reveal.",
     "short": "one at a time / resolve each When Revealed",
 }
 
 TRAVEL = {
-    "blocked": "No travel while a location is active - explore it first.",
-    "open": "The group may travel to 1 location - the first player has the final say.",
+    "blocked": "A location is already active, so there is no travel this phase.",
+    "open": "Travel to one location in the staging area. It is optional: the "
+            "players decide as a group, and the first player has the final say.",
     "btn_travel": "Travel to location",
     "btn_replace": "Replace location (card effect)",
 }
@@ -214,12 +230,12 @@ TRAVEL = {
 OUTCOME = {
     "toast_success": "Quested successfully! +%d progress",
     "toast_fail": "Quest failed. +%d threat to all",
-    "toast_tie": "Quest unsuccessful - a tie, no change",
+    "toast_tie": "A tie. No progress, no threat.",
     "card_fail": "Quest failed. ",
-    "card_tie": "Quest unsuccessful - a tie. ",
+    "card_tie": "A tie. ",
     "fail_line2_pre": "Each player's ",
     "fail_line2_post": "rose by %d.",
-    "tie_line2": "No progress placed, no threat gained.",
+    "tie_line2": "Neither successful nor unsuccessful.",
     "alloc_caption": "Location fills first, then the quest",
     "alloc_header": "Place %d progress",
     "alloc_unplaced": "Unplaced (discarded)",
