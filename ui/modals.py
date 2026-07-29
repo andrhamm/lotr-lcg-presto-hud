@@ -2156,7 +2156,16 @@ class QuestCardModal:
         text_left(d, pal, truncate_text(face.get("name") or "(unnamed)", BODY, W, d.measure_text),
                   M, y, BODY, pal.gold)
         y += 28
-        text_left(d, pal, "SETUP / STORY" if side == "A" else "QUEST", M, y, LABEL, pal.amber)
+        # The card's own text usually leads with "Setup:", which IS the
+        # heading - printed, at BODY, and legible. Repeating it in LABEL
+        # chrome above gave the section two headings, the smaller of which
+        # read as stray text. Show the label only when the text does not
+        # already name the section. The printed text is never edited: rule 4
+        # prefers a card's own words, and this is a card's own words.
+        heading = "SETUP / STORY" if side == "A" else "QUEST"
+        body_leads = (self._body_text(face) or "").lstrip().lower()
+        if not body_leads.startswith(heading.split(" / ")[0].lower() + ":"):
+            text_left(d, pal, heading, M, y, LABEL, pal.amber)
 
         # -- body: the card's own text, at the same scale as everywhere else.
         # It gets every pixel between here and whatever sits below (the tips

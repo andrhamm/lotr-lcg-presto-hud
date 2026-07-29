@@ -321,7 +321,8 @@ SAILING = {
 
 QUEST_SETUP = {
     "none": "No setup instructions for this stage.",
-    "banner": "QUEST SETUP: resolve now",
+    # "banner" is gone: the scroll ribbon it filled was removed. It repeated
+    # the header, which already says QUEST SETUP in DISPLAY.
     "flip": "Flip to Side B  ->  %d qp",
 }
 

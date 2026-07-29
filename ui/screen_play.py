@@ -671,40 +671,27 @@ class ScreenPlay:
                                   d.measure_text)
         text_center(d, pal, card_name, 240, name_y, DISPLAY, pal.gold)
 
-        # Distinct scroll-style tip: a double gold frame + ribbon banner -
-        # UNLIKE the standard note_panel() left-accent-bar style used
-        # elsewhere, since this is the one moment that reads as "resolve
-        # this printed text now".
+        # The standard note_panel treatment, like every other reminder in the
+        # app. This used to be a bespoke "scroll": a double gold frame around
+        # a filled gold ribbon reading "QUEST SETUP: resolve now". Two
+        # problems. It was the only element in the app drawn that way, so it
+        # read as a different product rather than as emphasis. And the ribbon
+        # repeated the header, which already says QUEST SETUP in DISPLAY -
+        # the screen announced itself twice and neither said it louder.
+        #
+        # The emphasis it was reaching for is carried by position and by the
+        # gold-framed card icon: this panel is the only content on the screen.
         tip_x, tip_w, tip_y = MARGIN, 480 - 2 * MARGIN, name_y + 30
-        # ribbon_h is 28, not 22: its caption is BODY (16px tall) plus the 6px
-        # inset, and the banner has to hold the text rather than the text
-        # shrink to hold the banner.
-        ribbon_h, pad_top, line_h, pad_bottom, max_lines = 28, 10, 24, 10, 4
-        usable = tip_w - 28
         raw = a_face.get("text")
         body = raw if raw else QUEST_SETUP["none"]
+        max_lines = 6
+        usable = tip_w - 16 - 12 - (len(icons.PIPE) + 14)
         lines = wrap_text(body, BODY, usable, measure=d.measure_text)
         if len(lines) > max_lines:
             lines = lines[:max_lines]
-            lines[max_lines - 1] = truncate_text(lines[max_lines - 1] + " ..", BODY, usable,
-                                                 d.measure_text)
-        tip_h = ribbon_h + pad_top + len(lines) * line_h + pad_bottom
-        d.set_pen(pal.border_gold)
-        d.rectangle(tip_x, tip_y, tip_w, tip_h)
-        d.set_pen(pal.bg)
-        d.rectangle(tip_x + 2, tip_y + 2, tip_w - 4, tip_h - 4)
-        d.set_pen(pal.border_gold)
-        d.rectangle(tip_x + 4, tip_y + 4, tip_w - 8, tip_h - 8)
-        d.set_pen(pal.scroll)
-        d.rectangle(tip_x + 6, tip_y + 6, tip_w - 12, tip_h - 12)
-        d.set_pen(pal.border_gold)
-        d.rectangle(tip_x, tip_y, tip_w, ribbon_h)
-        text_left(d, pal, QUEST_SETUP["banner"], tip_x + 10, tip_y + 6, BODY, pal.bg,
-                  shadow=False)
-        ly = tip_y + ribbon_h + pad_top
-        for ln in lines:
-            text_left(d, pal, ln, tip_x + 14, ly, BODY, pal.tan)
-            ly += line_h
+            lines[max_lines - 1] = truncate_text(lines[max_lines - 1] + " ..",
+                                                 BODY, usable, d.measure_text)
+        tip_h = note_panel(d, pal, tip_x, tip_y, tip_w, lines)
 
         # Read-only card modal (M4-B) - see on_button; null for custom games
         # (no scenario loaded, nothing to show).

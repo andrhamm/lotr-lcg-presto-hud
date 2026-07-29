@@ -635,35 +635,24 @@ export class ScreenPlay {
     const cardName = truncateText(aFace.name ?? "", DISPLAY, 480 - 2 * MARGIN);
     textCenter(ctx, cardName, 240, nameY, DISPLAY, pal.gold);
 
-    // Distinct scroll-style tip: a double gold frame + ribbon banner - UNLIKE
-    // the standard notePanel() left-accent-bar style used elsewhere, since
-    // this is the one moment that reads as "resolve this printed text now".
+    // The standard notePanel treatment, like every other reminder in the app.
+    // This used to be a bespoke "scroll": a double gold frame around a filled
+    // gold ribbon reading "QUEST SETUP: resolve now". Two problems. It was
+    // the only element in the app drawn that way, so it read as a different
+    // product rather than as emphasis. And the ribbon repeated the header,
+    // which already says QUEST SETUP in DISPLAY.
     const tipX = MARGIN, tipW = 480 - 2 * MARGIN, tipY = nameY + 30;
-    // ribbonH is 28, not 22: its caption is BODY (16px tall) plus the 6px
-    // inset, and the banner has to hold the text rather than the text shrink
-    // to hold the banner.
-    const ribbonH = 28, padTop = 10, lineH = 24, padBottom = 10, maxLines = 4;
-    const usable = tipW - 28;
     const raw = aFace.text;
     const body = (raw === null || raw === undefined || raw === "")
       ? QUEST_SETUP.none : raw;
+    const maxLines = 6;
+    const usable = tipW - 16 - 12 - (icons.PIPE[0] + 14);
     let lines = wrapText(body, BODY, usable);
     if (lines.length > maxLines) {
       lines = lines.slice(0, maxLines);
       lines[maxLines - 1] = truncateText(`${lines[maxLines - 1]} ..`, BODY, usable);
     }
-    const tipH = ribbonH + padTop + lines.length * lineH + padBottom;
-    rect(ctx, tipX, tipY, tipW, tipH, pal.border_gold);
-    rect(ctx, tipX + 2, tipY + 2, tipW - 4, tipH - 4, pal.bg);
-    rect(ctx, tipX + 4, tipY + 4, tipW - 8, tipH - 8, pal.border_gold);
-    rect(ctx, tipX + 6, tipY + 6, tipW - 12, tipH - 12, pal.scroll);
-    rect(ctx, tipX, tipY, tipW, ribbonH, pal.border_gold);
-    textLeft(ctx, QUEST_SETUP.banner, tipX + 10, tipY + 6, BODY, pal.bg, false);
-    let ly = tipY + ribbonH + padTop;
-    for (const ln of lines) {
-      textLeft(ctx, ln, tipX + 14, ly, BODY, pal.tan);
-      ly += lineH;
-    }
+    notePanel(ctx, tipX, tipY, tipW, lines);
 
     // Read-only card modal (M4-B) - see onButton; null for custom games
     // (no scenario loaded, nothing to show).

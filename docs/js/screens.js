@@ -1935,7 +1935,16 @@ export class QuestCardModal {
 
     textLeft(ctx, truncateText(face.name || "(unnamed)", BODY, W), M, y, BODY, pal.gold);
     y += 28;
-    textLeft(ctx, side === "A" ? "SETUP / STORY" : "QUEST", M, y, LABEL, pal.amber);
+    // The card's own text usually leads with "Setup:", which IS the heading -
+    // printed, at BODY, legible. Repeating it in LABEL chrome above gave the
+    // section two headings, the smaller of which read as stray text. Show the
+    // label only when the text does not already name the section. The printed
+    // text is never edited: rule 4 prefers a card's own words.
+    const heading = side === "A" ? "SETUP / STORY" : "QUEST";
+    const leads = (face.text || "").trimStart().toLowerCase();
+    if (!leads.startsWith(heading.split(" / ")[0].toLowerCase() + ":")) {
+      textLeft(ctx, heading, M, y, LABEL, pal.amber);
+    }
 
     // -- body: the card's own text, at the same scale as everywhere else. It
     // gets every pixel between here and whatever sits below (the tips peek,

@@ -179,12 +179,15 @@ def test_tips_detail_back_returns_to_the_card():
     assert m.on_button(next(b for b in m.buttons if b.id[0] == "tips")) == "redraw"
     hw = _draw(m, g)
     drawn = " ".join(c[1] for c in hw.display.calls if c[0] == "text")
-    assert "watch threat" in drawn and "SETUP / STORY" not in drawn   # detail, not card
+    assert "watch threat" in drawn and "Stage 1B >" not in drawn      # detail, not card
 
     assert m.on_button(next(b for b in m.buttons if b.id[0] == "back")) == "redraw"
     hw2 = _draw(m, g)
     drawn2 = " ".join(c[1] for c in hw2.display.calls if c[0] == "text")
-    assert "SETUP / STORY" in drawn2
+    # The pager identifies the card page. The section heading used to stand in
+    # for it, but it is suppressed when the card's own text leads with
+    # "Setup:" - the printed word is the heading in that case.
+    assert "Stage 1B >" in drawn2
 
 
 def test_tips_default_kwarg_keeps_existing_call_sites_working():
@@ -237,3 +240,38 @@ def test_epic_variant_backs_are_not_blank():
     joined = " ".join(seen)
     assert "back E" in joined, "non-B back face must still get its own page"
     assert "Stage 2E" in joined, "the page is labelled with the face's real side"
+
+
+def test_section_heading_is_suppressed_when_the_card_text_names_it():
+    """A heading and its content must not say the same word.
+
+    Most side-A quest cards print text that leads with "Setup:", which IS the
+    heading - printed, at BODY, legible. Repeating it above in LABEL chrome
+    gave the section two headings, and the smaller one read as stray text.
+
+    The printed text is never edited to fix this: rule 4 prefers a card's own
+    words. The chrome yields instead.
+    """
+    from tests.fake_hardware import FakeHardware
+    from ui.theme import Palette
+    from ui.modals import QuestCardModal
+    from gamestate import GameState
+
+    def drawn(text):
+        hw = FakeHardware()
+        pal = Palette(hw.display)
+        g = GameState(4, 25)
+        stages = [{"stage": 1, "cards": [{"questPoints": 5, "victory": None,
+                                          "sailing": False,
+                                          "faces": [{"side": "A", "name": "A face",
+                                                     "text": text},
+                                                    {"side": "B", "name": "B face",
+                                                     "text": "quest text"}]}]}]
+        m = QuestCardModal(g, stages=stages)
+        m.draw(hw, g, pal)
+        return " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+
+    assert "SETUP / STORY" not in drawn("Setup: Search the encounter deck.")
+    assert "SETUP / STORY" not in drawn("  setup: casing must not matter")
+    # A story-only face still needs the chrome - nothing else names the section
+    assert "SETUP / STORY" in drawn("The road grows dark before them.")
