@@ -55,7 +55,8 @@ def test_every_copy_group_reaches_the_web_twin():
     js = open(os.path.join(ROOT, "docs", "js", "viewcopy.js")).read()
     exported = set(re.findall(r"^export const ([A-Z_]+)", js, re.M))
     expected = {n for n in dir(viewcopy)
-                if n.isupper() and isinstance(getattr(viewcopy, n), (dict, list))}
+                if n.isupper()
+                and isinstance(getattr(viewcopy, n), (dict, list, str))}
     assert expected - exported == set(), (
         "not reaching the web twin: %s" % sorted(expected - exported))
 
@@ -82,7 +83,7 @@ def _strings():
         if not name.isupper():
             continue
         val = getattr(viewcopy, name)
-        if isinstance(val, (dict, list)):
+        if isinstance(val, (dict, list, str)):
             walk(name, val)
     return out
 

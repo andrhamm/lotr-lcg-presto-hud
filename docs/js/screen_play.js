@@ -9,7 +9,8 @@ import { step as phaseStep } from "./phases.js";
 import * as icons from "./icons.js";
 import { VIEW_ORDER, isWindowView, phaseViewOf } from "./gamestate.js";
 import { VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS, PHASE_FRAMEWORK, PHASE_WINDOW,
-         PHASE_CAPTION, COMBAT_FLOW, SHIP_NOTES, STAGING, TRAVEL,
+         PHASE_CAPTION, LOOP_FLOW, LOOP_LEGEND, SHIP_FLOW_NOTES,
+         SHIP_NOTES, STAGING, TRAVEL,
          OUTCOME, SAILING, QUEST_SETUP, CONFIRM, TOTALS,
          REFRESH } from "./viewcopy.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal,
@@ -24,6 +25,10 @@ const CTA_Y = 410;
 const CTA_H = 58;
 const NAV_W = CTA_H;      // back / forward are matching squares, CTA_H a side
 const NAV_RULE_Y = 400;
+const FLOW_X = 44;        // left gutter holds the loop arrow
+const FLOW_LINE = 20;     // one wrapped line inside a rung (16px glyphs)
+const FLOW_GAP = 2;
+const TICK_W = 14;        // purple window marker, right-aligned
 const AW_Y0 = 146;                      // top of the copy band, under the zones
 const AW_MAX_BOTTOM = NAV_RULE_Y - 10;  // copy must clear the nav rule   // 1px rule dividing the content area from the nav
 const ARROW = 22;         // arrow glyph size inside a nav square
@@ -134,6 +139,80 @@ export class ScreenPlay {
   // control is tapped every phase, so its target spans label + arrow rather
   // than the 58px square alone. Back's target is only its square, so a
   // mis-reach for the label can never undo.
+  // Mirror of ui/screen_play.py _loop_flow. Variable height: every rung
+  // wraps, so the loop arrow is sized from the result rather than a fixed row
+  // pitch. The old fixed-pitch version is why the corrected copy ran off the
+  // right edge - the longest rung measured 570px against a 480px screen.
+  _loopFlow(ctx, game, y0) {
+    const spec = LOOP_FLOW[game.view];
+    const full = 480 - 2 * MARGIN;
+    let yy = y0;
+
+    const flavour = { combat_enemy: [icons.DEFENSE, pal.green],
+                      combat_player: [icons.ATTACK, pal.tan] }[game.view];
+    if (flavour) {
+      icons.drawIcon(ctx, flavour[0], 480 - MARGIN - flavour[0][0], y0 - 2, flavour[1]);
+    }
+
+    // Reserve the flavour icon's column: the intro is drawn at the same y.
+    const introW = full - (flavour ? flavour[0][0] + 10 : 0);
+    for (const line of wrapText(spec.intro, BODY, introW, measureText)) {
+      textLeft(ctx, line, MARGIN, yy, BODY, pal.tan);
+      yy += FLOW_LINE;
+    }
+
+    const ticks = spec.rungs.some(r => r[1]);
+    const labelW = 480 - FLOW_X - 6 - MARGIN - (ticks ? TICK_W : 0);
+    const top = yy;
+    for (const [label, opens, sub] of spec.rungs) {
+      const lines = wrapText(label, BODY, labelW, measureText);
+      lines.forEach((line, k) => {
+        textLeft(ctx, line, FLOW_X + 6, yy, BODY, pal.tan);
+        if (opens && k === 0) rect(ctx, 480 - MARGIN - 8, yy + 3, 6, 6, pal.purple);
+        yy += FLOW_LINE;
+      });
+      if (sub) {
+        for (const line of wrapText(sub, BODY, labelW - 14, measureText)) {
+          textLeft(ctx, line, FLOW_X + 20, yy, BODY, pal.dim);
+          yy += FLOW_LINE;
+        }
+      }
+      yy += FLOW_GAP;
+    }
+    const bottom = yy - FLOW_GAP;
+
+    const gx = 20;
+    rect(ctx, gx, top + 6, 2, Math.max(2, bottom - top - 6), pal.border_gold);
+    rect(ctx, gx, bottom, FLOW_X - gx - 8, 2, pal.border_gold);
+    rect(ctx, gx, top + 6, FLOW_X - gx - 8, 2, pal.border_gold);
+    const ax = FLOW_X - 8;
+    ctx.fillStyle = pal.border_gold;
+    ctx.beginPath();
+    ctx.moveTo(ax, top + 1); ctx.lineTo(ax, top + 13); ctx.lineTo(ax + 9, top + 7);
+    ctx.closePath(); ctx.fill();
+
+    for (const line of wrapText(spec.exit, BODY, full - 24, measureText)) {
+      textLeft(ctx, line, FLOW_X + 6, yy, BODY, pal.dim);
+      yy += FLOW_LINE;
+    }
+    if (ticks) {
+      rect(ctx, MARGIN + 2, yy + 3, 6, 6, pal.purple);
+      textLeft(ctx, LOOP_LEGEND, MARGIN + 14, yy, BODY, pal.purple);
+      yy += FLOW_LINE;
+    }
+
+    const notes = [];
+    if (spec.note) notes.push(spec.note);
+    if (game.sailing && SHIP_FLOW_NOTES[game.view]) notes.push(SHIP_FLOW_NOTES[game.view]);
+    for (const para of notes) {
+      for (const line of wrapText(para, BODY, full, measureText)) {
+        textLeft(ctx, line, MARGIN, yy, BODY, pal.dim);
+        yy += FLOW_LINE;
+      }
+    }
+    return yy + 4;
+  }
+
   _drawActionWindow(ctx, game) {
     const y0 = AW_Y0, w = 480 - 2 * MARGIN;
     const gutter = icons.LEADERSHIP[0] + 14;
@@ -346,14 +425,14 @@ export class ScreenPlay {
         { kind: "framework", text: PHASE_FRAMEWORK["resource"] },
       ]);
       this._cta(ctx, game, `Next: ${VIEW_LABELS["planning"]}`, ["advance"]);
-    } else if (view === "planning") {
+    } else if (view in LOOP_FLOW) {
+      // Four views are genuinely loops and share one widget: Planning, the
+      // engagement checks, and both combat halves.
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
-      phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-        { kind: "framework", text: PHASE_FRAMEWORK["planning"] },
-        { kind: "window", text: PHASE_WINDOW["planning"] },
-      ]);
-      const nxt = game.sailing ? "quest_sailing" : "quest_commit";
+      this._loopFlow(ctx, game, CONTENT_Y + 6);
+      const nxt = (view === "planning" && game.sailing)
+        ? "quest_sailing" : game.nextPhaseView();
       this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt]}`, ["advance"]);
     } else if (view === "quest_commit") {
       this._playersZone(ctx, game);

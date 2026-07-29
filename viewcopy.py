@@ -150,19 +150,94 @@ SHIP_NOTES = {
 # gets a flow diagram rather than a prose arrow-chain - the chain could carry
 # the order but not the repetition, and the windows sit INSIDE the loop.
 # --------------------------------------------------------------------------
-COMBAT_FLOW = {
-    "combat_enemy": ("Repeat for each engaged enemy, in player order.",
-                     "Undefended: all damage hits one hero.",
-                     ["Choose an enemy",
-                      "Declare a defender (optional)",
-                      "Reveal the shadow card",
-                      "Deal damage"]),
-    "combat_player": ("Repeat for each attack you make.",
-                      "Optional; 1 attack per engaged enemy.",
-                      ["Choose an enemy",
-                       "Declare attackers",
-                       "Total attack vs defence",
-                       "Deal damage"]),
+# Loop diagrams. Four views are genuinely loops, and each is drawn with the
+# same three-part shape: a framing line saying what the whole loop is, the
+# diagram, and an optional note.
+#
+#   intro   leads with "In player order," wherever that governs the loop. It
+#           is what tells a reader whether the diagram is one pass or a
+#           rotation, so it comes BEFORE the diagram.
+#   rungs   (label, opens_a_window, sub_rung_or_None)
+#   exit    always "Repeat until <condition>". A question-shaped rung asks
+#           the player to work out the answer at the moment they want to be
+#           told it.
+#   note    one consequence, or None. Padding this slot to match a
+#           neighbouring view is how recap sentences got here originally.
+#
+# opens_a_window renders a purple tick, explained by ONE legend line. It used
+# to be an inline ", then actions" on every rung, which cost 128px each and
+# ran the longest rungs to 570px against a 480px screen.
+#
+# Ticks are placed from RR's timing chart, not by symmetry. The enemy flow has
+# ACTION WINDOW after every rung INCLUDING the choose step (6.4b); the player
+# flow has NONE after 6.8b and its first window follows the ranged option.
+# Planning and the engagement checks carry no ticks at all - Planning IS the
+# window, and 5.3's window is a screen of its own.
+LOOP_FLOW = {
+    "planning": {
+        "intro": "In player order, each player becomes the active player once.",
+        "rungs": [
+            ("Active player plays any number of allies and attachments", False,
+             "only the active player may"),
+            ("Any player may take one action, or pass", False,
+             "in player order, first player first"),
+        ],
+        "exit": "Repeat until every player has been active",
+        "note": "Only actions rotate. Responses fire on their own trigger.",
+    },
+    "enc_checks": {
+        "intro": "Not optional. In player order, each player engages one enemy "
+                 "at a time.",
+        "rungs": [
+            ("First player engages the staging enemy with the highest "
+             "engagement cost at or below their threat", False, None),
+            ("Each remaining player does the same", False, None),
+        ],
+        "exit": "Repeat until no enemy in staging can engage anyone",
+        "note": "Higher threat pulls bigger enemies.",
+    },
+    "combat_enemy": {
+        # One line by necessity: the two-line version put the note past the
+        # nav rule. Both cited facts survive - the player order, and the
+        # one-per-enemy cap (6.3: each engaged enemy "will have one
+        # opportunity to make an attack").
+        "intro": "In player order, one attack per engaged enemy.",
+        "rungs": [
+            ("Active player chooses an engaged enemy", True, None),
+            ("Declare a defender (optional)", True,
+             "if none, another player's Sentinel may defend"),
+            ("Reveal and resolve the shadow effect", True, None),
+            ("Determine combat damage", True, None),
+        ],
+        "exit": "Repeat until no eligible enemies remain",
+        # Trimmed to two lines: a third ran the view past the nav rule. The
+        # half that survives is the non-obvious one - defence reduces damage
+        # everywhere else in the game, and here it does not.
+        "note": "Undefended: all damage hits one hero, and defence does not "
+                "reduce it.",
+    },
+    "combat_player": {
+        "intro": "In player order, each player may declare attacks on engaged "
+                 "enemies.",
+        "rungs": [
+            ("Active player exhausts characters to attack 1 of their engaged "
+             "enemies", False,
+             "if every attacker has Ranged, any player's engaged enemy"),
+            ("Other players' Ranged may exhaust to join", True, None),
+            ("Determine attack strength", True, None),
+            ("Determine combat damage", True, None),
+        ],
+        "exit": "Repeat until no more attacks are declared",
+        "note": None,
+    },
+}
+
+LOOP_LEGEND = "= action window opens here"
+
+# Sailing-only third paragraph on the combat flows.
+SHIP_FLOW_NOTES = {
+    "combat_enemy": "Ships: only a ship can defend a ship-enemy.",
+    "combat_player": "Ships: your ships attack only ship-enemies.",
 }
 
 # --------------------------------------------------------------------------

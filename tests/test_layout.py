@@ -6,6 +6,7 @@ Rules:
   L3  touch targets are at least MIN_TARGET px in each dimension
   L4  touch targets stay on-screen
   L5  on play screens, no drawn rectangle crosses into the bottom nav band
+  L6  ...and neither does content TEXT
 
 L5 exists because L1-L4 all reason about TEXT. setup_game's sailing toggle
 ran 2px past its CTA for as long as that view has existed and nothing caught
@@ -109,3 +110,26 @@ def test_l5_play_content_clears_the_nav_rule(scene):
             assert y + h <= NAV_RULE_Y, (
                 "%s: rect at y=%d h=%d crosses the nav rule at %d"
                 % (scene, y, h, NAV_RULE_Y))
+
+
+@pytest.mark.parametrize("scene", PLAY_SCENES)
+def test_l6_play_text_clears_the_nav_rule(scene):
+    """L5's sibling for text.
+
+    L5 only inspects rects, so a rebuilt combat flow ran its closing note
+    across the rule and passed - the collision check did not fire either,
+    because the CTA label happened to sit 4px lower. The rule exists to keep
+    content out of the nav band; text belongs to that rule as much as panels
+    do.
+    """
+    from ui.screen_play import NAV_RULE_Y, CONTENT_Y, CTA_Y
+    hw, _ = SCENES[scene]()
+    for c in hw.display.calls:
+        if c[0] != "text":
+            continue
+        s, x, y, scale = str(c[1]), c[2], c[3], c[4]
+        if not s.strip() or y < CONTENT_Y or y >= CTA_Y:
+            continue          # header chrome and the CTA itself live outside
+        assert y + 8 * scale <= NAV_RULE_Y, (
+            "%s: content text %r ends at y=%d, past the nav rule at %d"
+            % (scene, s[:40], y + 8 * scale, NAV_RULE_Y))

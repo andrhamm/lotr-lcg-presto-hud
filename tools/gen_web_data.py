@@ -59,12 +59,13 @@ out.append("""export function measureText(s, scale = 1) {
 }""")
 open(os.path.join(root, "metrics.js"), "w").write("\n".join(out))
 
-# Play-screen copy. Every uppercase dict/list in viewcopy is exported verbatim,
-# so adding a new copy group needs no change here. Tuples become JS arrays -
-# COMBAT_FLOW's (caption, note, [rungs]) reads as a 3-element array.
+# Play-screen copy. Every uppercase dict/list/str in viewcopy is exported
+# verbatim, so adding a new copy group needs no change here. Tuples become JS
+# arrays - LOOP_FLOW's rungs read as [label, opensWindow, subRung].
 out = ["// GENERATED from viewcopy.py - do not edit (tools/gen_web_data.py)"]
 for n in sorted(d for d in dir(viewcopy)
-                if d.isupper() and isinstance(getattr(viewcopy, d), (dict, list))):
+                if d.isupper()
+                and isinstance(getattr(viewcopy, d), (dict, list, str))):
     out.append("export const %s = %s;" % (n, json.dumps(getattr(viewcopy, n))))
 open(os.path.join(root, "viewcopy.js"), "w").write("\n".join(out) + "\n")
 

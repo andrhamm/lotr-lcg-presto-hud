@@ -10,8 +10,9 @@ Mirror of docs/js/screen_play.js - keep the two in lockstep.
 import phases
 from gamestate import VIEW_ORDER, is_window_view, phase_view_of
 from viewcopy import (VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS,
+                      LOOP_FLOW, LOOP_LEGEND, SHIP_FLOW_NOTES,
                       PHASE_FRAMEWORK, PHASE_WINDOW, PHASE_CAPTION,
-                      COMBAT_FLOW, SHIP_NOTES, STAGING, TRAVEL, OUTCOME,
+                      SHIP_NOTES, STAGING, TRAVEL, OUTCOME,
                       SAILING, QUEST_SETUP, CONFIRM, TOTALS, REFRESH)
 from ui.header import draw_header, HEADER_H
 from ui.theme import DISPLAY, BODY, LABEL
@@ -191,50 +192,89 @@ class ScreenPlay:
     # says a player-action window opens after each substep, not once at the
     # end. A prose arrow-chain could carry the order but not the looping, so
     # this draws the sequence and the loop instead.
-    COMBAT_FLOW = COMBAT_FLOW      # module constant, kept as a class alias
     FLOW_X = 44            # left gutter holds the loop arrow
-    FLOW_ROW = 42
+    FLOW_LINE = 20         # one wrapped line inside a rung (16px glyphs)
+    FLOW_GAP = 2           # breathing room between rungs
+    TICK_W = 14            # purple window marker, right-aligned
 
-    def _combat_flow(self, d, pal, game, y0):
-        caption, note, steps = self.COMBAT_FLOW[game.view]
-        n = len(steps)
-        rows = [y0 + i * self.FLOW_ROW for i in range(n)]
-        # loop arrow: down the gutter from the last row back up to the first
+    def _loop_flow(self, d, pal, game, y0):
+        """Draw a loop diagram: intro, the looping rungs, exit, note.
+
+        Variable height. Every rung wraps, so a rung is however many lines it
+        needs and the loop arrow is sized from the result rather than from a
+        fixed row pitch. The previous version gave each rung one un-wrapped
+        line at a fixed 42px, which is why the corrected copy ran off the
+        right edge - the longest rung measured 570px against a 480px screen.
+        """
+        spec = LOOP_FLOW[game.view]
+        full = 480 - 2 * MARGIN
+        yy = y0
+
+        # flavour icon, top-right - kept from the prose version. Dropping it
+        # in the rebuild was a silent regression; the test caught it.
+        flavour = {"combat_enemy": (icons.DEFENSE, pal.green),
+                   "combat_player": (icons.ATTACK, pal.tan)}.get(game.view)
+        if flavour:
+            icons.draw(d, flavour[0], 480 - MARGIN - len(flavour[0]),
+                       y0 - 2, flavour[1])
+
+        # 1. framing line: what the whole loop is, BEFORE the diagram
+        # Reserve the flavour icon's column: the intro is drawn at the same
+        # y and would otherwise run underneath it.
+        intro_w = full - (len(flavour[0]) + 10 if flavour else 0)
+        for line in wrap_text(spec["intro"], BODY, intro_w, d.measure_text):
+            text_left(d, pal, line, MARGIN, yy, BODY, pal.tan)
+            yy += self.FLOW_LINE
+
+        # 2. the rungs
+        ticks = any(w for _, w, _ in spec["rungs"])
+        label_w = 480 - self.FLOW_X - 6 - MARGIN - (self.TICK_W if ticks else 0)
+        top = yy
+        for label, opens, sub in spec["rungs"]:
+            lines = wrap_text(label, BODY, label_w, d.measure_text)
+            for k, line in enumerate(lines):
+                text_left(d, pal, line, self.FLOW_X + 6, yy, BODY, pal.tan)
+                if opens and k == 0:
+                    # One tick per rung, explained once by the legend. The
+                    # words used to sit inline and cost 128px on every rung.
+                    d.set_pen(pal.purple)
+                    d.rectangle(480 - MARGIN - 8, yy + 3, 6, 6)
+                yy += self.FLOW_LINE
+            if sub:
+                for line in wrap_text(sub, BODY, label_w - 14, d.measure_text):
+                    text_left(d, pal, line, self.FLOW_X + 20, yy, BODY, pal.dim)
+                    yy += self.FLOW_LINE
+            yy += self.FLOW_GAP
+        bottom = yy - self.FLOW_GAP
+
+        # 3. the loop arrow, sized to the rungs it actually spans
         gx = 20
         d.set_pen(pal.border_gold)
-        d.rectangle(gx, rows[0] + 6, 2, rows[-1] - rows[0])       # the spine
-        d.rectangle(gx, rows[-1] + 6, self.FLOW_X - gx - 8, 2)     # bottom stub
-        d.rectangle(gx, rows[0] + 6, self.FLOW_X - gx - 8, 2)      # top stub
-        # arrowhead at the top, pointing into the first step
+        d.rectangle(gx, top + 6, 2, max(2, bottom - top - 6))
+        d.rectangle(gx, bottom, self.FLOW_X - gx - 8, 2)
+        d.rectangle(gx, top + 6, self.FLOW_X - gx - 8, 2)
         ax = self.FLOW_X - 8
-        d.triangle(ax, rows[0] + 1, ax, rows[0] + 13, ax + 9, rows[0] + 7)
-        # flavour icon, top-right of the flow (kept from the prose version)
-        mask, pen = {"combat_enemy": (icons.DEFENSE, pal.green),
-                     "combat_player": (icons.ATTACK, pal.tan)}[game.view]
-        icons.draw(d, mask, 480 - MARGIN - len(mask), y0 - 2, pen)
-        for label, ry in zip(steps, rows):
-            tx = self.FLOW_X + 6
-            text_left(d, pal, label, tx, ry, BODY, pal.tan)
-            # ", then actions" in the action-window purple, inline after each
-            # substep - it says what a dot plus a legend had to explain, and
-            # it is upstream's own phrasing ("then player actions"). Longest
-            # row lands at 450px of 472.
-            text_left(d, pal, ", then actions",
-                      tx + d.measure_text(label, BODY) + 4, ry, BODY, pal.purple)
-        cy = rows[-1] + self.FLOW_ROW - 10
-        # wrap rather than trusting the string to fit - the first draft of
-        # these notes ran 508px against 464 of screen
-        yy = cy
-        # Ships note only when the scenario is a Sailing quest - real rules
-        # content the prose version carried; dropping it silently would have
-        # been a regression (caught by test_combat_enemy_sailing_...).
-        ship = {"combat_enemy": "Ships: only a ship can defend a ship-enemy.",
-                "combat_player": "Ships: your ships attack only ship-enemies."}
-        extra = (ship[game.view],) if game.sailing else ()
-        for para in (caption, note) + extra:
-            for line in wrap_text(para, BODY, 480 - 2 * MARGIN, d.measure_text):
+        d.triangle(ax, top + 1, ax, top + 13, ax + 9, top + 7)
+
+        # 4. exit condition, then the legend, then the note
+        for line in wrap_text(spec["exit"], BODY, full - 24, d.measure_text):
+            text_left(d, pal, line, self.FLOW_X + 6, yy, BODY, pal.dim)
+            yy += self.FLOW_LINE
+        if ticks:
+            d.set_pen(pal.purple)
+            d.rectangle(MARGIN + 2, yy + 3, 6, 6)
+            text_left(d, pal, LOOP_LEGEND, MARGIN + 14, yy, BODY, pal.purple)
+            yy += self.FLOW_LINE
+
+        notes = []
+        if spec["note"]:
+            notes.append(spec["note"])
+        if game.sailing and game.view in SHIP_FLOW_NOTES:
+            notes.append(SHIP_FLOW_NOTES[game.view])
+        for para in notes:
+            for line in wrap_text(para, BODY, full, d.measure_text):
                 text_left(d, pal, line, MARGIN, yy, BODY, pal.dim)
-                yy += 24
+                yy += self.FLOW_LINE
         return yy + 4
 
     def _cta(self, d, pal, game, label, id, fill=None, fg=None):
@@ -399,15 +439,6 @@ class ScreenPlay:
                 ("framework", PHASE_FRAMEWORK["resource"]),
             ])
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["planning"], ("advance",))
-        elif view == "planning":
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
-            phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-                ("framework", PHASE_FRAMEWORK["planning"]),
-                ("window", PHASE_WINDOW["planning"]),
-            ])
-            nxt = "quest_sailing" if game.sailing else "quest_commit"
-            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS[nxt], ("advance",))
         elif view == "quest_commit":
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
@@ -449,13 +480,13 @@ class ScreenPlay:
                       "Next: %s (Round %d)" % (VIEW_LABELS["resource"],
                                                game.round + 1),
                       ("endround",))
-        elif view in self.COMBAT_FLOW:
+        elif view in LOOP_FLOW:
             # Combat is a loop, so it gets the flow diagram rather than a
             # prose arrow-chain: the chain could carry the order but not the
             # repetition, and the windows sit INSIDE the loop.
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
-            self._combat_flow(d, pal, game, CONTENT_Y + 6)
+            self._loop_flow(d, pal, game, CONTENT_Y + 6)
             self._cta(d, pal, game,
                       "Next: %s" % VIEW_LABELS[game.next_phase_view()],
                       ("advance",))

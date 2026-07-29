@@ -697,11 +697,17 @@ def test_enc_optional_has_no_framework_block_but_has_risk_caption():
     assert "engage you" in joined
 
 
-def test_enc_checks_shows_framework_and_first_player_caption():
+def test_enc_checks_shows_the_loop_and_the_engagement_rule():
+    """Engagement checks are a LOOP, so the view is a flow diagram now rather
+    than a framework band.
+
+    RR 5.3 has two nested loops: each player engages one enemy in player
+    order, then the whole rotation runs again, "until there are no enemies
+    remaining in the staging area that can engage any of the players"."""
     hw, pal, game, screen = _setup("enc_checks")
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert _has_framework(hw, pal)
+    assert any("Repeat until" in t for t in texts), "the loop must show its exit"
     # FFG's own term - Rules Reference p.10 glossary "In Player Order" - not
     # "clockwise", and not the non-existent "turn order". Joined because the
     # phrase wraps across drawn lines.
@@ -749,12 +755,27 @@ def test_combat_enemy_flavor_icon_still_drawn():
     assert icon_rows
 
 
-def test_combat_player_caption_mentions_one_attack_per_enemy():
+def test_combat_player_names_both_ranged_rules():
+    """CUT: "1 attack per engaged enemy".
+
+    RR 6.7 and 6.8a say only that the active player "may declare an attack
+    against one of their enemies", repeated - no per-enemy cap anywhere. The
+    cap IS stated on the enemy side (6.3: each engaged enemy "will have one
+    opportunity to make an attack"), which is what made the omission easy to
+    miss. Uncited, so it does not ship.
+
+    What replaces it is the thing that WAS missing: Ranged appears twice in
+    this flow, one step apart, and the old copy had only one of them."""
     hw, pal, game, screen = _setup("combat_player")
     screen.draw(hw, game, pal)
-    texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
-    assert "1 attack per engaged enemy" in texts
-
+    joined = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "1 attack per engaged enemy" not in joined
+    # 6.8b: an all-Ranged attack may target any enemy engaged with any player
+    assert "every attacker has Ranged" in joined
+    # 6.8.1: other players' ranged characters may exhaust to join
+    assert "Other players' Ranged" in joined
+    # 6.8b also requires exhausting the attackers, which was never on screen
+    assert "exhausts characters" in joined
 
 def test_refresh_shows_framework_window_and_threat_preview():
     hw, pal, game, screen = _setup("refresh")
