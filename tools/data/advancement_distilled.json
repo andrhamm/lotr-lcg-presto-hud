@@ -1,0 +1,480 @@
+{
+ "a-journey-to-rhosgobel::3::Return to Rhosgobel": {
+  "advance": "The players win if Wilyador is fully healed when this resolves.",
+  "lose": "Otherwise the players lose the game."
+ },
+ "a-knife-in-the-dark::3::The Ringwraiths Attack": {
+  "advance": "The players win the game if there are no Nazgûl enemies in play."
+ },
+ "ambush-at-erelas::1::Drive Them Away": {
+  "advance": "Advances at X resource tokens here, where X is 1 plus 2 per player."
+ },
+ "ambush-at-erelas::2::Ambush!": {
+  "advance": "The players win when Brigand Ringleader is defeated."
+ },
+ "assault-on-osgiliath::1::Retake the City": {
+  "advance": "The players win if they control all Osgiliath locations in play at the end of the round."
+ },
+ "attack-on-dol-guldur::1::Assault on the Golden Wood": {
+  "advance": "Advances to stage 2A at 3 resources here; progress moves to Power of Lorien instead."
+ },
+ "attack-on-dol-guldur::2::Crossing the Anduin": {
+  "advance": "Advances to a stage 3 of the players' choice when revealed."
+ },
+ "attack-on-dol-guldur::3::The Siege of Dol Guldur": {
+  "advance": "Each round, 5 progress here is removed, or Dol Guldur's city strength rises by 3."
+ },
+ "blood-in-the-isen::1::Crossing the Fords": {
+  "advance": "Cannot be defeated while West Bank is in play."
+ },
+ "breaking-of-the-fellowship::2::The Company Divided": {
+  "advance": "Each player advances to a different stage 3A of their choice at the refresh phase's end."
+ },
+ "breaking-of-the-fellowship::3::Guard the Hobbits": {
+  "advance": "Advances to stage 4A when Frodo's Choice is revealed; progress here is discarded."
+ },
+ "breaking-of-the-fellowship::3::Orc Hunting": {
+  "advance": "Advances to stage 4A when Frodo's Choice is revealed; progress here is discarded."
+ },
+ "breaking-of-the-fellowship::3::Searching the Woods": {
+  "advance": "Advances to stage 4A when Frodo's Choice is revealed; progress here is discarded."
+ },
+ "breaking-of-the-fellowship::3::The Seat of Amon Hen": {
+  "advance": "Advances to stage 4A when Frodo's Choice is revealed; progress here is discarded."
+ },
+ "challenge-of-the-wainriders::1::Wainrider Camp": {
+  "advance": "Defeated by filling its quest points, then a racing defense test.",
+  "quest_points": "+4 quest points per player"
+ },
+ "challenge-of-the-wainriders::2::First Sprint": {
+  "advance": "On defeat, a racing attack test; pass sends excess progress to the next stage, fail deals 1 damage to each character."
+ },
+ "challenge-of-the-wainriders::3::The Turnaround": {
+  "advance": "Defeated, then a racing willpower test decides if excess progress reaches the next stage."
+ },
+ "challenge-of-the-wainriders::5::Last Climb": {
+  "advance": "Passing a racing willpower test on defeat sends excess progress to the next stage."
+ },
+ "challenge-of-the-wainriders::6::Home Stretch": {
+  "advance": "Defeated by filling its quest points, then a racing attack test; fail discards progress."
+ },
+ "coast-of-umbar::2::Fate of The Dream-chaser": {
+  "advance": "Advances to stage 3 when revealed, swapping in the second encounter deck."
+ },
+ "conflict-at-the-carrock-nightmare::3::Grimbeorn's Folly": {
+  "advance": "The players win when Rob & Bob have been defeated, rescuing Grimbeorn the Old."
+ },
+ "crossings-of-poros::1::Flight to Gondor": {
+  "advance": "Advances to a random stage 2 at the end of the planning phase."
+ },
+ "danger-in-dorwinion::2::The Shadow of Mordor": {
+  "advance": "Defeated at least X resources here, where X is 3 more than the number of players."
+ },
+ "danger-in-dorwinion::3::Leader of the Cult": {
+  "advance": "The players win the game when the Cultist enemy is defeated."
+ },
+ "encounter-at-amon-din::1::Savagery of the Orcs": {
+  "advance": "Advances when no villager tokens remain here; progress here moves tokens to Rescued Villagers instead."
+ },
+ "escape-from-mount-gram::1::Unexpected Rescue": {
+  "advance": "When revealed, each player creates a staging area and advances to a different stage 2A."
+ },
+ "escape-from-mount-gram::2::Gornákh's Dungeons": {
+  "advance": "Progress rescues captured cards instead; advances to stage 3A once none remain and a player can't join another."
+ },
+ "fangs-in-the-dark::3::Caught in the Trap": {
+  "advance": "The players win when both Orc-eyes and Pack Matriarch are in the victory display."
+ },
+ "flies-and-spiders::2::Lost in the Dark": {
+  "advance": "First player splits off to stage 3 alone; other players advance to stage 4; solo, discarded instead."
+ },
+ "flight-from-moria-nightmare::2::Blocked by Flame": {
+  "advance": "Advances at 10 or more damage on The Nameless Fear (removed); or bypassed after combat."
+ },
+ "flight-from-moria::2::Hasty Council": {
+  "advance": "Reveals the top 2 quest cards and one becomes the active quest, replacing this stage."
+ },
+ "flight-to-michel-delving::2::Lose the Pursuers": {
+  "advance": "At 5+ progress per player, a Refresh Action lets players discard characters: 3A on scent majority, else 4A.",
+  "lose": "The players lose if the encounter deck and encounter discard pile are both empty."
+ },
+ "foundations-of-stone::3::Washed Away!": {
+  "advance": "When revealed, the encounter deck is rebuilt and each player draws a random stage 4 quest card."
+ },
+ "helm-s-deep::1::The King of the Golden Hall": {
+  "advance": "Advances to stage 2A at the end of the round."
+ },
+ "helm-s-deep::5::The King Rides Out": {
+  "advance": "The players win the game if there are no enemies in play."
+ },
+ "into-fangorn::3::The Angry Forest": {
+  "advance": "Advances to stage 2A once at least 6 progress is here and Mugash is attached to a hero."
+ },
+ "into-the-pit-nightmare::2::Goblin Ambush": {
+  "advance": "Advances once progress here reaches X, added only when an enemy is defeated.",
+  "quest_points": "X is 1 plus the number of players in the game"
+ },
+ "journey-down-the-anduin::3::Ambush on the Shore": {
+  "advance": "The players win once there are no enemies in play."
+ },
+ "mount-doom::2::The Road to Isenmouthe": {
+  "advance": "Advances to stage 3A when resources here equal or exceed the number of players."
+ },
+ "mount-doom::4::The Crack of Doom": {
+  "advance": "When explored, the players win if the first player passes a Fortitude test.",
+  "lose": "The players lose if the first player fails; the Ring-bearer claims The One Ring."
+ },
+ "mount-gundabad::1::The Side Door": {
+  "advance": "Advances to stage 2A at the end of the planning phase, joining the victory display."
+ },
+ "mustering-of-the-rohirrim::2::Seeking Support": {
+  "advance": "Advances to stage 3A when no other set-aside Mustering side quest remains."
+ },
+ "over-the-misty-mountains-grim::1::A Short Rest": {
+  "advance": "When Revealed, each player may search for a treasure card, then the stage advances to 2A."
+ },
+ "passage-through-mirkwood::3::\"Don't Leave the Path!\"": {
+  "advance": "The players win by finding and defeating Ungoliant's Spawn."
+ },
+ "pies-for-the-party::1::It’s for the Party!": {
+  "advance": "Advances to the next stage at the start of a round with no time tokens here."
+ },
+ "pies-for-the-party::2::Hobbiton Bakery": {
+  "advance": "The players win the game at the end of the round.",
+  "lose": "The players lose if any player discards resource tokens from their Food objective."
+ },
+ "race-across-harad::1::Setting Out": {
+  "advance": "Advances to stage 2A after each player searches out a location for staging."
+ },
+ "raid-on-the-grey-havens-nightmare::2::Sahir's Advance": {
+  "advance": "The players win when Captain Sahir and Na'asiyah are both in the victory display."
+ },
+ "raid-on-the-grey-havens::2::Sahír's Advance": {
+  "advance": "Progress clears location damage; wins if Captain Sahir's in victory display, undamaged."
+ },
+ "roam-across-rhovanion::1::The Goblin's Task": {
+  "advance": "Advances to random stage 2A when active location is explored, if first player controls Urdug."
+ },
+ "secrets-of-the-old-forest::1::Searching for a Sign": {
+  "advance": "Advances to stage 2A when Grey Lady Poplar has at least 2 attachments."
+ },
+ "secrets-of-the-old-forest::2::Into the Heart": {
+  "advance": "Advances to stage 3A when Grey Lady Poplar has at least 4 attachments."
+ },
+ "secrets-of-the-old-forest::3::The Heart of the Forest": {
+  "advance": "The players win when Grey Lady Poplar is explored."
+ },
+ "shelob-s-lair::1::The Stairs of Cirith Ungol": {
+  "advance": "Advances to stage 2A if Smeagol's Secret Way is in the victory display at end of quest phase."
+ },
+ "strange-news-in-bree::1::Something’s Amiss": {
+  "advance": "Advances to stage 2A after a Scheme side quest is defeated."
+ },
+ "strange-news-in-bree::2::Creeping Shadow": {
+  "advance": "Advances to stage 3A once 3 Scheme side quests are in the victory display."
+ },
+ "strange-news-in-bree::3::The Final Plot": {
+  "advance": "The players win if the people of Bree control the town."
+ },
+ "sundown-on-the-shire::3::Ambushed at the Campsite": {
+  "advance": "The players win if Packleader is in the victory display at round's end; otherwise, advance to stage 4A."
+ },
+ "sundown-on-the-shire::4::Flight to Woodhall": {
+  "advance": "Defeated by filling its quest points; the players win the game.",
+  "quest_points": "X is 15 per player"
+ },
+ "temple-of-doom::1::The Forgotten Temple": {
+  "advance": "Advances to the topmost stage 2A and joins the victory display at 2 resource tokens here."
+ },
+ "temple-of-doom::5::The Lord of Middle-earth": {
+  "advance": "Capped at X progress per round (cost of cards discarded) and blocked once 4 quest stages are in the victory display.",
+  "quest_points": "+4 quest points per player"
+ },
+ "temple-of-the-deceived::1::Searching the Island": {
+  "advance": "Progress here may be redirected onto a location in the staging area instead."
+ },
+ "the-aldburg-plot::1::Evil Under the Moon": {
+  "advance": "Advances to the next stage when players control 1 or more Clue objectives."
+ },
+ "the-aldburg-plot::2::Gathering Clues": {
+  "advance": "May advance to stage 3A at end of round if players control 4+ Clue objectives."
+ },
+ "the-antlered-crown::3::The Last Stage": {
+  "advance": "The players win if Raven Chief is in the victory display at the end of the round."
+ },
+ "the-battle-for-the-beacon::2::Hold the Hilltop": {
+  "advance": "Advances to stage 3A once no time counters remain on this stage.",
+  "lose": "Players lose if the Dunlendings control the beacon once Defend the Beacon is the quest."
+ },
+ "the-battle-for-the-beacon::3::The Last Push": {
+  "advance": "The players win at the end of the round if they control Erelas Beacon.",
+  "lose": "The players lose if the Dunlendings control Erelas Beacon at the end of the round."
+ },
+ "the-battle-of-five-armies::1::The Gathering of the Clouds": {
+  "advance": "When revealed, stage 2, stage 3, and stage 4 come into play and this stage is removed."
+ },
+ "the-battle-of-five-armies::5::The Clouds Burst": {
+  "advance": "Progress cannot be placed here; the players win when Bolg is destroyed."
+ },
+ "the-battle-of-lake-town::3::The Dragon's Wrath": {
+  "advance": "Smaug must be defeated; players win if victory points exceed Lake-town's damage tokens.",
+  "lose": "Otherwise Lake-town burns and the players lose the game."
+ },
+ "the-battle-of-the-pelennor-fields::2::Retreat from Osgiliath": {
+  "quest_points": "X is the total cost of each ally in the staging area"
+ },
+ "the-battle-of-the-pelennor-fields::4::Rohan has Come!": {
+  "advance": "Advances to stage 5A at quest phase end (Forced); progress here damages enemies instead."
+ },
+ "the-black-gate-opens::2::The Battle of the Morannon": {
+  "advance": "This stage cannot be defeated."
+ },
+ "the-brandywine-pursuit::1::Down the Brandywine": {
+  "advance": "Cannot be defeated unless at least 3 locations are in the victory display."
+ },
+ "the-brandywine-pursuit::2::We Must Keep Moving": {
+  "advance": "Cannot be defeated unless there are at least 6 locations in the victory display."
+ },
+ "the-brandywine-pursuit::3::Battle at Sarn Ford": {
+  "advance": "The players win the game when there are no enemies in play."
+ },
+ "the-caves-of-nibin-dum::2::Surprise Attack": {
+  "quest_points": "+4 quest points for each enemy in play"
+ },
+ "the-caves-of-nibin-dum::3::The Chasm": {
+  "advance": "Advances to stage 4A after Cracked Pillar leaves play as an explored location."
+ },
+ "the-city-of-corsairs::4::Final Confrontation": {
+  "advance": "The players win if Captain Sahir is destroyed."
+ },
+ "the-city-of-ulfast::4::Ulchor's Trap": {
+  "advance": "This stage is defeated, winning the game, once City Guard has no hit points left."
+ },
+ "the-dread-realm::2::Angmar Awakened": {
+  "advance": "Advances to the next stage when Daechanar is defeated."
+ },
+ "the-dread-realm::3::Daechanar's Fall": {
+  "advance": "Progress goes to locations instead; the players win once none remain in play."
+ },
+ "the-dunland-trap::2::A Well Laid Trap": {
+  "advance": "Advances to stage 3A at the end of the combat phase."
+ },
+ "the-dunland-trap::3::No Way Out": {
+  "advance": "The players win if no heroes are destroyed by the attacks after the last time counter is removed.",
+  "lose": "The players lose if a hero is destroyed at this stage."
+ },
+ "the-fate-of-numenor::2::A Fateful Discovery": {
+  "advance": "The players win when Shrine to Morgoth is added to the victory display."
+ },
+ "the-fate-of-wilderland::1::Urdug's Assault": {
+  "advance": "Advances once The Goblins' Assault has X or more progress.",
+  "quest_points": "X is 2 plus 2 per player"
+ },
+ "the-fate-of-wilderland::2::Outflanked": {
+  "advance": "Advances at round's end once The Goblins' Assault has X or more progress; X is 4 plus 4 per player."
+ },
+ "the-fate-of-wilderland::3::The Final Push": {
+  "lose": "Lose the game if progress on The Goblins' Assault reaches X (8 plus 8 per player)."
+ },
+ "the-glittering-caves::1::Search the Caves": {
+  "advance": "Progress redirects to caves with player tokens; advances to stage 2A once 1 undamaged cave remains."
+ },
+ "the-glittering-caves::2::The Horn’s Discovery": {
+  "advance": "Players win when Helm Hammerhand is defeated; progress here is distributed among caves."
+ },
+ "the-hobbit-quest::4::Leaving the Path": {
+  "advance": "Resolution earns The Web-cutter at 8+ progress per player, The Stinging Fly under 1 enemy per player."
+ },
+ "the-hobbit-quest::5::Smaug’s Hoard": {
+  "advance": "Always advances to the next stage after resolving resources on Smaug the Wealthy."
+ },
+ "the-hobbit-quest::6::The Battle of the Five Armies": {
+  "advance": "The players win when Bolg is destroyed."
+ },
+ "the-horse-lord-s-ire::3::The Sweeping Tide": {
+  "advance": "The players win if there are no enemies in play.",
+  "lose": "The players lose if a Mount objective is attached to an enemy."
+ },
+ "the-hunt-for-the-dreadnaught::1::Searching the High Seas": {
+  "advance": "Advances once quest points fill, but only at the end of the quest phase; capped at 5 progress per player each round.",
+  "quest_points": "global quest point value of 8 per player among all groups"
+ },
+ "the-hunt-for-the-dreadnaught::2::Destroy the Dreadnaught": {
+  "advance": "The players win when the Dreadnaught is destroyed."
+ },
+ "the-king-s-quest::1::The Iron Hills": {
+  "advance": "Defeated once 3 locations with victory points are in the victory display."
+ },
+ "the-king-s-quest::2::The Lower Depths": {
+  "advance": "Advances to stage 3A once The Dragon Hoard is the active location; progress here searches the Caves deck instead."
+ },
+ "the-king-s-quest::3::The Fire Worm": {
+  "advance": "Fire-drake must be defeated first; once it is, the players win the game."
+ },
+ "the-lonely-mountain::1::A Warm Welcome": {
+  "advance": "Advances to stage 2 at the end of the round; the Quest phase is skipped."
+ },
+ "the-lonely-mountain::2::The Burglar's Turn": {
+  "advance": "The players may advance to stage 3 after the first player's burgle attempt succeeds."
+ },
+ "the-long-arm-of-mordor::1::Surprise Attack": {
+  "advance": "Advances to stage 2A after progress is placed from a successful quest."
+ },
+ "the-mathom-house::1::Wounded Guard": {
+  "advance": "Players choose: advance to stage 2A now, or tend the guard, advancing next Refresh phase."
+ },
+ "the-mathom-house::2::The Search": {
+  "advance": "The players win if they have 3 Room quests in the victory display.",
+  "lose": "The players lose if Gaur has 3 permanent shadow cards attached to him."
+ },
+ "the-mirror-of-galadriel::1::Things that Yet May Be": {
+  "advance": "Advances to stage 2A as soon as this side is revealed."
+ },
+ "the-mirror-of-galadriel::2::The First Wave": {
+  "advance": "Advances after the last time token is removed from this stage."
+ },
+ "the-mirror-of-galadriel::3::The Second Wave": {
+  "advance": "Advances when the last time token is removed; progress here becomes damage instead."
+ },
+ "the-mirror-of-galadriel::4::The Villain": {
+  "lose": "The players lose the game if this stage is defeated or its last time token is removed."
+ },
+ "the-morgul-vale::1::The Rearguard": {
+  "advance": "Advances to the next stage when Murzag is defeated."
+ },
+ "the-morgul-vale::2::The Betrayal": {
+  "advance": "Advances to the next stage when Lord Alcaron is defeated."
+ },
+ "the-morgul-vale::3::The Morgul Rider": {
+  "advance": "The players win the game if Nazgûl of Minas Morgul is defeated."
+ },
+ "the-nin-in-eilph::1::Fleeing from Tharbad": {
+  "advance": "Advances to a random stage 2A when revealed."
+ },
+ "the-nin-in-eilph::4::Out of the Swamp": {
+  "advance": "The players win when Ancient Marsh-dweller is defeated."
+ },
+ "the-nine-are-abroad::1::Search for the Nine": {
+  "advance": "Advances to stage 2A when Nazgûl enemies in play equal the number of groups."
+ },
+ "the-nine-are-abroad::2::To Mordor We Will Send Them": {
+  "advance": "The players win if there are no Nazgûl enemies in play."
+ },
+ "the-old-forest::1::Farewell to the Shire": {
+  "advance": "Each player draws 1 card, then advances to a random stage 2A."
+ },
+ "the-old-forest::2::Choked with Brambles": {
+  "advance": "Advances to stage 3A if the victory display holds X+ victory points; else a different random 2A. X is players times 5."
+ },
+ "the-old-forest::2::Closing in Around Them": {
+  "advance": "Advances to stage 3A at X+ victory points on locations in the victory display, else to a different random stage 2A."
+ },
+ "the-old-forest::2::Dark Bad Place": {
+  "advance": "Advances to stage 3A if X+ victory points on locations in the victory display, else to a different random stage 2A."
+ },
+ "the-old-forest::2::Shifting Trees": {
+  "advance": "Advances to 3A once the victory display holds X+ victory points (X is 5 per player); else a different random 2A."
+ },
+ "the-passing-of-the-grey-company::1::The Forbidden Door": {
+  "advance": "Advances to stage 2A at the end of the planning phase, discarding each player's hand."
+ },
+ "the-ring-goes-south::1::The Council of Elrond": {
+  "advance": "Advances to stage 2 after the planning-phase Forced effect resolves."
+ },
+ "the-ring-goes-south::4::The Gates of Moria": {
+  "advance": "The players win the game once Doors of Durin is explored."
+ },
+ "the-road-to-isengard::1::Rouse the Ents": {
+  "advance": "Each round, after placing 1 resource here, the players may advance to stage 2."
+ },
+ "the-road-to-isengard::2::Breaking Isengard": {
+  "advance": "Advances to stage 3A at 5 damage tokens here, gained by exploring non-unique locations."
+ },
+ "the-ruins-of-belegost::4::The Beast of Belegost": {
+  "advance": "The players win the game when Naurlhug is defeated."
+ },
+ "the-scouring-of-the-shire::1::Many Partings": {
+  "advance": "Advances to the next stage at the end of every planning phase."
+ },
+ "the-scouring-of-the-shire::3::Raise the Shire": {
+  "advance": "Threat rises here each round; then players may choose to advance to the next stage."
+ },
+ "the-scouring-of-the-shire::4::The Battle of Bywater": {
+  "advance": "Advances to the next stage when there are no enemies in play."
+ },
+ "the-scouring-of-the-shire::5::The Very Last Stroke": {
+  "advance": "Progress caps at Saruman's tokens; defeating it wins the game, but only once he's gone.",
+  "quest_points": "X is 6 per player"
+ },
+ "the-siege-of-annuminas::1::Rebuild the Defenses": {
+  "advance": "Advances to stage 2 at 4 resources (1 per round); progress boosts city strength instead."
+ },
+ "the-siege-of-annuminas::3::Lead a Sortie": {
+  "advance": "Battering Ram blocks progress here; players win if Lieutenant of Angmar is in a victory display at round's end."
+ },
+ "the-siege-of-erebor::1::The Siege of Erebor": {
+  "advance": "Reveals 1 encounter card per player, then is removed from the game."
+ },
+ "the-siege-of-erebor::5::Erebor": {
+  "lose": "The players lose the game when Erebor is abandoned."
+ },
+ "the-steward-s-fear::1::Conspiracy": {
+  "advance": "Advances at 4 or more resource tokens, gained each time the active location is explored."
+ },
+ "the-steward-s-fear::2::The Grand Design": {
+  "advance": "Advances at 4+ resource tokens, gained each time the active location is explored."
+ },
+ "the-thing-in-the-depths::2::Change of Plans": {
+  "advance": "Advances to stage 3 automatically when this stage is revealed."
+ },
+ "the-thing-in-the-depths::3::Defend the Ship!": {
+  "advance": "The players win when Thing in the Depths is destroyed.",
+  "lose": "The players lose if any one Ship location's threat hits 9+ at round's end, destroying the Stormcaller."
+ },
+ "the-three-trials::1::The Trials Begin": {
+  "advance": "Advances to a stage 2A quest of the players' choice when revealed."
+ },
+ "the-three-trials::2::The Trial of Intuition": {
+  "advance": "Advances to a chosen 2A when players control Key objective (3A if all stage 2 quests are defeated); progress discarded."
+ },
+ "the-three-trials::2::The Trial of Perseverance": {
+  "advance": "Advances to a chosen 2A on Key objective control; to 3A once all stage 2 quests defeated."
+ },
+ "the-three-trials::2::The Trial of Strength": {
+  "advance": "Advances to a chosen stage 2A when players control the Key objective, or to 3A once all stage 2 quests are defeated."
+ },
+ "the-tower-of-cirith-ungol::1::Pass the Two Watchers": {
+  "advance": "The stage cannot be defeated while The Two Watchers is in play."
+ },
+ "the-treachery-of-rhudaur::1::Secrets of Rhudaur": {
+  "advance": "Advances to stage 2 when the last time counter is removed, or if no Treachery of Rhudaur side quests are in play."
+ },
+ "the-uruk-hai::2::Rescue the Captives": {
+  "advance": "Defeating enemies lowers the pursuit value; defeating this stage wins the game, but not while Ugluk is in play."
+ },
+ "the-woodland-realm::3::To the Elvenking's Halls": {
+  "advance": "Filling its quest points defeats the stage, and the players win the game.",
+  "quest_points": "X is equal to the threat level of the player with the highest threat level."
+ },
+ "to-catch-an-orc::1::Orders from Orthanc": {
+  "advance": "When revealed, each player adds a Mountain location to staging, then advances to stage 2."
+ },
+ "to-catch-an-orc::2::Searching for Mugash": {
+  "advance": "Advances to stage 3 when questing succeeds with Mugash in play; progress otherwise becomes a time counter."
+ },
+ "trouble-in-tharbad::1::Double Dealings": {
+  "advance": "Advances to stage 2 when all players have 0 threat; progress becomes threat loss."
+ },
+ "trouble-in-tharbad::2::Escape from Tharbad": {
+  "advance": "Progress placed here goes to The Crossing of Tharbad instead of advancing this stage."
+ },
+ "voyage-across-belegaer-nightmare::2::Corsair Confrontation": {
+  "advance": "Defeated when no Corsair Warship remains; on-course, players pick from the top 2 stages, else take the top one."
+ },
+ "voyage-across-belegaer-nightmare::2::Lost at Sea": {
+  "advance": "Defeated when on-course at quest phase end; advance to a chosen one of the top 3 stages."
+ },
+ "we-must-away-ere-break-of-day::3::Dawn Take You All": {
+  "advance": "Players win when revealed; Troll Cave in the victory display also grants Sting, Glamdring, and Orcrist."
+ }
+}

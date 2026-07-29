@@ -266,6 +266,35 @@ def parse_int(s):
     except ValueError:
         return None
 
+# Fields whose printed value is not always a number, and where the difference
+# matters on screen. Upstream stores four distinct things in these columns and
+# parse_int flattens all of them to None, which the UI cannot tell apart:
+#
+#   "4"  a number                     -> draw it
+#   "X"  the card literally prints X  -> no number exists; show the formula, or
+#        (16 threat values, 6 quest       ask the player. A 0 here is a lie, and
+#         point values)                   for threat it silently under-reports
+#                                        the staging total.
+#   "-"  the stat does not apply      -> draw nothing at all. Lost Island has
+#        (25 quest point values)          no quest points: it flips, it never
+#                                        explores. A stepper here is wrong.
+#   ""   absent upstream              -> unknown; treat as X's poor cousin.
+#
+# So the int stays where it is and a sibling marker carries the rest. Verified
+# against the pinned TSV 2026-07-29 - see tools/build_advancement.py.
+_MARKED_FIELDS = ("threat", "questPoints")
+
+def parse_marker(s):
+    """'x' | 'na' | None for a printed value that is not a number."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    if s.upper() == "X":
+        return "x"
+    if s in ("-", "–", "—"):
+        return "na"
+    return None
+
 def parse_tags(s):
     s = (s or "").strip()
     if not s:
@@ -294,6 +323,10 @@ def normalize_face(row):
             "shadow": _s(row, "shadow")}
     for k in _INT_FIELDS:
         face[k] = parse_int(row.get(k))
+    for k in _MARKED_FIELDS:
+        mark = parse_marker(row.get(k))
+        if mark:
+            face[k + "Kind"] = mark
     return face
 
 def group_cards(rows):
@@ -343,12 +376,20 @@ def is_sailing(card):
 def _quest_card_view(card):
     qp = next((f["questPoints"] for f in card["faces"] if f["questPoints"] is not None), 0)
     vic = next((f["victoryPoints"] for f in card["faces"] if f["victoryPoints"] is not None), None)
-    return {
+    # A stage printing X is not a stage worth 0. Without this the view reports
+    # questPoints 0 for both, and the Progress screen cannot tell "advances on
+    # a condition" from "fill a bar to X".
+    kind = next((f.get("questPointsKind") for f in card["faces"]
+                 if f.get("questPointsKind")), None)
+    view = {
         "questPoints": qp,
         "victory": vic,
         "sailing": is_sailing(card),
         "faces": [{"side": f["side"], "name": f["name"], "text": f["text"]} for f in card["faces"]],
     }
+    if kind:
+        view["questPointsKind"] = kind
+    return view
 
 def _branch_kind(cards):
     joined = " ".join((f["text"] or "") for c in cards for f in c["faces"] if f["side"] == "B").lower()

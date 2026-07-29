@@ -1,0 +1,126 @@
+{
+ "A Journey to Rhosgobel::Rhosgobel::-": {
+  "threat": "the number of players in the game"
+ },
+ "A Knife in the Dark - Nightmare::Forsaken Inn::-": {
+  "threat": "the number of characters the first player controls"
+ },
+ "Deeps of Moria::The Mountains' Roots::-": {
+  "quest_points": "the number of players in the game",
+  "threat": "the number of players in the game"
+ },
+ "Escape from Khazad-dum 16::The Mountain's Roots::-": {
+  "threat": "1 more than the stage number of the main quest"
+ },
+ "Escape from Mount Gram - Nightmare::Torture Chamber::-": {
+  "quest_points": "twice number of cards captured underneath Torture Chamber"
+ },
+ "Escape from Mount Gram::Tunnels of Mount Gram::-": {
+  "threat": "the number of cards captured underneath Tunnels of Mount Gram"
+ },
+ "Fangs in the Dark::Bone-white Cliffs::-": {
+  "threat": "the number of allies controlled by the Bree-landers player"
+ },
+ "Flight to the Ford - Nightmare::Great East Road::-": {
+  "threat": "1 plus the number of Nazgûl enemies in play"
+ },
+ "Flight to the Ford::The Last Bridge::-": {
+  "threat": "the number of players in the game"
+ },
+ "Hazards of the Pit::Dreadful Gap::-": {
+  "quest_points": "the number of characters in play"
+ },
+ "Into the Pit - Nightmare::Twisting Shadows::-": {
+  "quest_points": "the number of Dark locations in play",
+  "threat": "the number of Dark locations in play"
+ },
+ "Journey in the Dark - Nightmare::Glowing Fissure::-": {
+  "threat": "1 more than the number of damaged characters"
+ },
+ "Over the Misty Mountains Grim::The High Pass::-": {
+  "threat": "the number of players in the game"
+ },
+ "Secrets of the Old Forest::Grey Lady Poplar::-": {
+  "quest_points": "20 per player"
+ },
+ "Strange News in Bree::Tavern::-": {
+  "threat": "the number of heroes committed to the quest"
+ },
+ "Temple of Doom::Hall of Horrors::-": {
+  "threat": "1 more than the number of quest stages in the victory display"
+ },
+ "The Aldburg Plot::Garrison Barracks::-": {
+  "threat": "twice the number of clue objectives controlled by the players"
+ },
+ "The Aldburg Plot::The Horse’s Tail::-": {
+  "threat": "twice the number of Clue objectives controlled by the players"
+ },
+ "The Blood of Gondor::The Cross-roads::-": {
+  "threat": "the number of players in the game"
+ },
+ "The City of Ulfast::Streets of Ulfast::-": {
+  "threat": "1 more than the number of resources on the main quest"
+ },
+ "The Dead Marshes - Nightmare::The Mere of Dead Faces::-": {
+  "threat": "the number of resource tokens here"
+ },
+ "The Druadan Forest::Glade of Cleansing::-": {
+  "threat": "the total archery value of the highest archery Wose enemy in play"
+ },
+ "The Dunland Trap::Hithaeglir Foothills::-": {
+  "threat": "the number of resource tokens on this card"
+ },
+ "The Fords of Isen - Nightmare::Western Shore::-": {
+  "threat": "the number of cards in the first player's hand"
+ },
+ "The Fortress of Nurn::Plaza of Nurn::-": {
+  "threat": "1 more than the number of Castle side quests in the victory display"
+ },
+ "The Gap of Rohan::Slippery Hill::-": {
+  "quest_points": "1 more than the number of allies controlled by the player with the most allies"
+ },
+ "The Hobbit::Treetops::-": {
+  "quest_points": "4 per player"
+ },
+ "The Horse Lord’s Ire::Spoiled Pasture::-": {
+  "threat": "2, plus 2 for each Mount objective the players control"
+ },
+ "The Hunt for Gollum::The Old Ford::-": {
+  "threat": "the number of ally cards in play"
+ },
+ "The Land of Sorrow::Watch Tower::-": {
+  "threat": "1 more than the number of Captive objective allies the players control"
+ },
+ "The Morgul Vale::The White Bridge::-": {
+  "quest_points": "the number of progress tokens on To the Tower",
+  "threat": "the number of progress tokens on To the Tower"
+ },
+ "The Oath::Tangled Grove::-": {
+  "threat": "the number of locations in the staging area"
+ },
+ "The Redhorn Gate - Nightmare::Icy Cavern::-": {
+  "threat": "the number of Snow cards in the staging area"
+ },
+ "The Ring Goes South - Nightmare::Expanse of Hollin::-": {
+  "threat": "1 more than the number of enemies in play"
+ },
+ "The Scouring of the Shire::Three-farthing Stone::-": {
+  "quest_points": "3 per player"
+ },
+ "The Siege of Annuminas::Gate of Annúminas::-": {
+  "threat": "1 more than the number of enemies in play"
+ },
+ "The Woodland Realm 01::Forest Grove::-": {
+  "quest_points": "1 more than the stage number of the main quest",
+  "threat": "1 more than the stage number of the main quest"
+ },
+ "To Catch an Orc - Nightmare::Methedras Peak::-": {
+  "threat": "the number of characters controlled by the first player"
+ },
+ "Under the Ash Mountains::Fiery Chasm::-": {
+  "threat": "1 more than the number of quest cards in play"
+ },
+ "Wrath and Ruin::Gate of Dorwinion::-": {
+  "threat": "1 more than the number of locations controlled by the players"
+ }
+}
