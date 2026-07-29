@@ -74,8 +74,7 @@ class ScenarioSourceScreen:
         # point and had no way out at all, so a mis-tap on New Game committed
         # you to picking a scenario.
         draw_header(d, pal, game, self.buttons, title="SCENARIO SOURCE",
-                    round_label="< Menu")
-        self.buttons.append(Button(("back",), 0, 0, 150, 40))
+                    round_label="< Menu", round_id=("back",))
 
         off = Button(("choose_scenario", "official"), 24, 96, 432, 120)
         bevel(d, pal, off.x, off.y, off.w, off.h, pal.btn)
@@ -450,8 +449,7 @@ class ScenarioOptionsScreen:
         d.clear()
         # Back in the round-stamp slot, as on the source page.
         draw_header(d, pal, game, self.buttons, title="SCENARIO OPTIONS",
-                    round_label="< Scenarios")
-        self.buttons.append(Button(("back",), 0, 0, 170, 40))
+                    round_label="< Scenarios", round_id=("back",))
 
         name = self.scenario.get("name") or self.data.get("name", "Unknown scenario")
         pack = self.scenario.get("pack") or self.data.get("pack", "")

@@ -602,8 +602,8 @@ export class ScenarioSourceScreen {
     // The back affordance takes the round-stamp slot: "R0" says nothing on a
     // pre-game screen, and it is the slot PickCycle and ChooseScenario
     // already put "< Source" in. This page had no way out at all.
-    drawHeader(ctx, game, this.buttons, { title: "SCENARIO SOURCE", roundLabel: "< Menu" });
-    this.buttons.push(new Button(["back"], 0, 0, 150, 40));
+    drawHeader(ctx, game, this.buttons, { title: "SCENARIO SOURCE", roundLabel: "< Menu",
+                                          roundId: ["back"] });
 
     const off = new Button(["choose_scenario", "official"], 24, 96, 432, 120);
     bevel(ctx, off.x, off.y, off.w, off.h, pal.btn);
@@ -619,6 +619,7 @@ export class ScenarioSourceScreen {
   }
   onButton(btn) {
     const k = btn.id[0];
+    if (k === "back") return ["goto", "boot"];
     if (k === "nav") return ["goto", btn.id[1]];
     if (k === "choose_scenario") return btn.id;
     return null;
@@ -905,8 +906,8 @@ export class ScenarioOptionsScreen {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     // Back in the round-stamp slot, as on the source page.
-    drawHeader(ctx, game, this.buttons, { title: "SCENARIO OPTIONS", roundLabel: "< Scenarios" });
-    this.buttons.push(new Button(["back"], 0, 0, 170, 40));
+    drawHeader(ctx, game, this.buttons, { title: "SCENARIO OPTIONS", roundLabel: "< Scenarios",
+                                          roundId: ["back"] });
 
     const name = this.scenario.name ?? this.data.name ?? "Unknown scenario";
     const pack = this.scenario.pack ?? this.data.pack ?? "";
@@ -997,14 +998,14 @@ export class ScenarioOptionsScreen {
 
   onButton(btn, game) {
     const k = btn.id[0];
-      if (k === "back" || k === "retitle") {
-        // Same route as tapping the scenario name, which was the only way
-        // back before and is not discoverable.
-        return ["choose_scenario_list", this.scenario.source, this.scenario.cycle];
-      }
-      if (k === "back") return ["goto", "boot"];
     if (k === "nav") return ["goto", btn.id[1]];
-    if (k === "retitle") return ["choose_scenario_list", this.scenario.source, this.scenario.cycle];
+    if (k === "back" || k === "retitle") {
+      // Same route as tapping the scenario name, which was the only way back
+      // before and is not discoverable. Returns to the list this scenario
+      // came from rather than a bare goto, so the cycle and source survive
+      // the trip.
+      return ["choose_scenario_list", this.scenario.source, this.scenario.cycle];
+    }
     if (k === "dd") {
       return ["modal", new OptionListModal(this, "difficulty", "Difficulty", this.difficultyOptions())];
     }

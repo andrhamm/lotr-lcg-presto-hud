@@ -21,7 +21,7 @@ def _done_button(d, pal):
 
 def draw_header(d, pal, game, buttons, highlight=None, title=None,
                 close=False, close_left=False, round_label=None,
-                title_pen=None):
+                title_pen=None, round_id=None):
     """Standard header. Default: R# (tap -> log) | view label (tap -> phases)
     | Set. (tap -> settings).
     title: static center text instead of the view label.
@@ -29,7 +29,13 @@ def draw_header(d, pal, game, buttons, highlight=None, title=None,
     pal.purple, the established accent for action windows).
     close: DONE on the right closes the screen (Settings).
     close_left: the R# label is highlighted and tapping it again closes
-    (Game Log — toggle behavior)."""
+    (Game Log — toggle behavior).
+    round_id: retarget the round-stamp slot's tap. The label and its tap
+    target are one affordance, so a screen that puts "< Menu" there must be
+    able to say where it goes. Appending a second button over the slot does
+    not work: the dispatcher takes the first hit (main.py:437) and the
+    header's own button is already in the list, which is exactly how the
+    pre-game back buttons ended up opening the Game Log."""
     # DragnCards-style step decimal beside the round (e.g. R2 3.4, R1 6.E)
     # round_label overrides it entirely (pre-game setup screens show "R0").
     round_lbl = round_label if round_label else "R%d %s" % (game.round, game.step)
@@ -60,7 +66,7 @@ def draw_header(d, pal, game, buttons, highlight=None, title=None,
         buttons.append(Button(("nav", "close"), 0, 0, 150, HEADER_H))
         buttons.append(Button(("nav", "settings"), 330, 0, 150, HEADER_H))
     else:
-        buttons.append(Button(("nav", "log"), 0, 0, 150, HEADER_H))
+        buttons.append(Button(round_id or ("nav", "log"), 0, 0, 150, HEADER_H))
         buttons.append(Button(("nav", "phases"), 150, 0, 180, HEADER_H))
         buttons.append(Button(("nav", "settings"), 330, 0, 150, HEADER_H))
 

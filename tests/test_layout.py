@@ -7,11 +7,20 @@ Rules:
   L4  touch targets stay on-screen
   L5  on play screens, no drawn rectangle crosses into the bottom nav band
   L6  ...and neither does content TEXT
+  L7  every touch target is reachable by some tap
 
 L5 exists because L1-L4 all reason about TEXT. setup_game's sailing toggle
 ran 2px past its CTA for as long as that view has existed and nothing caught
 it - it is a panel, not a label. The nav rule made it visible; this rule keeps
 it from coming back.
+
+L7 exists because a button can be drawn, sized and on-screen and still be
+dead: the dispatcher takes the FIRST hit in the list (main.py:437), so an
+earlier button lying over it wins every tap. Both pre-game back buttons were
+added on top of draw_header's own round-stamp button, so "< Menu" opened the
+Game Log. Containment alone would not have caught it - the wider of the two
+was shadowed jointly by the log and phases buttons - so the rule asks the
+real question: is there any point this button answers?
 """
 import os
 import sys
@@ -133,3 +142,31 @@ def test_l6_play_text_clears_the_nav_rule(scene):
         assert y + 8 * scale <= NAV_RULE_Y, (
             "%s: content text %r ends at y=%d, past the nav rule at %d"
             % (scene, s[:40], y + 8 * scale, NAV_RULE_Y))
+
+
+@pytest.mark.parametrize("name", sorted(SCENES))
+def test_l7_every_touch_target_is_reachable(name):
+    """No button may be buried under earlier ones.
+
+    Dispatch is first-hit-wins over the list in draw order (main.py:418/437,
+    docs/js/main.js:208/226), so a button appended over an existing one is
+    dead on arrival however correct its handler is. Sampling is exact rather
+    than approximate: with axis-aligned rects, one point per cell of the grid
+    formed by every button edge decides the whole layout.
+    """
+    _, obj = SCENES[name]()
+    btns = getattr(obj, "buttons", [])
+    xs = sorted({v for b in btns for v in (b.x, b.x + b.w)})
+    ys = sorted({v for b in btns for v in (b.y, b.y + b.h)})
+    probes = [((a + b) // 2, (c + d) // 2)
+              for a, b in zip(xs, xs[1:]) for c, d in zip(ys, ys[1:])]
+    reached = set()
+    for x, y in probes:
+        for i, b in enumerate(btns):
+            if b.hit(x, y):
+                reached.add(i)
+                break
+    dead = [(i, b.id) for i, b in enumerate(btns) if i not in reached]
+    assert not dead, (
+        "%s: no tap reaches %s - an earlier button covers it"
+        % (name, [d[1] for d in dead]))

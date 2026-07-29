@@ -32,7 +32,8 @@ function doneButton(ctx) {
 export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
                                                  close = false, closeLeft = false,
                                                  roundLabel = null,
-                                                 titlePen = null } = {}) {
+                                                 titlePen = null,
+                                                 roundId = null } = {}) {
   const roundLbl = roundLabel ?? `R${game.round} ${game.step}`;
   textLeft(ctx, roundLbl, 10, 12, BODY,
            (closeLeft || highlight === "log") ? pal.gold : pal.muted);
@@ -56,7 +57,11 @@ export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
     buttons.push(new Button(["nav", "close"], 0, 0, 150, HEADER_H));
     buttons.push(new Button(["nav", "settings"], 330, 0, 150, HEADER_H));
   } else {
-    buttons.push(new Button(["nav", "log"], 0, 0, 150, HEADER_H));
+    // roundId retargets the round-stamp slot. The label and its tap target are
+    // one affordance: a screen that puts "< Menu" there cannot just append its
+    // own button over the slot, because the dispatcher takes the first hit and
+    // this one is already in the list.
+    buttons.push(new Button(roundId ?? ["nav", "log"], 0, 0, 150, HEADER_H));
     buttons.push(new Button(["nav", "phases"], 150, 0, 180, HEADER_H));
     buttons.push(new Button(["nav", "settings"], 330, 0, 150, HEADER_H));
   }

@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tests.fake_hardware import FakeHardware
@@ -1111,7 +1113,13 @@ def test_every_modal_state_can_be_dismissed():
 
 def test_every_new_game_page_can_be_backed_out_of():
     """The new-game flow is a funnel, and every page of it must be
-    reversible - a mis-picked scenario should never mean restarting."""
+    reversible - a mis-picked scenario should never mean restarting.
+
+    Dispatch the way main.py:437 does, by tapping the middle of the back
+    button and taking the FIRST hit. Picking the button out of the list by id
+    passed on two screens whose back button was buried under draw_header's
+    own, so "< Menu" opened the Game Log.
+    """
     from tests.fake_hardware import FakeHardware
     from ui.theme import Palette
     from ui.screen_quest import (ScenarioSourceScreen, PickCycleScreen,
@@ -1132,7 +1140,88 @@ def test_every_new_game_page_can_be_backed_out_of():
         screen.draw(hw, g, pal)
         back = [b for b in screen.buttons if b.id[0] == "back"]
         assert back, "%s has no back button" % type(screen).__name__
-        result = screen.on_button(back[0], g)
+        x, y = back[0].x + back[0].w // 2, back[0].y + back[0].h // 2
+        hit = next(b for b in screen.buttons if b.hit(x, y))
+        assert hit.id[0] == "back", (
+            "%s: tapping back at (%d,%d) hits %s instead"
+            % (type(screen).__name__, x, y, hit.id))
+        result = screen.on_button(hit, g)
         assert result is not None, type(screen).__name__
         if expect:
             assert result == ("goto", expect), (type(screen).__name__, result)
+
+
+# --------------------------------------------------------------------------
+# Twin parity, executed rather than eyeballed
+# --------------------------------------------------------------------------
+
+_JS_BACK_PROBE = """\
+const m = await import("./screens_other.js");
+const out = {};
+out.ScenarioSourceScreen = new m.ScenarioSourceScreen().onButton({id: ["back"]});
+out.PickCycleScreen = new m.PickCycleScreen("official", []).onButton({id: ["back"]});
+out.ChooseScenarioScreen =
+  new m.ChooseScenarioScreen("official", "c", []).onButton({id: ["back"]});
+out.ScenarioOptionsScreen =
+  new m.ScenarioOptionsScreen({slug: "x", source: "official", cycle: "c"}, {})
+    .onButton({id: ["back"]}, null);
+console.log(JSON.stringify(out));
+"""
+
+
+def test_the_web_twin_backs_out_of_the_new_game_flow_the_same_way():
+    """Run the twin's own handlers and compare routes with the firmware's.
+
+    Reading the two files side by side is what the iron rule asks for and it
+    is not enough: the JS ScenarioSourceScreen shipped with no "back" case at
+    all while its firmware sibling had one, and the missing line sat a few
+    hundred lines away inside ScenarioOptionsScreen where it was unreachable.
+    Nothing failed, because nothing executed the twin.
+
+    The modules import under plain node with no DOM, so this costs a
+    subprocess and settles the question instead of arguing it.
+    """
+    import json
+    import shutil
+    import subprocess
+    import tempfile
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node not installed")
+
+    from ui.screen_quest import (ScenarioSourceScreen, PickCycleScreen,
+                                 ChooseScenarioScreen, ScenarioOptionsScreen)
+
+    py = {
+        "ScenarioSourceScreen": ScenarioSourceScreen(),
+        "PickCycleScreen": PickCycleScreen("official", []),
+        "ChooseScenarioScreen": ChooseScenarioScreen("official", "c", []),
+        "ScenarioOptionsScreen": ScenarioOptionsScreen(
+            {"slug": "x", "source": "official", "cycle": "c"}, {}),
+    }
+    expect = {name: list(s.on_button(_btn(("back",)), None))
+              for name, s in py.items()}
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with tempfile.TemporaryDirectory() as tmp:
+        # docs/js has no package.json, so node reads its .js as CommonJS.
+        # Copying beside a type:module marker is the least invasive fix - the
+        # alternative puts a package.json into the deployed Pages site.
+        for f in os.listdir(os.path.join(root, "docs", "js")):
+            if f.endswith(".js"):
+                shutil.copy(os.path.join(root, "docs", "js", f),
+                            os.path.join(tmp, f))
+        with open(os.path.join(tmp, "package.json"), "w") as f:
+            f.write('{"type":"module"}')
+        probe = os.path.join(tmp, "probe.mjs")
+        with open(probe, "w") as f:
+            f.write(_JS_BACK_PROBE)
+        r = subprocess.run([node, probe], cwd=tmp, capture_output=True, text=True)
+        assert r.returncode == 0, "web twin failed to load:\n%s" % r.stderr
+        got = json.loads(r.stdout)
+
+    for name in expect:
+        assert got[name] == expect[name], (
+            "%s: web twin backs out to %s, firmware to %s"
+            % (name, got[name], expect[name]))
