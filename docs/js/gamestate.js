@@ -511,7 +511,7 @@ export class GameState {
   // quest_catalog.locationsFor - so the Progress screen can show the card's
   // own definition of X instead of a 0 it made up.
   static LOC_META = ["threat", "pointsKind", "pointsX",
-                     "threatKind", "threatX"];
+                     "threatKind", "threatX", "threatCount"];
 
   _seatLocation(points, name, meta = null) {
     const loc = { points, progress: 0 };

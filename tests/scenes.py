@@ -625,6 +625,24 @@ def _location_config_modal_unknown_x():
     return hw, m
 
 
+def _location_config_modal_count_control():
+    # The variable-height threat block at its tallest: a computed value, two
+    # wrapped formula lines AND a count stepper. This is the one that walked
+    # into the footer's Cancel/Save before the clamp.
+    from ui.modals import LocationConfigModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = {
+        "points": 3, "progress": 0, "name": "Gate of Annuminas",
+        "threatKind": "x", "threatCount": 3,
+        "threatX": {"text": "1 more than the number of enemies in play",
+                    "target": "enemies_in_play", "add": 1}}
+    m = LocationConfigModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
 def _quest_card_modal():
     # A normal (non-branch) stage with real text on both faces (Foundations
     # of Stone stage 1) - exercises wrapped text in both SIDE A and SIDE B
@@ -1309,6 +1327,7 @@ SCENES = {
     "quest_config_modal_condition_stage": _quest_config_modal_condition_stage,
     "location_config_modal_formula": _location_config_modal_formula,
     "location_config_modal_unknown_x": _location_config_modal_unknown_x,
+    "location_config_modal_count_control": _location_config_modal_count_control,
     "questing_progress_modal_no_location": _questing_progress_modal_no_location,
     "questing_progress_modal_loc_choose": _questing_progress_modal_loc_choose,
     "questing_progress_modal_loc_pts": _questing_progress_modal_loc_pts,

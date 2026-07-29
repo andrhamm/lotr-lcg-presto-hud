@@ -12,6 +12,7 @@ from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         ring, wx_small, wrap_text, truncate_text, ribbon, ribbon_h,
                         BAND_PAD, band_line_h)
 from ui.counter import CounterState
+import xtargets
 from ui import icons
 from gamestate import HEADINGS
 from ui.theme import DISPLAY, BODY, LABEL
@@ -209,6 +210,24 @@ class LocationConfigModal:
         # control will be built from. See xtargets.py.
         self.threat_x = (loc or {}).get("threatX")
         self.threat_formula = (self.threat_x or {}).get("text")
+        # How the threat row behaves, from the coded X (see xtargets.py):
+        #   "auto"   a tracked value answers it - read-only, no stepper
+        #   "count"  the player supplies a count the app does arithmetic on -
+        #            read-only value PLUS a stepper on the count
+        #   "bare"   the count IS the value - one stepper, no second number
+        #   None     an ordinary editable number
+        self.threat_count = (loc or {}).get("threatCount")
+        self.threat_shape = None
+        if self.threat_x:
+            target = self.threat_x.get("target")
+            if xtargets.auto_for(target):
+                self.threat_shape = "auto"
+            elif (self.threat_x.get("mul", 1) == 1
+                  and not self.threat_x.get("add")):
+                self.threat_shape = "bare"
+            else:
+                self.threat_shape = "count"
+            self.threat_label = xtargets.label_for(target)
         # An X with no formula has no number to show yet, and 0 would be a
         # claim the card never made. Once the player taps "+" it is a real
         # value like any other.
@@ -229,6 +248,50 @@ class LocationConfigModal:
             d.set_pen(pal.gold)
             d.rectangle(340, y + 25, 30, 3)
 
+    def _computed(self, d, pal, y, label, value):
+        """A value the CARD owns: read-only, no stepper. `label = X` states the
+        chain rather than leaving the player to infer it from a note."""
+        text_left(d, pal, label, 30, y + 14, BODY, pal.tan)
+        lw = d.measure_text(label, BODY)
+        text_left(d, pal, "= X", 36 + lw, y + 14, BODY, pal.dim)
+        text_center(d, pal, "-" if value is None else str(value),
+                    355, y + 10, DISPLAY, pal.gold)
+
+    def _threat_block(self, d, pal, y):
+        """The threat row, in whichever of the four shapes the card calls for.
+        Returns the y to continue at."""
+        shape = self.threat_shape
+        if shape in ("auto", "count"):
+            value = xtargets.resolve(
+                self.threat_x, count=self.threat_count,
+                players=len(self.game.players),
+                stage=self.game.quest.get("stage_n", 1),
+                highest_threat=max([p.threat for p in self.game.players] or [0]))
+            self._computed(d, pal, y, "Threat", value)
+            # +40, not +34: the value is DISPLAY-sized (24px tall drawn at
+            # y+10), so a 34 step put the formula's first line inside its
+            # descender. The layout linter caught it on the tallest scene.
+            y += 40
+            for ln in wrap_text("X = " + (self.threat_formula or ""), BODY,
+                               420, d.measure_text)[:2]:
+                text_left(d, pal, ln, 50, y, BODY, pal.dim)
+                y += 22
+            if shape == "count":
+                # The only thing the player can move. They answer "how many
+                # enemies are in play?" by looking at the table; the app applies
+                # the arithmetic, so nobody does it in their head, and the count
+                # survives to next round when it changes by one.
+                self._row(d, pal, y + 4, self.threat_label,
+                          self.threat_count or 0, "count")
+                y += 62
+            else:
+                y += 8
+            return y
+        # bare count, or an ordinary number: one stepper, no second value.
+        self._row(d, pal, y, "Threat", self.threat, "threat",
+                  blank=self.threat_blank)
+        return y + 56
+
     def draw(self, hw, game, pal):
         d = hw.display
         self.buttons = []
@@ -245,20 +308,24 @@ class LocationConfigModal:
         # to staging" has to add back. 34 of the catalog's X-printing location
         # faces print X HERE rather than on quest points, so this is the row
         # the X work actually shows up on.
-        self._row(d, pal, 196, "Threat", self.threat, "threat",
-                  blank=self.threat_blank)
-        y = 252
-        if self.threat_formula:
+        y = self._threat_block(d, pal, 196)
+        if self.threat_formula and self.threat_shape == "bare":
             for ln in wrap_text("X = " + self.threat_formula, BODY, 420,
                                 d.measure_text)[:2]:
                 text_left(d, pal, ln, 30, y, BODY, pal.dim)
                 y += 22
-        elif self.threat_blank:
+        elif self.threat_blank and not self.threat_x:
+            # Only when the card defines X NOWHERE we can read. With a coded X
+            # the formula line above already said where the number comes from,
+            # and this contradicted it.
             text_left(d, pal, "the card prints X and defines it elsewhere",
                       30, y, BODY, pal.dim)
             y += 22
 
-        none_b = Button(("none",), 30, max(y + 8, 296), 420, 52)
+        # Clamped: the threat block is variable-height (a computed value, up to
+        # two formula lines and a count stepper), and unclamped it walked into
+        # the footer's Cancel/Save at y=404.
+        none_b = Button(("none",), 30, min(max(y + 8, 296), 340), 420, 52)
         panel(d, pal, none_b.x, none_b.y, none_b.w, none_b.h, fill=pal.btn_no, border=pal.no_fg)
         text_center(d, pal, "Set none (no active location)", none_b.x + none_b.w / 2,
                     none_b.y + 16, BODY, pal.no_fg)
@@ -274,6 +341,10 @@ class LocationConfigModal:
             return None
         if k == "prog":
             self.prog = max(0, min(99, self.prog + btn.id[1]))
+            self.has = True
+            return None
+        if k == "count":
+            self.threat_count = max(0, min(60, (self.threat_count or 0) + btn.id[1]))
             self.has = True
             return None
         if k == "threat":
@@ -293,7 +364,18 @@ class LocationConfigModal:
             loc = dict(self.game.active_location or {})
             loc["points"] = self.pts
             loc["progress"] = self.prog
-            if self.threat or not self.threat_blank:
+            if self.threat_shape in ("auto", "count"):
+                # The count is the player's input and the threat is derived, so
+                # store the count and recompute - storing only the result would
+                # make it stale the moment the board changes.
+                if self.threat_count is not None:
+                    loc["threatCount"] = self.threat_count
+                loc["threat"] = xtargets.resolve(
+                    self.threat_x, count=self.threat_count,
+                    players=len(self.game.players),
+                    stage=self.game.quest.get("stage_n", 1),
+                    highest_threat=max([p.threat for p in self.game.players] or [0])) or 0
+            elif self.threat or not self.threat_blank:
                 loc["threat"] = self.threat
             if loc != self.game.active_location:
                 self.game.log_event("Active location set to %d/%d progress, "

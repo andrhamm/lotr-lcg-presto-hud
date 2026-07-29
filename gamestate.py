@@ -601,7 +601,7 @@ class GameState:
     # quest_catalog.locations_for. Carried so the Progress screen can show the
     # card's own definition of X instead of a 0 it made up.
     LOC_META = ("threat", "pointsKind", "pointsX",
-                "threatKind", "threatX")
+                "threatKind", "threatX", "threatCount")
 
     def _seat_location(self, points, name, meta=None):
         """The new active location. `name` is the catalog card name when the

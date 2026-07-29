@@ -980,6 +980,83 @@ def test_location_config_save_keeps_the_card_metadata():
     assert loc["threatX"]["target"] == "locations_in_staging"
 
 
+def _loc_x(threat_x, count=None, **extra):
+    game = GameState()
+    loc = {"points": 3, "progress": 0, "name": "A Location",
+           "threatKind": "x", "threatX": threat_x}
+    if count is not None:
+        loc["threatCount"] = count
+    loc.update(extra)
+    game.active_location = loc
+    return game
+
+
+def test_threat_count_control_does_the_arithmetic():
+    # THE point of the coded X: the player answers "how many enemies are in
+    # play?" - a question they can settle by looking at the table - and the app
+    # applies the +1. They never do it in their head.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = _loc_x({"text": "1 more than the number of enemies in play",
+                   "target": "enemies_in_play", "add": 1}, count=3)
+    m = modals.LocationConfigModal(game)
+    m.draw(hw, game, pal)
+    assert m.threat_shape == "count"
+    assert m.threat_label == "Enemies in play"
+    texts = " ".join(_texts(hw))
+    assert "Enemies in play" in texts        # the stepper is labelled by what it counts
+    assert "Threat" in texts and "= X" in texts
+    # 3 enemies -> threat 4, and one tap makes it 4 -> 5.
+    m.on_button(_find(m, ("count", 1)))
+    m.on_button(_find(m, ("save",)))
+    # Stores the COUNT, not just the result: storing only the result would go
+    # stale the moment the board changes.
+    assert game.active_location["threatCount"] == 4
+    assert game.active_location["threat"] == 5
+
+
+def test_threat_auto_target_needs_no_control_at_all():
+    # 16 of the 58 formulas are answerable from the player count we already
+    # track, so there is nothing to ask - and a stale count must not be able to
+    # override it.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = _loc_x({"text": "the number of players in the game",
+                   "target": "players"}, count=99)
+    m = modals.LocationConfigModal(game)
+    m.draw(hw, game, pal)
+    assert m.threat_shape == "auto"
+    assert not any(b.id[0] == "count" for b in m.buttons)
+    m.on_button(_find(m, ("save",)))
+    assert game.active_location["threat"] == len(game.players)
+
+
+def test_threat_bare_count_keeps_one_stepper_and_no_second_number():
+    # 19 of the 40 are a bare count, where the count IS the value - so the row
+    # must NOT grow a read-only duplicate above its own stepper.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = _loc_x({"text": "the number of locations in the staging area",
+                   "target": "locations_in_staging"})
+    m = modals.LocationConfigModal(game)
+    m.draw(hw, game, pal)
+    assert m.threat_shape == "bare"
+    assert not any(b.id[0] == "count" for b in m.buttons)
+    assert any(b.id[0] == "threat" for b in m.buttons)
+
+
+def test_coded_x_suppresses_the_defined_elsewhere_note():
+    # The note contradicts the formula line directly above it, and used to fire
+    # whenever threat happened to be 0.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = _loc_x({"text": "1 more than the number of enemies in play",
+                   "target": "enemies_in_play", "add": 1})
+    m = modals.LocationConfigModal(game)
+    m.draw(hw, game, pal)
+    assert "defines it elsewhere" not in " ".join(_texts(hw))
+
+
 def test_location_config_threat_starts_blank_when_x_is_undefined():
     # 18 X-printing faces define X nowhere we can read. The value slot stays
     # empty rather than claiming 0 - for threat especially, a wrong 0

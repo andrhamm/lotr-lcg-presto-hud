@@ -6,6 +6,7 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          disc, arcRuns, ring, token, wxSmall, BAND_PAD, bandLineH,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
+import * as xtargets from "./xtargets.js";
 import * as icons from "./icons.js";
 import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, REMINDER_DEFS, HEADINGS,
          DEFAULT_START_THREAT, MAX_PLAYERS, viewForStep, fmtMs } from "./gamestate.js";
@@ -1713,6 +1714,21 @@ export class LocationConfigModal {
     // built from. See xtargets.py.
     this.threatX = loc?.threatX ?? null;
     this.threatFormula = this.threatX?.text ?? null;
+    // How the threat row behaves, from the coded X (see xtargets.js):
+    //   "auto"   a tracked value answers it - read-only, no stepper
+    //   "count"  the player supplies a count the app does arithmetic on -
+    //            read-only value PLUS a stepper on the count
+    //   "bare"   the count IS the value - one stepper, no second number
+    //   null     an ordinary editable number
+    this.threatCount = loc?.threatCount ?? null;
+    this.threatShape = null;
+    if (this.threatX) {
+      const t = this.threatX.target;
+      if (xtargets.autoFor(t)) this.threatShape = "auto";
+      else if ((this.threatX.mul ?? 1) === 1 && !this.threatX.add) this.threatShape = "bare";
+      else this.threatShape = "count";
+      this.threatLabel = xtargets.labelFor(t);
+    }
     // An X with no formula has no number to show yet, and 0 would be a claim
     // the card never made. One tap on "+" makes it a real value.
     this.threatBlank = loc?.threatKind === "x" && !this.threat;
@@ -1730,6 +1746,52 @@ export class LocationConfigModal {
     if (blank) rect(ctx, 340, y + 25, 30, 3, pal.gold);
   }
 
+  // A value the CARD owns: read-only, no stepper. "label = X" states the chain
+  // rather than leaving the player to infer it from a note.
+  _computed(ctx, y, label, value) {
+    textLeft(ctx, label, 30, y + 14, BODY, pal.tan);
+    textLeft(ctx, "= X", 36 + measureText(label, BODY), y + 14, BODY, pal.dim);
+    textCenter(ctx, value === null ? "-" : String(value), 355, y + 10, DISPLAY, pal.gold);
+  }
+
+  _resolved() {
+    return xtargets.resolve(this.threatX, {
+      count: this.threatCount,
+      players: this.game.players.length,
+      stage: this.game.quest.stage_n ?? 1,
+      highestThreat: Math.max(0, ...this.game.players.map(p => p.threat)),
+    });
+  }
+
+  // The threat row, in whichever shape the card calls for. Returns the y to
+  // continue at.
+  _threatBlock(ctx, y) {
+    const shape = this.threatShape;
+    if (shape === "auto" || shape === "count") {
+      this._computed(ctx, y, "Threat", this._resolved());
+      // +40, not +34: the value is DISPLAY-sized (24px tall drawn at y+10), so
+      // a 34 step put the formula's first line inside its descender.
+      y += 40;
+      for (const ln of wrapText("X = " + (this.threatFormula ?? ""), BODY, 420,
+                                measureText).slice(0, 2)) {
+        textLeft(ctx, ln, 50, y, BODY, pal.dim);
+        y += 22;
+      }
+      if (shape === "count") {
+        // The only thing the player can move. They answer "how many enemies are
+        // in play?" by looking at the table; the app applies the arithmetic, so
+        // nobody does it in their head, and the count survives to next round.
+        this._row(ctx, y + 4, this.threatLabel, this.threatCount ?? 0, "count");
+        y += 62;
+      } else {
+        y += 8;
+      }
+      return y;
+    }
+    this._row(ctx, y, "Threat", this.threat, "threat", this.threatBlank);
+    return y + 56;
+  }
+
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
@@ -1739,19 +1801,22 @@ export class LocationConfigModal {
     }
     this._row(ctx, 76, "Progress", this.prog, "prog");
     this._row(ctx, 136, "Quest points", this.pts, "pts");
-    this._row(ctx, 196, "Threat", this.threat, "threat", this.threatBlank);
-    let y = 252;
-    if (this.threatFormula) {
+    let y = this._threatBlock(ctx, 196);
+    if (this.threatFormula && this.threatShape === "bare") {
       for (const ln of wrapText("X = " + this.threatFormula, BODY, 420,
                                 measureText).slice(0, 2)) {
         textLeft(ctx, ln, 30, y, BODY, pal.dim);
         y += 22;
       }
-    } else if (this.threatBlank) {
+    } else if (this.threatBlank && !this.threatX) {
+      // Only when the card defines X NOWHERE we can read. With a coded X the
+      // formula line above already said where the number comes from.
       textLeft(ctx, "the card prints X and defines it elsewhere", 30, y, BODY, pal.dim);
       y += 22;
     }
-    const nb = new Button(["none"], 30, Math.max(y + 8, 296), 420, 52);
+    // Clamped: the threat block is variable-height, and unclamped it walked
+    // into the footer's Cancel/Save at y=404.
+    const nb = new Button(["none"], 30, Math.min(Math.max(y + 8, 296), 340), 420, 52);
     panel(ctx, nb.x, nb.y, nb.w, nb.h, pal.btn_no, pal.no_fg);
     textCenter(ctx, "Set none (no active location)", nb.x + nb.w / 2, nb.y + 16,
                BODY, pal.no_fg);
@@ -1767,6 +1832,10 @@ export class LocationConfigModal {
     }
     if (k === "prog") {
       this.prog = Math.max(0, Math.min(99, this.prog + btn.id[1]));
+      this.has = true; return null;
+    }
+    if (k === "count") {
+      this.threatCount = Math.max(0, Math.min(60, (this.threatCount ?? 0) + btn.id[1]));
       this.has = true; return null;
     }
     if (k === "threat") {
@@ -1785,7 +1854,14 @@ export class LocationConfigModal {
       const loc = { ...(this.game.active_location ?? {}) };
       loc.points = this.pts;
       loc.progress = this.prog;
-      if (this.threat || !this.threatBlank) loc.threat = this.threat;
+      if (this.threatShape === "auto" || this.threatShape === "count") {
+        // Store the COUNT and recompute: storing only the result would make it
+        // stale the moment the board changes.
+        if (this.threatCount !== null) loc.threatCount = this.threatCount;
+        loc.threat = this._resolved() ?? 0;
+      } else if (this.threat || !this.threatBlank) {
+        loc.threat = this.threat;
+      }
       if (JSON.stringify(loc) !== JSON.stringify(this.game.active_location)) {
         this.game.logEvent(`Active location set to ${this.prog}/${this.pts} progress, ${this.threat} threat`);
       }
