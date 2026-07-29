@@ -13,7 +13,7 @@ from viewcopy import (VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS,
                       LOOP_FLOW, LOOP_LEGEND, SHIP_FLOW_NOTES,
                       STAGING_PENDING, COMBAT_LAST_CHANCE,
                       PHASE_FRAMEWORK, PHASE_WINDOW, PHASE_CAPTION,
-                      SHIP_NOTES, STAGING, TRAVEL, OUTCOME,
+                      STAGING, TRAVEL, OUTCOME,
                       SAILING, QUEST_SETUP, CONFIRM, TOTALS, REFRESH)
 from ui.header import draw_header, HEADER_H
 from ui.theme import DISPLAY, BODY, LABEL
@@ -522,15 +522,12 @@ class ScreenPlay:
                       ("advance",))
         else:
             self._players_zone(d, pal, game)
-            ship_notes = SHIP_NOTES
             flavor = {"combat_enemy": (icons.DEFENSE, pal.green),
                       "combat_player": (icons.ATTACK, pal.tan)}.get(view)
             self._progress_zone(d, pal, game)
             sections = []
             if PHASE_FRAMEWORK.get(view):
                 fw = PHASE_FRAMEWORK[view]
-                if game.sailing and view in ship_notes:
-                    fw = [fw, ship_notes[view]]
                 sections.append(("framework", fw))
             if PHASE_WINDOW.get(view):
                 sections.append(("window", PHASE_WINDOW[view]))

@@ -688,13 +688,26 @@ def test_travel_with_location_says_travel_is_blocked():
     assert "explore" not in texts.lower()
 
 
-def test_enc_optional_has_no_framework_block_but_has_risk_caption():
+def test_enc_optional_has_no_framework_block_and_says_why_to_engage():
+    """The threat caption was CUT, not reworded.
+
+    It duplicated the following window screen, which says the same thing on
+    the screen where a player can still act on it, and it was the last
+    second-person line on this view ("your threat... engage you") - meaningless
+    on a device four players share.
+
+    What this view owes the player is why anyone would engage VOLUNTARILY,
+    and that needs no strategy claim: 5.2 ignores engagement cost where 5.3
+    requires it to be at or below the player's threat.
+    """
     hw, pal, game, screen = _setup("enc_optional")
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert not _has_framework(hw, pal) and _has_window(hw, pal)
     joined = " ".join(texts)
-    assert "engage you" in joined
+    assert "engagement cost is ignored" in joined.lower()
+    assert "staging area" in joined.lower()
+    assert "engage you" not in joined
 
 
 def test_enc_checks_shows_the_loop_and_the_engagement_rule():

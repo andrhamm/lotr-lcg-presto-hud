@@ -91,18 +91,10 @@ PHASE_FRAMEWORK = {
                  "lasting \"until the end of the round\" expires now.",
     "resource": "Each hero gains a resource and each player draws a card, "
                 "all at the same time. (1 each normally.)",
-    "planning": "In player order, play allies and attachments from "
-                "hand - the only step that allows it.",
-    "enc_checks": "Not optional. In player order, each player engages the "
-                  "staging enemy with the highest engagement cost at or below "
-                  "their threat. This repeats until no enemy in staging can "
-                  "engage anyone.",
     "combat_shadow": "In player order, deal 1 facedown shadow card to each of "
                      "that player's engaged enemies, highest engagement cost "
                      "first. If the encounter deck runs out, those enemies "
                      "get none this round.",
-    "combat_enemy": "Choose an enemy -> exhaust a defender (optional) -> shadow effect -> damage, one at a time.",
-    "combat_player": "Choose an enemy -> exhaust attackers -> total ATK -> damage, one enemy at a time.",
     "refresh": "Simultaneously ready all exhausted cards. Pass the first "
                "player token clockwise. The tracker already raised each "
                "player's threat and passed the token.",
@@ -114,36 +106,19 @@ PHASE_FRAMEWORK = {
 # actions throughout", and both combat halves are "player actions after each
 # combat substep". A single after-the-step screen would misdescribe all three.
 PHASE_WINDOW = {
-    "planning": "This whole phase is your window - actions may be taken "
-                "throughout it, not only at the end. Once you pass on playing "
-                "allies you cannot return to it this turn.",
     "quest_commit": "In player order, exhaust characters to commit them and "
                     "add their willpower. They stay committed for the whole "
                     "phase and do not ready at resolution.",
     "enc_optional": "In player order, each player may engage 1 enemy in the "
                     "staging area. Engagement cost is ignored here, so a "
                     "player can engage an enemy far above their threat.",
-    "enc_checks": "Responses.",
     "combat_shadow": "Responses.",
-    "combat_enemy": "A window opens after each substep of every enemy attack, "
-                    "not once at the end.",
-    "combat_player": "A window opens after each substep of every attack you "
-                     "make. The last one ends the combat phase.",
     "refresh": "Responses.",
 }
 
 PHASE_CAPTION = {
-    "enc_optional": "Your threat decides which enemies can engage you next.",
-    "enc_checks": "In player order, repeating until no enemy in staging can engage anyone.",
-    "combat_enemy": "In player order; each player resolves all their enemies before the next. Undefended: all damage to one of your heroes.",
-    "combat_player": "In player order; each player makes all their attacks before the next. 1 attack per engaged enemy, and attacking is optional.",
 }
 
-# Sailing-only addendum, appended to the framework band when game.sailing.
-SHIP_NOTES = {
-    "combat_enemy": "Ships: only a ship can defend a ship-enemy. Undefended ship attacks must damage a ship you control.",
-    "combat_player": "Ships: your ships attack only ship-enemies - but any character may attack a ship-enemy.",
-}
 
 # --------------------------------------------------------------------------
 # Combat loop diagram: (caption, note, [rung labels]). Combat is a loop, so it
@@ -239,7 +214,7 @@ LOOP_LEGEND = "= action window opens here"
 # Sailing-only third paragraph on the combat flows.
 SHIP_FLOW_NOTES = {
     "combat_enemy": "Ships: only a ship can defend a ship-enemy.",
-    "combat_player": "Ships: your ships attack only ship-enemies.",
+    "combat_player": "Ships attack only ship-enemies.",
 }
 
 # --------------------------------------------------------------------------
@@ -346,7 +321,7 @@ SAILING = {
 
 QUEST_SETUP = {
     "none": "No setup instructions for this stage.",
-    "banner": "QUEST SETUP - resolve now",
+    "banner": "QUEST SETUP: resolve now",
     "flip": "Flip to Side B  ->  %d qp",
 }
 

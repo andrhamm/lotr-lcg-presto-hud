@@ -29,7 +29,7 @@ STEPS = [
     {"id": "1.R",  "phase": "Resource",  "label": "1.2-1.3 Gain resources and draw cards",             "action_window": True},
     {"id": "1.4",  "phase": "Resource",  "label": "1.4 End of the Resource phase",                     "action_window": False},
     {"id": "2.1",  "phase": "Planning",  "label": "2.1 Beginning of the Planning phase",               "action_window": False},
-    {"id": "2.P",  "phase": "Planning",  "label": "2.2-2.3 Play cards in turn order",                  "action_window": True},
+    {"id": "2.P",  "phase": "Planning",  "label": "2.2-2.3 Play cards in turn order - player actions throughout",                  "action_window": True},
     {"id": "2.4",  "phase": "Planning",  "label": "2.4 End of the Planning phase",                     "action_window": False},
     {"id": "3.1",  "phase": "Quest",     "label": "3.1 Beginning of the Quest phase",                  "action_window": True},
     {"id": "3.2",  "phase": "Quest",     "label": "3.2 Commit characters to the quest",                "action_window": True},

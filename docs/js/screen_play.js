@@ -11,7 +11,7 @@ import { VIEW_ORDER, isWindowView, phaseViewOf } from "./gamestate.js";
 import { VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS, PHASE_FRAMEWORK, PHASE_WINDOW,
          PHASE_CAPTION, LOOP_FLOW, LOOP_LEGEND, SHIP_FLOW_NOTES,
          STAGING_PENDING, COMBAT_LAST_CHANCE,
-         SHIP_NOTES, STAGING, TRAVEL,
+         STAGING, TRAVEL,
          OUTCOME, SAILING, QUEST_SETUP, CONFIRM, TOTALS,
          REFRESH } from "./viewcopy.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal,
@@ -554,11 +554,9 @@ export class ScreenPlay {
       const flavor = { combat_enemy: [icons.DEFENSE, pal.green],
                        combat_player: [icons.ATTACK, pal.tan] }[view];
       this._progressZone(ctx, game);
-      const shipNotes = SHIP_NOTES;
       const sections = [];
       if (PHASE_FRAMEWORK[view]) {
-        const fw = game.sailing && shipNotes[view]
-          ? [PHASE_FRAMEWORK[view], shipNotes[view]] : PHASE_FRAMEWORK[view];
+        const fw = PHASE_FRAMEWORK[view];
         sections.push({ kind: "framework", text: fw });
       }
       if (PHASE_WINDOW[view]) sections.push({ kind: "window", text: PHASE_WINDOW[view] });

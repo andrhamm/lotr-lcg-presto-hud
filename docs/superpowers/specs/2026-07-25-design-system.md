@@ -140,12 +140,55 @@ not tappable.
 
 ## Copy
 
+All play-screen copy lives in `viewcopy.py`, from which `docs/js/viewcopy.js`
+is generated. One edit, not two, and drift is structurally impossible rather
+than merely discouraged.
+
 - Sentence case for prose, ALL CAPS for `LABEL` chrome.
 - **ASCII only.** The device font has 82 glyphs; `→`, `−`, `’` and friends
-  render as garbage. Write `->`, `-`, `'`.
+  render as garbage. Write `->`, `-`, `'`. Worse than ugly: `BITMAP8_W`
+  measures an unknown glyph as 4px, so a curly quote passes every layout test
+  and only breaks on the device.
+- **No spaced dash. Use two sentences.** A dash invites a trailing clause, and
+  the trailing clause is where vague copy hides — splitting one such sentence
+  is what exposed that "resolve each When Revealed" was narrower than the rule
+  it paraphrased.
+- **Third person. Never "you".** The Presto sits between four players, so
+  "your threat" has no referent and "1 enemy engaged with you" is
+  unanswerable. Name the actor, using the Rules Reference's own vocabulary:
+  *the active player* (one player acting alone), *each player* (everyone, in
+  player order), *the first player* (token holder), *the players* (the table
+  as a group).
+- **Bold trigger words are reserved.** `Action`, `Forced`, `Response`,
+  `When Revealed`, `Travel`, `Surge`, `Doomed` name printed card abilities.
+  Never use one to describe a framework step: a draft opened a step with
+  "Forced, not optional", but RR defines `Forced` as "a bold trigger word" for
+  mandatory triggered abilities and never applies it to engagement.
+- **Never name a mechanic the copy cannot afford to define.** "Each check
+  engages…" leans on a term the screen never explains, and every later mention
+  inherits the debt. Say what the player does instead.
+- **Do not restate the obvious.** If a competent player already knows it, it is
+  not worth a line. Prefer a fact the app computed, or a consequence of the
+  rules they may not have connected. This is *not* a ban on explaining why a
+  step exists.
+- **"In player order" leads the sentence it governs.** It frames the whole
+  instruction, so a reader needs it before they picture the action.
 - Never ship an unverified rules claim — see [[../../../CLAUDE|Iron rule 4]].
   A truncated rule is a wrong rule, which is why truncation needs an
   affordance rather than a silent cut.
+
+### Loop views
+
+Four views are genuinely loops (Planning, engagement checks, both combat
+halves). Each is drawn with one shape: a **framing line** saying what the whole
+loop is, the **diagram**, and an optional **note**. The framing line comes
+*before* the diagram — it is what tells a reader whether they are looking at
+one pass or a rotation.
+
+Draw a loop when its body has two or more steps, or when something happens
+between them; otherwise say it in a sentence. Loop exits always read
+`Repeat until <condition>`: a question-shaped rung asks the player to work out
+the answer at the moment they want to be told it.
 
 ## Enforcement
 
@@ -158,7 +201,10 @@ Rules that are only written down decay. Each of these is a test:
 | Every ink/ground pair clears WCAG AA (4.5:1) | `tests/test_contrast.py` |
 | `dim < muted < tan` stays separable | `tests/test_contrast.py` |
 | Touch targets ≥ 24px, nothing off-screen, no text collisions | `tests/test_layout.py` |
-| A round costs ≤ 22 taps | `tests/test_tap_budget.py` |
+| Content text clears the nav rule | `tests/test_layout.py` (L6) |
+| A round costs ≤ 33 taps | `tests/test_tap_budget.py` |
+| Copy is ASCII, third person, no spaced dash, no reserved trigger words | `tests/test_viewcopy.py` |
+| Generated web-twin mirrors are fresh | `tests/test_viewcopy.py` |
 | Both twins render identically | `tests/scenes.py` + `tools/preview.py` |
 
 `tests/test_typography.py` carries a short, reasoned allowlist. Adding to it

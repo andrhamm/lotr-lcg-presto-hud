@@ -95,8 +95,6 @@ def test_copy_is_ascii_only():
     assert not bad, "non-ASCII copy: %s" % bad[:5]
 
 
-@pytest.mark.xfail(strict=True, reason=
-    "spaced dashes are removed by T4-T7 (the copy rewrite); strict=True so this flips to a real gate the moment it passes")
 def test_copy_uses_no_spaced_dash():
     """Use two sentences. A dash invites a trailing clause, and the trailing
     clause is where vague copy hides - splitting one such sentence is what
@@ -106,8 +104,6 @@ def test_copy_uses_no_spaced_dash():
     assert not bad, "spaced dash in copy: %s" % [b[1][:70] for b in bad[:8]]
 
 
-@pytest.mark.xfail(strict=True, reason=
-    "the second-person purge lands in T4; strict=True so this flips to a real gate the moment it passes")
 def test_copy_is_third_person():
     """The Presto sits between four players, so "your threat" has no referent.
 
