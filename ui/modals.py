@@ -9,7 +9,8 @@ import random
 
 from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         stepper, draw_weather, token, circ_btn, disc, arc_runs,
-                        ring, wx_small, wrap_text, truncate_text, ribbon, ribbon_h)
+                        ring, wx_small, wrap_text, truncate_text, ribbon, ribbon_h,
+                        BAND_PAD, band_line_h)
 from ui.counter import CounterState
 from ui import icons
 from gamestate import HEADINGS
@@ -1971,7 +1972,10 @@ class QuestCardModal:
     NAV_H = 44
     BODY_Y0 = 130
     DETAIL_Y0 = 78
-    LH = 26                 # 10*scale(2)+6 - one wrapped body line
+    # One wrapped body line. This was 26, hand-copied from note_panel's old
+    # formula, so card text stepped 2px looser than every guidance band on
+    # the play screen for no stated reason.
+    LH = band_line_h(BODY)
     TIPS_LINES = 2          # inline peek before "more" takes over
     TIPS_H = 18 + TIPS_LINES * LH + 8
 

@@ -19,6 +19,7 @@ from ui.header import draw_header, HEADER_H
 from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
                         note_panel, phase_block, willpower_staging_meter, wrap_text,
+                        BAND_PAD, band_line_h,
                         truncate_text, draw_heart, draw_flag, disc, arc_runs, token,
                         arrow_left, arrow_right,
                         wx_small)
@@ -150,7 +151,9 @@ class ScreenPlay:
     # action window. No timer and no "Perform Actions" button: those existed
     # only to let a 3s auto-advance be frozen, and there is no auto-advance.
     # The player leaves when they are ready, like every other view.
-    AW_Y0 = 146                       # top of the copy band, under the zones
+    AW_Y0 = CONTENT_Y                 # top of the copy band - the same line
+                                      # every phase view starts its band on;
+                                      # this was 146, off by 4 for no reason
     AW_MAX_BOTTOM = NAV_RULE_Y - 10   # copy must clear the nav rule
 
     # There is no open/close pair: a window is a real view, so entering and
@@ -189,7 +192,7 @@ class ScreenPlay:
         w = 480 - 2 * MARGIN
         gutter = len(icons.LEADERSHIP) + 14
         usable = w - 16 - 12 - gutter
-        lh = 10 * BODY + 6
+        lh = band_line_h(BODY)
         band_top, band_bottom = y0, self.AW_MAX_BOTTOM
         max_lines = max(1, (band_bottom - band_top - 16) // lh)
         # Whole paragraphs only - clipping a sentence mid-clause is exactly
@@ -203,10 +206,12 @@ class ScreenPlay:
             if len(lines) + len(wrapped) > max_lines:
                 continue
             lines.extend(wrapped)
-        # centre the panel in the band rather than letting it hug the title
-        ph = max(len(lines) * lh + 16, len(icons.LEADERSHIP) + 14)
-        ty = band_top + max(0, (band_bottom - band_top - ph) // 2)
-        note_panel(d, pal, MARGIN, ty, w, lines, BODY, 0, icons.LEADERSHIP)
+        # Top-anchored, like every phase view's band. This used to centre the
+        # panel in the band, which meant its top edge moved with the copy
+        # length - 195 on a five-line window, 234 on a two-line one, against a
+        # flat 150 on every phase view. Walking a round, the band jumped up
+        # and down under a stat strip that never moved.
+        note_panel(d, pal, MARGIN, band_top, w, lines, BODY, 0, icons.LEADERSHIP)
         # The window hands off to the NEXT step, so the CTA names it - the same
         # "Next: X" every phase view uses, which the nav bar renders as the
         # NEXT PHASE kicker over the destination.
@@ -608,7 +613,7 @@ class ScreenPlay:
         self._players_zone(d, pal, game)
         self._progress_zone(d, pal, game)
         if not game.sailing:
-            note_panel(d, pal, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
+            note_panel(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
                        [SAILING["no_keyword"],
                         SAILING["enable_hint"]])
             eb = Button(("sail_toggle",), MARGIN, CONTENT_Y + 96, 480 - 2 * MARGIN, 52)
@@ -619,16 +624,16 @@ class ScreenPlay:
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_commit"], ("advance",))
             return
         # tip: pipe medallion top-left; wheel glyph inline in the sentence
-        tw, ty0 = 480 - 2 * MARGIN, CONTENT_Y + 6
-        gutt, lh = 28 + 14, 26
-        th = 3 * lh + 16
+        tw, ty0 = 480 - 2 * MARGIN, CONTENT_Y
+        gutt, lh = 28 + 14, band_line_h(BODY)
+        th = 3 * lh + 2 * BAND_PAD
         d.set_pen(pal.card_hi)
         d.rectangle(MARGIN, ty0, tw, th)
         d.set_pen(pal.border_gold)
         d.rectangle(MARGIN, ty0, 4, th)
-        icons.draw(d, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold)
+        icons.draw(d, icons.PIPE, MARGIN + 10, ty0 + BAND_PAD, pal.gold)
         tx = MARGIN + 12 + gutt
-        ly = ty0 + 8
+        ly = ty0 + BAND_PAD
         fp = "P%d" % (game.first_player + 1)
         text_left(d, pal, fp, tx, ly, BODY, pal.muted)
         sx0 = tx + d.measure_text(fp, BODY) + 6
@@ -770,18 +775,19 @@ class ScreenPlay:
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
             fail = game.quest_outcome == "fail"
-            ty0, gutt, lh = CONTENT_Y + 6, 28 + 14, 26
+            ty0, gutt, lh = CONTENT_Y, 28 + 14, band_line_h(BODY)
             tx = MARGIN + 12 + gutt
-            th = 2 * lh + 16
+            th = 2 * lh + 2 * BAND_PAD
             d.set_pen(pal.card_hi)
             d.rectangle(MARGIN, ty0, 480 - 2 * MARGIN, th)
             d.set_pen(pal.border_gold)
             d.rectangle(MARGIN, ty0, 4, th)
-            icons.draw(d, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold)
+            icons.draw(d, icons.PIPE, MARGIN + 10, ty0 + BAND_PAD, pal.gold)
             l1 = "Quest failed. " if fail else OUTCOME["card_tie"]
-            text_left(d, pal, l1, tx, ty0 + 8, BODY, pal.muted)
-            draw_heart(d, pal, tx + d.measure_text(l1, BODY) + 8, ty0 + 8 + 8, 7, True, pal.red)
-            y2 = ty0 + 8 + lh
+            text_left(d, pal, l1, tx, ty0 + BAND_PAD, BODY, pal.muted)
+            draw_heart(d, pal, tx + d.measure_text(l1, BODY) + 8,
+                       ty0 + BAND_PAD + 8, 7, True, pal.red)
+            y2 = ty0 + BAND_PAD + lh
             if fail:
                 a = "Each player's "
                 text_left(d, pal, a, tx, y2, BODY, pal.muted)

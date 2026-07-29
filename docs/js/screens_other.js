@@ -3,6 +3,7 @@
 // strip on web).
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          stepper, truncateText, wrapText, ribbon, disc, arcRuns, notePanel, token,
+         BAND_PAD, bandLineH,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
@@ -966,12 +967,14 @@ export class ScenarioOptionsScreen {
       // A scenario-specific mode card's own printed setup text can run several
       // hundred characters. Clip it above the CTA rather than letting it run
       // through - the full text is on the physical card in front of the player.
-      // Mirrors notePanel's own geometry (ui.js): lh = 10*scale+6, and the
-      // usable width subtracts the panel padding and the pipe-icon gutter.
+      // Mirrors notePanel's own geometry (ui.js): take its line height and
+      // padding from the shared constants rather than restating them, which
+      // is how this went stale when the band metrics were unified.
       const gutter = icons.PIPE[0] + 14;
       const usable = 448 - 16 - 12 - gutter;
-      const lh = 10 * scale + 6;
-      const maxLines = Math.max(1, Math.floor((CTA_Y - 10 - ty - 16) / lh));
+      const lh = bandLineH(scale);
+      const maxLines = Math.max(1,
+        Math.floor((CTA_Y - 10 - ty - 2 * BAND_PAD) / lh));
       let lines = [];
       for (const m of msgs) lines = lines.concat(wrapText(m, scale, usable));
       const shown = lines.length <= maxLines
@@ -1122,7 +1125,10 @@ export class FirstRunScreen {
     const para = (title, lines) => {
       textCenter(ctx, title, 240, y, BODY, pal.gold);
       y += 40;
-      for (const ln of lines) { textCenter(ctx, ln, 240, y, BODY, pal.tan); y += 26; }
+      for (const ln of lines) {
+        textCenter(ctx, ln, 240, y, BODY, pal.tan);
+        y += bandLineH(BODY);
+      }
     };
     if (this.page === 0) {
       para("A companion, not a rules engine",

@@ -11,7 +11,8 @@ and ChooseScenarioScreen(source, cycle, scenarios) from one group's
 from ui.header import draw_header
 from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import (Button, panel, bevel, text_center, text_left,
-                         truncate_text, wrap_text, disc, arc_runs, note_panel)
+                         truncate_text, wrap_text, disc, arc_runs, note_panel,
+                         BAND_PAD, band_line_h)
 from ui import icons
 import quest_catalog
 
@@ -517,15 +518,17 @@ class ScenarioOptionsScreen:
     def _clip_to_height(self, d, msgs, scale, avail):
         """Trim wrapped tip lines to what fits above the CTA, appending an
         ellipsis to the last kept line when anything was dropped."""
-        # Mirror note_panel's own geometry exactly (ui/widgets.py): line
-        # height is 10*scale+6 and the usable width is the panel minus its
-        # padding and the pipe-icon gutter. Guessing these numbers is how an
-        # earlier attempt at this clip still overflowed.
+        # Mirror note_panel's own geometry exactly (ui/widgets.py): take its
+        # line height and padding from the shared constants rather than
+        # restating them, and subtract the panel padding and pipe-icon gutter
+        # from the width. Guessing these numbers is how an earlier attempt at
+        # this clip still overflowed, and hardcoding them is how this one
+        # silently went stale when the band metrics were unified.
         from ui import icons as _icons
         gutter = len(_icons.PIPE) + 14
         usable = 448 - 16 - 12 - gutter
-        line_h = 10 * scale + 6
-        max_lines = max(1, (avail - 16) // line_h)
+        line_h = band_line_h(scale)
+        max_lines = max(1, (avail - 2 * BAND_PAD) // line_h)
         lines = []
         for m in msgs:
             lines.extend(wrap_text(m, scale, usable, d.measure_text))

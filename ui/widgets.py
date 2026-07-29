@@ -171,6 +171,22 @@ def ribbon_h(d, pal, y, w, h, notch=10, fill=None):
     d.triangle(w, y, w, y + h, w - notch, y + h // 2)
 
 
+# Guidance-band metrics, shared by note_panel and phase_block.
+#
+# These were two sets of numbers for one visual element. phase_block padded 6
+# and stepped 24; note_panel padded 8 and stepped 26, and two hand-rolled
+# copies of note_panel in screen_play inlined its 8/26 again. So the same band
+# drawn on two adjacent views had different leading, which is exactly the kind
+# of drift nobody sees in one screenshot and everybody feels walking a round.
+BAND_PAD = 6                       # top and bottom padding inside the band
+
+
+def band_line_h(scale=BODY):
+    """Line pitch inside a guidance band. 24px at BODY, which is what every
+    phase view already used."""
+    return 10 * scale + 4
+
+
 def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None):
     """Distinct style for phase reminder messages: dark panel, gold edge,
     muted text, and (by default) the hobbit-pipe hint medallion on the left.
@@ -186,15 +202,15 @@ def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None):
     lines = []
     for p in paras:
         lines.extend(wrap_text(p, scale, usable, d.measure_text))
-    lh = 10 * scale + 6
-    h = max(len(lines) * lh + 16, isz + 14 if gutter else 0)
+    lh = band_line_h(scale)
+    h = max(len(lines) * lh + 2 * BAND_PAD, isz + 14 if gutter else 0)
     d.set_pen(pal.card_hi)
     d.rectangle(x, y, w, h)
     d.set_pen(pal.border_gold)
     d.rectangle(x, y, 4, h)
     if gutter:
-        _icons.draw(d, icon, x + 10, y + 8, pal.gold)   # top-left, not centered
-    ty = y + 8
+        _icons.draw(d, icon, x + 10, y + BAND_PAD, pal.gold)  # top-left, not centered
+    ty = y + BAND_PAD
     for s in lines:
         text_left(d, pal, s, x + 12 + gutter, ty, scale, pal.muted)
         ty += lh
@@ -219,11 +235,12 @@ def phase_block(d, pal, x, y, w, sections, reserve_right=0):
     for kind, text in sections:
         body = " ".join(text) if isinstance(text, (list, tuple)) else text
         lines = wrap_text(body, BODY, usable, d.measure_text)
-        laid.append((kind, lines, len(lines) * 24))
-    h = 12 + sum(sec_h for _, _, sec_h in laid) + 6 * (len(laid) - 1)
+        laid.append((kind, lines, len(lines) * band_line_h()))
+    h = 2 * BAND_PAD + sum(sec_h for _, _, sec_h in laid) \
+        + BAND_PAD * (len(laid) - 1)
     d.set_pen(pal.card_hi)
     d.rectangle(x, y, w, h)
-    ty = y + 6
+    ty = y + BAND_PAD
     for kind, lines, sec_h in laid:
         # The accent bar alone says which kind this is - no label row. Red =
         # happens whether or not you act; green = your window to act. That
@@ -235,8 +252,8 @@ def phase_block(d, pal, x, y, w, sections, reserve_right=0):
         ly = ty
         for s in lines:
             text_left(d, pal, s, x + 14, ly, BODY, pal.tan)
-            ly += 24
-        ty += sec_h + 6
+            ly += band_line_h()
+        ty += sec_h + BAND_PAD
     return h
 
 

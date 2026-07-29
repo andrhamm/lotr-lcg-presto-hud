@@ -190,6 +190,17 @@ export function ribbon(ctx, x, y, w = 12, h = 22) {
   ctx.fill();
 }
 
+// Guidance-band metrics, shared by notePanel and phaseBlock.
+//
+// These were two sets of numbers for one visual element: phaseBlock padded 6
+// and stepped 24, notePanel padded 8 and stepped 26, and two hand-rolled
+// copies of notePanel in screen_play inlined its 8/26 again. The same band on
+// two adjacent views had different leading.
+export const BAND_PAD = 6;
+// Line pitch inside a guidance band. 24px at BODY, which is what every phase
+// view already used.
+export function bandLineH(scale = BODY) { return 10 * scale + 4; }
+
 export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon) {
   const mask = icon === undefined ? icons.PIPE : icon;
   const isz = mask ? mask[0] : 0;
@@ -198,12 +209,12 @@ export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon)
   const usable = w - 16 - 12 - gutter - reserveRight;
   const lines = [];
   for (const p of paras) lines.push(...wrapText(p, scale, usable));
-  const lh = 10 * scale + 6;
-  const h = Math.max(lines.length * lh + 16, gutter ? isz + 14 : 0);
+  const lh = bandLineH(scale);
+  const h = Math.max(lines.length * lh + 2 * BAND_PAD, gutter ? isz + 14 : 0);
   rect(ctx, x, y, w, h, pal.card_hi);
   rect(ctx, x, y, 4, h, pal.border_gold);
-  if (gutter) icons.drawIcon(ctx, mask, x + 10, y + 8, pal.gold);   // top-left, not centered
-  let ty = y + 8;
+  if (gutter) icons.drawIcon(ctx, mask, x + 10, y + BAND_PAD, pal.gold);  // top-left, not centered
+  let ty = y + BAND_PAD;
   for (const s of lines) {
     textLeft(ctx, s, x + 12 + gutter, ty, scale, pal.muted);
     ty += lh;
@@ -222,11 +233,12 @@ export function phaseBlock(ctx, x, y, w, sections, reserveRight = 0) {
   const laid = sections.map(({ kind, text }) => {
     const body = Array.isArray(text) ? text.join(" ") : text;
     const lines = wrapText(body, BODY, usable);
-    return { kind, lines, h: lines.length * 24 };
+    return { kind, lines, h: lines.length * bandLineH() };
   });
-  const h = 12 + laid.reduce((s, sec) => s + sec.h, 0) + 6 * (laid.length - 1);
+  const h = 2 * BAND_PAD + laid.reduce((s, sec) => s + sec.h, 0)
+          + BAND_PAD * (laid.length - 1);
   rect(ctx, x, y, w, h, pal.card_hi);
-  let ty = y + 6;
+  let ty = y + BAND_PAD;
   for (const sec of laid) {
     // The accent bar alone says which kind this is - no label row. Red =
     // happens whether or not you act; green = your window to act. That
@@ -235,8 +247,8 @@ export function phaseBlock(ctx, x, y, w, sections, reserveRight = 0) {
     // out of the type.
     rect(ctx, x, ty, 4, sec.h, sec.kind === "framework" ? pal.red : pal.green);
     let ly = ty;
-    for (const s of sec.lines) { textLeft(ctx, s, x + 14, ly, BODY, pal.tan); ly += 24; }
-    ty += sec.h + 6;
+    for (const s of sec.lines) { textLeft(ctx, s, x + 14, ly, BODY, pal.tan); ly += bandLineH(); }
+    ty += sec.h + BAND_PAD;
   }
   return h;
 }

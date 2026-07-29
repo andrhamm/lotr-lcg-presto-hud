@@ -55,6 +55,30 @@ bare `1` at a draw site is how prose ends up unreadable.
 > (`Questing: Staging`, `Combat: Shadow Cards`) are the game's own proper
 > nouns. A subtitle under a title stays `LABEL` and grows the bar to 52px.
 
+### Vertical rhythm
+
+Prose steps **24px at `BODY`** — `band_line_h()` in `ui/widgets.py`, `bandLineH()`
+in `docs/js/ui.js` — and a guidance band pads **6px** top and bottom
+(`BAND_PAD`). Use the helpers; a literal `26` at a draw site is how this drifted
+the first time.
+
+The two band widgets, `note_panel` and `phase_block`, are described in their own
+docstrings as semantic siblings and now actually are: one padding, one pitch. They
+used to differ (6/24 against 8/26), with two hand-rolled copies of `note_panel`
+inside `screen_play` restating its numbers a third time and `QuestCardModal.LH`
+a fourth. The same band on two adjacent views had different leading.
+
+**Bands top-anchor on `CONTENT_Y`.** How tall a band grows is the copy's
+business; where it starts is not. The action-window band used to centre itself
+in the space under the stat strip, so its top edge moved with the copy length —
+195px on a five-line window against 234px on a two-line one, while every phase
+view sat flat at 150. Walking a round, it bobbed underneath a stat strip that
+never moved.
+
+Row strides and the loop diagram are *not* prose and keep their own rhythm: the
+log's feed, the by-round stats table, list rows, and `FLOW_LINE`. Forcing those
+to 24 would be consistency for its own sake.
+
 Above `DISPLAY` there is no reading tier — sizes 4–9 belong to **numerals and
 wordmarks** (the threat counters, the sailing dial, `LOTR LCG`, `VICTORY!`).
 Those are chosen by the widget that owns the numeral, never at a call site,
@@ -216,6 +240,7 @@ Rules that are only written down decay. Each of these is a test:
 | Every title bar is `DISPLAY` | `tests/test_typography.py` |
 | No title bar is ALL CAPS | `tests/test_typography.py` |
 | Every touch target is reachable by some tap | `tests/test_layout.py` (L7) |
+| Guidance bands top-anchor on the content line | `tests/test_layout.py` (L8) |
 | Every ink/ground pair clears WCAG AA (4.5:1) | `tests/test_contrast.py` |
 | `dim < muted < tan` stays separable | `tests/test_contrast.py` |
 | Touch targets ≥ 24px, nothing off-screen, no text collisions | `tests/test_layout.py` |

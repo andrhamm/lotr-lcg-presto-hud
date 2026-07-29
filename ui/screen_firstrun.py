@@ -7,7 +7,8 @@ docs/js/screens_other.js - keep the two in lockstep.
 
 from ui.header import draw_header, HEADER_H
 from ui.theme import DISPLAY, BODY, LABEL
-from ui.widgets import Button, bevel, disc, text_center, text_left, token
+from ui.widgets import (Button, bevel, disc, text_center, text_left, token,
+                        band_line_h)
 from ui import icons
 
 PAGES = 3
@@ -89,7 +90,7 @@ class FirstRunScreen:
                        "It never touches your cards - you still",
                        "play the game on the table."]:
                 text_center(d, pal, ln, 240, y, BODY, pal.tan)
-                y += 26
+                y += band_line_h(BODY)
         elif self.page == 1:
             text_center(d, pal, "One screen per phase", 240, y, BODY, pal.gold)
             y += 40
@@ -100,7 +101,7 @@ class FirstRunScreen:
                        "",
                        "Tap the stats up top to edit them."]:
                 text_center(d, pal, ln, 240, y, BODY, pal.tan)
-                y += 26
+                y += band_line_h(BODY)
         else:
             text_center(d, pal, "What the marks mean", 240, y, BODY, pal.gold)
             draw_legend_rows(d, pal, y + 36)

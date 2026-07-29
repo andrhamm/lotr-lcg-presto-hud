@@ -3,7 +3,7 @@
 // .buttons, and handles taps in onButton returning the same protocol values.
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          stepper, wrapText, truncateText, ribbon, ribbonH, notePanel, drawWeather,
-         disc, arcRuns, ring, token, wxSmall,
+         disc, arcRuns, ring, token, wxSmall, BAND_PAD, bandLineH,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
@@ -1734,7 +1734,9 @@ export class QuestCardModal {
   static NAV_H = 44;
   static BODY_Y0 = 130;
   static DETAIL_Y0 = 78;
-  static LH = 26;              // 10*scale(2)+6 - one wrapped body line
+  // One wrapped body line. This was 26, hand-copied from notePanel's old
+  // formula, so card text stepped 2px looser than every guidance band.
+  static LH = bandLineH(BODY);
   static TIPS_LINES = 2;       // inline peek before "more" takes over
   static TIPS_H = 18 + 2 * 26 + 8;
   static MORE = " [...] more";

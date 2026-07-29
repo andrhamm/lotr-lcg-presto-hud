@@ -170,3 +170,40 @@ def test_l7_every_touch_target_is_reachable(name):
     assert not dead, (
         "%s: no tap reaches %s - an earlier button covers it"
         % (name, [d[1] for d in dead]))
+
+
+# Views whose content area is not a guidance band under the stat strip, with
+# the reason each one is exempt.
+_NOT_A_BAND_VIEW = {
+    "play_quest_resolution": "the placement table - it drops the stat strip "
+                             "entirely and starts its rows higher",
+    "play_setup": "pre-game, so there is no stat strip to sit under",
+    "play_setup_sailing": "pre-game, so there is no stat strip to sit under",
+}
+
+
+@pytest.mark.parametrize("scene", PLAY_SCENES)
+def test_l8_content_bands_start_on_the_content_line(scene):
+    """Every guidance band top-anchors at CONTENT_Y.
+
+    The action-window band used to be CENTRED in the space between the stat
+    strip and the nav rule, so its top edge moved with the copy length: 195 on
+    a five-line window, 234 on a two-line one, against a flat 150 on every
+    phase view. Walking a round, the band jumped up and down underneath a stat
+    strip that never moved - which is the "odd spacing" a player notices
+    without being able to name it.
+
+    Anchoring is the rule; how tall the band grows is the copy's business.
+    """
+    from ui.screen_play import CONTENT_Y, NAV_RULE_Y
+    if scene in _NOT_A_BAND_VIEW:
+        return
+    hw, _ = SCENES[scene]()
+    tops = [c[2] for c in hw.display.calls
+            if c[0] == "rect" and c[4] >= 40 and c[3] > 300
+            and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y]
+    if not tops:
+        return                      # a loop-diagram view draws no band at all
+    assert min(tops) == CONTENT_Y, (
+        "%s: content band starts at y=%d, not CONTENT_Y=%d"
+        % (scene, min(tops), CONTENT_Y))

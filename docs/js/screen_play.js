@@ -2,6 +2,7 @@
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
          truncateText, ribbon, notePanel, phaseBlock, willpowerStagingMeter,
          drawHeart, drawFlag, disc, arcRuns, wxSmall, token,
+         BAND_PAD, bandLineH,
          arrowLeft, arrowRight,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
@@ -30,7 +31,9 @@ const FLOW_X = 44;        // left gutter holds the loop arrow
 const FLOW_LINE = 20;     // one wrapped line inside a rung (16px glyphs)
 const FLOW_GAP = 2;
 const TICK_W = 14;        // purple window marker, right-aligned
-const AW_Y0 = 146;                      // top of the copy band, under the zones
+// Top of the copy band - the same line every phase view starts its band
+// on; this was 146, off by 4 for no reason.
+const AW_Y0 = CONTENT_Y;
 const AW_MAX_BOTTOM = NAV_RULE_Y - 10;  // copy must clear the nav rule   // 1px rule dividing the content area from the nav
 const ARROW = 22;         // arrow glyph size inside a nav square
 const NAV_PAD = 8;        // clearance between a nav square and the label
@@ -241,9 +244,9 @@ export class ScreenPlay {
     const y0 = AW_Y0, w = 480 - 2 * MARGIN;
     const gutter = icons.LEADERSHIP[0] + 14;
     const usable = w - 16 - 12 - gutter;
-    const lh = 10 * BODY + 6;
+    const lh = bandLineH(BODY);
     const bandTop = y0, bandBottom = AW_MAX_BOTTOM;
-    const maxLines = Math.max(1, Math.floor((bandBottom - bandTop - 16) / lh));
+    const maxLines = Math.max(1, Math.floor((bandBottom - bandTop - 2 * BAND_PAD) / lh));
     // Whole paragraphs only - clipping a sentence mid-clause is exactly what
     // the design system forbids.
     const lines = [];
@@ -254,9 +257,10 @@ export class ScreenPlay {
       if (lines.length + wrapped.length > maxLines) continue;
       lines.push(...wrapped);
     }
-    const ph = Math.max(lines.length * lh + 16, icons.LEADERSHIP[0] + 14);
-    const ty = bandTop + Math.max(0, Math.floor((bandBottom - bandTop - ph) / 2));
-    notePanel(ctx, MARGIN, ty, w, lines, BODY, 0, icons.LEADERSHIP);
+    // Top-anchored, like every phase view's band. This used to centre the
+    // panel, so its top edge moved with the copy length - 195 on a five-line
+    // window, 234 on a two-line one, against a flat 150 on every phase view.
+    notePanel(ctx, MARGIN, bandTop, w, lines, BODY, 0, icons.LEADERSHIP);
     // The window hands off to the NEXT step, so the CTA names it - the same
     // "Next: X" every phase view uses.
     this._cta(ctx, game, `Next: ${VIEW_LABELS[game.nextPhaseView()]}`, ["advance"]);
@@ -478,7 +482,7 @@ export class ScreenPlay {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       if (!game.sailing) {
-        notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
+        notePanel(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
                   [SAILING.no_keyword, SAILING.enable_hint]);
         const eb = new Button(["sail_toggle"], MARGIN, CONTENT_Y + 96,
                               480 - 2 * MARGIN, 52);
@@ -489,13 +493,13 @@ export class ScreenPlay {
         this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       } else {
         // tip (pipe medallion top-left; wheel glyph inline in the sentence)
-        const tw = 480 - 2 * MARGIN, ty0 = CONTENT_Y + 6;
-        const gutt = 28 + 14, lh = 26, th = 3 * lh + 16;
+        const tw = 480 - 2 * MARGIN, ty0 = CONTENT_Y;
+        const gutt = 28 + 14, lh = bandLineH(BODY), th = 3 * lh + 2 * BAND_PAD;
         rect(ctx, MARGIN, ty0, tw, th, pal.card_hi);
         rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
-        icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold);
+        icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + BAND_PAD, pal.gold);
         const tx = MARGIN + 12 + gutt;
-        let ly = ty0 + 8;
+        let ly = ty0 + BAND_PAD;
         const fp = `P${game.first_player + 1}`;
         textLeft(ctx, fp, tx, ly, BODY, pal.muted);
         let sx0 = tx + measureText(fp, BODY) + 6;
@@ -701,17 +705,18 @@ export class ScreenPlay {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       const fail = game.quest_outcome === "fail";
-      const ty0 = CONTENT_Y + 6, gutt = 28 + 14, tx = MARGIN + 12 + gutt, lh = 26;
-      const th = 2 * lh + 16;
+      const ty0 = CONTENT_Y, gutt = 28 + 14, tx = MARGIN + 12 + gutt,
+            lh = bandLineH(BODY);
+      const th = 2 * lh + 2 * BAND_PAD;
       rect(ctx, MARGIN, ty0, 480 - 2 * MARGIN, th, pal.card_hi);
       rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
-      icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold);
+      icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + BAND_PAD, pal.gold);
       // line 1: outcome + a broken heart marking the failed quest
       const l1 = fail ? "Quest failed. " : OUTCOME.card_tie;
-      textLeft(ctx, l1, tx, ty0 + 8, BODY, pal.muted);
-      drawHeart(ctx, tx + measureText(l1, BODY) + 8, ty0 + 8 + 8, 7, true, pal.red);
+      textLeft(ctx, l1, tx, ty0 + BAND_PAD, BODY, pal.muted);
+      drawHeart(ctx, tx + measureText(l1, BODY) + 8, ty0 + BAND_PAD + 8, 7, true, pal.red);
       // line 2
-      const y2 = ty0 + 8 + lh;
+      const y2 = ty0 + BAND_PAD + lh;
       if (fail) {
         const a = "Each player's ";
         textLeft(ctx, a, tx, y2, BODY, pal.muted);
