@@ -560,7 +560,6 @@ class ScreenPlay:
                 ("framework", PHASE_FRAMEWORK["refresh"]),
                 ("window", PHASE_WINDOW["refresh"]),
             ])
-            self._refresh_threat_preview(d, pal, game, CONTENT_Y + bh + 8)
             self._cta(d, pal, game,
                       "Next: %s" % VIEW_LABELS[game.next_phase_view()],
                       ("advance",))
@@ -776,26 +775,6 @@ class ScreenPlay:
         if not all_done:
             self.buttons.append(b)
         return y + 48
-
-    def _refresh_threat_preview(self, d, pal, game, y):
-        """Live REFRESH["preview_caption"] threat per living player, flagged red
-        when the projected value crosses the same danger threshold
-        _players_zone uses (proj >= elimination - 10). Eliminated players are
-        skipped - their threat is capped at their elimination level and does
-        not keep rising. Fixed height: 48 (the caption is BODY, so the row
-        below it sits 22px down rather than 14px)."""
-        text_left(d, pal, "After +1 threat:", MARGIN + 4, y, BODY, pal.dim)
-        x = MARGIN + 4
-        ly = y + 22
-        for i, p in enumerate(game.players):
-            if p.eliminated:
-                continue
-            proj = p.threat + p.threat_per_round
-            danger = proj >= p.elimination - 10
-            seg = "P%d %d->%d%s" % (i + 1, p.threat, proj, "!" if danger else "")
-            text_left(d, pal, seg, x, ly, BODY, pal.red if danger else pal.value)
-            x += d.measure_text(seg, BODY) + 16
-        return 48
 
     def _draw_travel(self, d, pal, game):
         loc = game.active_location

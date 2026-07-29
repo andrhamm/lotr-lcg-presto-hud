@@ -378,7 +378,6 @@ TOTALS = {
 }
 
 REFRESH = {
-    "preview_caption": "current -> projected",
 }
 
 

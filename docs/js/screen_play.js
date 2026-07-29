@@ -365,26 +365,6 @@ export class ScreenPlay {
     return y + 48;
   }
 
-  // Live REFRESH.preview_caption threat per living player, flagged red when the
-  // projected value crosses the same danger threshold _playersZone uses
-  // (proj >= elimination - 10). Eliminated players are skipped: their threat is
-  // capped at their elimination level and does not keep rising. Height: 48
-  // (the caption is BODY, so the row below it sits 22px down, not 14px).
-  _refreshThreatPreview(ctx, game, y) {
-    textLeft(ctx, "After +1 threat:", MARGIN + 4, y, BODY, pal.dim);
-    let x = MARGIN + 4;
-    const ly = y + 22;
-    game.players.forEach((p, i) => {
-      if (p.eliminated) return;
-      const proj = p.threat + p.threat_per_round;
-      const danger = proj >= p.elimination - 10;
-      const seg = `P${i + 1} ${p.threat}->${proj}${danger ? "!" : ""}`;
-      textLeft(ctx, seg, x, ly, BODY, danger ? pal.red : pal.value);
-      x += measureText(seg, BODY) + 16;
-    });
-    return 48;
-  }
-
   _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
     const half = Math.floor((480 - 3 * MARGIN) / 2);
     const defs = [
@@ -585,7 +565,6 @@ export class ScreenPlay {
         { kind: "framework", text: PHASE_FRAMEWORK["refresh"] },
         { kind: "window", text: PHASE_WINDOW["refresh"] },
       ]);
-      this._refreshThreatPreview(ctx, game, CONTENT_Y + bh + 8);
       this._cta(ctx, game, `Next: ${VIEW_LABELS[game.nextPhaseView()]}`, ["advance"]);
     } else if (view === "round_end") {
       // 0.1. Not an action window - RR's chart puts the last one after 7.4 -
