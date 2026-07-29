@@ -87,6 +87,40 @@ export function cyclesFor(index, source) {
     .map(g => ({ cycle: g.cycle, date: g.date, count: g.scenarios.length }));
 }
 
+// Everything the three quest-picker screens need to rebuild themselves from a
+// saved game's `scenario` stamp, or null if it cannot be resolved.
+//
+// A resumed game restores its own state fine, but the picker screens are
+// router-held: the boot path built them as empty placeholders and `resume`
+// only flipped to the play screen, so backing out of Quest Setup landed on an
+// unpopulated Scenario Options and the router bounced the player all the way
+// to Scenario Source to pick again. Nothing was missing from the save -
+// `scenario` already carries slug/name/pack/cycle/source and the chosen
+// `mode` - it was just never read back.
+//
+// Returns null rather than throwing for every way this can legitimately miss:
+// a custom game (no scenario at all), or a slug the current catalog no longer
+// has because it was rebuilt without ALeP or with a newer card DB.
+export function resumePickerState(index, scenario) {
+  if (!scenario?.slug) return null;
+  const entry = (index.scenarios ?? []).find(s => s.slug === scenario.slug);
+  if (!entry) return null;
+  // Prefer the stamp's own source/cycle: they are what the player actually
+  // navigated through, and they were captured when the pick was made.
+  const source = scenario.source ?? entry.source;
+  const cycle = scenario.cycle ?? entry.cycle;
+  const group = groupByCycle(index.scenarios ?? [], source)
+    .find(g => g.cycle === cycle);
+  return {
+    entry, source, cycle,
+    cycles: cyclesFor(index, source),
+    siblings: group?.scenarios ?? [],
+    // "mode" is where begin_setup stamps the chosen difficulty; a game saved
+    // before that field existed just reads as Standard.
+    difficulty: scenario.mode || "Standard",
+  };
+}
+
 // Read the whole catalog index. Thin wrapper, not host-tested.
 export async function loadIndex() {
   return (await fetch("data/index.json")).json();

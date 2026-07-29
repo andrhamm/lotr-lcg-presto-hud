@@ -118,6 +118,47 @@ def cycles_for(index, source):
             for g in groups]
 
 
+def resume_picker_state(index, scenario):
+    """Everything the three quest-picker screens need to rebuild themselves
+    from a saved game's `scenario` stamp, or None if it cannot be resolved.
+
+    A resumed game restores its own state fine, but the picker screens are
+    router-held: the boot path built them as empty placeholders and `resume`
+    only flipped to the play screen, so backing out of Quest Setup landed on
+    an unpopulated Scenario Options and the router bounced the player all the
+    way to Scenario Source to pick again. Nothing was missing from the save -
+    `scenario` already carries slug/name/pack/cycle/source and the chosen
+    `mode` - it was just never read back.
+
+    Returns None rather than raising for every way this can legitimately miss:
+    a custom game (no scenario at all), or a slug the current catalog no
+    longer has because it was rebuilt without ALeP or with a newer card DB.
+    Callers fall back to sending the player to the source page.
+    """
+    if not scenario or not scenario.get("slug"):
+        return None
+    slug = scenario["slug"]
+    entry = next((s for s in index.get("scenarios", []) if s.get("slug") == slug), None)
+    if entry is None:
+        return None
+    # Prefer the stamp's own source/cycle: they are what the player actually
+    # navigated through, and they were captured when the pick was made.
+    source = scenario.get("source") or entry.get("source")
+    cycle = scenario.get("cycle") or entry.get("cycle")
+    groups = group_by_cycle(index.get("scenarios", []), source)
+    group = next((g for g in groups if g["cycle"] == cycle), None)
+    return {
+        "entry": entry,
+        "source": source,
+        "cycle": cycle,
+        "cycles": cycles_for(index, source),
+        "siblings": group["scenarios"] if group else [],
+        # "mode" is where begin_setup stamps the chosen difficulty; a game
+        # saved before that field existed just reads as Standard.
+        "difficulty": scenario.get("mode") or "Standard",
+    }
+
+
 def load_index():
     """Read the whole catalog index from flash. Thin wrapper, not host-tested."""
     with open(INDEX_PATH) as f:

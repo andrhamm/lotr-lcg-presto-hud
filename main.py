@@ -38,6 +38,48 @@ PREGAME_ACTIVE = ("boot", "setup", "scenario_source", "pick_cycle",
                   "choose_scenario", "scenario_options", "firstrun", "legend")
 
 
+def _rehydrate_pickers(screens, game, catalog_index, catalog_icons):
+    """Rebuild the quest-picker screens from a resumed game's saved scenario.
+
+    The picker screens are router-held, not game state, so a resume left them
+    as the empty placeholders the boot path constructed. Everything needed is
+    already in the save (`game.scenario` carries slug/source/cycle and the
+    chosen `mode`), so this reads it back and rebuilds all three - Scenario
+    Options for the scenario itself, and the two list screens behind it so
+    backing out further lands on a populated page with the right cycle
+    selected, not on an empty list.
+
+    Lazy on purpose, at the first tap that needs a picker rather than during
+    resume: reading index.json off flash is the slowest thing the device does,
+    and the boot path already defers every catalog read this way (see the
+    catalog_tips note above). A resume that never backs out never pays for it.
+
+    Returns the (possibly newly loaded) catalog caches so the caller can keep
+    them. Never raises: a failure just leaves the placeholders in place and
+    the caller falls back to the source page.
+    """
+    try:
+        if catalog_index is None:
+            catalog_index = quest_catalog.load_index()
+        state = quest_catalog.resume_picker_state(catalog_index, game.scenario)
+        if state is None:
+            return catalog_index, catalog_icons
+        if catalog_icons is None:
+            catalog_icons = quest_catalog.load_icons()
+        data = quest_catalog.load_scenario(state["entry"]["slug"])
+        screens["pick_cycle"] = PickCycleScreen(state["source"], state["cycles"])
+        chooser = ChooseScenarioScreen(state["source"], state["cycle"],
+                                       state["siblings"])
+        # Land on the scenario the game is actually playing, not the first row.
+        chooser.selected = state["entry"]["slug"]
+        screens["choose_scenario"] = chooser
+        screens["scenario_options"] = ScenarioOptionsScreen(
+            state["entry"], data, catalog_icons, state["difficulty"])
+    except Exception as e:
+        print("resume: could not rebuild the picker screens (%r)" % e)
+    return catalog_index, catalog_icons
+
+
 def load_prefs():
     try:
         with open(PREFS_PATH) as f:
@@ -442,13 +484,20 @@ def main():
                         kind = result[0]
                         if kind == "goto":
                             target = result[1]
-                            if target == "scenario_options" and not getattr(
-                                    screens["scenario_options"], "scenario", None):
-                                # Resumed straight into quest_setup, so the
-                                # options screen was never built for this
-                                # scenario. Start the choice over rather than
-                                # showing its empty placeholder.
-                                target = "scenario_source"
+                            if target == "scenario_options" and not (
+                                    getattr(screens["scenario_options"],
+                                            "scenario", None) or {}).get("slug"):
+                                # Resumed straight into the game, so the picker
+                                # screens are still the empty placeholders the
+                                # boot path built. Rebuild them from the saved
+                                # scenario instead of making the player pick
+                                # again; only a game with nothing to rebuild
+                                # from falls back to the source page.
+                                catalog_index, catalog_icons = _rehydrate_pickers(
+                                    screens, game, catalog_index, catalog_icons)
+                                if not (screens["scenario_options"].scenario
+                                        or {}).get("slug"):
+                                    target = "scenario_source"
                             if target == "close":
                                 target = nav_stack.pop() if nav_stack else "play"
                             elif target in ("settings", "log", "phases",
@@ -532,8 +581,19 @@ def main():
                             groups = quest_catalog.group_by_cycle(
                                 catalog_index.get("scenarios", []), source)
                             group = next((g for g in groups if g["cycle"] == cycle), None)
-                            screens["choose_scenario"] = ChooseScenarioScreen(
+                            chooser = ChooseScenarioScreen(
                                 source, cycle, group["scenarios"] if group else [])
+                            # Land on the scenario the player already has, not
+                            # the first row. This handler rebuilds the screen
+                            # from scratch, so backing out of Scenario Options
+                            # used to silently reset the radio to row 1 - the
+                            # picked scenario was still live one screen away.
+                            picked = (getattr(screens["scenario_options"],
+                                              "scenario", None) or {}).get("slug")
+                            if picked and any(sc["slug"] == picked
+                                              for sc in chooser.scenarios):
+                                chooser.selected = picked
+                            screens["choose_scenario"] = chooser
                             active = "choose_scenario"
                         elif kind == "goto_pick_cycle":
                             active = "pick_cycle"

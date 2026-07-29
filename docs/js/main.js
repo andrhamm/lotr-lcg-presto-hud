@@ -12,7 +12,8 @@ import { EliminationModal, QuestCardModal, SideQuestPickModal,
          StageCompleteModal, ResolutionModal, LocationPickModal,
          QuestingProgressModal } from "./screens.js";
 import { loadIndex, loadScenario, cyclesFor, groupByCycle, loadPlayerSideQuests,
-         loadIcons, loadTips, loadLocations } from "./quest_catalog.js";
+         loadIcons, loadTips, loadLocations,
+         resumePickerState } from "./quest_catalog.js";
 
 const STATE_KEY = "lotr-hud-state";
 const PREFS_KEY = "lotr-hud-prefs";
@@ -235,6 +236,40 @@ function main() {
     }
   }
 
+  // Rebuild the quest-picker screens from a resumed game's saved scenario.
+  //
+  // The picker screens are router-held, not game state, so a resume left them
+  // as the empty placeholders the boot path constructed. Everything needed is
+  // already in the save (game.scenario carries slug/source/cycle and the
+  // chosen mode), so this reads it back and rebuilds all three - Scenario
+  // Options for the scenario itself, and the two list screens behind it so
+  // backing out further lands on a populated page with the right cycle
+  // selected, not on an empty list.
+  //
+  // Lazy on purpose, at the first tap that needs a picker rather than during
+  // resume: the boot path already defers every catalog fetch this way. A
+  // resume that never backs out never pays for it. Never throws - a failure
+  // leaves the placeholders and the caller falls back to the source page.
+  async function rehydratePickers() {
+    try {
+      if (!catalogIndex) catalogIndex = await loadIndex();
+      const state = resumePickerState(catalogIndex, game.scenario);
+      if (!state) return;
+      if (!iconsCache) iconsCache = await loadIcons();
+      const data = await loadScenario(state.entry.slug);
+      screens.pick_cycle = new PickCycleScreen(state.source, state.cycles);
+      const chooser = new ChooseScenarioScreen(state.source, state.cycle,
+                                               state.siblings);
+      // Land on the scenario the game is actually playing, not the first row.
+      chooser.selected = state.entry.slug;
+      screens.choose_scenario = chooser;
+      screens.scenario_options = new ScenarioOptionsScreen(
+        state.entry, data, iconsCache, state.difficulty);
+    } catch (e) {
+      console.warn("resume: could not rebuild the picker screens", e);
+    }
+  }
+
   // async: a couple of result kinds (choose_scenario, scenario_chosen) fetch
   // catalog data before they can finish routing; handleTap above awaits this.
   async function handleResult(result) {
@@ -242,11 +277,19 @@ function main() {
       const kind = result[0];
       if (kind === "goto") {
         let target = result[1];
-        if (target === "scenario_options" && !screens.scenario_options?.scenario) {
-          // Resumed straight into quest_setup, so the options screen was
-          // never built for this scenario. Start the choice over rather than
-          // showing its empty placeholder.
-          target = "scenario_source";
+        // `.scenario?.slug`, NOT `.scenario`: the placeholder is built as
+        // `new ScenarioOptionsScreen({}, {})` and `{}` is truthy in JS, so a
+        // truthiness check never fired here and the screen rendered its
+        // "Unknown scenario" empty state. Python's `not {}` is True, so the
+        // two twins disagreed - the firmware bounced to the source page while
+        // the web twin showed a blank options screen.
+        if (target === "scenario_options" && !screens.scenario_options?.scenario?.slug) {
+          // Resumed straight into the game, so the picker screens are still
+          // the empty placeholders the boot path built. Rebuild them from the
+          // saved scenario instead of making the player pick again; only a
+          // game with nothing to rebuild from falls back to the source page.
+          await rehydratePickers();
+          if (!screens.scenario_options.scenario?.slug) target = "scenario_source";
         }
         if (target === "close") target = navStack.pop() ?? "play";
         else if (["settings", "log", "phases", "about", "firstrun", "legend"].includes(target)) {
@@ -308,7 +351,16 @@ function main() {
         const [, source, cycle] = result;
         const groups = groupByCycle(catalogIndex?.scenarios ?? [], source);
         const group = groups.find(g => g.cycle === cycle);
-        screens.choose_scenario = new ChooseScenarioScreen(source, cycle, group?.scenarios ?? []);
+        const chooser = new ChooseScenarioScreen(source, cycle, group?.scenarios ?? []);
+        // Land on the scenario the player already has, not the first row. This
+        // handler rebuilds the screen from scratch, so backing out of Scenario
+        // Options used to silently reset the radio to row 1 - the picked
+        // scenario was still live one screen away.
+        const picked = screens.scenario_options?.scenario?.slug;
+        if (picked && chooser.scenarios.some(sc => sc.slug === picked)) {
+          chooser.selected = picked;
+        }
+        screens.choose_scenario = chooser;
         active = "choose_scenario";
       } else if (kind === "goto_pick_cycle") {
         active = "pick_cycle";

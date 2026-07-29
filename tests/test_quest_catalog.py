@@ -404,3 +404,154 @@ def test_locations_for_returns_empty_when_there_are_no_locations():
     assert qc.locations_for(PASSAGE, {}) == []
     assert qc.locations_for({"slug": "q"}, {"q": {"encounter": {}}}) == []
     assert qc.locations_for(None, LOC_PACKS) == []
+
+
+# --------------------------------------------------------------------------
+# Resume: rebuilding the picker screens from a saved game
+# --------------------------------------------------------------------------
+
+def test_resume_picker_state_resolves_a_saved_scenario():
+    """The picker screens are router-held, not game state, so a resume left
+    them as empty placeholders and backing out of Quest Setup bounced the
+    player to Scenario Source to pick their scenario over again. Nothing was
+    missing from the save - this is the read-back that never existed."""
+    st = qc.resume_picker_state(
+        {"scenarios": SCENARIOS},
+        {"slug": "conflict-at-the-carrock", "source": "official",
+         "cycle": "Core Set", "mode": "Nightmare"})
+    assert st["entry"]["name"] == "Conflict at the Carrock"
+    assert st["source"] == "official" and st["cycle"] == "Core Set"
+    assert st["difficulty"] == "Nightmare"
+    # the two list screens behind it get real contents, not empty lists
+    assert [c["cycle"] for c in st["cycles"]] == ["Core Set", "Shadows of Mirkwood"]
+    assert "conflict-at-the-carrock" in [s["slug"] for s in st["siblings"]]
+
+
+def test_resume_picker_state_defaults_a_missing_mode_to_standard():
+    """A game saved before begin_setup stamped `mode` must still resolve."""
+    st = qc.resume_picker_state(
+        {"scenarios": SCENARIOS},
+        {"slug": "passage-through-mirkwood", "source": "official",
+         "cycle": "Core Set"})
+    assert st["difficulty"] == "Standard"
+
+
+def test_resume_picker_state_gives_up_quietly_on_what_it_cannot_resolve():
+    """Both misses are legitimate, and neither may raise: a custom game has no
+    scenario at all, and a slug can vanish from a catalog rebuilt without ALeP
+    or against a newer card DB. The router falls back to the source page."""
+    idx = {"scenarios": SCENARIOS}
+    assert qc.resume_picker_state(idx, None) is None
+    assert qc.resume_picker_state(idx, {}) is None
+    assert qc.resume_picker_state(idx, {"name": "no slug"}) is None
+    assert qc.resume_picker_state(idx, {"slug": "was-removed-from-the-catalog"}) is None
+    assert qc.resume_picker_state({}, {"slug": "passage-through-mirkwood"}) is None
+
+
+def test_resume_picker_state_falls_back_to_the_entry_for_source_and_cycle():
+    """The stamp is preferred because it is what the player navigated, but an
+    early save may carry only the slug."""
+    st = qc.resume_picker_state({"scenarios": SCENARIOS},
+                                {"slug": "a-journey-to-rhosgobel"})
+    assert st["source"] == "official"
+    assert st["cycle"] == "Shadows of Mirkwood"
+    assert [s["slug"] for s in st["siblings"]] == ["a-journey-to-rhosgobel"]
+
+
+def test_screens_rebuilt_from_resume_state_actually_render_populated():
+    """The end of the chain: a saved stamp goes in, three drawn screens come
+    out with real contents.
+
+    Testing resume_picker_state alone would not have caught the symptom the
+    player reported - empty pages behind the Back button - because the screens
+    are what render, and the placeholder ones draw a perfectly valid *blank*
+    list. So this asserts what is actually on the glass.
+    """
+    from tests.fake_hardware import FakeHardware
+    from ui.theme import Palette
+    from ui.screen_quest import (PickCycleScreen, ChooseScenarioScreen,
+                                 ScenarioOptionsScreen)
+    from gamestate import GameState
+
+    index = {"scenarios": SCENARIOS}
+    # what to_dict() stores for a game part-way through Passage
+    st = qc.resume_picker_state(index, {
+        "slug": "passage-through-mirkwood", "name": "Passage Through Mirkwood",
+        "pack": "Core Set", "cycle": "Core Set", "source": "official",
+        "kind": "quest", "nightmare": False, "mode": "Easy"})
+
+    def texts(screen):
+        hw = FakeHardware()
+        screen.draw(hw, GameState(2, 25), Palette(hw.display))
+        return " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+
+    cycles = texts(PickCycleScreen(st["source"], st["cycles"]))
+    assert "Core Set" in cycles and "Shadows of Mirkwood" in cycles
+
+    chooser = ChooseScenarioScreen(st["source"], st["cycle"], st["siblings"])
+    chooser.selected = st["entry"]["slug"]
+    listing = texts(chooser)
+    assert "Passage Through Mirkwood" in listing
+    assert "Conflict at the Carrock" in listing
+    assert chooser.selected == "passage-through-mirkwood", \
+        "resume must land on the scenario being played, not the first row"
+
+    opts = ScenarioOptionsScreen(st["entry"], {"slug": st["entry"]["slug"],
+                                               "name": st["entry"]["name"]},
+                                 {}, st["difficulty"])
+    body = texts(opts)
+    assert "Passage Through Mirkwood" in body
+    assert "Easy" in body, "the difficulty the player chose must come back too"
+
+
+def test_both_routers_rehydrate_before_sending_the_player_back_to_the_picker():
+    """The routers are hand-mirrored and neither is importable on the host
+    (main.py runs its loop at module scope, main.js needs a DOM), so this
+    checks the wiring at the source, in the style of
+    tests/test_firstrun.py's nav-trail gate.
+
+    The bounce to scenario_source must stay a LAST resort. Before this, it was
+    the whole handler: a resumed game's Back button threw the player's picked
+    scenario away and made them choose it again.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cases = (
+        ("main.py", "_rehydrate_pickers",
+         'if target == "scenario_options" and not ('),
+        ("docs/js/main.js", "rehydratePickers",
+         'if (target === "scenario_options" && !screens.scenario_options?.scenario?.slug)'),
+    )
+    for rel, rehydrate, marker in cases:
+        with open(os.path.join(root, rel), encoding="utf-8") as f:
+            src = f.read()
+        assert marker in src, "%s: the resumed-picker guard moved" % rel
+        # generous: the firmware indents this ~32 columns deep
+        window = src[src.index(marker):][:1600]
+        assert rehydrate in window, \
+            "%s: bounces to the source page without rebuilding first" % rel
+        assert window.index(rehydrate) < window.index("scenario_source"), \
+            "%s: falls back before it tries to rebuild" % rel
+        assert "resume_picker_state" in src or "resumePickerState" in src, \
+            "%s: never reads the saved scenario back" % rel
+        # The emptiness check must test the SLUG, not truthiness. The
+        # placeholder is built as ScenarioOptionsScreen({}, {}), and `{}` is
+        # truthy in JS while `not {}` is True in Python - so a truthiness
+        # check made the twins behave differently: the firmware bounced to the
+        # source page and the web twin rendered "Unknown scenario".
+        assert "scenario?.slug" in window or '"slug"' in window, \
+            "%s: emptiness check must look at the slug, not truthiness" % rel
+
+
+def test_both_routers_keep_the_picked_scenario_selected_when_relisting():
+    """`choose_scenario_list` rebuilds the chooser from scratch, so without
+    this the radio silently snapped back to row 1 every time you backed out of
+    Scenario Options - resumed or not. Source-level for the same reason as the
+    gate above."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for rel in ("main.py", "docs/js/main.js"):
+        with open(os.path.join(root, rel), encoding="utf-8") as f:
+            src = f.read()
+        i = src.index("choose_scenario_list")
+        window = src[i:i + 1800]
+        assert "selected" in window, \
+            "%s: relisting drops the player's current pick" % rel
