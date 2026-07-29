@@ -2131,7 +2131,7 @@ class QuestCardModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        modal_header(d, pal, game, "QUEST CARDS", self.buttons)
+        modal_header(d, pal, game, "Quest Cards", self.buttons)
         M, W = self.MARGIN, 480 - 2 * self.MARGIN
 
         pages = self._pages()

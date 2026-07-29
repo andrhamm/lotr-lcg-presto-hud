@@ -73,7 +73,7 @@ class ScenarioSourceScreen:
         # ChooseScenario already put "< Source" in. This page was the entry
         # point and had no way out at all, so a mis-tap on New Game committed
         # you to picking a scenario.
-        draw_header(d, pal, game, self.buttons, title="SCENARIO SOURCE",
+        draw_header(d, pal, game, self.buttons, title="Scenario Source",
                     round_label="< Menu", round_id=("back",))
 
         off = Button(("choose_scenario", "official"), 24, 96, 432, 120)
@@ -127,13 +127,12 @@ class PickCycleScreen:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        d.set_pen(pal.card)
-        d.rectangle(0, 0, 480, 40)
-        d.set_pen(pal.border)
-        d.rectangle(0, 40, 480, 1)
-        text_left(d, pal, "< Source", 12, 12, BODY, pal.muted)
-        text_center(d, pal, "CHOOSE CYCLE", 250, 12, BODY, pal.gold)
-        self.buttons.append(Button(("back",), 0, 0, 150, 40))
+        # Was a bespoke bar: a card-coloured strip with its title centred on
+        # 250 rather than 240, so it sat 10px off from every screen either
+        # side of it in the same funnel. It also had no nav, which is how it
+        # escaped the round-stamp button collision the other two hit.
+        draw_header(d, pal, game, self.buttons, title="Choose Cycle",
+                    round_label="< Source", round_id=("back",))
 
         pages = self._pages()
         self.page = min(self.page, pages - 1)
@@ -219,18 +218,14 @@ class ChooseScenarioScreen:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        d.set_pen(pal.card)
-        d.rectangle(0, 0, 480, 52)
-        d.set_pen(pal.border)
-        d.rectangle(0, 52, 480, 1)
-        text_left(d, pal, "< Cycles", 12, 8, BODY, pal.muted)
-        text_center(d, pal, "Choose Scenario", 250, 6, BODY, pal.gold)
-        # The "Cycle: X" subtitle is deliberately LABEL - the user specified it
-        # small when they designed this header (allow-listed in
-        # tests/test_typography.py).
-        subtitle = truncate_text("Cycle: %s" % self.cycle, LABEL, 440, d.measure_text)
-        text_center(d, pal, subtitle, 250, 30, LABEL, pal.dim)
-        self.buttons.append(Button(("back",), 0, 0, 150, 52))
+        # The "Cycle: X" subtitle is the only one in the app, and it is what
+        # kept this screen on a bespoke bar. draw_header carries it now, so
+        # the title lines up with its neighbours instead of sitting 10px right
+        # of them.
+        draw_header(d, pal, game, self.buttons, title="Choose Scenario",
+                    round_label="< Cycles", round_id=("back",),
+                    subtitle=truncate_text("Cycle: %s" % self.cycle, LABEL, 440,
+                                           d.measure_text))
 
         pages = self._pages()
         self.page = min(self.page, pages - 1)
@@ -448,7 +443,7 @@ class ScenarioOptionsScreen:
         d.set_pen(pal.bg)
         d.clear()
         # Back in the round-stamp slot, as on the source page.
-        draw_header(d, pal, game, self.buttons, title="SCENARIO OPTIONS",
+        draw_header(d, pal, game, self.buttons, title="Scenario Options",
                     round_label="< Scenarios", round_id=("back",))
 
         name = self.scenario.get("name") or self.data.get("name", "Unknown scenario")

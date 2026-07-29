@@ -417,8 +417,8 @@ class ScreenPlay:
             # the round stamp (R1 3.2 vs R1 3.3) is what distinguishes two
             # windows inside the same phase.
             draw_header(d, pal, game, self.buttons, title_pen=pal.purple,
-                        title="ACTION WINDOW - %s"
-                              % phases.step(game.step)["phase"].upper())
+                        title="Action Window: %s"
+                              % phases.step(game.step)["phase"])
         elif view == "round_end":
             # The one screen where two round numbers are live at once: the
             # round being closed, and the one its CTA offers. Without the
@@ -427,7 +427,9 @@ class ScreenPlay:
             draw_header(d, pal, game, self.buttons,
                         title="End of Round %d" % game.round)
         elif view == "quest_setup":
-            draw_header(d, pal, game, self.buttons, title="QUEST SETUP", round_label="R0")
+            # Same spelling as VIEW_LABELS["quest_setup"], which is what any
+            # CTA pointing at this view would print. They used to disagree.
+            draw_header(d, pal, game, self.buttons, title="Quest Setup", round_label="R0")
         else:
             draw_header(d, pal, game, self.buttons)
 

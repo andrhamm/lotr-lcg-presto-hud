@@ -602,7 +602,7 @@ export class ScenarioSourceScreen {
     // The back affordance takes the round-stamp slot: "R0" says nothing on a
     // pre-game screen, and it is the slot PickCycle and ChooseScenario
     // already put "< Source" in. This page had no way out at all.
-    drawHeader(ctx, game, this.buttons, { title: "SCENARIO SOURCE", roundLabel: "< Menu",
+    drawHeader(ctx, game, this.buttons, { title: "Scenario Source", roundLabel: "< Menu",
                                           roundId: ["back"] });
 
     const off = new Button(["choose_scenario", "official"], 24, 96, 432, 120);
@@ -650,11 +650,11 @@ export class PickCycleScreen {
     const { PER_PAGE, ROW_H, ROW_STRIDE, LIST_Y0, CUSTOM_Y, CUSTOM_H } = PickCycleScreen;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    rect(ctx, 0, 0, 480, 40, pal.card);
-    rect(ctx, 0, 40, 480, 1, pal.border);
-    textLeft(ctx, "< Source", 12, 12, BODY, pal.muted);
-    textCenter(ctx, "CHOOSE CYCLE", 250, 12, BODY, pal.gold);
-    this.buttons.push(new Button(["back"], 0, 0, 150, 40));
+    // Was a bespoke bar: a card-coloured strip with its title centred on 250
+    // rather than 240, so it sat 10px off from every screen either side of it
+    // in the same funnel.
+    drawHeader(ctx, game, this.buttons, { title: "Choose Cycle",
+                                          roundLabel: "< Source", roundId: ["back"] });
 
     const pages = this._pages();
     this.page = Math.min(this.page, pages - 1);
@@ -727,14 +727,14 @@ export class ChooseScenarioScreen {
     const { PER_PAGE, ROW_STRIDE, LIST_Y0 } = ChooseScenarioScreen;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    rect(ctx, 0, 0, 480, 52, pal.card);
-    rect(ctx, 0, 52, 480, 1, pal.border);
-    textLeft(ctx, "< Cycles", 12, 8, BODY, pal.muted);
-    textCenter(ctx, "Choose Scenario", 250, 6, BODY, pal.gold);
-    // The "Cycle: X" subtitle is deliberately LABEL - the user specified it
-    // small when they designed this header (allow-listed in test_typography).
-    textCenter(ctx, truncateText(`Cycle: ${this.cycle}`, LABEL, 440), 250, 30, LABEL, pal.dim);
-    this.buttons.push(new Button(["back"], 0, 0, 150, 52));
+    // The "Cycle: X" subtitle is the only one in the app, and it is what kept
+    // this screen on a bespoke bar. drawHeader carries it now. It stays LABEL
+    // because the user specified that subtitle small when they designed this
+    // screen (allow-listed in test_typography).
+    drawHeader(ctx, game, this.buttons, {
+      title: "Choose Scenario", roundLabel: "< Cycles", roundId: ["back"],
+      subtitle: truncateText(`Cycle: ${this.cycle}`, LABEL, 440),
+    });
 
     const pages = this._pages();
     this.page = Math.min(this.page, pages - 1);
@@ -906,7 +906,7 @@ export class ScenarioOptionsScreen {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     // Back in the round-stamp slot, as on the source page.
-    drawHeader(ctx, game, this.buttons, { title: "SCENARIO OPTIONS", roundLabel: "< Scenarios",
+    drawHeader(ctx, game, this.buttons, { title: "Scenario Options", roundLabel: "< Scenarios",
                                           roundId: ["back"] });
 
     const name = this.scenario.name ?? this.data.name ?? "Unknown scenario";

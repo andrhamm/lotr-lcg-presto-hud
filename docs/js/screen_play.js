@@ -392,17 +392,19 @@ export class ScreenPlay {
     rect(ctx, 0, 0, 480, 480, pal.bg);
     const view = game.view;
     if (view === "quest_setup") {
-      drawHeader(ctx, game, this.buttons, { title: "QUEST SETUP", roundLabel: "R0" });
+      // Same spelling as VIEW_LABELS.quest_setup, which is what any CTA
+      // pointing at this view would print. They used to disagree.
+      drawHeader(ctx, game, this.buttons, { title: "Quest Setup", roundLabel: "R0" });
     } else if (view === "round_end") {
       // The one screen where two round numbers are live at once: the round
       // being closed, and the one its CTA offers.
       drawHeader(ctx, game, this.buttons, { title: `End of Round ${game.round}` });
     } else if (isWindowView(view)) {
-      // "ACTION WINDOW" is the screen's TITLE and belongs in the header,
+      // "Action Window" is the screen's TITLE and belongs in the header,
       // where every other screen puts its title - not floating in the
       // content area competing with the copy.
       drawHeader(ctx, game, this.buttons, {
-        title: `ACTION WINDOW - ${phaseStep(game.step).phase.toUpperCase()}`,
+        title: `Action Window: ${phaseStep(game.step).phase}`,
         titlePen: pal.purple,
       });
     } else {

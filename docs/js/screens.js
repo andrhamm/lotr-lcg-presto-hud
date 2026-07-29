@@ -13,6 +13,9 @@ import { PHASES, STEPS, step as phaseStep } from "./phases.js";
 import { tipsFor } from "./quest_catalog.js";
 
 export const HEADER_H = 40;
+// A subtitle rides under the title, so the bar grows: DISPLAY title at y=8
+// (24px tall), LABEL subtitle at y=36, rule at 52, 8px of air top and bottom.
+export const SUBTITLE_HEADER_H = 52;
 const MARGIN = 8;
 const STRIP_Y = HEADER_H + 10;
 const CHIP_H = 56;
@@ -33,37 +36,42 @@ export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
                                                  close = false, closeLeft = false,
                                                  roundLabel = null,
                                                  titlePen = null,
-                                                 roundId = null } = {}) {
+                                                 roundId = null,
+                                                 subtitle = null } = {}) {
   const roundLbl = roundLabel ?? `R${game.round} ${game.step}`;
   textLeft(ctx, roundLbl, 10, 12, BODY,
            (closeLeft || highlight === "log") ? pal.gold : pal.muted);
   const center = title ?? (VIEW_LABELS[game.view] ?? phaseStep(game.step).phase);
-  const scale = center.length > 12 ? BODY : DISPLAY;
+  // Always DISPLAY. The scale used to come from the title's character count,
+  // so the same element changed tier as a round advanced. Every title fits at
+  // DISPLAY inside the narrowest span a title has (360px), which is what
+  // settled it.
   // titlePen lets a screen own its title colour. The action-window screens
   // use pal.purple, the same ink their in-view window sections use, so the
   // header says which KIND of screen this is rather than only its name.
-  textCenter(ctx, center, 240, scale === BODY ? 12 : 8, scale,
-             titlePen ?? pal.gold);
+  textCenter(ctx, center, 240, 8, DISPLAY, titlePen ?? pal.gold);
+  const h = subtitle ? SUBTITLE_HEADER_H : HEADER_H;
+  if (subtitle) textCenter(ctx, subtitle, 240, 36, LABEL, pal.dim);
   if (close) {
     doneButton(ctx);
   } else {
     textLeft(ctx, "Set.", 480 - 10 - measureText("Set.", BODY), 12, BODY,
              highlight === "settings" ? pal.gold : pal.muted);
   }
-  rect(ctx, 0, HEADER_H, 480, 1, pal.border);
+  rect(ctx, 0, h, 480, 1, pal.border);
   if (close) {
     buttons.push(new Button(["nav", "close"], 408, 4, 64, 32));
   } else if (closeLeft) {
-    buttons.push(new Button(["nav", "close"], 0, 0, 150, HEADER_H));
-    buttons.push(new Button(["nav", "settings"], 330, 0, 150, HEADER_H));
+    buttons.push(new Button(["nav", "close"], 0, 0, 150, h));
+    buttons.push(new Button(["nav", "settings"], 330, 0, 150, h));
   } else {
     // roundId retargets the round-stamp slot. The label and its tap target are
     // one affordance: a screen that puts "< Menu" there cannot just append its
     // own button over the slot, because the dispatcher takes the first hit and
     // this one is already in the list.
-    buttons.push(new Button(roundId ?? ["nav", "log"], 0, 0, 150, HEADER_H));
-    buttons.push(new Button(["nav", "phases"], 150, 0, 180, HEADER_H));
-    buttons.push(new Button(["nav", "settings"], 330, 0, 150, HEADER_H));
+    buttons.push(new Button(roundId ?? ["nav", "log"], 0, 0, 150, h));
+    buttons.push(new Button(["nav", "phases"], 150, 0, 180, h));
+    buttons.push(new Button(["nav", "settings"], 330, 0, 150, h));
   }
 }
 
@@ -73,7 +81,10 @@ export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
 export function modalHeader(ctx, game, title, buttons) {
   const roundLbl = `R${game.round} ${game.step}`;
   textLeft(ctx, roundLbl, 10, 12, BODY, pal.muted);
-  textCenter(ctx, title, 240, 12, BODY, pal.gold);
+  // DISPLAY, like every screen title. This was BODY, so opening a modal from
+  // Settings stepped its title DOWN a tier - the spec's "screen and modal
+  // titles" is one row of the table, not two.
+  textCenter(ctx, title, 240, 8, DISPLAY, pal.gold);
   rect(ctx, 0, HEADER_H, 480, 1, pal.border);
   doneButton(ctx);
   buttons.push(new Button(["close"], 408, 4, 64, 32));
@@ -1886,7 +1897,7 @@ export class QuestCardModal {
     const S = QuestCardModal;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    modalHeader(ctx, game, "QUEST CARDS", this.buttons);
+    modalHeader(ctx, game, "Quest Cards", this.buttons);
     const M = S.MARGIN, W = 480 - 2 * M;
 
     const pages = this._pages();

@@ -99,3 +99,63 @@ def test_above_display_is_numerals_and_wordmarks_only(scene):
 
 def test_the_scale_is_ordered_and_named():
     assert LABEL < BODY < DISPLAY, "the type scale inverted"
+
+
+# --------------------------------------------------------------------------
+# Title bars
+# --------------------------------------------------------------------------
+
+def _title_runs(hw):
+    """The centred title in a screen's or modal's header bar.
+
+    Only four things draw in the header band: the round stamp (left-aligned at
+    x=10), "Set." (right), DONE (centred on 440), and the title (centred on
+    240). Matching on the centre picks out the title without the draw sites
+    having to announce themselves.
+    """
+    out = []
+    for c in hw.display.calls:
+        if c[0] != "text":
+            continue
+        s, x, y, scale = str(c[1]), c[2], c[3], c[4]
+        if not s.strip() or y > 12:
+            continue
+        if abs(x + hw.display.measure_text(s, scale) / 2 - 240) <= 4:
+            out.append((s, scale))
+    return out
+
+
+@pytest.mark.parametrize("scene", sorted(SCENES))
+def test_every_title_bar_is_display(scene):
+    """One element, one tier.
+
+    draw_header used to choose between DISPLAY and BODY by counting the
+    title's characters (`BODY if len > 12`), so the title bar changed size as
+    a round advanced: Planning and Travel at DISPLAY, Questing: Staging and
+    Combat: Shadow Cards at BODY. modal_header separately hardcoded BODY, so
+    opening Progress from Settings stepped the title down a tier too.
+
+    The spec has one row for this - "Screen and modal titles", DISPLAY - and
+    measurement says it costs nothing: the narrowest span a title has is 360px
+    (a two-digit round stamp beside "Set.") and every title fits there.
+    """
+    hw, _ = SCENES[scene]()
+    bad = [(s, sc) for s, sc in _title_runs(hw) if sc != DISPLAY]
+    assert not bad, (
+        "%s: title bar is not DISPLAY: %s" % (scene, sorted(set(bad))))
+
+
+@pytest.mark.parametrize("scene", sorted(SCENES))
+def test_no_title_bar_is_all_caps(scene):
+    """ALL CAPS is how the design system demotes LABEL chrome - "the casing
+    carries the demotion rather than the size alone". A title bar wearing it
+    says the opposite of what a title bar is for, and eight of them did:
+    SCENARIO SOURCE, SCENARIO OPTIONS, QUEST SETUP, QUEST CARDS and the five
+    ACTION WINDOW - X screens. The new-game funnel flipped convention twice in
+    four screens because of it.
+    """
+    hw, _ = SCENES[scene]()
+    bad = [s for s, _ in _title_runs(hw) if _is_label(s)]
+    assert not bad, (
+        "%s: title bar is ALL CAPS, which is LABEL's marker: %s"
+        % (scene, sorted(set(bad))))

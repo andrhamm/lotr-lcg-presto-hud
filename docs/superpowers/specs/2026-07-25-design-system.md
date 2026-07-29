@@ -40,6 +40,21 @@ bare `1` at a draw site is how prose ends up unreadable.
 > CTA earns its emphasis from size *and position* — full width, pinned to the
 > bottom, `btn_ok` green — not from the type scale alone.
 
+> [!note] Title bars are `DISPLAY`, always, and never ALL CAPS
+> "Screen and modal titles" is one row of that table, not two. `draw_header`
+> used to pick its tier from the title's character count (`BODY if len > 12`),
+> so the title bar changed size as a round advanced — `Planning` at `DISPLAY`,
+> `Questing: Staging` at `BODY` — and `modal_header` separately hardcoded
+> `BODY`. Measurement retired the rule: the narrowest span a title has is
+> **360px** (a two-digit round stamp beside `Set.`), and every title fits
+> there at `DISPLAY` with 12–300px to spare.
+>
+> Casing follows from `LABEL`'s. ALL CAPS is how this system *demotes* text,
+> so a title bar wearing it says the opposite of what a title bar is for. Use
+> Title Case: it is what 23 of the 31 titles already used, and phase names
+> (`Questing: Staging`, `Combat: Shadow Cards`) are the game's own proper
+> nouns. A subtitle under a title stays `LABEL` and grows the bar to 52px.
+
 Above `DISPLAY` there is no reading tier — sizes 4–9 belong to **numerals and
 wordmarks** (the threat counters, the sailing dial, `LOTR LCG`, `VICTORY!`).
 Those are chosen by the widget that owns the numeral, never at a call site,
@@ -198,6 +213,9 @@ Rules that are only written down decay. Each of these is a test:
 |---|---|
 | Prose is never `LABEL`-sized | `tests/test_typography.py` |
 | Only numerals/wordmarks above `DISPLAY` | `tests/test_typography.py` |
+| Every title bar is `DISPLAY` | `tests/test_typography.py` |
+| No title bar is ALL CAPS | `tests/test_typography.py` |
+| Every touch target is reachable by some tap | `tests/test_layout.py` (L7) |
 | Every ink/ground pair clears WCAG AA (4.5:1) | `tests/test_contrast.py` |
 | `dim < muted < tan` stays separable | `tests/test_contrast.py` |
 | Touch targets ≥ 24px, nothing off-screen, no text collisions | `tests/test_layout.py` |
