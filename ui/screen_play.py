@@ -681,7 +681,7 @@ class ScreenPlay:
                 else QUEST_SETUP["none"] % stage_n)
         phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
             ("framework", [lead,
-                           QUEST_SETUP["then_flip"] % card["questPoints"]]),
+                           QUEST_SETUP["then_flip"] % game.quest["stage_n"]]),
         ])
 
         # Read-only card modal (M4-B) - see on_button; null for custom games
@@ -691,7 +691,7 @@ class ScreenPlay:
         text_center(d, pal, QUEST_SETUP["view"], 240, card_btn.y + 14, BODY, pal.tan)
         self.buttons.append(card_btn)
 
-        self._cta(d, pal, game, QUEST_SETUP["flip"], ("flip_to_b",))
+        self._cta(d, pal, game, QUEST_SETUP["begin"], ("flip_to_b",))
 
     def _draw_confirm_all(self, d, pal, game, y):
         """One-tap 'everyone's commit is reviewed' button for the commit view -

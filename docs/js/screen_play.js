@@ -646,7 +646,7 @@ export class ScreenPlay {
       : QUEST_SETUP.none.replace("%s", stageN);
     phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
       { kind: "framework",
-        text: [lead, QUEST_SETUP.then_flip.replace("%d", card.questPoints)] },
+        text: [lead, QUEST_SETUP.then_flip.replace("%s", game.quest.stage_n)] },
     ]);
 
     // Read-only card modal (M4-B) - see onButton; null for custom games
@@ -656,7 +656,7 @@ export class ScreenPlay {
     textCenter(ctx, QUEST_SETUP.view, 240, cardBtn.y + 14, BODY, pal.tan);
     this.buttons.push(cardBtn);
 
-    this._cta(ctx, game, QUEST_SETUP.flip, ["flip_to_b"]);
+    this._cta(ctx, game, QUEST_SETUP.begin, ["flip_to_b"]);
   }
 
   _drawTravel(ctx, game) {

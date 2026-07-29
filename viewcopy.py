@@ -320,26 +320,29 @@ SAILING = {
 }
 
 QUEST_SETUP = {
-    # The framework band, not a text dump. The card's Setup text used to be
-    # printed straight onto this screen; it now lives one tap away behind
-    # "View quest card", where a player reads it on the card that prints it.
-    # This screen's job is to say what to DO, which is what a framework band
+    # Learn to Play, setup step 7, near-verbatim: "Perform the 'Setup'
+    # instructions presented on the stage '1A' quest card. Then, flip the card
+    # to the stage '1B' side. The game is now ready to begin."
+    #
+    # The framework band, not a text dump. The card's Setup text lives one tap
+    # away behind "View quest card", where a player reads it on the card that
+    # prints it. This screen says what to DO, which is what a framework band
     # is for everywhere else in the app.
-    # The stage and card name live HERE, in the instruction, not in a
-    # centred amber/DISPLAY-gold header above it. That header was bespoke to
-    # this one view - no other screen titles its content that way - and the
-    # tracker's job is to say what to do in the phase, not to present the
-    # card. Naming them in the sentence is not duplication once the bespoke
-    # header is gone; it is the sentence being self-contained.
-    "resolve": "Resolve the Setup text on Stage %s, %s.",
-    "none": "Stage %s has no Setup text.",
-    "then_flip": "Then flip to side B, which has %d quest points.",
+    "resolve": "Perform the Setup instructions on Stage %s, %s.",
+    "none": "Stage %s has no Setup instructions.",
+    "then_flip": "Then flip the card to its Stage %sB side.",
     "view": "View quest card",
-    # An ACTION cta, so single-line with no NEXT PHASE kicker - the same shape
-    # as "Begin Round 1". It carried "  ->  %d qp" before, which crammed a
-    # fact into a button label; the quest points are stated in the copy above
-    # instead, where there is room to say what they are.
-    "flip": "Flip to Side B",
+    # "Begin Round 1", not "Flip to Side B". Quest setup happens once per
+    # game - it is reached only from the new-game flow - and flip_to_b enters
+    # VIEW_ORDER[0] directly, so the resource phase really is immediately
+    # after. RR: "After completing these steps, players begin the game
+    # starting with the first game round."
+    #
+    # It is the same label the custom-quest path already uses on setup_game,
+    # so both routes into round 1 end with the same button. An ACTION cta:
+    # single line, no NEXT PHASE kicker. The flip itself is a table action and
+    # is named in the copy above, the same split the refresh view uses.
+    "begin": "Begin Round 1",
 }
 
 CONFIRM = {
