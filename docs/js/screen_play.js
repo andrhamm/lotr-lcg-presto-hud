@@ -368,6 +368,319 @@ export class ScreenPlay {
   // replaces the old per-player CommitModal round-trip. Caption counts
   // confirmed living players; once all are confirmed it reads as done and the
   // button goes inert. Returns the y for whatever follows.
+  _totalsRow(ctx, game, y, withSteppers = false, tappable = []) {
+    const half = Math.floor((480 - 3 * MARGIN) / 2);
+    const defs = [
+      ["Questing for", game.willpower, pal.value, "wp", icons.WILLPOWER_MD, pal.gold, true],
+      ["Staging area", game.staging, pal.outline, "stg", icons.THREAT_MD, pal.outline, false],
+    ];
+    defs.forEach(([label, val, pen, key, icon, ipen, shadow], idx) => {
+      const x = MARGIN + idx * (half + MARGIN);
+      panel(ctx, x, y, half, 84);
+      textCenter(ctx, label, x + half / 2, y + 6, BODY, pal.muted);
+      // scale 4 is the numeral tier above DISPLAY - owned by this widget,
+      // never a reading size (docs/js/ui.js).
+      const vw = measureText(String(val), 4);
+      const gx = Math.floor(x + half / 2 - (vw + 8 + 28) / 2);
+      textLeft(ctx, String(val), gx, y + 32, 4, pen, shadow);
+      icons.drawIcon(ctx, icon, gx + vw + 8, y + 32, ipen);
+      if (withSteppers) {
+        const mn = new Button([key + "-"], x + 8, y + 30, 52, 44);
+        const pl = new Button([key + "+"], x + half - 60, y + 30, 52, 44);
+        for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
+          bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+          textCenter(ctx, s, b.x + 26, b.y + 10, DISPLAY, pal.tan);
+          this.buttons.push(b);
+        }
+        if (key === "stg") this.buttons.push(new Button(["enc_rem"], x + 64, y, half - 128, 84));
+        if (key === "wp") this.buttons.push(new Button(["wp"], x + 64, y, half - 128, 84));
+      } else if (tappable.includes(key)) {
+        // thin inset dividers + tan +/- glyphs (matches the mock — no button
+        // chrome). Left/right strips tap +/-; centre = big editor (direct
+        // total entry for "wp", the staging counter for "stg").
+        rect(ctx, x + 36, y + 8, 1, 56, pal.border);
+        rect(ctx, x + half - 36, y + 8, 1, 56, pal.border);
+        textCenter(ctx, "-", x + 18, y + 32, DISPLAY, pal.tan);
+        textCenter(ctx, "+", x + half - 18, y + 32, DISPLAY, pal.tan);
+        this.buttons.push(new Button([key + "-"], x, y, 36, 84));
+        this.buttons.push(new Button([key], x + 36, y, half - 72, 84));
+        this.buttons.push(new Button([key + "+"], x + half - 36, y, 36, 84));
+        if (key === "stg") {
+          textCenter(ctx, `+${game.stagingRevealEstimate()} reveal estimate`,
+                     x + half / 2, y + 64, BODY, pal.dim);
+        }
+      }
+    });
+  }
+
+  draw(ctx, game) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    // Views that draw no stat zone (the pre-game screens) keep the old fixed
+    // line; _statZone overwrites this with its own bottom edge.
+    this.contentY = CONTENT_Y;
+    const view = game.view;
+    if (view === "quest_setup") {
+      // Same spelling as VIEW_LABELS.quest_setup, which is what any CTA
+      // pointing at this view would print. They used to disagree.
+      drawHeader(ctx, game, this.buttons, { title: "Quest Setup", roundLabel: "R0" });
+    } else if (view === "round_end") {
+      // The one screen where two round numbers are live at once: the round
+      // being closed, and the one its CTA offers.
+      drawHeader(ctx, game, this.buttons, { title: `End of Round ${game.round}` });
+    } else if (isWindowView(view)) {
+      // "Action Window" is the screen's TITLE and belongs in the header,
+      // where every other screen puts its title - not floating in the
+      // content area competing with the copy.
+      drawHeader(ctx, game, this.buttons, {
+        title: `Action Window: ${phaseStep(game.step).phase}`,
+        titlePen: pal.purple,
+      });
+    } else {
+      drawHeader(ctx, game, this.buttons);
+    }
+
+    if (isWindowView(view)) {
+      this._statZone(ctx, game);
+      this._drawActionWindow(ctx, game);
+      return;
+    }
+
+    if (view === "setup_game") {
+      const th = notePanel(ctx, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP);
+      // This view's two rows are the tallest stack on any play screen and used
+      // to run to y=412 - 2px PAST the old CTA at 410, an overlap the layout
+      // linter never caught because it compares text, not rects. The nav rule
+      // at NAV_RULE_Y makes it visible, so the rows were tightened by 20px
+      // total (gap 18->8, rows 48->42 and 38->34) and now end at 392, clearing
+      // the rule by 8px. Every target stays >=24px.
+      const y = 56 + th + 8;
+      textLeft(ctx, "Stage 1B quest points", MARGIN + 8, y + 13, BODY, pal.tan);
+      const mn = new Button(["qp", -1], 300, y, 52, 42);
+      const pl = new Button(["qp", 1], 412, y, 52, 42);
+      for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
+        bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+        textCenter(ctx, s, b.x + 26, b.y + 9, DISPLAY, pal.tan);
+        this.buttons.push(b);
+      }
+      textCenter(ctx, String(game.quest.points), 382, y + 9, DISPLAY, pal.gold);
+      const sy = y + 44;
+      textLeft(ctx, "Sailing quest", MARGIN + 8, sy + 9, BODY, pal.tan);
+      icons.drawIcon(ctx, icons.WHEEL, 160, sy + 6,
+                     game.sailing ? pal.gold : pal.dim);
+      const sb = new Button(["sail_toggle"], 300, sy, 164, 34);
+      panel(ctx, sb.x, sb.y, sb.w, sb.h, game.sailing ? pal.gold : pal.btn);
+      textCenter(ctx, game.sailing ? "On" : "Off", sb.x + 82, sb.y + 9, BODY,
+                 game.sailing ? pal.bg : pal.tan, false);
+      this.buttons.push(sb);
+      this._cta(ctx, game, "Begin Round 1", ["advance"]);
+    } else if (view === "quest_setup") {
+      this._statZone(ctx, game);
+      this._drawQuestSetup(ctx, game);
+    } else if (view === "resource") {
+      this._statZone(ctx, game);
+      phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
+        { kind: "framework", text: PHASE_FRAMEWORK["resource"] },
+      ]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS["planning"]}`, ["advance"]);
+    } else if (view in LOOP_FLOW) {
+      // Four views are genuinely loops and share one widget: Planning, the
+      // engagement checks, and both combat halves.
+      this._statZone(ctx, game);
+      this._loopFlow(ctx, game, this.contentY);
+      const nxt = (view === "planning" && game.sailing)
+        ? "quest_sailing" : game.nextPhaseView();
+      this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt]}`, ["advance"]);
+    } else if (view === "quest_commit") {
+      this._statZone(ctx, game);
+      const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN,
+        [{ kind: "window", text: PHASE_WINDOW["quest_commit"] }]);
+      this._totalsRow(ctx, game, this.contentY + bh + 8, false, ["wp", "stg"]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_staging}`, ["advance"]);
+    } else if (view === "quest_sailing") {
+      this._statZone(ctx, game);
+      if (!game.sailing) {
+        notePanel(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN,
+                  [SAILING.no_keyword, SAILING.enable_hint]);
+        const eb = new Button(["sail_toggle"], MARGIN, this.contentY + 96,
+                              480 - 2 * MARGIN, 52);
+        bevel(ctx, eb.x, eb.y, eb.w, eb.h, pal.btn);
+        icons.drawIcon(ctx, icons.WHEEL, 130, this.contentY + 96 + 14, pal.gold);
+        textCenter(ctx, "Enable Sailing", 254, this.contentY + 96 + 16, BODY, pal.tan);
+        this.buttons.push(eb);
+        this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
+      } else {
+        // tip (pipe medallion top-left; wheel glyph inline in the sentence)
+        const tw = 480 - 2 * MARGIN, ty0 = this.contentY;
+        const gutt = 28 + 14, lh = bandLineH(BODY), th = 3 * lh + 2 * BAND_PAD;
+        rect(ctx, MARGIN, ty0, tw, th, pal.card_hi);
+        rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
+        icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + BAND_PAD, pal.gold);
+        const tx = MARGIN + 12 + gutt;
+        let ly = ty0 + BAND_PAD;
+        const fp = `P${game.first_player + 1}`;
+        textLeft(ctx, fp, tx, ly, BODY, pal.muted);
+        let sx0 = tx + measureText(fp, BODY) + 6;
+        ribbon(ctx, sx0, ly - 1, 10, 18);
+        sx0 += 10 + 6;
+        textLeft(ctx, "exhausts characters (ships", sx0, ly, BODY, pal.muted);
+        ly += lh;
+        textLeft(ctx, "count), looks at and discards them.", tx, ly, BODY, pal.muted);
+        ly += lh;
+        icons.drawIcon(ctx, icons.WHEEL_SM, tx, ly, pal.gold);
+        textLeft(ctx, "found: move 1 step on-course.", tx + 22, ly, BODY, pal.muted);
+        const sb = new Button(["sail_modal"], MARGIN, ty0 + th + 10, 480 - 2 * MARGIN, 52);
+        bevel(ctx, sb.x, sb.y, sb.w, sb.h, pal.btn);
+        icons.drawIcon(ctx, icons.WHEEL, 150, sb.y + 14, pal.gold);
+        textCenter(ctx, "Log sailing test", 262, sb.y + 16, BODY, pal.tan);
+        this.buttons.push(sb);
+        this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
+      }
+    } else if (view === "quest_staging") {
+      this._statZone(ctx, game);
+      const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
+        { kind: "framework", text: STAGING.framework },
+        { kind: "window", text: STAGING.window },
+      ]);
+      // Gaps are 4, not 8: the framework line grew to two lines when it
+      // gained the STAGING.short rule, and the
+      // totals row has to stay clear of the CTA. Re-laid out rather than
+      // shrinking the text - see the design system.
+      const my = this.contentY + bh + 4;
+      const mh = willpowerStagingMeter(ctx, MARGIN, my, 480 - 2 * MARGIN, game.willpower, game.staging);
+      this._totalsRow(ctx, game, my + mh + 4, true);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_resolution}`, ["stage_advance"]);
+    } else if (view === "quest_resolution") {
+      this._drawResolution(ctx, game);
+    } else if (view === "travel") {
+      this._statZone(ctx, game);
+      this._drawTravel(ctx, game);
+    } else if (view === "refresh") {
+      this._statZone(ctx, game);
+      const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
+        { kind: "framework", text: PHASE_FRAMEWORK["refresh"] },
+        { kind: "window", text: PHASE_WINDOW["refresh"] },
+      ]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS[game.nextPhaseView()]}`, ["advance"]);
+    } else if (view === "round_end") {
+      // 0.1. Not an action window - RR's chart puts the last one after 7.4 -
+      // so no purple treatment: this is a resolution checklist.
+      this._statZone(ctx, game);
+      phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
+        { kind: "framework", text: PHASE_FRAMEWORK["round_end"] },
+      ]);
+      this._cta(ctx, game,
+                `Next: ${VIEW_LABELS["resource"]} (Round ${game.round + 1})`,
+                ["endround"]);
+    } else {
+      this._statZone(ctx, game);
+      const flavor = { combat_enemy: [icons.DEFENSE, pal.green],
+                       combat_player: [icons.ATTACK, pal.tan] }[view];
+      const sections = [];
+      if (PHASE_FRAMEWORK[view]) {
+        const fw = PHASE_FRAMEWORK[view];
+        sections.push({ kind: "framework", text: fw });
+      }
+      if (PHASE_WINDOW[view]) sections.push({ kind: "window", text: PHASE_WINDOW[view] });
+      const reserve = flavor ? 34 : 0;
+      const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, sections, reserve);
+      if (flavor) {
+        icons.drawIcon(ctx, flavor[0], 480 - MARGIN - 34,
+                       this.contentY + Math.floor((bh - 20) / 2), flavor[1]);
+      }
+      if (PHASE_CAPTION[view]) {
+        // a rules caption: BODY, wrapped over as many lines as it needs
+        // (every one of these is 2 lines, ending by y=316).
+        const capW = 480 - 2 * (MARGIN + 4);
+        let cy = this.contentY + bh + 10;
+        for (const ln of wrapText(PHASE_CAPTION[view], BODY, capW)) {
+          textLeft(ctx, ln, MARGIN + 4, cy, BODY, pal.dim);
+          cy += 24;
+        }
+      }
+      // nextPhaseView(), not raw VIEW_ORDER indexing: the very next view is
+      // this phase's action window, and a CTA must announce the next PHASE.
+      const nxt = game.nextPhaseView();
+      this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt] ?? nxt}`, ["advance"]);
+    }
+
+    if (this.notif) {
+      const entries = this.notif.map(e =>
+        Array.isArray(e) ? (e.length === 3 ? e : [e[0], e[1], "amber"]) : [null, e, "amber"]);
+      const hasIcon = entries.some(([ic]) => ic);
+      const edge = entries[0][2];
+      this.notifEdge = edge;
+      const tx0 = MARGIN + (hasIcon ? 48 : 14);
+      const usable = 480 - MARGIN - 48 - tx0;
+      const lines = [];
+      for (const [, s, c] of entries) {
+        for (const ln of wrapText(s, BODY, usable)) lines.push([ln, c]);
+      }
+      const th = Math.max(14 + 22 * lines.length, hasIcon ? 40 : 34);
+      bevel(ctx, MARGIN, HEADER_H + 2, 480 - 2 * MARGIN, th, pal.card_hi, false, 2);
+      rect(ctx, MARGIN, HEADER_H + 2, 4, th, pal[edge]);
+      if (hasIcon) {
+        const [firstIc, , firstC] = entries.find(([ic]) => ic);
+        icons.drawIcon(ctx, icons[firstIc], MARGIN + 14,
+                       HEADER_H + 2 + Math.floor((th - 24) / 2), pal[firstC]);
+      }
+      let ty = HEADER_H + 9;
+      for (const [s, c] of lines) {
+        textLeft(ctx, s, tx0, ty, BODY, pal[c]);
+        ty += 22;
+      }
+      const cx = 480 - MARGIN - 22, cy = HEADER_H + 2 + Math.floor(th / 2), r = 11;
+      this.notifPie = [cx, cy, r];
+      drawNotifPie(ctx, cx, cy, r, this.notifFrac, edge);
+      this.buttons.push(new Button(["notif_dismiss"], MARGIN, HEADER_H + 2,
+                                   480 - 2 * MARGIN, th));
+    } else {
+      this.notifPie = null;
+    }
+
+    if (this.banner && this.banner[2] === view) {
+      const [btextRaw, bkind] = this.banner;
+      const bpen = { good: pal.green, bad: pal.red, mid: pal.amber }[bkind];
+      const btext = truncateText(btextRaw, BODY, 480 - 2 * MARGIN);
+      textCenter(ctx, btext, 240, CTA_Y - 26, BODY, bpen);
+    }
+  }
+
+  // R0 pre-round-1 phase: stage 1A's setup text to resolve, then the first
+  // flip (1A -> 1B) that begins round 1. Reuses the standard zones (Task 8).
+  _drawQuestSetup(ctx, game) {
+    const card = game.stages[game.stage_idx].cards[game.card_idx];
+    const aFace = card.faces.find(f => f.side === "A") ?? {};
+    // No bespoke title block. A centred amber stage label over a
+    // DISPLAY-gold card name was this view's own invention - nothing else
+    // in the app presents content that way - and it pushed the actual
+    // instruction down the screen.
+
+    // Framework treatment, like every other "this happens anyway" band in the
+    // app: say what to DO, and let the card's own text live one tap away
+    // behind View quest card. Printing the setup text here made this screen a
+    // text dump with a button under it, duplicating a card the player can
+    // already open. No stage number or card name in the copy either - the
+    // screen shows both 20px above.
+    const stageN = `${game.quest.stage_n}${game.quest.side}`;
+    const lead = aFace.text
+      ? QUEST_SETUP.resolve.replace("%s", stageN).replace("%s", aFace.name || "")
+      : QUEST_SETUP.none.replace("%s", stageN);
+    phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
+      { kind: "framework",
+        text: [lead, QUEST_SETUP.then_flip.replace("%s", game.quest.stage_n)] },
+    ]);
+
+    // Read-only card modal (M4-B) - see onButton; null for custom games
+    // (no scenario loaded, nothing to show).
+    const cardBtn = new Button(["open_card_modal"], MARGIN, 358, 480 - 2 * MARGIN, 44);
+    bevel(ctx, cardBtn.x, cardBtn.y, cardBtn.w, cardBtn.h, pal.btn);
+    textCenter(ctx, QUEST_SETUP.view, 240, cardBtn.y + 14, BODY, pal.tan);
+    this.buttons.push(cardBtn);
+
+    this._cta(ctx, game, QUEST_SETUP.begin, ["flip_to_b"]);
+  }
+
   _drawTravel(ctx, game) {
     const loc = game.active_location;
     const fw = loc
