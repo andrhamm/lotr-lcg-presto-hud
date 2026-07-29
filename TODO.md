@@ -38,12 +38,6 @@ across columns, and surface blockers here.
 
 ## Ready
 
-- [ ] Progress screen: the "count it" control for a dynamic X
-  - notes: mocked and approved (`x_1_count` / `x_2_count_plus` / `x_3_auto`). Over all 58 formulas: **16** are computable from the player count we already track (no control at all), **40** reference board state we cannot see, and **2** have no usable formula. A 5-rule grammar recovers BOTH the thing to count and the arithmetic around it for 40 of the 42 — `1 more than…` → count+1, `twice…` → count×2, `2, plus 2 for each…` → 2+2×count, bare `the number of…` → count.
-  - so: the control is not "type the threat", it is "how many enemies are in play?" — a question the player answers by looking at the table — and the tracker applies the +1. The player never does the arithmetic, and the count survives to next round when it changes by one.
-  - split by shape: **19 bare counts** get ONE stepper (the count IS the value — no second number); **20 arithmetic** get a read-only value plus a stepper on the count; **16 auto** get no control.
-  - needs: the wrapper grammar in `build_card_data.py` (emit `threatCount` / `threatArith` alongside the formula), then the row widget in both twins.
-
 - [ ] Reconcile the 18 location faces whose X is defined nowhere we can read
   - notes: cross-referencing the quest cards does NOT work — only 6 of 16 official ones have any `X is` on a stage, and most are a different X (*The Argonath*'s is an enemy's threat, *Wall of Trees*'s is the stage's quest points, *Battering Ram*'s is the damage it deals). One defensible: *Plains of Rohan* = the pursuit value.
   - so: needs an outside source. Hall of Beorn carries printed per-card stats and `tools/build_hob_enrichment.py` already exists, but its cache holds Quest cards only — this is a fresh ~18-card fetch. Until then the sheet correctly shows an empty slot and the player sets it.
@@ -64,6 +58,12 @@ across columns, and surface blockers here.
 ## Blocked
 
 ## Done
+
+- [x] The count control for a dynamic X
+  - notes: the original plan was a 5-rule regex grammar over the distilled sentence, parsed at build time. User called it: put an **enum** in the card data and code one formula per distinct target instead. The 43 distinct sentences collapse to **26 targets** — most of the difference is phrasing ("characters controlled by the first player" vs "characters the first player controls"; "1 more than" vs "1 plus"). Arithmetic is two integers, `value = mul * count + add`, which covers every observed shape.
+  - notes(cont): `xtargets.py` holds the table (label + whether a tracked value answers it), host- and device-safe like phases.py; the table is generated into `docs/js/xtargets.js`, the arithmetic hand-mirrored. Three targets are `auto` — players, main-quest stage, highest threat — and `resolve()` ignores any stored count for those so "X is 4 per player" can't be overridden by a stale one.
+  - shipped: the threat row takes four shapes (auto / count / bare / plain). The count stepper is labelled by **what it counts**, and the app does the arithmetic — the player answers "how many enemies are in play?" and never adds the +1 themselves. Saving stores the COUNT, so it doesn't go stale when the board changes.
+  - done: bccdb4b, 4817ccc. 1891 tests green. The layout linter caught a real collision in the new tallest-case scene (DISPLAY value's descender vs the formula's first line) — iron rule 3 earning its keep.
 
 - [x] Tell printed X, "-" and 0 apart, and stop drawing targets that don't exist
   - notes: `parse_int` flattened four different printed values into one `None` — a number, a literal `X`, a `-` meaning the stat does not apply, and absent. So a stage printing X read as worth 0, and a location printing X read the same as one with no such stat. Sibling `threatKind` / `questPointsKind` markers ("x" | "na") now carry the difference. Verified against the pinned TSV: 131 quest stages print `-`, 7 print X; 52 location faces print X for threat, 10 for quest points.
