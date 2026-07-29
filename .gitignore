@@ -35,3 +35,9 @@ tools/data/tips_cache/
 # a local research corpus only: never committed, never shipped. Only text we
 # write ourselves from reading it reaches docs/data/tips.json.
 research/votp/
+# Official FFG rulebooks parsed to markdown by tools/build_rules_corpus.py,
+# and indexed by qmd for semantic search (collection `lotr-lcg-rules`). Same
+# posture and the same reason as research/votp/ above: this is verbatim FFG
+# rules text, so it is a local research corpus only. Only summaries we write
+# ourselves — rules/*.md — are committed. See rules/README.md.
+research/rules/

@@ -17,6 +17,7 @@ across columns, and surface blockers here.
 
 ## Ideas
 
+* game setup no longer needs the manual "Sailing quest" On/Off toggle, nor the manual Stage 1B quest-points stepper — when a quest is picked from the catalog we already know both (`stages[0].cards[0].sailing` and `.questPoints`). Keep the manual path only for the custom/no-catalog game, which is what `setup_game` is really for.
 * not in love with the placement or design of the tips... the stats redesign is much more compact than the initial design so the tips can be revamped to use the recovered space more effectively
 * side quests modal for adding, not clear that we're setting the quest points.. and since the progress is readonly on this screen, its a bit confusing...
 * Choose an appropriate license, fully open source but with care regarding the copyrighted IP

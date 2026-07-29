@@ -38,7 +38,14 @@ implementations:
       scenarios print which cards, every stage's quest points, every card's
       printed text. Query it before generalizing about "some quests" or
       "a few scenarios"; the answer is usually one `python3 -c` away.
-   2. **The rulebook** (`pdftotext` the PDF) and the FAQ.
+   2. **The rulebooks** — 16 official FFG books (Rules Reference, Learn to
+      Play, every saga/campaign/hero expansion) are parsed to markdown in
+      `research/rules/` and indexed by qmd as **`lotr-lcg-rules`**, so this is
+      a search, not a PDF hunt:
+      `qmd query "when does archery damage resolve" -c lotr-lcg-rules`.
+      Do **not** reach for `pdftotext` — the books are two-column and it
+      shreds the prose. See `rules/README.md` for how to add a book. Then
+      the FAQ.
    3. **This repo's own notes** (`quests/*.md`) — already summarized, already
       checked, and the house voice to match.
 
@@ -107,6 +114,23 @@ these rather than re-researching; correct them only with a better citation.
   condition (defeat/explore/objective), not by placing progress.
 - **Side quests are not a Core Set mechanic**; the rulebook says nothing about
   excess progress on one. Don't assert a rule there.
+- **Combat resolves player-major, not enemy-major.** Rules Reference **6.4a /
+  6.5**: the active player (first player first) picks *one* eligible enemy they
+  are engaged with and resolves its attack, repeating "until no eligible enemies
+  remain for the active player", and only *then* does the next player in player
+  order become active. So a player clears **all** their engaged enemies before
+  play passes. Within a player, they **choose** the order freely — engagement
+  cost does not order attacks.
+- **Engagement cost orders two things, and only two.** Dealing shadow cards
+  (**6.2**: in player order, and within one player's enemies "the enemy with the
+  highest engagement cost first… next highest second, and so forth"), and
+  engagement *checks* (**5.3**: the highest engagement cost that is ≤ the
+  player's threat engages). It explicitly does **not** apply to optional
+  engagement (**5.2**: "The enemy's engagement cost has no bearing on this
+  procedure") or to attack order (6.4a).
+- **Engagement checks are round-robin, not per-player-in-full.** **5.3**: first
+  player checks, then each other player in order, then the first player makes a
+  *second* check, and so on until no enemy in staging can engage anyone.
 
 ## What may be committed (data policy)
 
