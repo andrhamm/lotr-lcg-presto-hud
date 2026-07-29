@@ -112,8 +112,25 @@ class QuestConfigModal:
         text_left(d, pal, "Side", 30, 156, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("side", -1), ("side", 1), 300, 142, self.q["side"], 150, 52)
 
-        text_left(d, pal, "Quest points", 30, 228, BODY, pal.tan)
-        stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 300, 214, str(self.q["points"]), 150, 52)
+        # A stage that advances on a condition has no quest points to edit, so
+        # the stepper is replaced by the card's own sentence about how the
+        # stage ends (distilled from its printed text - see
+        # tools/build_advancement.py). 177 stage cards are like this; a
+        # stepper reading 0 invites the player to "fix" a number the card
+        # never printed.
+        if self.q.get("mode") == "condition" and self.q.get("advance"):
+            text_left(d, pal, "Advances", 30, 214, BODY, pal.tan)
+            ty = 236
+            for ln in wrap_text(self.q["advance"], BODY, 420, d.measure_text)[:2]:
+                text_left(d, pal, ln, 30, ty, BODY, pal.dim)
+                ty += 22
+        else:
+            label = "Quest points"
+            if self.q.get("formula"):
+                label = "Quest points = X"
+            text_left(d, pal, label, 30, 228, BODY, pal.tan)
+            stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 300, 214,
+                    str(self.q["points"]), 150, 52)
 
         text_left(d, pal, "Sailing quest", 30, 296, BODY, pal.tan)
         icons.draw(d, icons.WHEEL, 176, 292, pal.gold if self.sail else pal.dim)
@@ -1262,10 +1279,20 @@ class QuestingProgressModal:
         # always-short generic labels ("Quest 1A", "Location", "Side Quest 3").
         name_s = truncate_text(it["name"], BODY, 118, d.measure_text)
         text_left(d, pal, name_s, 12, y, BODY, pal.gold if quest_card_tappable else pal.tan)
+        # A stage that advances on a condition has no target to edit, and a 0
+        # in the Target column reads as "worth nothing" rather than "not
+        # scored this way". Draw the same blank rule the location sheet uses
+        # and drop the stepper entirely - the card's own sentence needs more
+        # than 38px, so it lives on the detail sheet (QuestConfigModal).
+        no_target = it["kind"] == "q" and g.quest.get("mode") == "condition"
         self._val_editor2(d, pal, 178, cy, prog, (prog / pts if pts else 0), True,
                           (pfx + "P-", idx), (pfx + "P+", idx))
-        self._val_editor2(d, pal, 300, cy, pts, 0, False,
-                          (pfx + "T-", idx), (pfx + "T+", idx))
+        if no_target:
+            d.set_pen(pal.dim)
+            d.rectangle(300 - 15, cy - 1, 30, 3)
+        else:
+            self._val_editor2(d, pal, 300, cy, pts, 0, False,
+                              (pfx + "T-", idx), (pfx + "T+", idx))
         if it.get("removable"):
             self._icon_btn(d, pal, 400, cy, 11, "done", (pfx + "done", idx))
             self._icon_btn(d, pal, 436, cy, 11, "x", (pfx + "X", idx))

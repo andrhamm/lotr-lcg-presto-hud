@@ -987,8 +987,18 @@ export class QuestingProgressModal {
     // labels ("Quest 1A", "Location", "Side Quest 3").
     const nameS = truncateText(it.name, BODY, 118);
     textLeft(ctx, nameS, 12, y, BODY, questCardTappable ? pal.gold : pal.tan);
+    // A stage that advances on a condition has no target to edit, and a 0 in
+    // the Target column reads as "worth nothing" rather than "not scored this
+    // way". Draw the same blank rule the location sheet uses and drop the
+    // stepper entirely - the card's own sentence needs more than 38px, so it
+    // lives on the detail sheet (QuestConfigModal), not here.
+    const noTarget = it.kind === "q" && g.quest.mode === "condition";
     this._valEditor2(ctx, 178, cy, prog, pts ? prog / pts : 0, true, [pfx + "P-", idx], [pfx + "P+", idx]);
-    this._valEditor2(ctx, 300, cy, pts, 0, false, [pfx + "T-", idx], [pfx + "T+", idx]);
+    if (noTarget) {
+      rect(ctx, 300 - 15, cy - 1, 30, 3, pal.dim);
+    } else {
+      this._valEditor2(ctx, 300, cy, pts, 0, false, [pfx + "T-", idx], [pfx + "T+", idx]);
+    }
     if (it.removable) {
       this._iconBtn(ctx, 400, cy, 11, "done", [pfx + "done", idx]);
       this._iconBtn(ctx, 436, cy, 11, "x", [pfx + "X", idx]);
@@ -1682,8 +1692,23 @@ export class QuestConfigModal {
     stepper(ctx, this.buttons, ["n", -1], ["n", 1], 300, 70, String(this.q.stage_n), 150, 52);
     textLeft(ctx, "Side", 30, 156, BODY, pal.tan);
     stepper(ctx, this.buttons, ["side", -1], ["side", 1], 300, 142, this.q.side, 150, 52);
-    textLeft(ctx, "Quest points", 30, 228, BODY, pal.tan);
-    stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 300, 214, String(this.q.points), 150, 52);
+    // A stage that advances on a condition has no quest points to edit, so the
+    // stepper is replaced by the card's own sentence about how the stage ends
+    // (distilled from its printed text - see tools/build_advancement.py). 177
+    // stage cards are like this; a stepper reading 0 invites the player to
+    // "fix" a number the card never printed.
+    if (this.q.mode === "condition" && this.q.advance) {
+      textLeft(ctx, "Advances", 30, 214, BODY, pal.tan);
+      let ty = 236;
+      for (const ln of wrapText(this.q.advance, BODY, 420, measureText).slice(0, 2)) {
+        textLeft(ctx, ln, 30, ty, BODY, pal.dim);
+        ty += 22;
+      }
+    } else {
+      textLeft(ctx, this.q.formula ? "Quest points = X" : "Quest points",
+               30, 228, BODY, pal.tan);
+      stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 300, 214, String(this.q.points), 150, 52);
+    }
     textLeft(ctx, "Sailing quest", 30, 296, BODY, pal.tan);
     icons.drawIcon(ctx, icons.WHEEL, 176, 292, this.sail ? pal.gold : pal.dim);
     const sb = new Button(["sail"], 300, 284, 150, 48);

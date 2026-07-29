@@ -29,6 +29,64 @@ def test_flip_loads_b_points():
         "source":"official","kind":"quest","nightmare":False,"mode":"Standard"}, STAGES)
     assert g.flip_to_b() == 8 and g.quest["side"] == "B" and g.quest["points"] == 8
 
+def _flip(card):
+    g = _g()
+    g.preload_scenario({"slug": "p", "name": "P", "pack": "Core Set",
+                        "cycle": "Core Set", "source": "official",
+                        "kind": "quest", "nightmare": False,
+                        "mode": "Standard"}, [{"stage": 1, "cards": [card]}])
+    g.flip_to_b()
+    return g.quest
+
+
+def test_flip_marks_a_condition_stage_and_carries_its_sentence():
+    # 177 stage cards print NO quest points: they advance on a condition, not
+    # by filling a bar, so drawing 0/0 for them is a lie. `mode` is what lets
+    # the Progress row drop the phantom Target stepper and the detail sheet
+    # show the card's own sentence instead.
+    q = _flip({"questPoints": 0, "questPointsKind": "na",
+               "advance": "The players win when Bolg is destroyed.",
+               "lose": "Otherwise the players lose the game."})
+    assert q["mode"] == "condition"
+    assert q["advance"] == "The players win when Bolg is destroyed."
+    assert q["lose"] == "Otherwise the players lose the game."
+    assert "formula" not in q
+
+
+def test_flip_marks_a_stage_whose_target_is_a_formula():
+    q = _flip({"questPoints": 0, "questPointsKind": "x",
+               "questPointsFormula": "+4 quest points per player"})
+    assert q["mode"] == "formula"
+    assert q["formula"] == "+4 quest points per player"
+
+
+def test_flip_leaves_a_genuine_zero_alone():
+    # The regression this guards: a card that really prints 0 has no marker,
+    # and must stay an ordinary points stage rather than being reclassified as
+    # condition-advanced and losing its (editable) target.
+    q = _flip({"questPoints": 0})
+    assert q["mode"] == "points" and "advance" not in q
+
+
+def test_flip_clears_stale_condition_state_on_the_next_stage():
+    # quest is a long-lived dict, so advancing from a condition stage to a
+    # pointed one must REMOVE the old sentence, not leave it on screen.
+    g = _g()
+    g.preload_scenario({"slug": "p", "name": "P", "pack": "Core Set",
+                        "cycle": "Core Set", "source": "official",
+                        "kind": "quest", "nightmare": False, "mode": "Standard"},
+                       [{"stage": 1, "cards": [{"questPoints": 0,
+                                                "questPointsKind": "na",
+                                                "advance": "Old sentence."}]},
+                        {"stage": 2, "cards": [{"questPoints": 8}]}])
+    g.flip_to_b()
+    assert g.quest["advance"] == "Old sentence."
+    g.stage_idx = 1
+    g.flip_to_b()
+    assert g.quest["mode"] == "points"
+    assert "advance" not in g.quest and "formula" not in g.quest
+
+
 def test_serialization_round_trips_scenario():
     g = _g(); g.preload_scenario({"slug":"p","name":"P","pack":"Core Set","cycle":"Core Set",
         "source":"official","kind":"quest","nightmare":False,"mode":"Standard"}, STAGES)

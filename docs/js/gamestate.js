@@ -608,10 +608,36 @@ export class GameState {
   }
 
   // 1A -> 1B: load the current card's questPoints as side B's target.
+  //
+  // `mode` says whether that target is real. ~177 stage cards print no quest
+  // points at all: they advance on a condition (an enemy defeated, an
+  // objective claimed, a pile of resource tokens) rather than by filling a
+  // bar, and drawing 0/0 for them is a lie. `advance` / `lose` carry the
+  // card's own sentence about how the stage ends, distilled from its printed
+  // text - see tools/build_advancement.py.
+  //
+  //   "points"     a real printed target; fill the bar
+  //   "condition"  no target exists; show the sentence instead
+  //   "formula"    the card computes one in its own text
   flipToB() {
     const card = this.stages[this.stage_idx].cards[this.card_idx];
     this.quest.side = "B";
     this.quest.points = card.questPoints;
+    const kind = card.questPointsKind, formula = card.questPointsFormula;
+    if (formula) {
+      this.quest.mode = "formula";
+      this.quest.formula = formula;
+    } else if (kind === "na" || (!card.questPoints && kind)) {
+      this.quest.mode = "condition";
+      delete this.quest.formula;
+    } else {
+      this.quest.mode = "points";
+      delete this.quest.formula;
+    }
+    for (const k of ["advance", "lose"]) {
+      if (card[k]) this.quest[k] = card[k];
+      else delete this.quest[k];
+    }
     return this.quest.points;
   }
 

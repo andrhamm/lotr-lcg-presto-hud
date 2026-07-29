@@ -751,10 +751,38 @@ class GameState:
         self.sailing = bool(st["cards"][0].get("sailing"))
 
     def flip_to_b(self):
-        """1A -> 1B: load the current card's questPoints as side B's target."""
+        """1A -> 1B: load the current card's questPoints as side B's target.
+
+        `mode` says whether that target is real. ~177 stage cards print no
+        quest points at all: they advance on a condition (an enemy defeated,
+        an objective claimed, a pile of resource tokens) rather than by
+        filling a bar, and drawing 0/0 for them is a lie. `advance` / `lose`
+        carry the card's own sentence about how the stage ends, distilled from
+        its printed text - see tools/build_advancement.py.
+
+            "points"     a real printed target; fill the bar
+            "condition"  no target exists; show the sentence instead
+            "formula"    the card computes one in its own text
+        """
         card = self.stages[self.stage_idx]["cards"][self.card_idx]
         self.quest["side"] = "B"
         self.quest["points"] = card["questPoints"]
+        kind = card.get("questPointsKind")
+        formula = card.get("questPointsFormula")
+        if formula:
+            self.quest["mode"] = "formula"
+            self.quest["formula"] = formula
+        elif kind == "na" or (not card["questPoints"] and kind):
+            self.quest["mode"] = "condition"
+            self.quest.pop("formula", None)
+        else:
+            self.quest["mode"] = "points"
+            self.quest.pop("formula", None)
+        for k in ("advance", "lose"):
+            if card.get(k):
+                self.quest[k] = card[k]
+            else:
+                self.quest.pop(k, None)
         return self.quest["points"]
 
     def quest_label(self):

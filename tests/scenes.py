@@ -565,6 +565,37 @@ def _quest_config_modal():
     return hw, m
 
 
+def _quest_config_modal_condition_stage():
+    # A stage that advances on a condition: the quest-points stepper is
+    # replaced by the card's own sentence, so the sentence has to fit in the
+    # stepper's slot without colliding with "Sailing quest" below it.
+    from ui.modals import QuestConfigModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.quest["mode"] = "condition"
+    g.quest["advance"] = ("Progress cannot be placed here; the players win "
+                          "when Bolg is destroyed.")
+    m = QuestConfigModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _questing_progress_modal_condition_stage():
+    # The quest row's Target column is a blank rule rather than a phantom 0
+    # when the stage has no quest points to fill.
+    from ui.modals import QuestingProgressModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.quest["mode"] = "condition"
+    g.quest["advance"] = "The players win when Bolg is destroyed."
+    g.side_quests = [{"points": 5, "progress": 2}]
+    m = QuestingProgressModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
 def _quest_card_modal():
     # A normal (non-branch) stage with real text on both faces (Foundations
     # of Stone stage 1) - exercises wrapped text in both SIDE A and SIDE B
@@ -1245,6 +1276,8 @@ SCENES = {
     "reminders_modal": _reminders_modal,
     "led_modal": _led_modal,
     "questing_progress_modal": _questing_progress_modal,
+    "questing_progress_modal_condition_stage": _questing_progress_modal_condition_stage,
+    "quest_config_modal_condition_stage": _quest_config_modal_condition_stage,
     "questing_progress_modal_no_location": _questing_progress_modal_no_location,
     "questing_progress_modal_loc_choose": _questing_progress_modal_loc_choose,
     "questing_progress_modal_loc_pts": _questing_progress_modal_loc_pts,
