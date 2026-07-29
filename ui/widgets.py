@@ -187,11 +187,18 @@ def band_line_h(scale=BODY):
     return 10 * scale + 4
 
 
-def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None):
+def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None,
+               accent=None):
     """Distinct style for phase reminder messages: dark panel, gold edge,
     muted text, and (by default) the hobbit-pipe hint medallion on the left.
     Accepts a string or list of paragraphs; each is word-wrapped to the usable
-    width (minus icon gutter and reserve_right). Returns the panel height."""
+    width (minus icon gutter and reserve_right). Returns the panel height.
+
+    `accent` overrides the left bar's colour, because the BAR is the
+    vocabulary - red happens anyway, green is your window, gold is a hint -
+    and it belongs to the meaning of the content, not to the widget that
+    happens to draw it. phase_block owns red/green for phase copy; this lets a
+    band keep note_panel's paragraph wrapping while still saying green.""" 
     from ui import icons as _icons
     if icon is None:
         icon = _icons.PIPE
@@ -206,7 +213,7 @@ def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None):
     h = max(len(lines) * lh + 2 * BAND_PAD, isz + 14 if gutter else 0)
     d.set_pen(pal.card_hi)
     d.rectangle(x, y, w, h)
-    d.set_pen(pal.border_gold)
+    d.set_pen(accent if accent is not None else pal.border_gold)
     d.rectangle(x, y, 4, h)
     if gutter:
         _icons.draw(d, icon, x + 10, y + BAND_PAD, pal.gold)  # top-left, not centered

@@ -283,13 +283,27 @@ export class SideQuestsModal {
   }
   onButton(btn) {
     const k = btn.id[0];
-    if (k === "add") { this.game.side_quests.push({ points: 4, progress: 0 }); return null; }
-    if (k === "pts") {
-      const s = this.game.side_quests[btn.id[1]];
-      s.points = Math.max(1, Math.min(30, s.points + btn.id[2]));
+    // Live edits, like PlayersDetailModal: Save only closes, so each action
+    // logs as it happens rather than on commit.
+    if (k === "add") {
+      this.game.side_quests.push({ points: 4, progress: 0 });
+      this.game.logEvent(`Side quest ${this.game.side_quests.length} added (4 quest points)`);
       return null;
     }
-    if (k === "rm") { this.game.side_quests.splice(btn.id[1], 1); return null; }
+    if (k === "pts") {
+      const s = this.game.side_quests[btn.id[1]];
+      const was = s.points;
+      s.points = Math.max(1, Math.min(30, was + btn.id[2]));
+      if (s.points !== was) {
+        this.game.logEvent(`Side quest ${btn.id[1] + 1} quest points ${was} -> ${s.points}`);
+      }
+      return null;
+    }
+    if (k === "rm") {
+      this.game.side_quests.splice(btn.id[1], 1);
+      this.game.logEvent(`Side quest ${btn.id[1] + 1} removed`);
+      return null;
+    }
     if (k === "save") return "close";
     return null;
   }
@@ -682,7 +696,11 @@ export class RemindersModal {
   onButton(btn) {
     const k = btn.id[0];
     if (k === "tog") {
-      this.game.reminders[btn.id[1]] = !this.game.reminders[btn.id[1]];
+      const key = btn.id[1];
+      const on = !this.game.reminders[key];
+      this.game.reminders[key] = on;
+      const def = REMINDER_DEFS.find(d => d[0] === key);
+      this.game.logEvent(`Reminder ${def ? def[1] : key}: ${on ? "on" : "off"}`);
       return null;
     }
     if (k === "close") return "close";
@@ -1689,6 +1707,14 @@ export class QuestConfigModal {
     }
     if (k === "sail") { this.sail = !this.sail; return null; }
     if (k === "save") {
+      const was = this.game.quest;
+      if (this.q.stage_n !== was.stage_n || this.q.side !== was.side
+          || this.q.points !== was.points || this.q.progress !== was.progress) {
+        // One entry on commit, not one per stepper tap: this modal edits a
+        // scratch copy and only applies here.
+        this.game.logEvent(`Quest set to stage ${this.q.stage_n}${this.q.side}, `
+                           + `${this.q.progress}/${this.q.points} progress`);
+      }
       this.game.quest = this.q;
       if (this.sail !== this.game.sailing) {
         this.game.sailing = this.sail;

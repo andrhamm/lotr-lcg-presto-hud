@@ -82,3 +82,142 @@ def test_from_dict_restores_player_and_progress_state():
     assert restored.players[3].threat == 41
     assert restored.players[3].eliminated is False
     assert restored.active_location == {"points": 4, "progress": 2}
+
+
+# --------------------------------------------------------------------------
+# Log completeness
+# --------------------------------------------------------------------------
+
+def _game_fingerprint(g):
+    """Everything a player would expect to see accounted for in the log."""
+    return (tuple((p.threat, p.commit, p.elimination, p.threat_per_round,
+                   p.starting_threat, p.eliminated) for p in g.players),
+            dict(g.quest),
+            dict(g.active_location) if g.active_location else None,
+            [dict(s) for s in g.side_quests],
+            g.willpower, g.staging, g.sailing, g.heading, g.round,
+            g.first_player, dict(g.reminders))
+
+
+def _fresh_game():
+    from gamestate import GameState
+    g = GameState(4, 25)
+    g.active_location = {"points": 3, "progress": 1}
+    g.side_quests = [{"points": 5, "progress": 2}]
+    g.sailing = True
+    return g
+
+
+# Controls that change state but deliberately do not log, with the reason.
+_SILENT = {
+    # Navigation and view flow log their own "Phase: X" line on arrival, so a
+    # second entry for the same tap would double up.
+    ("play", "advance"), ("play", "back"),
+}
+
+
+def test_every_play_screen_control_that_changes_state_logs_it():
+    """The log is the game's audit trail, and it had holes.
+
+    Willpower and staging were assigned straight to the attribute from three
+    places, so committing willpower - the single most-repeated action in a
+    round - left no trace. This walks every control on every play view and
+    asserts that a tap which moves the game also says so.
+    """
+    from tests.fake_hardware import FakeHardware
+    from ui.theme import Palette
+    from ui.screen_play import ScreenPlay
+    from gamestate import VIEW_STEP, VIEW_ORDER
+
+    skip = ("nav", "advance", "back", "players_detail", "progress_detail",
+            "open_card_modal", "setup_back", "banner", "notif_dismiss")
+    offenders = []
+    for view in VIEW_ORDER:
+        def build():
+            hw = FakeHardware()
+            g = _fresh_game()
+            g.view = view
+            g.step = VIEW_STEP.get(view, g.step)
+            s = ScreenPlay()
+            try:
+                s.draw(hw, g, Palette(hw.display))
+            except Exception:
+                return None, None, None
+            return hw, g, s
+        _, _, probe = build()
+        if probe is None:
+            continue                      # view needs scenario data; covered by scenes
+        for bid in sorted({b.id for b in probe.buttons}, key=str):
+            if bid[0] in skip or ("play", bid[0]) in _SILENT:
+                continue
+            _, g, s = build()
+            hit = [b for b in s.buttons if b.id == bid]
+            if not hit:
+                continue
+            before, n = _game_fingerprint(g), len(g.log)
+            try:
+                s.on_button(hit[0], g)
+            except Exception:
+                continue                  # opens a modal / needs catalog data
+            if _game_fingerprint(g) != before and len(g.log) == n:
+                offenders.append("%s: %s" % (view, bid))
+    assert not offenders, (
+        "these controls change the game without logging it:\n  %s"
+        % "\n  ".join(offenders))
+
+
+def test_every_modal_control_that_changes_state_logs_it():
+    """Same rule for the modals.
+
+    Some commit on Save and some edit live, so this taps and then closes by
+    whichever affordance the modal offers - which is also what caught that the
+    progress modal was fine (it flushes one summary on close) while the
+    reminders toggle genuinely said nothing.
+    """
+    from tests.fake_hardware import FakeHardware
+    from ui.theme import Palette
+    from ui import modals
+
+    cases = [
+        (modals.QuestConfigModal, lambda g: modals.QuestConfigModal(g)),
+        (modals.LocationConfigModal, lambda g: modals.LocationConfigModal(g)),
+        (modals.SideQuestsModal, lambda g: modals.SideQuestsModal(g)),
+        (modals.QuestingProgressModal, lambda g: modals.QuestingProgressModal(g)),
+        (modals.RemindersModal, lambda g: modals.RemindersModal(g)),
+        (modals.SailingModal, lambda g: modals.SailingModal(g)),
+        (modals.PlayersDetailModal, lambda g: modals.PlayersDetailModal(g)),
+        (modals.PlayerSettingsModal, lambda g: modals.PlayerSettingsModal(g, 1)),
+    ]
+    offenders = []
+    for cls, make in cases:
+        hw = FakeHardware()
+        g = _fresh_game()
+        probe = make(g)
+        probe.draw(hw, g, Palette(hw.display))
+        for bid in sorted({b.id for b in probe.buttons}, key=str):
+            if bid[0] in ("cancel", "close", "save", "apply"):
+                continue
+            hw2 = FakeHardware()
+            g2 = _fresh_game()
+            m = make(g2)
+            pal2 = Palette(hw2.display)
+            m.draw(hw2, g2, pal2)
+            hit = [b for b in m.buttons if b.id == bid]
+            if not hit:
+                continue
+            before, n = _game_fingerprint(g2), len(g2.log)
+            try:
+                m.on_button(hit[0])
+                m.draw(hw2, g2, pal2)
+                for sid in (("save",), ("apply",), ("close",)):
+                    exits = [b for b in m.buttons if b.id == sid]
+                    if exits:
+                        m.on_button(exits[0])
+                        break
+            except Exception:
+                continue
+            if _game_fingerprint(g2) != before and len(g2.log) == n:
+                offenders.append("%s: %s" % (cls.__name__, bid))
+    assert not offenders, (
+        "these modal controls change the game without logging it:\n  %s"
+        % "\n  ".join(offenders))

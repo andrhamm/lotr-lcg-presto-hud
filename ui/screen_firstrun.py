@@ -47,6 +47,16 @@ def draw_legend_rows(d, pal, y):
     d.set_pen(pal.green)
     d.rectangle(x_icon + 2, y - 10, 4, 20)
     text_left(d, pal, "red = happens anyway; green = your window", x_text, y - 8, BODY, pal.tan)
+    y += 34
+
+    # The third bar. It was in the UI from the start and taught nowhere, so a
+    # player met gold with no way to know it meant something weaker than the
+    # two colours they HAD been taught - which is how the whole vocabulary
+    # ends up reading as decoration.
+    d.set_pen(pal.border_gold)
+    d.rectangle(x_icon - 12, y - 10, 4, 20)
+    icons.draw(d, icons.PIPE, x_icon - 2, y - 11, pal.gold)
+    text_left(d, pal, "gold = a hint, not a rule", x_text, y - 8, BODY, pal.tan)
     return y + 30
 
 

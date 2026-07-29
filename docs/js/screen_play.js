@@ -242,8 +242,7 @@ export class ScreenPlay {
 
   _drawActionWindow(ctx, game) {
     const y0 = AW_Y0, w = 480 - 2 * MARGIN;
-    const gutter = icons.LEADERSHIP[0] + 14;
-    const usable = w - 16 - 12 - gutter;
+    const usable = w - 16 - 12;
     const lh = bandLineH(BODY);
     const bandTop = y0, bandBottom = AW_MAX_BOTTOM;
     const maxLines = Math.max(1, Math.floor((bandBottom - bandTop - 2 * BAND_PAD) / lh));
@@ -260,7 +259,12 @@ export class ScreenPlay {
     // Top-anchored, like every phase view's band. This used to centre the
     // panel, so its top edge moved with the copy length - 195 on a five-line
     // window, 234 on a two-line one, against a flat 150 on every phase view.
-    notePanel(ctx, MARGIN, bandTop, w, lines, BODY, 0, icons.LEADERSHIP);
+    // GREEN, not the gold hint bar. An action window IS what green means -
+    // "your window to act" - so these eight screens wore the one treatment
+    // reserved for hints while the phase view before each drew the same idea
+    // in green. The leadership medallion goes with it: the bar already says
+    // it, which is why the label rows were dropped in the first place.
+    notePanel(ctx, MARGIN, bandTop, w, lines, BODY, 0, false, pal.green);
     // The window hands off to the NEXT step, so the CTA names it - the same
     // "Next: X" every phase view uses.
     this._cta(ctx, game, `Next: ${VIEW_LABELS[game.nextPhaseView()]}`, ["advance"]);
@@ -709,7 +713,11 @@ export class ScreenPlay {
             lh = bandLineH(BODY);
       const th = 2 * lh + 2 * BAND_PAD;
       rect(ctx, MARGIN, ty0, 480 - 2 * MARGIN, th, pal.card_hi);
-      rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
+      // RED, not the gold hint bar: this reports what the resolution already
+      // did to the table - the quest failed and threat rose - which is exactly
+      // "happens whether or not you act". The sailing panel above stays gold,
+      // because that one really is a hint about a control.
+      rect(ctx, MARGIN, ty0, 4, th, pal.red);
       icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + BAND_PAD, pal.gold);
       // line 1: outcome + a broken heart marking the failed quest
       const l1 = fail ? "Quest failed. " : OUTCOME.card_tie;
@@ -833,7 +841,12 @@ export class ScreenPlay {
     }
     if (k === "notif_dismiss") { this.notif = null; return true; }
     if (k === "qp") {
-      game.quest.points = Math.max(0, Math.min(30, game.quest.points + btn.id[1]));
+      const was = game.quest.points;
+      game.quest.points = Math.max(0, Math.min(30, was + btn.id[1]));
+      if (game.quest.points !== was) {
+        game.logEvent(`Stage ${game.quest.stage_n}${game.quest.side} quest points `
+                      + `${was} -> ${game.quest.points}`);
+      }
       return true;
     }
     if (k === "setup" ) return null;
@@ -867,17 +880,17 @@ export class ScreenPlay {
     }
     if (k === "wp") {
       return ["modal", new CounterModal(TOTALS.willpower_modal, game.willpower,
-        v => { game.willpower = v; }, "willpower")];
+        v => { game.setWillpower(v); }, "willpower")];
     }
     if (k === "enc_rem") return ["modal", new RemindersModal(game)];
     if (k === "stg") {
       return ["modal", new CounterModal(TOTALS.staging_modal, game.staging,
-        v => { game.staging = v; }, "threat")];
+        v => { game.setStaging(v); }, "threat")];
     }
-    if (k === "wp-") { game.willpower = Math.max(0, game.willpower - 1); return true; }
-    if (k === "wp+") { game.willpower += 1; return true; }
-    if (k === "stg-") { game.staging = Math.max(0, game.staging - 1); return true; }
-    if (k === "stg+") { game.staging += 1; return true; }
+    if (k === "wp-") { game.setWillpower(game.willpower - 1); return true; }
+    if (k === "wp+") { game.setWillpower(game.willpower + 1); return true; }
+    if (k === "stg-") { game.setStaging(game.staging - 1); return true; }
+    if (k === "stg+") { game.setStaging(game.staging + 1); return true; }
     // Task 10 reworks the modal this opens.
     if (k === "progress_detail") return ["modal", new QuestingProgressModal(game)];
     if (k === "stage_advance") {

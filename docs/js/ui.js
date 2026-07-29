@@ -201,7 +201,11 @@ export const BAND_PAD = 6;
 // view already used.
 export function bandLineH(scale = BODY) { return 10 * scale + 4; }
 
-export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon) {
+// `accent` overrides the left bar's colour, because the BAR is the vocabulary
+// - red happens anyway, green is your window, gold is a hint - and it belongs
+// to the meaning of the content, not to the widget that draws it.
+export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon,
+                          accent) {
   const mask = icon === undefined ? icons.PIPE : icon;
   const isz = mask ? mask[0] : 0;
   const gutter = mask !== false && mask ? isz + 14 : 0;
@@ -212,7 +216,7 @@ export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon)
   const lh = bandLineH(scale);
   const h = Math.max(lines.length * lh + 2 * BAND_PAD, gutter ? isz + 14 : 0);
   rect(ctx, x, y, w, h, pal.card_hi);
-  rect(ctx, x, y, 4, h, pal.border_gold);
+  rect(ctx, x, y, 4, h, accent ?? pal.border_gold);
   if (gutter) icons.drawIcon(ctx, mask, x + 10, y + BAND_PAD, pal.gold);  // top-left, not centered
   let ty = y + BAND_PAD;
   for (const s of lines) {

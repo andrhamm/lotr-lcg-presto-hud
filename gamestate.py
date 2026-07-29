@@ -388,6 +388,29 @@ class GameState:
         self.players[index].commit_touched = True
         self.willpower = sum(p.commit for p in self.players)
 
+    def set_willpower(self, value):
+        """Set the committed-willpower total, logging the change.
+
+        A setter rather than a bare assignment because three entry points
+        write this - the quest_commit and quest_staging steppers and the
+        willpower counter modal - and all three used to assign straight to
+        the attribute, so none of them appeared in the log.
+        """
+        v = max(0, value)
+        if v != self.willpower:
+            self.log_event("Willpower total %d -> %d" % (self.willpower, v))
+            self.willpower = v
+        return self.willpower
+
+    def set_staging(self, value):
+        """Set the staging-threat total, logging the change. Same three entry
+        points as set_willpower, same reason."""
+        v = max(0, value)
+        if v != self.staging:
+            self.log_event("Staging threat %d -> %d" % (self.staging, v))
+            self.staging = v
+        return self.staging
+
     def touch_commit(self, index):
         """Mark a player's commit as touched this round (willpower ring visual)."""
         self.players[index].commit_touched = True

@@ -320,6 +320,30 @@ export class GameState {
     this.willpower = this.players.reduce((a, p) => a + p.commit, 0);
   }
 
+  // Set the committed-willpower total, logging the change. A setter rather
+  // than a bare assignment because three entry points write this - the
+  // quest_commit and quest_staging steppers and the willpower counter modal -
+  // and all three used to assign straight to the field, so none of them
+  // appeared in the log.
+  setWillpower(value) {
+    const v = Math.max(0, value);
+    if (v !== this.willpower) {
+      this.logEvent(`Willpower total ${this.willpower} -> ${v}`);
+      this.willpower = v;
+    }
+    return this.willpower;
+  }
+
+  // Same three entry points as setWillpower, same reason.
+  setStaging(value) {
+    const v = Math.max(0, value);
+    if (v !== this.staging) {
+      this.logEvent(`Staging threat ${this.staging} -> ${v}`);
+      this.staging = v;
+    }
+    return this.staging;
+  }
+
   touchCommit(i) {
     this.players[i].commit_touched = true;
   }

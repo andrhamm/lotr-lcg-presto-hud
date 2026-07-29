@@ -1101,6 +1101,14 @@ export function drawLegendRows(ctx, y) {
   rect(ctx, xIcon - 12, y - 10, 4, 20, pal.red);
   rect(ctx, xIcon + 2, y - 10, 4, 20, pal.green);
   textLeft(ctx, "red = happens anyway; green = your window", xText, y - 8, BODY, pal.tan);
+  y += 34;
+
+  // The third bar. It was in the UI from the start and taught nowhere, so a
+  // player met gold with no way to know it meant something weaker than the two
+  // colours they HAD been taught.
+  rect(ctx, xIcon - 12, y - 10, 4, 20, pal.border_gold);
+  icons.drawIcon(ctx, icons.PIPE, xIcon - 2, y - 11, pal.gold);
+  textLeft(ctx, "gold = a hint, not a rule", xText, y - 8, BODY, pal.tan);
   return y + 30;
 }
 

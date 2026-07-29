@@ -154,6 +154,16 @@ class QuestConfigModal:
             self.sail = not self.sail
             return None
         if k == "save":
+            was = self.game.quest
+            if (self.q["stage_n"], self.q["side"], self.q["points"],
+                    self.q["progress"]) != (was["stage_n"], was["side"],
+                                            was["points"], was["progress"]):
+                # One entry on commit, not one per stepper tap: this modal
+                # edits a scratch copy and only applies here.
+                self.game.log_event(
+                    "Quest set to stage %d%s, %d/%d progress"
+                    % (self.q["stage_n"], self.q["side"],
+                       self.q["progress"], self.q["points"]))
             self.game.quest = self.q
             if self.sail != self.game.sailing:
                 self.game.sailing = self.sail
@@ -204,10 +214,16 @@ class LocationConfigModal:
             self.has = True
             return None
         if k == "none":
+            if self.game.active_location is not None:
+                self.game.log_event("Active location cleared")
             self.game.active_location = None
             return "close"
         if k == "save":
-            self.game.active_location = {"points": self.pts, "progress": self.prog}
+            loc = {"points": self.pts, "progress": self.prog}
+            if loc != self.game.active_location:
+                self.game.log_event("Active location set to %d/%d progress"
+                                    % (self.prog, self.pts))
+            self.game.active_location = loc
             return "close"
         if k == "cancel":
             return "cancel"
@@ -254,15 +270,25 @@ class SideQuestsModal:
 
     def on_button(self, btn):
         k = btn.id[0]
+        # Live edits, like PlayersDetailModal: Save only closes, so each
+        # action logs as it happens rather than on commit.
         if k == "add":
             self.game.side_quests.append({"points": 4, "progress": 0})
+            self.game.log_event("Side quest %d added (4 quest points)"
+                                % len(self.game.side_quests))
             return None
         if k == "pts":
             i = btn.id[1]
-            self.game.side_quests[i]["points"] = max(1, min(30, self.game.side_quests[i]["points"] + btn.id[2]))
+            sq = self.game.side_quests[i]
+            was = sq["points"]
+            sq["points"] = max(1, min(30, was + btn.id[2]))
+            if sq["points"] != was:
+                self.game.log_event("Side quest %d quest points %d -> %d"
+                                    % (i + 1, was, sq["points"]))
             return None
         if k == "rm":
             self.game.side_quests.pop(btn.id[1])
+            self.game.log_event("Side quest %d removed" % (btn.id[1] + 1))
             return None
         if k == "save":
             return "close"
@@ -507,7 +533,12 @@ class RemindersModal:
         k = btn.id[0]
         if k == "tog":
             key = btn.id[1]
-            self.game.reminders[key] = not self.game.reminders.get(key, False)
+            on = not self.game.reminders.get(key, False)
+            self.game.reminders[key] = on
+            from gamestate import REMINDER_DEFS
+            label = next((lb for k2, lb, _v, _t, _i in REMINDER_DEFS
+                          if k2 == key), key)
+            self.game.log_event("Reminder %s: %s" % (label, "on" if on else "off"))
             return None
         if k == "close":
             return "close"

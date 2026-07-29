@@ -207,3 +207,65 @@ def test_l8_content_bands_start_on_the_content_line(scene):
     assert min(tops) == CONTENT_Y, (
         "%s: content band starts at y=%d, not CONTENT_Y=%d"
         % (scene, min(tops), CONTENT_Y))
+
+
+# --------------------------------------------------------------------------
+# Treatment vocabulary
+# --------------------------------------------------------------------------
+
+# Play views allowed to draw the gold hint bar, with the reason. Gold is the
+# weakest of the three and says "a hint, not a rule", so it has to earn its
+# place on a screen that is otherwise telling you what the game does.
+_GOLD_OK = {
+    "play_quest_sailing": "genuinely a hint about a control - this quest has "
+                          "no sailing keyword, here is where to enable it",
+}
+
+
+@pytest.mark.parametrize("scene", PLAY_SCENES)
+def test_accent_bars_follow_the_colour_vocabulary(scene):
+    """Red happens anyway, green is your window, gold is a hint.
+
+    That pairing is the one piece of colour vocabulary a player has to learn,
+    and it was applied loosely: all eight action-window screens drew the GOLD
+    hint bar, even though an action window is the literal definition of the
+    green one - and the phase view immediately before each of them drew the
+    same idea in green. The resolution-failure band was gold too, reporting a
+    threat raise that had already happened.
+    """
+    from ui.screen_play import CONTENT_Y, NAV_RULE_Y
+    from ui.theme import Palette
+    from tests.fake_hardware import FakeHardware
+    pal = Palette(FakeHardware().display)
+    hw, _ = SCENES[scene]()
+    gold = [c for c in hw.display.calls
+            if c[0] == "rect" and c[3] == 4 and c[4] >= 12
+            and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y and c[5] == pal.border_gold]
+    if gold and scene not in _GOLD_OK:
+        raise AssertionError(
+            "%s draws the gold hint bar. Gold means 'a hint, not a rule' - if "
+            "this content says what the game does, it is red (happens anyway) "
+            "or green (your window)." % scene)
+
+
+@pytest.mark.parametrize("scene", sorted(s for s in SCENES if s.startswith("play_aw_")))
+def test_action_windows_wear_the_green_window_bar(scene):
+    """An action window IS "your window to act" - the thing green means."""
+    from ui.screen_play import CONTENT_Y, NAV_RULE_Y
+    from ui.theme import Palette
+    from tests.fake_hardware import FakeHardware
+    pal = Palette(FakeHardware().display)
+    hw, _ = SCENES[scene]()
+    bars = {c[5] for c in hw.display.calls
+            if c[0] == "rect" and c[3] == 4 and c[4] >= 12
+            and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y}
+    assert pal.green in bars, "%s: action-window band is not green" % scene
+
+
+def test_the_legend_teaches_all_three_bars():
+    """A treatment the player is never taught reads as decoration, and gold
+    was in the UI from the start with no legend row."""
+    hw, _ = SCENES["legend"]()
+    text = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "red = happens anyway" in text and "green = your window" in text
+    assert "gold" in text, "the legend never explains the gold hint bar"

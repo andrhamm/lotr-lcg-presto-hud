@@ -190,8 +190,7 @@ class ScreenPlay:
         # content area competing with the copy.
         y0 = self.AW_Y0
         w = 480 - 2 * MARGIN
-        gutter = len(icons.LEADERSHIP) + 14
-        usable = w - 16 - 12 - gutter
+        usable = w - 16 - 12
         lh = band_line_h(BODY)
         band_top, band_bottom = y0, self.AW_MAX_BOTTOM
         max_lines = max(1, (band_bottom - band_top - 16) // lh)
@@ -211,7 +210,15 @@ class ScreenPlay:
         # length - 195 on a five-line window, 234 on a two-line one, against a
         # flat 150 on every phase view. Walking a round, the band jumped up
         # and down under a stat strip that never moved.
-        note_panel(d, pal, MARGIN, band_top, w, lines, BODY, 0, icons.LEADERSHIP)
+        # GREEN, not the gold hint bar. An action window IS the thing green
+        # means - "your window to act" - so these eight screens were wearing
+        # the one treatment reserved for hints, while the phase view right
+        # before each of them drew the same idea in green. The leadership
+        # medallion goes with it: the design system dropped the FRAMEWORK /
+        # YOUR WINDOW label rows because the bar already says it, and a glyph
+        # restating the same thing is the same redundancy in another form.
+        note_panel(d, pal, MARGIN, band_top, w, lines, BODY, 0, False,
+                   accent=pal.green)
         # The window hands off to the NEXT step, so the CTA names it - the same
         # "Next: X" every phase view uses, which the nav bar renders as the
         # NEXT PHASE kicker over the destination.
@@ -780,7 +787,12 @@ class ScreenPlay:
             th = 2 * lh + 2 * BAND_PAD
             d.set_pen(pal.card_hi)
             d.rectangle(MARGIN, ty0, 480 - 2 * MARGIN, th)
-            d.set_pen(pal.border_gold)
+            # RED, not the gold hint bar: this reports what the resolution
+            # already did to the table - the quest failed and threat rose -
+            # which is exactly "happens whether or not you act". The sailing
+            # panel a few lines up stays gold, because that one really is a
+            # hint about a control.
+            d.set_pen(pal.red)
             d.rectangle(MARGIN, ty0, 4, th)
             icons.draw(d, icons.PIPE, MARGIN + 10, ty0 + BAND_PAD, pal.gold)
             l1 = "Quest failed. " if fail else OUTCOME["card_tie"]
@@ -903,7 +915,12 @@ class ScreenPlay:
             self.notif = None
             return True
         if k == "qp":
-            game.quest["points"] = max(0, min(30, game.quest["points"] + btn.id[1]))
+            was = game.quest["points"]
+            game.quest["points"] = max(0, min(30, was + btn.id[1]))
+            if game.quest["points"] != was:
+                game.log_event("Stage %d%s quest points %d -> %d"
+                               % (game.quest["stage_n"], game.quest["side"],
+                                  was, game.quest["points"]))
             return True
         if k == "open_card_modal":
             if not game.stages:
@@ -938,7 +955,7 @@ class ScreenPlay:
             return True
         if k == "wp":
             def set_wp(v, game=game):
-                game.willpower = v
+                game.set_willpower(v)
             return ("modal", CounterModal(TOTALS["willpower_modal"], game.willpower,
                                           on_commit=set_wp, icon="willpower"))
         if k == "enc_rem":
@@ -946,20 +963,20 @@ class ScreenPlay:
             return ("modal", RemindersModal(game))
         if k == "stg":
             def set_stg(v, game=game):
-                game.staging = v
+                game.set_staging(v)
             return ("modal", CounterModal(TOTALS["staging_modal"], game.staging,
                                           on_commit=set_stg, icon="threat"))
         if k == "wp-":
-            game.willpower = max(0, game.willpower - 1)
+            game.set_willpower(game.willpower - 1)
             return True
         if k == "wp+":
-            game.willpower += 1
+            game.set_willpower(game.willpower + 1)
             return True
         if k == "stg-":
-            game.staging = max(0, game.staging - 1)
+            game.set_staging(game.staging - 1)
             return True
         if k == "stg+":
-            game.staging += 1
+            game.set_staging(game.staging + 1)
             return True
         if k == "progress_detail":
             # Task 10 reworks the modal this opens.
