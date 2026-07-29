@@ -242,6 +242,12 @@ function main() {
       const kind = result[0];
       if (kind === "goto") {
         let target = result[1];
+        if (target === "scenario_options" && !screens.scenario_options?.scenario) {
+          // Resumed straight into quest_setup, so the options screen was
+          // never built for this scenario. Start the choice over rather than
+          // showing its empty placeholder.
+          target = "scenario_source";
+        }
         if (target === "close") target = navStack.pop() ?? "play";
         else if (["settings", "log", "phases", "about", "firstrun", "legend"].includes(target)) {
           if (active !== target) navStack.push(active);

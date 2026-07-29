@@ -442,6 +442,13 @@ def main():
                         kind = result[0]
                         if kind == "goto":
                             target = result[1]
+                            if target == "scenario_options" and not getattr(
+                                    screens["scenario_options"], "scenario", None):
+                                # Resumed straight into quest_setup, so the
+                                # options screen was never built for this
+                                # scenario. Start the choice over rather than
+                                # showing its empty placeholder.
+                                target = "scenario_source"
                             if target == "close":
                                 target = nav_stack.pop() if nav_stack else "play"
                             elif target in ("settings", "log", "phases",

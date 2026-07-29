@@ -969,3 +969,26 @@ def test_back_clears_screen_local_allocation_and_banner():
     assert screen.alloc is None
     assert screen.banner is None
     assert game.view == "quest_staging"
+
+
+def test_quest_setup_offers_back_even_with_no_undo_history():
+    """Quest Setup is the first screen of a game, so there is nothing to undo
+    - but it is also the last point where the scenario and difficulty can
+    still be changed. Its Back leaves the game rather than undoing a move, so
+    it carries its own id and is not gated on can_undo()."""
+    hw, pal, game, screen = _setup("quest_setup")
+    game.preload_scenario(_QS_SCN, _QS_STAGES)
+    assert not game.can_undo()
+    screen.draw(hw, game, pal)
+    ids = [b.id for b in screen.buttons]
+    assert ("setup_back",) in ids
+    assert ("back",) not in ids, "must not offer undo when there is none"
+    assert screen.on_button(_find(screen, ("setup_back",)), game) == \
+        ("goto", "scenario_options")
+
+
+def test_other_play_views_still_gate_back_on_undo_history():
+    hw, pal, game, screen = _setup("travel")
+    screen.draw(hw, game, pal)
+    ids = [b.id for b in screen.buttons]
+    assert ("back",) not in ids and ("setup_back",) not in ids

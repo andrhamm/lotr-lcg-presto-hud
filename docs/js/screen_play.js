@@ -267,8 +267,12 @@ export class ScreenPlay {
     const cy = CTA_Y + CTA_H / 2;
     const fwdX = 480 - MARGIN - NAV_W;
 
-    if (game.canUndo()) {
-      const back = new Button(["back"], MARGIN, CTA_Y, NAV_W, CTA_H);
+    // Quest Setup has no undo history - it is the first screen of a game -
+    // but it is also the last point where the scenario and difficulty can
+    // still be changed. Its Back leaves the game rather than undoing a move.
+    const backId = game.view === "quest_setup" ? ["setup_back"] : ["back"];
+    if (game.view === "quest_setup" || game.canUndo()) {
+      const back = new Button(backId, MARGIN, CTA_Y, NAV_W, CTA_H);
       bevel(ctx, back.x, back.y, back.w, back.h, pal.btn, false, 3);
       arrowLeft(ctx, MARGIN + NAV_W / 2, cy, ARROW, pal.tan);
       this.buttons.push(back);
@@ -829,6 +833,12 @@ export class ScreenPlay {
     if (k === "open_card_modal") {
       // Custom games have no scenario/stages - nothing to show.
       return game.stages.length ? ["modal", new QuestCardModal(game)] : null;
+    }
+    if (k === "setup_back") {
+      // Back to the difficulty picker for the chosen scenario. Nothing to
+      // undo: no move has been made, and preloadScenario re-runs on the way
+      // back in.
+      return ["goto", "scenario_options"];
     }
     if (k === "flip_to_b") {
       // Mirrors advanceView's setup_game -> round-1 branch (custom-quest

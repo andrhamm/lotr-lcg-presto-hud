@@ -323,8 +323,13 @@ class ScreenPlay:
         cy = CTA_Y + CTA_H // 2
         fwd_x = 480 - MARGIN - NAV_W
 
-        if game.can_undo():
-            back = Button(("back",), MARGIN, CTA_Y, NAV_W, CTA_H)
+        # Quest Setup has no undo history - it is the first screen of a game -
+        # but it is also the last point where the scenario and difficulty can
+        # still be changed. Its Back leaves the game rather than undoing a
+        # move, so it carries its own id.
+        back_id = ("setup_back",) if game.view == "quest_setup" else ("back",)
+        if game.view == "quest_setup" or game.can_undo():
+            back = Button(back_id, MARGIN, CTA_Y, NAV_W, CTA_H)
             bevel(d, pal, back.x, back.y, back.w, back.h, pal.btn, t=3)
             arrow_left(d, pal, MARGIN + NAV_W // 2, cy, ARROW, pal.tan)
             self.buttons.append(back)
@@ -897,6 +902,12 @@ class ScreenPlay:
                 return None    # custom game: no scenario, nothing to show
             from ui.modals import QuestCardModal
             return ("modal", QuestCardModal(game))
+        if k == "setup_back":
+            # Back to the difficulty picker for the chosen scenario, so a
+            # mis-picked scenario or mode can still be changed. Nothing to
+            # undo here: no move has been made yet, and preload_scenario is
+            # re-run on the way back in.
+            return ("goto", "scenario_options")
         if k == "flip_to_b":
             # Mirrors advance_view's setup_game -> round-1 branch (custom-quest
             # path), but for a scenario game: flip 1A -> 1B first, then the
