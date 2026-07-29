@@ -188,14 +188,22 @@ export class ScreenPlay {
     }
     const bottom = yy - FLOW_GAP;
 
+    // Both arms are centred on the TEXT they point at, which they were not: a
+    // BODY line at y is 16px tall, so its centre is y+8 and a 2px rail centred
+    // there starts at y+7. The bottom arm sat in the gap between the last rung
+    // and the exit line, pointing at neither. It belongs to the exit line -
+    // "Repeat until ..." is the loop's exit and the arm wraps back up from it.
+    const exitY = bottom + FLOW_GAP;
     const gx = 20;
-    rect(ctx, gx, top + 6, 2, Math.max(2, bottom - top - 6), pal.border_gold);
-    rect(ctx, gx, bottom, FLOW_X - gx - 8, 2, pal.border_gold);
-    rect(ctx, gx, top + 6, FLOW_X - gx - 8, 2, pal.border_gold);
+    const armTop = top + 7, armBot = exitY + 7;
+    rect(ctx, gx, armTop, 2, Math.max(2, armBot - armTop), pal.border_gold);
+    rect(ctx, gx, armBot, FLOW_X - gx - 8, 2, pal.border_gold);
+    rect(ctx, gx, armTop, FLOW_X - gx - 8, 2, pal.border_gold);
     const ax = FLOW_X - 8;
     ctx.fillStyle = pal.border_gold;
     ctx.beginPath();
-    ctx.moveTo(ax, top + 1); ctx.lineTo(ax, top + 13); ctx.lineTo(ax + 9, top + 7);
+    ctx.moveTo(ax, armTop - 5); ctx.lineTo(ax, armTop + 7);
+    ctx.lineTo(ax + 9, armTop + 1);
     ctx.closePath(); ctx.fill();
 
     for (const line of wrapText(spec.exit, BODY, full - 24, measureText)) {
@@ -214,13 +222,28 @@ export class ScreenPlay {
     // and 7.3 lets a player act.
     if (game.view === "combat_player") notes.push(COMBAT_LAST_CHANCE);
     if (game.sailing && SHIP_FLOW_NOTES[game.view]) notes.push(SHIP_FLOW_NOTES[game.view]);
+    // The closing note gets a treatment too. It used to be bare dim text under
+    // the diagram - "just text in the void" - which left the line a player is
+    // most likely to act on as the least marked thing on screen. `note_kind`
+    // says which it is: a rule the game applies to you (framework, red) or
+    // advice you may act on (tip, gold).
+    //
+    // A BAR, not a filled band. The two combat views have 8px of headroom and
+    // a filled band costs 16-20 more, which would mean cutting a cited rule to
+    // make room - and the note is a footnote to the diagram, not a second
+    // framing statement, so it earns the lighter weight anyway.
     let lastNoteY = yy;
+    const noteTop = yy;
     for (const para of notes) {
-      for (const line of wrapText(para, BODY, full, measureText)) {
-        textLeft(ctx, line, MARGIN, yy, BODY, pal.dim);
+      for (const line of wrapText(para, BODY, full - 14, measureText)) {
+        textLeft(ctx, line, MARGIN + 14, yy, BODY, pal.dim);
         lastNoteY = yy;
         yy += FLOW_LINE;
       }
+    }
+    if (notes.length) {
+      rect(ctx, MARGIN, noteTop, 4, lastNoteY + 16 - noteTop,
+           spec.note_kind === "framework" ? pal.red : pal.border_gold);
     }
     if (flavour) {
       icons.drawIcon(ctx, flavour[0], 480 - MARGIN - flavour[0][0],
@@ -273,7 +296,10 @@ export class ScreenPlay {
     // reserved for hints while the phase view before each drew the same idea
     // in green. The leadership medallion goes with it: the bar already says
     // it, which is why the label rows were dropped in the first place.
-    notePanel(ctx, MARGIN, bandTop, w, lines, BODY, 0, false, pal.green);
+    // pen=tan: this is guidance, the same as every phase view's band, and
+    // notePanel's default `muted` made the action windows read a tier quieter
+    // than the screen the player just came from.
+    notePanel(ctx, MARGIN, bandTop, w, lines, BODY, 0, false, pal.green, pal.tan);
     // The window hands off to the NEXT step, so the CTA names it - the same
     // "Next: X" every phase view uses.
     this._cta(ctx, game, `Next: ${VIEW_LABELS[game.nextPhaseView()]}`, ["advance"]);

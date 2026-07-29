@@ -162,6 +162,8 @@ LOOP_FLOW = {
              "in player order, first player first"),
         ],
         "exit": "Repeat until every player has been active",
+        # A rule about how the loop works, not advice: framework.
+        "note_kind": "framework",
         "note": "Only actions rotate. Responses fire on their own trigger.",
     },
     "enc_checks": {
@@ -175,6 +177,9 @@ LOOP_FLOW = {
             ("Each remaining player does the same", False, None),
         ],
         "exit": "Repeat until no enemy in staging can engage anyone",
+        # Strategy, not a rule - nothing in RR says this, it is the
+        # consequence a player should plan around: tip.
+        "note_kind": "tip",
         "note": "Higher threat pulls bigger enemies.",
     },
     "combat_enemy": {
@@ -196,6 +201,9 @@ LOOP_FLOW = {
         # Trimmed to two lines: a third ran the view past the nav rule. The
         # half that survives is the non-obvious one - defence reduces damage
         # everywhere else in the game, and here it does not.
+        #
+        # States what the rules do to you, not what to do about it: framework.
+        "note_kind": "framework",
         "note": "Undefended: all damage hits one hero, and defence does not "
                 "reduce it.",
     },
@@ -215,6 +223,8 @@ LOOP_FLOW = {
             ("Determine combat damage", True, None),
         ],
         "exit": "Repeat until no more attacks are declared",
+        # The only note here is COMBAT_LAST_CHANCE, which is advice: tip.
+        "note_kind": "tip",
         "note": None,
     },
 }

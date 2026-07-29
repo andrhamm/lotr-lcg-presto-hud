@@ -188,7 +188,7 @@ def band_line_h(scale=BODY):
 
 
 def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None,
-               accent=None):
+               accent=None, pen=None):
     """Distinct style for phase reminder messages: dark panel, gold edge,
     muted text, and (by default) the hobbit-pipe hint medallion on the left.
     Accepts a string or list of paragraphs; each is word-wrapped to the usable
@@ -198,7 +198,12 @@ def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None,
     vocabulary - red happens anyway, green is your window, gold is a hint -
     and it belongs to the meaning of the content, not to the widget that
     happens to draw it. phase_block owns red/green for phase copy; this lets a
-    band keep note_panel's paragraph wrapping while still saying green.""" 
+    band keep note_panel's paragraph wrapping while still saying green.
+
+    `pen` overrides the ink. The default is `muted`, which suits a hint;
+    guidance copy is body text and reads `tan`, the same as phase_block's, so
+    a band that is guidance passes it rather than looking like a second
+    tier of importance.""" 
     from ui import icons as _icons
     if icon is None:
         icon = _icons.PIPE
@@ -219,7 +224,9 @@ def note_panel(d, pal, x, y, w, text, scale=BODY, reserve_right=0, icon=None,
         _icons.draw(d, icon, x + 10, y + BAND_PAD, pal.gold)  # top-left, not centered
     ty = y + BAND_PAD
     for s in lines:
-        text_left(d, pal, s, x + 12 + gutter, ty, scale, pal.muted)
+        # x + 14, matching phase_block. These sat 2px apart for no reason.
+        text_left(d, pal, s, x + 14 + gutter, ty, scale,
+                  pen if pen is not None else pal.muted)
         ty += lh
     return h
 
@@ -247,15 +254,24 @@ def phase_block(d, pal, x, y, w, sections, reserve_right=0):
         + BAND_PAD * (len(laid) - 1)
     d.set_pen(pal.card_hi)
     d.rectangle(x, y, w, h)
+    # The bars TILE the left edge: together they cover the box's full height,
+    # and the seam between them is where framework ends and window begins.
+    # They used to span only their own text run, so they floated with 6px of
+    # background above and below - which read as a different element from
+    # note_panel's full-height bar, on screens a player sees one after the
+    # other. A section's bar owns its share of the padding, not just its type.
     ty = y + BAND_PAD
-    for kind, lines, sec_h in laid:
+    for i, (kind, lines, sec_h) in enumerate(laid):
+        bar_top = y if i == 0 else ty - BAND_PAD // 2
+        bar_bot = (y + h if i == len(laid) - 1
+                   else ty + sec_h + BAND_PAD - BAND_PAD // 2)
         # The accent bar alone says which kind this is - no label row. Red =
         # happens whether or not you act; green = your window to act. That
         # pairing is taught in Settings -> Help, and dropping the words buys
         # back ~20px on every phase screen, which is the space that used to
         # get taken out of the type.
         d.set_pen(pal.red if kind == "framework" else pal.green)
-        d.rectangle(x, ty, 4, sec_h)
+        d.rectangle(x, bar_top, 4, bar_bot - bar_top)
         ly = ty
         for s in lines:
             text_left(d, pal, s, x + 14, ly, BODY, pal.tan)

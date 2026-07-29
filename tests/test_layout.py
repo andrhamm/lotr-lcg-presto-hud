@@ -219,6 +219,14 @@ def test_l8_content_bands_start_on_the_content_line(scene):
 _GOLD_OK = {
     "play_quest_sailing": "genuinely a hint about a control - this quest has "
                           "no sailing keyword, here is where to enable it",
+    # Closing notes that are strategy rather than rules. Their siblings
+    # (planning, combat_enemy) state what the game does to you and take the
+    # red bar instead, which is the distinction this allow-list exists to
+    # keep honest - gold has to mean "you may act on this", not "leftover".
+    "play_enc_checks": "the closing note is strategy - 'higher threat pulls "
+                       "bigger enemies' is nowhere in the rules",
+    "play_combat_player": "the closing note is advice - lower threat now or "
+                          "refresh may eliminate",
 }
 
 
@@ -303,3 +311,71 @@ def test_every_phase_view_states_framework_or_window(scene):
     assert bars & {pal.red, pal.green, pal.border_gold}, (
         "%s guides the player but draws no accent bar, so it never says "
         "whether this happens anyway or is the player's window" % scene)
+
+
+def test_the_two_band_widgets_draw_the_same_element():
+    """note_panel and phase_block call themselves semantic siblings, and a
+    player meets them one screen after the other - a phase view then its
+    action window. They disagreed three ways at once: the bar spanned the full
+    box in one and floated 6px inset in the other, the ink was tan in one and
+    muted in the other, and the text sat 2px apart.
+    """
+    from tests.fake_hardware import FakeHardware
+    from ui.theme import Palette, BODY
+    from ui.widgets import note_panel, phase_block
+
+    def draw(fn):
+        hw = FakeHardware()
+        pal = Palette(hw.display)
+        fn(hw.display, pal)
+        return hw.display.calls
+
+    note = draw(lambda d, pal: note_panel(d, pal, 8, 150, 464, ["One line here."],
+                                          BODY, 0, False, pal.green, pal.tan))
+    block = draw(lambda d, pal: phase_block(d, pal, 8, 150, 464,
+                                            [("window", "One line here.")]))
+
+    def bar(calls):
+        return next((c[2], c[4]) for c in calls if c[0] == "rect" and c[3] == 4)
+
+    def body(calls):
+        return next((c[2], c[5]) for c in calls if c[0] == "text" and str(c[1]).strip()
+                    and c[5] != (34, 30, 24))          # skip the drop shadow
+
+    assert bar(note) == bar(block), (
+        "the accent bar sits differently: note_panel %s vs phase_block %s"
+        % (bar(note), bar(block)))
+    assert body(note) == body(block), (
+        "body text differs in x or ink: note_panel %s vs phase_block %s"
+        % (body(note), body(block)))
+
+
+@pytest.mark.parametrize("scene", PLAY_SCENES)
+def test_accent_bars_cover_their_box(scene):
+    """A bar marks the box it is in, so the bars tile its full height.
+
+    Half-height bars floating in a filled box is what made the same element
+    look like two different ones from view to view.
+    """
+    from ui.screen_play import CONTENT_Y, NAV_RULE_Y
+    from ui.theme import Palette
+    from tests.fake_hardware import FakeHardware
+    pal = Palette(FakeHardware().display)
+    accents = {pal.red, pal.green, pal.border_gold}
+    hw, _ = SCENES[scene]()
+    boxes = [(c[2], c[4]) for c in hw.display.calls
+             if c[0] == "rect" and c[3] > 300 and c[4] >= 24
+             and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y and c[5] == pal.card_hi]
+    bars = [(c[2], c[4]) for c in hw.display.calls
+            if c[0] == "rect" and c[3] == 4 and c[5] in accents
+            and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y]
+    for by, bh in boxes:
+        inside = sorted((y, h) for y, h in bars if by <= y < by + bh)
+        if not inside:
+            continue                      # a box with no bar is another rule
+        assert inside[0][0] == by, (
+            "%s: box at y=%d starts before its first bar (y=%d)"
+            % (scene, by, inside[0][0]))
+        assert inside[-1][0] + inside[-1][1] == by + bh, (
+            "%s: box at y=%d..%d, bars stop at %d"
+            % (scene, by, by + bh, inside[-1][0] + inside[-1][1]))

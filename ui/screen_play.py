@@ -217,8 +217,11 @@ class ScreenPlay:
         # medallion goes with it: the design system dropped the FRAMEWORK /
         # YOUR WINDOW label rows because the bar already says it, and a glyph
         # restating the same thing is the same redundancy in another form.
+        # pen=tan: this is guidance, the same as every phase view's band, and
+        # note_panel's default `muted` made the action windows read a tier
+        # quieter than the screen the player just came from.
         note_panel(d, pal, MARGIN, band_top, w, lines, BODY, 0, False,
-                   accent=pal.green)
+                   accent=pal.green, pen=pal.tan)
         # The window hands off to the NEXT step, so the CTA names it - the same
         # "Next: X" every phase view uses, which the nav bar renders as the
         # NEXT PHASE kicker over the destination.
@@ -296,14 +299,26 @@ class ScreenPlay:
             yy += self.FLOW_GAP
         bottom = yy - self.FLOW_GAP
 
-        # 3. the loop arrow, sized to the rungs it actually spans
+        # 3. the loop arrow, sized to the rungs it actually spans.
+        #
+        # Both arms are centred on the TEXT they point at, which they were
+        # not: a BODY line at y is 16px tall, so its centre is y+8 and a 2px
+        # rail centred there starts at y+7. The top arm sat at top+6 (1px
+        # high) and the bottom arm at `bottom`, which is the gap between the
+        # last rung and the exit line - 13px below one and 9px above the
+        # other, pointing at neither.
+        #
+        # The bottom arm belongs to the exit line: "Repeat until ..." is the
+        # loop's exit condition and the arm is what wraps from it back up.
+        exit_y = bottom + self.FLOW_GAP
         gx = 20
+        arm_top, arm_bot = top + 7, exit_y + 7
         d.set_pen(pal.border_gold)
-        d.rectangle(gx, top + 6, 2, max(2, bottom - top - 6))
-        d.rectangle(gx, bottom, self.FLOW_X - gx - 8, 2)
-        d.rectangle(gx, top + 6, self.FLOW_X - gx - 8, 2)
+        d.rectangle(gx, arm_top, 2, max(2, arm_bot - arm_top))
+        d.rectangle(gx, arm_bot, self.FLOW_X - gx - 8, 2)
+        d.rectangle(gx, arm_top, self.FLOW_X - gx - 8, 2)
         ax = self.FLOW_X - 8
-        d.triangle(ax, top + 1, ax, top + 13, ax + 9, top + 7)
+        d.triangle(ax, arm_top - 5, ax, arm_top + 7, ax + 9, arm_top + 1)
 
         # 4. exit condition, then the legend, then the note
         for line in wrap_text(spec["exit"], BODY, full - 24, d.measure_text):
@@ -324,12 +339,28 @@ class ScreenPlay:
             notes.append(COMBAT_LAST_CHANCE)
         if game.sailing and game.view in SHIP_FLOW_NOTES:
             notes.append(SHIP_FLOW_NOTES[game.view])
+        # The closing note gets a treatment too. It used to be bare dim text
+        # under the diagram - "just text in the void" - which left the line a
+        # player is most likely to act on as the least marked thing on screen.
+        # `note_kind` says which it is: a rule the game applies to you
+        # (framework, red) or advice you may act on (tip, gold).
+        #
+        # A BAR, not a filled band. The two combat views have 8px of headroom
+        # and a filled band costs 16-20 more, which would mean cutting a cited
+        # rule to make room - and the note is a footnote to the diagram, not a
+        # second framing statement, so it earns the lighter of the two weights
+        # anyway. The bar is what carries the meaning either way.
         last_note_y = yy
+        note_top = yy
         for para in notes:
-            for line in wrap_text(para, BODY, full, d.measure_text):
-                text_left(d, pal, line, MARGIN, yy, BODY, pal.dim)
+            for line in wrap_text(para, BODY, full - 14, d.measure_text):
+                text_left(d, pal, line, MARGIN + 14, yy, BODY, pal.dim)
                 last_note_y = yy
                 yy += self.FLOW_LINE
+        if notes:
+            d.set_pen(pal.red if spec.get("note_kind") == "framework"
+                      else pal.border_gold)
+            d.rectangle(MARGIN, note_top, 4, last_note_y + 16 - note_top)
         if flavour:
             icons.draw(d, flavour[0], 480 - MARGIN - len(flavour[0]),
                        last_note_y - 2, flavour[1])

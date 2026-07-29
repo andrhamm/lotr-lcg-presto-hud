@@ -204,8 +204,10 @@ export function bandLineH(scale = BODY) { return 10 * scale + 4; }
 // `accent` overrides the left bar's colour, because the BAR is the vocabulary
 // - red happens anyway, green is your window, gold is a hint - and it belongs
 // to the meaning of the content, not to the widget that draws it.
+// `pen` overrides the ink. The default `muted` suits a hint; guidance copy is
+// body text and reads `tan`, the same as phaseBlock's.
 export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon,
-                          accent) {
+                          accent, pen) {
   const mask = icon === undefined ? icons.PIPE : icon;
   const isz = mask ? mask[0] : 0;
   const gutter = mask !== false && mask ? isz + 14 : 0;
@@ -220,7 +222,8 @@ export function notePanel(ctx, x, y, w, text, scale = 2, reserveRight = 0, icon,
   if (gutter) icons.drawIcon(ctx, mask, x + 10, y + BAND_PAD, pal.gold);  // top-left, not centered
   let ty = y + BAND_PAD;
   for (const s of lines) {
-    textLeft(ctx, s, x + 12 + gutter, ty, scale, pal.muted);
+    // x + 14, matching phaseBlock. These sat 2px apart for no reason.
+    textLeft(ctx, s, x + 14 + gutter, ty, scale, pen ?? pal.muted);
     ty += lh;
   }
   return h;
@@ -242,18 +245,27 @@ export function phaseBlock(ctx, x, y, w, sections, reserveRight = 0) {
   const h = 2 * BAND_PAD + laid.reduce((s, sec) => s + sec.h, 0)
           + BAND_PAD * (laid.length - 1);
   rect(ctx, x, y, w, h, pal.card_hi);
+  // The bars TILE the left edge: together they cover the box's full height,
+  // and the seam between them is where framework ends and window begins. They
+  // used to span only their own text run, so they floated with 6px of
+  // background above and below - a different element from notePanel's
+  // full-height bar, on screens a player sees one after the other.
   let ty = y + BAND_PAD;
-  for (const sec of laid) {
+  laid.forEach((sec, i) => {
+    const barTop = i === 0 ? y : ty - Math.floor(BAND_PAD / 2);
+    const barBot = i === laid.length - 1
+      ? y + h : ty + sec.h + BAND_PAD - Math.floor(BAND_PAD / 2);
     // The accent bar alone says which kind this is - no label row. Red =
     // happens whether or not you act; green = your window to act. That
     // pairing is taught in Settings -> Help, and dropping the words buys back
     // ~20px on every phase screen, which is the space that used to get taken
     // out of the type.
-    rect(ctx, x, ty, 4, sec.h, sec.kind === "framework" ? pal.red : pal.green);
+    rect(ctx, x, barTop, 4, barBot - barTop,
+         sec.kind === "framework" ? pal.red : pal.green);
     let ly = ty;
     for (const s of sec.lines) { textLeft(ctx, s, x + 14, ly, BODY, pal.tan); ly += bandLineH(); }
     ty += sec.h + BAND_PAD;
-  }
+  });
   return h;
 }
 
