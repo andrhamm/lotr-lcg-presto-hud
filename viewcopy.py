@@ -320,10 +320,23 @@ SAILING = {
 }
 
 QUEST_SETUP = {
-    "none": "No setup instructions for this stage.",
-    # "banner" is gone: the scroll ribbon it filled was removed. It repeated
-    # the header, which already says QUEST SETUP in DISPLAY.
-    "flip": "Flip to Side B  ->  %d qp",
+    # The framework band, not a text dump. The card's Setup text used to be
+    # printed straight onto this screen; it now lives one tap away behind
+    # "View quest card", where a player reads it on the card that prints it.
+    # This screen's job is to say what to DO, which is what a framework band
+    # is for everywhere else in the app.
+    # No stage number or card name in these: the screen already shows both,
+    # in amber LABEL and DISPLAY gold, 20px above. Repeating them is the same
+    # fault the Quest Cards heading had.
+    "resolve": "Resolve the Setup text on this card.",
+    "none": "This card has no Setup text.",
+    "then_flip": "Then flip to side B, which has %d quest points.",
+    "view": "View quest card",
+    # An ACTION cta, so single-line with no NEXT PHASE kicker - the same shape
+    # as "Begin Round 1". It carried "  ->  %d qp" before, which crammed a
+    # fact into a button label; the quest points are stated in the copy above
+    # instead, where there is room to say what they are.
+    "flip": "Flip to Side B",
 }
 
 CONFIRM = {

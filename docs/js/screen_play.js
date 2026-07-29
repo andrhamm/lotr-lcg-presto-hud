@@ -635,33 +635,26 @@ export class ScreenPlay {
     const cardName = truncateText(aFace.name ?? "", DISPLAY, 480 - 2 * MARGIN);
     textCenter(ctx, cardName, 240, nameY, DISPLAY, pal.gold);
 
-    // The standard notePanel treatment, like every other reminder in the app.
-    // This used to be a bespoke "scroll": a double gold frame around a filled
-    // gold ribbon reading "QUEST SETUP: resolve now". Two problems. It was
-    // the only element in the app drawn that way, so it read as a different
-    // product rather than as emphasis. And the ribbon repeated the header,
-    // which already says QUEST SETUP in DISPLAY.
-    const tipX = MARGIN, tipW = 480 - 2 * MARGIN, tipY = nameY + 30;
-    const raw = aFace.text;
-    const body = (raw === null || raw === undefined || raw === "")
-      ? QUEST_SETUP.none : raw;
-    const maxLines = 6;
-    const usable = tipW - 16 - 12 - (icons.PIPE[0] + 14);
-    let lines = wrapText(body, BODY, usable);
-    if (lines.length > maxLines) {
-      lines = lines.slice(0, maxLines);
-      lines[maxLines - 1] = truncateText(`${lines[maxLines - 1]} ..`, BODY, usable);
-    }
-    notePanel(ctx, tipX, tipY, tipW, lines);
+    // Framework treatment, like every other "this happens anyway" band in the
+    // app: say what to DO, and let the card's own text live one tap away
+    // behind View quest card. Printing the setup text here made this screen a
+    // text dump with a button under it, duplicating a card the player can
+    // already open. No stage number or card name in the copy either - the
+    // screen shows both 20px above.
+    const lead = aFace.text ? QUEST_SETUP.resolve : QUEST_SETUP.none;
+    phaseBlock(ctx, MARGIN, nameY + 30, 480 - 2 * MARGIN, [
+      { kind: "framework",
+        text: [lead, QUEST_SETUP.then_flip.replace("%d", card.questPoints)] },
+    ]);
 
     // Read-only card modal (M4-B) - see onButton; null for custom games
     // (no scenario loaded, nothing to show).
     const cardBtn = new Button(["open_card_modal"], MARGIN, 358, 480 - 2 * MARGIN, 44);
     bevel(ctx, cardBtn.x, cardBtn.y, cardBtn.w, cardBtn.h, pal.btn);
-    textCenter(ctx, "View quest card", 240, cardBtn.y + 14, BODY, pal.tan);
+    textCenter(ctx, QUEST_SETUP.view, 240, cardBtn.y + 14, BODY, pal.tan);
     this.buttons.push(cardBtn);
 
-    this._cta(ctx, game, `Flip to Side B  ->  ${card.questPoints} qp`, ["flip_to_b"]);
+    this._cta(ctx, game, QUEST_SETUP.flip, ["flip_to_b"]);
   }
 
   _drawTravel(ctx, game) {

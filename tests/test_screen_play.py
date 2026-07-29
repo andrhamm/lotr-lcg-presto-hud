@@ -648,8 +648,17 @@ def test_quest_setup_shows_stage_and_setup_text():
     texts = _texts(hw)
     assert "STAGE 1A" in texts
     assert any("Flies and Spiders" in t for t in texts)
-    assert any("Setup: do the thing." in t for t in texts)
-    assert any("Flip to Side B" in t and "8 qp" in t for t in texts)
+    # The card's Setup text is NOT printed here any more. This screen says
+    # what to DO; the text itself lives one tap away on the card that prints
+    # it, which the player can open with "View quest card".
+    assert not any("Setup: do the thing." in t for t in texts)
+    joined = " ".join(texts)
+    assert "Resolve the Setup text on this card." in joined
+    assert "View quest card" in joined
+    assert "8 quest points" in joined      # stated in the copy, not the button
+    # An ACTION cta: single line, no NEXT PHASE kicker, and no fact crammed in
+    assert "Flip to Side B" in texts
+    assert not any("qp" in t and "Flip" in t for t in texts)
 
 
 def test_quest_setup_no_setup_text_shows_fallback():
@@ -659,7 +668,10 @@ def test_quest_setup_no_setup_text_shows_fallback():
                   {"side": "B", "name": "x", "text": None}]}]}]
     game.preload_scenario(_QS_SCN, stages)
     screen.draw(hw, game, pal)
-    assert any("No setup instructions for this stage." in t for t in _texts(hw))
+    assert any("This card has no Setup text." in t for t in _texts(hw))
+    # Still offers the card: a player may want to read side A's story even
+    # when it carries no Setup instructions.
+    assert any("View quest card" in t for t in _texts(hw))
 
 
 def test_travel_no_location_shows_framework_and_travel_button():

@@ -671,36 +671,26 @@ class ScreenPlay:
                                   d.measure_text)
         text_center(d, pal, card_name, 240, name_y, DISPLAY, pal.gold)
 
-        # The standard note_panel treatment, like every other reminder in the
-        # app. This used to be a bespoke "scroll": a double gold frame around
-        # a filled gold ribbon reading "QUEST SETUP: resolve now". Two
-        # problems. It was the only element in the app drawn that way, so it
-        # read as a different product rather than as emphasis. And the ribbon
-        # repeated the header, which already says QUEST SETUP in DISPLAY -
-        # the screen announced itself twice and neither said it louder.
-        #
-        # The emphasis it was reaching for is carried by position and by the
-        # gold-framed card icon: this panel is the only content on the screen.
-        tip_x, tip_w, tip_y = MARGIN, 480 - 2 * MARGIN, name_y + 30
-        raw = a_face.get("text")
-        body = raw if raw else QUEST_SETUP["none"]
-        max_lines = 6
-        usable = tip_w - 16 - 12 - (len(icons.PIPE) + 14)
-        lines = wrap_text(body, BODY, usable, measure=d.measure_text)
-        if len(lines) > max_lines:
-            lines = lines[:max_lines]
-            lines[max_lines - 1] = truncate_text(lines[max_lines - 1] + " ..",
-                                                 BODY, usable, d.measure_text)
-        tip_h = note_panel(d, pal, tip_x, tip_y, tip_w, lines)
+        # Framework treatment, like every other "this happens anyway" band in
+        # the app: say what to DO, and let the card's own text live one tap
+        # away behind View quest card. Printing the setup text here made this
+        # screen a text dump with a button under it, and duplicated a card the
+        # player can already open.
+        lead = (QUEST_SETUP["resolve"] if a_face.get("text")
+                else QUEST_SETUP["none"])
+        phase_block(d, pal, MARGIN, name_y + 30, 480 - 2 * MARGIN, [
+            ("framework", [lead,
+                           QUEST_SETUP["then_flip"] % card["questPoints"]]),
+        ])
 
         # Read-only card modal (M4-B) - see on_button; null for custom games
         # (no scenario loaded, nothing to show).
         card_btn = Button(("open_card_modal",), MARGIN, 358, 480 - 2 * MARGIN, 44)
         bevel(d, pal, card_btn.x, card_btn.y, card_btn.w, card_btn.h, pal.btn)
-        text_center(d, pal, "View quest card", 240, card_btn.y + 14, BODY, pal.tan)
+        text_center(d, pal, QUEST_SETUP["view"], 240, card_btn.y + 14, BODY, pal.tan)
         self.buttons.append(card_btn)
 
-        self._cta(d, pal, game, QUEST_SETUP["flip"] % card["questPoints"], ("flip_to_b",))
+        self._cta(d, pal, game, QUEST_SETUP["flip"], ("flip_to_b",))
 
     def _draw_confirm_all(self, d, pal, game, y):
         """One-tap 'everyone's commit is reviewed' button for the commit view -
