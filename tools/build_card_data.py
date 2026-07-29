@@ -584,6 +584,16 @@ def build_outputs(stream, meta=None, enrichment=None, extra_rows=None):
         packs[slug] = {"pack": player_name[slug], "cards": by_type}
         players_index.append({"slug": slug, "name": player_name[slug], "cardCount": len(group)})
 
+    # The two committed distillations. Both are our own words compiled from
+    # printed card text, live in the repo, and are merged in this same pass -
+    # nothing here fetches (see CLAUDE.md: prefer committing derived output to
+    # re-fetching it at build time).
+    adv_hits = merge_advancement(scenarios, _load_distilled(ADVANCEMENT_FILE))
+    locx_hits = merge_location_x(scenarios, _load_distilled(LOCATION_X_FILE))
+    if adv_hits or locx_hits:
+        print("build_card_data: merged %d stage conditions and %d location X "
+              "formulas" % (adv_hits, locx_hits))
+
     # Provenance (Task 3, Step 2): only claim Hall of Beorn as a source when
     # enrichment was actually merged above - an absent/corrupt enrichment
     # file must not leave a stale credit behind (see _load_enrichment).
@@ -621,6 +631,77 @@ def _load_enrichment(path):
         return data if isinstance(data.get("scenarios"), dict) else None
     except Exception:
         return None
+
+ADVANCEMENT_FILE = os.path.join(os.path.dirname(__file__), "data",
+                                "advancement_distilled.json")
+LOCATION_X_FILE = os.path.join(os.path.dirname(__file__), "data",
+                               "location_dynamic_distilled.json")
+
+def _load_distilled(path):
+    """Best-effort load of one of the committed distillations. Same posture as
+    _load_enrichment: absent or corrupt degrades to {} rather than failing a
+    catalog build. The Progress screen falls back to showing no sentence and
+    no formula, which is the pre-distillation behaviour."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def merge_advancement(scenarios, distilled):
+    """Attach each stage card's distilled condition, keyed slug::stage::name.
+
+    The name comes from whichever face carries the text, B first then A --
+    the same rule the extraction used, so the keys line up. Side A is
+    story/setup and side B carries the quest points, but plenty of stage
+    cards print their condition on only one of the two."""
+    hit = 0
+    for slug, scn in scenarios.items():
+        for stage in ((scn.get("quest") or {}).get("stages") or []):
+            for card in (stage.get("cards") or []):
+                faces = card.get("faces") or []
+                b = next((f for f in faces if f.get("side") == "B"), None)
+                a = next((f for f in faces if f.get("side") == "A"), None)
+                face = b if (b and b.get("text")) else a
+                if not face:
+                    continue
+                entry = distilled.get("%s::%s::%s"
+                                      % (slug, stage.get("stage"),
+                                         face.get("name")))
+                if not entry:
+                    continue
+                for src, dst in (("advance", "advance"), ("lose", "lose"),
+                                 ("quest_points", "questPointsFormula")):
+                    if entry.get(src):
+                        card[dst] = entry[src]
+                hit += 1
+    return hit
+
+def merge_location_x(scenarios, distilled):
+    """Attach each location face's X formula, keyed encounterSet::name::side.
+
+    Only where the face actually prints X for that stat -- the marker, not a
+    null. Guarding here as well as in build_advancement.py's validator keeps
+    a stale artifact from reintroducing a formula onto a card that prints a
+    real number."""
+    hit = 0
+    for scn in scenarios.values():
+        for card in ((scn.get("encounter") or {}).get("location") or []):
+            es = card.get("encounterSet")
+            for face in (card.get("faces") or []):
+                entry = distilled.get("%s::%s::%s"
+                                      % (es, face.get("name"),
+                                         face.get("side") or "-"))
+                if not entry:
+                    continue
+                for src, stat, dst in (
+                        ("quest_points", "questPoints", "questPointsFormula"),
+                        ("threat", "threat", "threatFormula")):
+                    if entry.get(src) and face.get(stat + "Kind") == "x":
+                        face[dst] = entry[src]
+                        hit += 1
+    return hit
 
 def needs_refresh(out_path, refresh):
     """False when `out_path` already exists and `refresh` wasn't asked for.
