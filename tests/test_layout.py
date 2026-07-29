@@ -269,3 +269,37 @@ def test_the_legend_teaches_all_three_bars():
     text = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
     assert "red = happens anyway" in text and "green = your window" in text
     assert "gold" in text, "the legend never explains the gold hint bar"
+
+
+# Play views with no accent bar, and why each is exempt.
+_NO_BAR_OK = {
+    "play_quest_resolution": "the placement table - it drops the stat strip "
+                             "and every row is a control, not guidance",
+    "play_setup": "pre-game: no phase yet, so nothing to call framework or window",
+    "play_setup_sailing": "pre-game, same as play_setup",
+}
+
+
+@pytest.mark.parametrize("scene", PLAY_SCENES)
+def test_every_phase_view_states_framework_or_window(scene):
+    """A view that guides the player says which kind of guidance it is.
+
+    The four loop views - Planning, Encounter: Checks, and both halves of
+    Combat - used to state their framing sentence as bare text, so a player
+    who had learned red = happens anyway and green = your window met four
+    screens that simply stopped saying it. Planning was among them, which is
+    the phase that is nothing BUT your window.
+    """
+    from ui.screen_play import CONTENT_Y, NAV_RULE_Y
+    from ui.theme import Palette
+    from tests.fake_hardware import FakeHardware
+    pal = Palette(FakeHardware().display)
+    if scene in _NO_BAR_OK:
+        return
+    hw, _ = SCENES[scene]()
+    bars = {c[5] for c in hw.display.calls
+            if c[0] == "rect" and c[3] == 4 and c[4] >= 12
+            and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y}
+    assert bars & {pal.red, pal.green, pal.border_gold}, (
+        "%s guides the player but draws no accent bar, so it never says "
+        "whether this happens anyway or is the player's window" % scene)

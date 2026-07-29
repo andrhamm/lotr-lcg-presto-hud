@@ -150,6 +150,10 @@ PHASE_CAPTION = {
 # window, and 5.3's window is a screen of its own.
 LOOP_FLOW = {
     "planning": {
+        # Playing allies and attachments is entirely optional: your window,
+        # green. The rotation the intro describes is the shape of that window,
+        # not something that happens to you.
+        "kind": "window",
         "intro": "In player order, each player becomes the active player once.",
         "rungs": [
             ("Active player plays any number of allies and attachments", False,
@@ -161,6 +165,8 @@ LOOP_FLOW = {
         "note": "Only actions rotate. Responses fire on their own trigger.",
     },
     "enc_checks": {
+        # The copy says it outright - "Not optional" - so red.
+        "kind": "framework",
         "intro": "Not optional. In player order, each player engages one enemy "
                  "at a time.",
         "rungs": [
@@ -172,6 +178,8 @@ LOOP_FLOW = {
         "note": "Higher threat pulls bigger enemies.",
     },
     "combat_enemy": {
+        # Enemies attack whether or not you act: framework, red.
+        "kind": "framework",
         # One line by necessity: the two-line version put the note past the
         # nav rule. Both cited facts survive - the player order, and the
         # one-per-enemy cap (6.3: each engaged enemy "will have one
@@ -192,6 +200,8 @@ LOOP_FLOW = {
                 "reduce it.",
     },
     "combat_player": {
+        # "may attack" - declaring attacks is optional, so green.
+        "kind": "window",
         # One line: the standing elimination note below needs two, and the
         # rungs already carry the scope ("1 of their engaged enemies"). The
         # modal "may" is what makes attacking optional, per the copy rules.

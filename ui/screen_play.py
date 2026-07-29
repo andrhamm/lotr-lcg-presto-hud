@@ -248,21 +248,32 @@ class ScreenPlay:
         full = 480 - 2 * MARGIN
         yy = y0
 
-        # flavour icon, top-right - kept from the prose version. Dropping it
-        # in the rebuild was a silent regression; the test caught it.
+        # Flavour icon (defence / attack), kept from the prose version -
+        # dropping it in the rebuild was a silent regression and a test guards
+        # it. It used to sit top-right on the intro row, where it reserved
+        # 30px of width. Once the intro is banded that is the difference
+        # between one line and two, and combat_enemy's intro cannot be
+        # shortened: both halves carry a cited rule (player order, and RR
+        # 6.3's one-attack-per-enemy cap). So it moves to the bottom-right,
+        # beside the closing note, which has 288px of slack on that view and
+        # 60px on the other. Drawn at the end, once `yy` is known.
         flavour = {"combat_enemy": (icons.DEFENSE, pal.green),
                    "combat_player": (icons.ATTACK, pal.tan)}.get(game.view)
-        if flavour:
-            icons.draw(d, flavour[0], 480 - MARGIN - len(flavour[0]),
-                       y0 - 2, flavour[1])
 
-        # 1. framing line: what the whole loop is, BEFORE the diagram
-        # Reserve the flavour icon's column: the intro is drawn at the same
-        # y and would otherwise run underneath it.
-        intro_w = full - (len(flavour[0]) + 10 if flavour else 0)
-        for line in wrap_text(spec["intro"], BODY, intro_w, d.measure_text):
-            text_left(d, pal, line, MARGIN, yy, BODY, pal.tan)
-            yy += self.FLOW_LINE
+
+        # 1. framing line: what the whole loop is, BEFORE the diagram.
+        #
+        # Banded like every other phase view's framing copy. These four views
+        # used to state it as bare text, so a player who had learned that red
+        # means "happens anyway" and green means "your window" met four
+        # screens that simply stopped saying it - and Planning, the phase that
+        # is nothing BUT your window, was one of them. The diagram carries its
+        # own vocabulary (the bracket loops, the purple tick marks a window);
+        # the framing sentence above it is not part of that and belongs to the
+        # phase-view vocabulary.
+        #
+        yy += phase_block(d, pal, MARGIN, yy, full,
+                          [(spec["kind"], spec["intro"])])
 
         # 2. the rungs
         ticks = any(w for _, w, _ in spec["rungs"])
@@ -313,10 +324,15 @@ class ScreenPlay:
             notes.append(COMBAT_LAST_CHANCE)
         if game.sailing and game.view in SHIP_FLOW_NOTES:
             notes.append(SHIP_FLOW_NOTES[game.view])
+        last_note_y = yy
         for para in notes:
             for line in wrap_text(para, BODY, full, d.measure_text):
                 text_left(d, pal, line, MARGIN, yy, BODY, pal.dim)
+                last_note_y = yy
                 yy += self.FLOW_LINE
+        if flavour:
+            icons.draw(d, flavour[0], 480 - MARGIN - len(flavour[0]),
+                       last_note_y - 2, flavour[1])
         return yy + 4
 
     def _cta(self, d, pal, game, label, id, fill=None, fg=None):
@@ -535,7 +551,7 @@ class ScreenPlay:
             # repetition, and the windows sit INSIDE the loop.
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
-            self._loop_flow(d, pal, game, CONTENT_Y + 6)
+            self._loop_flow(d, pal, game, CONTENT_Y)
             self._cta(d, pal, game,
                       "Next: %s" % VIEW_LABELS[game.next_phase_view()],
                       ("advance",))

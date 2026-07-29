@@ -152,18 +152,21 @@ export class ScreenPlay {
     const full = 480 - 2 * MARGIN;
     let yy = y0;
 
+    // Flavour icon (defence / attack). It used to sit top-right on the intro
+    // row, where it reserved 30px of width - once the intro is banded that is
+    // the difference between one line and two, and combat_enemy's intro
+    // cannot be shortened (both halves carry a cited rule). It moves to the
+    // bottom-right beside the closing note, drawn at the end once yy is known.
     const flavour = { combat_enemy: [icons.DEFENSE, pal.green],
                       combat_player: [icons.ATTACK, pal.tan] }[game.view];
-    if (flavour) {
-      icons.drawIcon(ctx, flavour[0], 480 - MARGIN - flavour[0][0], y0 - 2, flavour[1]);
-    }
 
-    // Reserve the flavour icon's column: the intro is drawn at the same y.
-    const introW = full - (flavour ? flavour[0][0] + 10 : 0);
-    for (const line of wrapText(spec.intro, BODY, introW, measureText)) {
-      textLeft(ctx, line, MARGIN, yy, BODY, pal.tan);
-      yy += FLOW_LINE;
-    }
+    // Framing line, banded like every other phase view's framing copy. These
+    // four views used to state it as bare text, so a player who had learned
+    // red = happens anyway and green = your window met four screens that
+    // simply stopped saying it - Planning, the phase that is nothing BUT your
+    // window, among them. The diagram has its own vocabulary (the bracket
+    // loops, the purple tick marks a window); this sentence is not part of it.
+    yy += phaseBlock(ctx, MARGIN, yy, full, [{ kind: spec.kind, text: spec.intro }]);
 
     const ticks = spec.rungs.some(r => r[1]);
     const labelW = 480 - FLOW_X - 6 - MARGIN - (ticks ? TICK_W : 0);
@@ -211,11 +214,17 @@ export class ScreenPlay {
     // and 7.3 lets a player act.
     if (game.view === "combat_player") notes.push(COMBAT_LAST_CHANCE);
     if (game.sailing && SHIP_FLOW_NOTES[game.view]) notes.push(SHIP_FLOW_NOTES[game.view]);
+    let lastNoteY = yy;
     for (const para of notes) {
       for (const line of wrapText(para, BODY, full, measureText)) {
         textLeft(ctx, line, MARGIN, yy, BODY, pal.dim);
+        lastNoteY = yy;
         yy += FLOW_LINE;
       }
+    }
+    if (flavour) {
+      icons.drawIcon(ctx, flavour[0], 480 - MARGIN - flavour[0][0],
+                     lastNoteY - 2, flavour[1]);
     }
     return yy + 4;
   }
@@ -470,7 +479,7 @@ export class ScreenPlay {
       // engagement checks, and both combat halves.
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
-      this._loopFlow(ctx, game, CONTENT_Y + 6);
+      this._loopFlow(ctx, game, CONTENT_Y);
       const nxt = (view === "planning" && game.sailing)
         ? "quest_sailing" : game.nextPhaseView();
       this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt]}`, ["advance"]);

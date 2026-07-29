@@ -1232,7 +1232,10 @@ SCENES = {
     "play_round_end": _play("round_end"),
     "log_replay": _screen("ui.screen_log", "ScreenLog", prep=_log_replay_prep),
     "play_quest_staging_can_back": _play("quest_staging", mutate=_has_undo_history),
-    "play_combat_player_can_back": _play("combat_enemy", mutate=_has_undo_history),
+    # Named for what it draws: _play("combat_enemy", ...). The old key said
+    # "combat_player" and rendered Combat: Enemy Attacks, which made the
+    # treatment audit read as though one view drew two different bars.
+    "play_combat_enemy_can_back": _play("combat_enemy", mutate=_has_undo_history),
     "play_travel_can_back": _play("travel", mutate=_has_undo_history),
     "settings": _screen("ui.screen_settings", "ScreenSettings"),
     "counter": _counter,
