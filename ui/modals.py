@@ -202,24 +202,62 @@ class LocationConfigModal:
         self.has = loc is not None
         self.pts = loc["points"] if loc else 2
         self.prog = loc["progress"] if loc else 0
+        self.name = (loc or {}).get("name")
+        self.threat = (loc or {}).get("threat") or 0
+        self.threat_formula = (loc or {}).get("threatFormula")
+        # An X with no formula has no number to show yet, and 0 would be a
+        # claim the card never made. Once the player taps "+" it is a real
+        # value like any other.
+        self.threat_blank = ((loc or {}).get("threatKind") == "x"
+                             and not self.threat)
         self.buttons = []
+
+    def _row(self, d, pal, y, label, value, key, blank=False):
+        """One editable stat. `blank` draws an empty value slot instead of a
+        number: the card prints X and nothing tells us what X is, and a 0 there
+        is a claim the card never made. A DRAWN rule rather than a typed dash -
+        at this size a dash is indistinguishable from the stepper's own "-",
+        and the device font has 82 glyphs so an em-dash is not guaranteed."""
+        text_left(d, pal, label, 30, y + 14, BODY, pal.tan)
+        stepper(d, pal, self.buttons, (key, -1), (key, 1), 260, y,
+                "" if blank else str(value), 190, 52)
+        if blank:
+            d.set_pen(pal.gold)
+            d.rectangle(340, y + 25, 30, 3)
 
     def draw(self, hw, game, pal):
         d = hw.display
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "Active Location", 240, 24, DISPLAY, pal.gold)
-        state = "%d / %d" % (self.prog, self.pts) if self.has else "none"
-        text_center(d, pal, state, 240, 80, DISPLAY, pal.tan if self.has else pal.dim)
+        text_center(d, pal, "Active Location", 240, 12, DISPLAY, pal.gold)
+        if self.name:
+            text_center(d, pal, truncate_text(self.name, BODY, 440, d.measure_text),
+                        240, 46, BODY, pal.tan)
 
-        text_left(d, pal, "Quest points", 30, 168, BODY, pal.tan)
-        stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 260, 154, str(self.pts), 190, 56)
+        self._row(d, pal, 76, "Progress", self.prog, "prog")
+        self._row(d, pal, 136, "Quest points", self.pts, "pts")
+        # Threat is the location's staging contribution, and it is what "Back
+        # to staging" has to add back. 34 of the catalog's X-printing location
+        # faces print X HERE rather than on quest points, so this is the row
+        # the X work actually shows up on.
+        self._row(d, pal, 196, "Threat", self.threat, "threat",
+                  blank=self.threat_blank)
+        y = 252
+        if self.threat_formula:
+            for ln in wrap_text("X = " + self.threat_formula, BODY, 420,
+                                d.measure_text)[:2]:
+                text_left(d, pal, ln, 30, y, BODY, pal.dim)
+                y += 22
+        elif self.threat_blank:
+            text_left(d, pal, "the card prints X and defines it elsewhere",
+                      30, y, BODY, pal.dim)
+            y += 22
 
-        none_b = Button(("none",), 30, 250, 420, 56)
+        none_b = Button(("none",), 30, max(y + 8, 296), 420, 52)
         panel(d, pal, none_b.x, none_b.y, none_b.w, none_b.h, fill=pal.btn_no, border=pal.no_fg)
         text_center(d, pal, "Set none (no active location)", none_b.x + none_b.w / 2,
-                    none_b.y + 18, BODY, pal.no_fg)
+                    none_b.y + 16, BODY, pal.no_fg)
         self.buttons.append(none_b)
 
         _footer(d, pal, self.buttons)
@@ -230,16 +268,32 @@ class LocationConfigModal:
             self.pts = max(1, min(30, self.pts + btn.id[1]))
             self.has = True
             return None
+        if k == "prog":
+            self.prog = max(0, min(99, self.prog + btn.id[1]))
+            self.has = True
+            return None
+        if k == "threat":
+            self.threat = max(0, min(30, self.threat + btn.id[1]))
+            self.threat_blank = False   # a tap makes it a real value
+            self.has = True
+            return None
         if k == "none":
             if self.game.active_location is not None:
                 self.game.log_event("Active location cleared")
             self.game.active_location = None
             return "close"
         if k == "save":
-            loc = {"points": self.pts, "progress": self.prog}
+            # Start from the EXISTING record. Replacing it wholesale used to
+            # drop the card name, its threat and the *Kind/*Formula keys -
+            # everything the picker had just filled in.
+            loc = dict(self.game.active_location or {})
+            loc["points"] = self.pts
+            loc["progress"] = self.prog
+            if self.threat or not self.threat_blank:
+                loc["threat"] = self.threat
             if loc != self.game.active_location:
-                self.game.log_event("Active location set to %d/%d progress"
-                                    % (self.prog, self.pts))
+                self.game.log_event("Active location set to %d/%d progress, "
+                                    "%d threat" % (self.prog, self.pts, self.threat))
             self.game.active_location = loc
             return "close"
         if k == "cancel":
@@ -1272,13 +1326,18 @@ class QuestingProgressModal:
         # (x=136) by construction, so there should be no real overlap to
         # arbitrate.
         quest_card_tappable = it["kind"] == "q" and bool(g.stages)
+        # The Location row's title does the same for its detail sheet - the
+        # only way to reach the location's threat, which "Back to staging"
+        # needs. Gold ink is this screen's existing hint for a tappable title.
+        loc_tappable = it["kind"] == "l"
         # 118px matches the quest_card tap target's fixed width below (and
         # the room left before the Current editor's leftmost hit-box at
         # x=136) - a real catalog side-quest name (up to ~20 chars) can
         # otherwise run into the Current/Target editors, unlike the old
         # always-short generic labels ("Quest 1A", "Location", "Side Quest 3").
         name_s = truncate_text(it["name"], BODY, 118, d.measure_text)
-        text_left(d, pal, name_s, 12, y, BODY, pal.gold if quest_card_tappable else pal.tan)
+        text_left(d, pal, name_s, 12, y, BODY,
+                  pal.gold if (quest_card_tappable or loc_tappable) else pal.tan)
         # A stage that advances on a condition has no target to edit, and a 0
         # in the Target column reads as "worth nothing" rather than "not
         # scored this way". Draw the same blank rule the location sheet uses
@@ -1300,6 +1359,8 @@ class QuestingProgressModal:
             self._icon_btn(d, pal, 400, cy, 11, "adv", ("qAdv",))
         if quest_card_tappable:
             self.buttons.append(Button(("quest_card",), 12, y, 118, self.ROW_H))
+        if loc_tappable:
+            self.buttons.append(Button(("loc_detail",), 12, y, 118, self.ROW_H))
 
     def draw(self, hw, game, pal):
         from ui.header import modal_header
@@ -1521,6 +1582,12 @@ class QuestingProgressModal:
             # main.py's loop, which checks pending_quest_card once modal is
             # None.
             g.pending_quest_card = True
+            self._log_changes()
+            return "close"
+        if k == "loc_detail":
+            # Same one-modal-at-a-time dance as "quest_card" above: close, flag,
+            # and let the router open LocationConfigModal on the next pass.
+            g.pending_location_detail = True
             self._log_changes()
             return "close"
         if k == "qAdv":

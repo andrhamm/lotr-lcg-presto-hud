@@ -241,6 +241,10 @@ export class GameState {
     // Progress modal you tapped "+ Side quest" from, instead of dropping you
     // back on the play screen. Same pending-flag pattern.
     this.pending_progress_detail = false;
+    // Set by the Progress modal's location row. A modal cannot open another
+    // modal, so the router (main.js) opens LocationConfigModal on the next
+    // tick, exactly like pending_location_pick.
+    this.pending_location_detail = false;
                                         // tap wants SideQuestPickModal opened
                                         // once the Progress-detail modal has
                                         // closed (same pending-flag pattern
@@ -1041,6 +1045,7 @@ export class GameState {
       pending_quest_card: this.pending_quest_card,
       pending_side_quest_pick: this.pending_side_quest_pick,
       pending_progress_detail: this.pending_progress_detail,
+      pending_location_detail: this.pending_location_detail,
       pending_location_pick: this.pending_location_pick,
       reminders: { ...this.reminders },
       elimination_threat: this.elimination_threat,
@@ -1091,6 +1096,7 @@ export class GameState {
     g.pending_quest_card = d.pending_quest_card ?? false;
     g.pending_side_quest_pick = d.pending_side_quest_pick ?? false;
     g.pending_progress_detail = d.pending_progress_detail ?? false;
+    g.pending_location_detail = d.pending_location_detail ?? false;
     g.pending_location_pick = d.pending_location_pick ?? null;
     g.reminders = Object.fromEntries(REMINDER_DEFS.map(dd => [dd[0], false]));
     for (const k of Object.keys(g.reminders)) {

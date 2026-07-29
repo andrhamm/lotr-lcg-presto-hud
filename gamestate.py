@@ -289,6 +289,10 @@ class GameState:
         # you back on the play screen. Same pending-flag pattern - a modal
         # cannot open another modal directly.
         self.pending_progress_detail = False
+        # Set by the Progress modal's location row. A modal cannot open another
+        # modal, so the router (main.py) opens LocationConfigModal on the next
+        # tick, exactly like pending_location_pick.
+        self.pending_location_detail = False
                                            # tap wants SideQuestPickModal
                                            # opened once the Progress-detail
                                            # modal has closed (same
@@ -1259,6 +1263,7 @@ class GameState:
             "pending_quest_card": self.pending_quest_card,
             "pending_side_quest_pick": self.pending_side_quest_pick,
             "pending_progress_detail": self.pending_progress_detail,
+            "pending_location_detail": self.pending_location_detail,
             "pending_location_pick": self.pending_location_pick,
             "reminders": dict(self.reminders),
             "refresh_applied": self.refresh_applied,
@@ -1313,6 +1318,7 @@ class GameState:
         g.pending_quest_card = d.get("pending_quest_card", False)
         g.pending_side_quest_pick = d.get("pending_side_quest_pick", False)
         g.pending_progress_detail = d.get("pending_progress_detail", False)
+        g.pending_location_detail = d.get("pending_location_detail", False)
         g.pending_location_pick = d.get("pending_location_pick", None)
         g.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         saved_rem = d.get("reminders", {})

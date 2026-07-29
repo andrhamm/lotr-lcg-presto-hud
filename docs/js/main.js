@@ -10,7 +10,7 @@ import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
          ScenarioOptionsScreen, FirstRunScreen, LegendScreen } from "./screens_other.js";
 import { EliminationModal, QuestCardModal, SideQuestPickModal,
          StageCompleteModal, ResolutionModal, LocationPickModal,
-         QuestingProgressModal } from "./screens.js";
+         QuestingProgressModal, LocationConfigModal } from "./screens.js";
 import { loadIndex, loadScenario, cyclesFor, groupByCycle, loadPlayerSideQuests,
          loadIcons, loadTips, loadLocations,
          resumePickerState } from "./quest_catalog.js";
@@ -485,6 +485,17 @@ function main() {
         modalPending -= 1;
         dirty = true;
       });
+    }
+    // The Progress modal's Location row: open the location's detail sheet.
+    // Reopening Progress afterwards is what pending_progress_detail already
+    // does for the location picker, so the player lands back where they
+    // tapped rather than on the play screen. No catalog fetch needed - the
+    // record already carries everything the sheet shows.
+    if (!modal && active === "play" && game.pending_location_detail) {
+      game.pending_location_detail = false;
+      game.pending_progress_detail = true;
+      modal = new LocationConfigModal(game);
+      dirty = true;
     }
     // Manual progress-edit overflow (QuestingProgressModal close, or the
     // quest row's "Advance" icon): same pending-flag pattern as

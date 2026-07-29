@@ -980,13 +980,18 @@ export class QuestingProgressModal {
     // left of the Current editor's leftmost hit-box (x=136) by construction,
     // so there should be no real overlap to arbitrate.
     const questCardTappable = it.kind === "q" && g.stages.length > 0;
+    // The Location row's title does the same for its detail sheet - the only
+    // way to reach the location's threat, which "Back to staging" needs. Gold
+    // ink is this screen's existing hint for a tappable title.
+    const locTappable = it.kind === "l";
     // 118px matches the quest_card tap target's fixed width below (and the
     // room left before the Current editor's leftmost hit-box at x=136) - a
     // real catalog side-quest name (up to ~20 chars) can otherwise run into
     // the Current/Target editors, unlike the old always-short generic
     // labels ("Quest 1A", "Location", "Side Quest 3").
     const nameS = truncateText(it.name, BODY, 118);
-    textLeft(ctx, nameS, 12, y, BODY, questCardTappable ? pal.gold : pal.tan);
+    textLeft(ctx, nameS, 12, y, BODY,
+             (questCardTappable || locTappable) ? pal.gold : pal.tan);
     // A stage that advances on a condition has no target to edit, and a 0 in
     // the Target column reads as "worth nothing" rather than "not scored this
     // way". Draw the same blank rule the location sheet uses and drop the
@@ -1008,6 +1013,9 @@ export class QuestingProgressModal {
     }
     if (questCardTappable) {
       this.buttons.push(new Button(["quest_card"], 12, y, 118, QuestingProgressModal.ROW_H));
+    }
+    if (locTappable) {
+      this.buttons.push(new Button(["loc_detail"], 12, y, 118, QuestingProgressModal.ROW_H));
     }
   }
 
@@ -1201,6 +1209,13 @@ export class QuestingProgressModal {
     if (k === "hd_set") {
       if (a !== g.heading) g.shiftHeading(a - g.heading, "progress view");
       return null;
+    }
+    if (k === "loc_detail") {
+      // Same one-modal-at-a-time dance as "quest_card" below: close, flag, and
+      // let the router open LocationConfigModal on the next pass.
+      g.pending_location_detail = true;
+      this._logChanges();
+      return "close";
     }
     if (k === "quest_card") {
       // The router holds one modal at a time (no stacking) - close this one
@@ -1676,6 +1691,108 @@ export class ResolutionModal {
     return null;
   }
 }
+
+// Twin of ui/modals.py LocationConfigModal. Everything about the active
+// location the player may need to correct at the table: its progress, its
+// quest points (defaulted from the card, still overridable) and its THREAT -
+// the staging contribution that "Back to staging" has to add back.
+//
+// 34 of the catalog's X-printing location faces print X for threat rather
+// than quest points, so this is the row the X work actually shows up on.
+export class LocationConfigModal {
+  constructor(game) {
+    this.game = game;
+    const loc = game.active_location;
+    this.has = loc !== null && loc !== undefined;
+    this.pts = loc ? loc.points : 2;
+    this.prog = loc ? loc.progress : 0;
+    this.name = loc?.name ?? null;
+    this.threat = loc?.threat ?? 0;
+    this.threatFormula = loc?.threatFormula ?? null;
+    // An X with no formula has no number to show yet, and 0 would be a claim
+    // the card never made. One tap on "+" makes it a real value.
+    this.threatBlank = loc?.threatKind === "x" && !this.threat;
+    this.buttons = [];
+  }
+
+  // `blank` draws an empty value slot instead of a number. A DRAWN rule rather
+  // than a typed dash: at this size a dash is indistinguishable from the
+  // stepper's own "-", and the device font has 82 glyphs so an em-dash is not
+  // guaranteed to be one of them.
+  _row(ctx, y, label, value, key, blank = false) {
+    textLeft(ctx, label, 30, y + 14, BODY, pal.tan);
+    stepper(ctx, this.buttons, [key, -1], [key, 1], 260, y,
+            blank ? "" : String(value), 190, 52);
+    if (blank) rect(ctx, 340, y + 25, 30, 3, pal.gold);
+  }
+
+  draw(ctx) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    textCenter(ctx, "Active Location", 240, 12, DISPLAY, pal.gold);
+    if (this.name) {
+      textCenter(ctx, truncateText(this.name, BODY, 440), 240, 46, BODY, pal.tan);
+    }
+    this._row(ctx, 76, "Progress", this.prog, "prog");
+    this._row(ctx, 136, "Quest points", this.pts, "pts");
+    this._row(ctx, 196, "Threat", this.threat, "threat", this.threatBlank);
+    let y = 252;
+    if (this.threatFormula) {
+      for (const ln of wrapText("X = " + this.threatFormula, BODY, 420,
+                                measureText).slice(0, 2)) {
+        textLeft(ctx, ln, 30, y, BODY, pal.dim);
+        y += 22;
+      }
+    } else if (this.threatBlank) {
+      textLeft(ctx, "the card prints X and defines it elsewhere", 30, y, BODY, pal.dim);
+      y += 22;
+    }
+    const nb = new Button(["none"], 30, Math.max(y + 8, 296), 420, 52);
+    panel(ctx, nb.x, nb.y, nb.w, nb.h, pal.btn_no, pal.no_fg);
+    textCenter(ctx, "Set none (no active location)", nb.x + nb.w / 2, nb.y + 16,
+               BODY, pal.no_fg);
+    this.buttons.push(nb);
+    footer(ctx, this.buttons);
+  }
+
+  onButton(btn) {
+    const k = btn.id[0];
+    if (k === "pts") {
+      this.pts = Math.max(1, Math.min(30, this.pts + btn.id[1]));
+      this.has = true; return null;
+    }
+    if (k === "prog") {
+      this.prog = Math.max(0, Math.min(99, this.prog + btn.id[1]));
+      this.has = true; return null;
+    }
+    if (k === "threat") {
+      this.threat = Math.max(0, Math.min(30, this.threat + btn.id[1]));
+      this.threatBlank = false;   // a tap makes it a real value
+      this.has = true; return null;
+    }
+    if (k === "none") {
+      if (this.game.active_location) this.game.logEvent("Active location cleared");
+      this.game.active_location = null;
+      return "close";
+    }
+    if (k === "save") {
+      // Start from the EXISTING record. Replacing it wholesale drops the card
+      // name, its threat and the *Kind/*Formula keys the picker filled in.
+      const loc = { ...(this.game.active_location ?? {}) };
+      loc.points = this.pts;
+      loc.progress = this.prog;
+      if (this.threat || !this.threatBlank) loc.threat = this.threat;
+      if (JSON.stringify(loc) !== JSON.stringify(this.game.active_location)) {
+        this.game.logEvent(`Active location set to ${this.prog}/${this.pts} progress, ${this.threat} threat`);
+      }
+      this.game.active_location = loc;
+      return "close";
+    }
+    if (k === "cancel") return "cancel";
+    return null;
+  }
+}
+
 
 export class QuestConfigModal {
   constructor(game) {

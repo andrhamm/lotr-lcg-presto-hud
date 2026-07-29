@@ -941,6 +941,64 @@ def test_location_pick_travel_commits_the_card_numbers_and_name():
     assert "Traveled to Old Forest Road" in game.log[-2]["text"]
 
 
+def test_progress_location_row_opens_the_detail_sheet():
+    # LocationConfigModal was unreachable dead code: nothing constructed it.
+    # The Location row's title is now its entry point, using the same
+    # close-and-flag dance as the quest row (a modal cannot open another).
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 3, "progress": 1, "name": "Tangled Grove"}
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("loc_detail",))) == "close"
+    assert game.pending_location_detail is True
+
+
+def test_location_config_save_keeps_the_card_metadata():
+    # The save handler used to REPLACE the record with {points, progress},
+    # dropping the card name, its threat and the *Kind/*Formula keys the picker
+    # had just filled in - so editing progress silently cost you the threat
+    # that "Back to staging" needs.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {
+        "points": 3, "progress": 1, "name": "Tangled Grove", "threat": 4,
+        "threatKind": "x",
+        "threatFormula": "the number of locations in the staging area"}
+    m = modals.LocationConfigModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("prog", 1)))
+    assert m.on_button(_find(m, ("save",))) == "close"
+    loc = game.active_location
+    assert loc["progress"] == 2
+    assert loc["name"] == "Tangled Grove"
+    assert loc["threat"] == 4
+    assert loc["threatKind"] == "x"
+    assert loc["threatFormula"] == "the number of locations in the staging area"
+
+
+def test_location_config_threat_starts_blank_when_x_is_undefined():
+    # 18 X-printing faces define X nowhere we can read. The value slot stays
+    # empty rather than claiming 0 - for threat especially, a wrong 0
+    # under-reports the staging total the player compares willpower against.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 5, "progress": 0, "name": "Amon Hen",
+                            "threatKind": "x"}
+    m = modals.LocationConfigModal(game)
+    m.draw(hw, game, pal)
+    assert m.threat_blank is True
+    assert "the card prints X and defines it elsewhere" in " ".join(_texts(hw))
+    # One tap makes it a real value, and it survives the save.
+    m.on_button(_find(m, ("threat", 1)))
+    assert m.threat_blank is False
+    m.on_button(_find(m, ("save",)))
+    assert game.active_location["threat"] == 1
+
+
 def test_location_pick_carries_the_x_metadata_onto_the_location():
     # A location printing X for its threat must reach the location record with
     # the marker AND the card's own definition of X, or the Progress screen has

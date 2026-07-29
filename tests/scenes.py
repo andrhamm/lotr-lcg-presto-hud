@@ -596,6 +596,35 @@ def _questing_progress_modal_condition_stage():
     return hw, m
 
 
+def _location_config_modal_formula():
+    # Threat prints X and the card says what X is: the formula sits under the
+    # stepper and must not collide with the "Set none" button below it.
+    from ui.modals import LocationConfigModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = {
+        "points": 3, "progress": 1, "name": "Tangled Grove", "threat": 4,
+        "threatKind": "x",
+        "threatFormula": "the number of locations in the staging area"}
+    m = LocationConfigModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _location_config_modal_unknown_x():
+    # Threat prints X and nothing defines it: an empty value slot, not a 0.
+    from ui.modals import LocationConfigModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_location = {"points": 5, "progress": 0, "name": "Amon Hen",
+                         "threatKind": "x"}
+    m = LocationConfigModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
 def _quest_card_modal():
     # A normal (non-branch) stage with real text on both faces (Foundations
     # of Stone stage 1) - exercises wrapped text in both SIDE A and SIDE B
@@ -1278,6 +1307,8 @@ SCENES = {
     "questing_progress_modal": _questing_progress_modal,
     "questing_progress_modal_condition_stage": _questing_progress_modal_condition_stage,
     "quest_config_modal_condition_stage": _quest_config_modal_condition_stage,
+    "location_config_modal_formula": _location_config_modal_formula,
+    "location_config_modal_unknown_x": _location_config_modal_unknown_x,
     "questing_progress_modal_no_location": _questing_progress_modal_no_location,
     "questing_progress_modal_loc_choose": _questing_progress_modal_loc_choose,
     "questing_progress_modal_loc_pts": _questing_progress_modal_loc_pts,

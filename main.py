@@ -344,6 +344,18 @@ def main():
             dirty = True
             continue
 
+        # The Progress modal's Location row: open the location's detail sheet.
+        # Reopening Progress afterwards is what pending_progress_detail already
+        # does for the location picker, so the player lands back where they
+        # tapped rather than on the play screen.
+        if modal is None and active == "play" and game.pending_location_detail:
+            from ui.modals import LocationConfigModal
+            game.pending_location_detail = False
+            game.pending_progress_detail = True
+            modal = LocationConfigModal(game)
+            dirty = True
+            continue
+
         # Manual progress-edit overflow (QuestingProgressModal close, or the
         # quest row's "Advance" icon): same pending-flag pattern as
         # pending_quest_card above - the modal that detected it had to
