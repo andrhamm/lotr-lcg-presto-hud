@@ -51,7 +51,7 @@ STEPS = [
     {"id": "7.1",  "phase": "Refresh",   "label": "7.1 Beginning of the Refresh phase",                "action_window": False},
     {"id": "7.R",  "phase": "Refresh",   "label": "7.2-7.4 Ready cards, raise threat, pass P1 token",  "action_window": True},
     {"id": "7.5",  "phase": "Refresh",   "label": "7.5 End of the Refresh phase",                      "action_window": False},
-    {"id": "8.0",  "phase": "End",       "label": "8.0 End of the round",                              "action_window": False},
+    {"id": "0.1",  "phase": "End",       "label": "0.1 End of the round",                              "action_window": False},
 ]
 
 STEP_ORDER = [s["id"] for s in STEPS]

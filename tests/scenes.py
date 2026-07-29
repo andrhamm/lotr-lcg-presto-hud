@@ -1229,6 +1229,7 @@ SCENES = {
     "play_aw_enc_optional": _aw_scene("enc_optional"),
     "play_aw_enc_checks": _aw_scene("enc_checks"),
     "play_aw_refresh": _aw_scene("refresh"),
+    "play_round_end": _play("round_end"),
     "log_replay": _screen("ui.screen_log", "ScreenLog", prep=_log_replay_prep),
     "play_quest_staging_can_back": _play("quest_staging", mutate=_has_undo_history),
     "play_combat_player_can_back": _play("combat_enemy", mutate=_has_undo_history),

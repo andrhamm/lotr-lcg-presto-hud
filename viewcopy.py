@@ -61,6 +61,7 @@ VIEW_LABELS = {
     "combat_enemy": "Combat: Enemy Attacks",
     "combat_player": "Combat: Player Attacks",
     "refresh": "Refresh",
+    "round_end": "End of Round",
 }
 
 # Window views. These never appear in a CTA - a phase view's button names the
@@ -87,6 +88,8 @@ SETUP_TIP = [
 # The red "this happens anyway" band. Keyed by view.
 # --------------------------------------------------------------------------
 PHASE_FRAMEWORK = {
+    "round_end": "Resolve any \"at the end of the round\" effects. Anything "
+                 "lasting \"until the end of the round\" expires now.",
     "resource": "Each hero gains a resource and each player draws "
                 "a card (1 each normally) - all at once.",
     "planning": "In player order, play allies and attachments from "

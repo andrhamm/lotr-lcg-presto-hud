@@ -344,6 +344,13 @@ class ScreenPlay:
             draw_header(d, pal, game, self.buttons, title_pen=pal.purple,
                         title="ACTION WINDOW - %s"
                               % phases.step(game.step)["phase"].upper())
+        elif view == "round_end":
+            # The one screen where two round numbers are live at once: the
+            # round being closed, and the one its CTA offers. Without the
+            # digit, "End of Round" beside a button reading "Resource (Round
+            # 2)" reads as though round 2 is what is ending.
+            draw_header(d, pal, game, self.buttons,
+                        title="End of Round %d" % game.round)
         elif view == "quest_setup":
             draw_header(d, pal, game, self.buttons, title="QUEST SETUP", round_label="R0")
         else:
@@ -427,7 +434,21 @@ class ScreenPlay:
                 ("window", PHASE_WINDOW["refresh"]),
             ])
             self._refresh_threat_preview(d, pal, game, CONTENT_Y + bh + 8)
-            self._cta(d, pal, game, "End Round", ("endround",))
+            self._cta(d, pal, game,
+                      "Next: %s" % VIEW_LABELS[game.next_phase_view()],
+                      ("advance",))
+        elif view == "round_end":
+            # 0.1. Not an action window - RR's chart puts the last one after
+            # 7.4 - so no purple treatment: this is a resolution checklist.
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
+            phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+                ("framework", PHASE_FRAMEWORK["round_end"]),
+            ])
+            self._cta(d, pal, game,
+                      "Next: %s (Round %d)" % (VIEW_LABELS["resource"],
+                                               game.round + 1),
+                      ("endround",))
         elif view in self.COMBAT_FLOW:
             # Combat is a loop, so it gets the flow diagram rather than a
             # prose arrow-chain: the chain could carry the order but not the

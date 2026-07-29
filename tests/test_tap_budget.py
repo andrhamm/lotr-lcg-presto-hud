@@ -19,10 +19,13 @@ Then the eight action-window screens were wired into the flow (2026-07-28).
 They were a non-functional prototype before: nothing could enter or leave one.
 Always-in-flow was chosen deliberately over "once per game" - a checklist that
 only appears when the app is confident it is needed goes missing precisely
-when it matters. Six of the eight fall inside this walk (the Resource,
-Commit, Resolution, Travel, Opt. Engage and Checks windows), taking it to 31.
-The Staging window is skipped because a successful resolve jumps straight to
-the resolution view, and the Refresh window sits after End Round.
+when it matters. Seven of the eight fall inside this walk - only the Staging window is
+skipped, because a successful resolve jumps straight to the resolution view.
+
+The round boundary then split in two (2026-07-28): 7.3 and 7.4 apply on
+ARRIVAL at the refresh view, where RR's chart puts them, and the round turns
+on a new round_end view at step 0.1. That is +1 tap and removes the End Round
+CTA, which had been doing two jobs at once. Total: 33.
 """
 import os
 import sys
@@ -34,7 +37,7 @@ from ui.theme import Palette
 from ui.screen_play import ScreenPlay
 from gamestate import GameState
 
-TAP_BUDGET = 31
+TAP_BUDGET = 33
 
 
 def test_common_round_hits_tap_budget():
@@ -107,10 +110,15 @@ def test_common_round_hits_tap_budget():
     tap(("close",))                                 # 20: close modal
     assert [p.threat for p in game.players] == [1, 1, 1, 1]
 
-    tap(("advance",))                               # 21: -> combat_enemy
-    tap(("advance",))                               # 22: -> combat_player
-    tap(("advance",))                               # 23: -> refresh
-    tap(("endround",))                              # 24: end round
+    tap(("advance",))                               # -> combat_enemy
+    tap(("advance",))                               # -> combat_player
+    tap(("advance",))                               # -> refresh (7.3/7.4 apply)
+    assert game.first_player == 1                   # token passed on arrival
+    tap(("advance",))                               # -> the Refresh window
+    tap(("advance",))                               # -> round_end (0.1)
+    assert game.view == "round_end"
+    assert game.round == 1                          # 0.1 is still this round
+    tap(("endround",))                              # turn the round
 
     assert game.round == 2
     assert state["taps"] <= TAP_BUDGET, \

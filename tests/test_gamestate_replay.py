@@ -393,29 +393,50 @@ def test_redo_is_not_recorded_either():
     assert g.replay_step == 0
 
 
-def test_back_across_a_round_boundary_reverts_everything_end_round_did():
-    """end_round raises threat, rotates first player and bumps the round.
-    Stepping back across it must undo all three together - they are one
-    action, so they are one delta."""
+def test_back_across_the_refresh_boundary_reverts_threat_and_token():
+    """The round boundary is now TWO actions, and each must undo cleanly.
+
+    Entering refresh applies 7.3 and 7.4 (threat + token); the round_end CTA
+    bumps the counter. Stepping back across the first must revert threat, the
+    token AND refresh_applied together - the flag is in snapshot() precisely
+    so that re-advancing applies exactly once instead of raising twice."""
     g = _round1(GameState(2, 25))
     _act(g, lambda: g.set_commit(0, 3))
-    g.view = "refresh"
+    g.view = "combat_player"
     before = (g.players[0].threat, g.players[1].threat, g.first_player, g.round)
     assert before == (25, 25, 0, 1)
 
-    _act(g, lambda: g.end_round())
+    _act(g, lambda: g.enter_view("refresh"))
     assert (g.players[0].threat, g.players[1].threat) == (26, 26)  # +1 each
     assert g.first_player == 1
-    assert g.round == 2
-    assert g.view == "resource"
+    assert g.refresh_applied is True
+    assert g.round == 1                       # the round has NOT turned yet
 
     assert g.undo() is True
     assert (g.players[0].threat, g.players[1].threat, g.first_player, g.round) == before
-    assert g.view == "refresh"
+    assert g.refresh_applied is False, "the flag must revert with the threat"
+    assert g.view == "combat_player"
 
     assert g.redo() is True
-    assert g.round == 2 and g.first_player == 1
+    assert g.first_player == 1
     assert (g.players[0].threat, g.players[1].threat) == (26, 26)
+    # and re-entering does not raise a second time
+    g.enter_view("refresh")
+    assert (g.players[0].threat, g.players[1].threat) == (26, 26)
+
+
+def test_back_across_end_round_reverts_the_counter():
+    g = _round1(GameState(2, 25))
+    _act(g, lambda: g.set_commit(0, 3))
+    _act(g, lambda: g.enter_view("refresh"))
+    _act(g, lambda: g.end_round())
+    assert g.round == 2
+    assert g.view == "resource"
+    assert g.refresh_applied is False         # next round's 7.3 re-armed
+
+    assert g.undo() is True
+    assert g.round == 1
+    assert g.refresh_applied is True
 
 
 # --------------------------------------------------------------------------

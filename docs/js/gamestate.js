@@ -21,7 +21,8 @@ export const VIEW_ORDER = ["resource", "aw_resource",
   "enc_optional", "aw_enc_optional",
   "enc_checks", "aw_enc_checks",
   "combat_shadow", "combat_enemy", "combat_player",
-  "refresh", "aw_refresh"];
+  "refresh", "aw_refresh",
+  "round_end"];
 
 export const WINDOW_PREFIX = "aw_";
 export const isWindowView = v => v.startsWith(WINDOW_PREFIX);
@@ -40,6 +41,7 @@ export const VIEW_STEP = {
   combat_enemy: "6.E", combat_player: "6.P", refresh: "7.R",
 };
 // Window views share the step they follow: the window IS that step's window.
+VIEW_STEP["round_end"] = "0.1";
 for (const pv of ["resource", "quest_commit", "quest_staging",
                   "quest_resolution", "travel", "enc_optional",
                   "enc_checks", "refresh"]) {
@@ -348,11 +350,15 @@ export class GameState {
     // A window is not a new phase, so it does not claim to be one in the log:
     // the "Phase:" lines are how a reader reconstructs a round, and eight
     // extra false starts per round would drown them.
-    if (isWindowView(v)) {
+    if (v === "round_end") {
+      this.logEvent(`End of Round ${this.round}`);
+    } else if (isWindowView(v)) {
       this.logEvent(`Action window: ${VIEW_LABELS[phaseViewOf(v)] ?? v}`);
     } else {
       this.logEvent(`Phase: ${VIEW_LABELS[v] ?? v}`);
     }
+    // 7.3 and 7.4 happen on ARRIVAL at refresh, before its window opens.
+    if (v === "refresh") this.applyRefresh();
   }
 
   nextView() {
@@ -479,12 +485,26 @@ export class GameState {
 
   actionWindowOpen() { return phaseStep(this.step).action_window; }
 
-  endRound() {
+  // Steps 7.3 and 7.4. Called from enterView() when the refresh view is
+  // entered, because RR puts both BEFORE the refresh action window (the chart
+  // runs 7.3, 7.4, ACTION WINDOW, 7.5). Idempotent via refresh_applied, which
+  // is in snapshot(), so back restores the threat and the flag together.
+  applyRefresh() {
+    if (this.refresh_applied) return false;
     for (let i = 0; i < this.players.length; i++) {
       if (!this.players[i].eliminated) {
         this.adjustThreat(i, this.players[i].threat_per_round);
       }
     }
+    this.first_player = (this.first_player + 1) % this.players.length;
+    this.refresh_applied = true;
+    this.logEvent(`Refresh: threat raised, first player -> P${this.first_player + 1}`);
+    return true;
+  }
+
+  // Close the round out. 7.3 and 7.4 are NOT here - they belong to
+  // applyRefresh(). This is 0.1 -> 0.0.
+  endRound() {
     this.players.forEach(p => p.commit_touched = false);
     const snap = this._round_snap;
     if (snap) {
@@ -498,15 +518,13 @@ export class GameState {
       if (pd) parts.push(`quest ${pd > 0 ? "+" : ""}${pd}`);
       this.logEvent(`Round ${this.round} ended: ${parts.length ? parts.join(", ") : "no changes"}`);
     }
-    this.first_player = (this.first_player + 1) % this.players.length;
     this.round += 1;
-    this.step = STEP_ORDER[0];
-    this.view = VIEW_ORDER[0];
     this.willpower = this.players.reduce((a, p) => a + p.commit, 0);
     this.quest_resolved = false;
     this.quest_outcome = null;
-    this.logEvent(`New round ${this.round} - threat raised, first player -> P${this.first_player + 1}`);
-    this.logEvent(`Phase: ${VIEW_LABELS[VIEW_ORDER[0]]}`);
+    this.refresh_applied = false;      // arm the next round's 7.3 / 7.4
+    this.logEvent(`New round ${this.round} begins`);
+    this.enterView(VIEW_ORDER[0]);
     this._snapshotRound();
   }
 
@@ -710,6 +728,7 @@ export class GameState {
       stage_idx: this.stage_idx,
       card_idx: this.card_idx,
       quest_resolved: this.quest_resolved,
+      refresh_applied: this.refresh_applied,
       quest_outcome: this.quest_outcome,
       quest_outcome_n: this.quest_outcome_n,
       game_over: this.game_over ? { ...this.game_over } : null,
@@ -744,6 +763,7 @@ export class GameState {
     this.stage_idx = m.stage_idx;
     this.card_idx = m.card_idx;
     this.quest_resolved = m.quest_resolved;
+    this.refresh_applied = m.refresh_applied;
     this.quest_outcome = m.quest_outcome;
     this.quest_outcome_n = m.quest_outcome_n;
     this.game_over = m.game_over ? { ...m.game_over } : null;
@@ -915,6 +935,7 @@ export class GameState {
       reminders: { ...this.reminders },
       elimination_threat: this.elimination_threat,
       quest_resolved: this.quest_resolved,
+      refresh_applied: this.refresh_applied,
       quest_outcome: this.quest_outcome, quest_outcome_n: this.quest_outcome_n,
       quest_history: this.quest_history.map(e => ({ ...e })),
       sailing: this.sailing, heading: this.heading,
@@ -965,6 +986,10 @@ export class GameState {
     for (const k of Object.keys(g.reminders)) {
       if (d.reminders && k in d.reminders) g.reminders[k] = d.reminders[k];
     }
+    // A save written before this flag existed, resumed AT or AFTER the
+    // refresh view, has already had its threat raised.
+    g.refresh_applied = d.refresh_applied ??
+      ["refresh", "aw_refresh", "round_end"].includes(d.view);
     g.quest_resolved = d.quest_resolved ?? false;
     g.quest_outcome = d.quest_outcome ?? null;
     g.quest_outcome_n = d.quest_outcome_n ?? 0;

@@ -30,4 +30,4 @@ def test_deal_shadow_cards_step_has_no_action_window():
 
 def test_first_and_last_steps():
     assert phases.STEP_ORDER[0] == "0.0"
-    assert phases.STEP_ORDER[-1] == "8.0"
+    assert phases.STEP_ORDER[-1] == "0.1"

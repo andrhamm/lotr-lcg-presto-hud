@@ -60,9 +60,11 @@ def test_elimination_level_is_configurable():
 def test_player_count_limits_players_and_rotation():
     g = GameState(player_count=2)
     assert [p.label for p in g.players] == ["P1", "P2"]
-    g.end_round()
+    # The token passes at 7.4, which is apply_refresh() now, not end_round().
+    g.apply_refresh()
     assert g.first_player == 1
-    g.end_round()
+    g.end_round()          # arms the next round's 7.4
+    g.apply_refresh()
     assert g.first_player == 0
 
 
@@ -79,14 +81,29 @@ def test_settings_survive_round_trip():
     assert restored.elimination_threat == 99
 
 
-def test_end_round_adds_threat_per_round_to_living_players():
+def test_apply_refresh_adds_threat_per_round_to_living_players():
+    """7.3 lives in apply_refresh(), not end_round().
+
+    RR's chart runs 7.3, 7.4, ACTION WINDOW, 7.5 - the threat raise happens
+    on ARRIVAL at the refresh view, before its window opens, so a player can
+    see the result while the window is still theirs to act in."""
     g = GameState()
     g.adjust_threat(0, 10)
     g.players[1].threat_per_round = 3
     g.adjust_threat(1, 10)
-    g.end_round()
+    g.apply_refresh()
     assert g.players[0].threat == 11
     assert g.players[1].threat == 13
+
+
+def test_apply_refresh_is_idempotent():
+    """Guarded on state, not on "have I drawn": re-entering the view, a
+    redraw, or back-and-forward must not raise threat twice."""
+    g = GameState()
+    assert g.apply_refresh() is True
+    before = [p.threat for p in g.players]
+    assert g.apply_refresh() is False
+    assert [p.threat for p in g.players] == before
 
 
 def test_end_round_skips_eliminated_players():
@@ -101,16 +118,21 @@ def test_end_round_increments_round_and_resets_step():
     g.step = "3.4"
     g.end_round()
     assert g.round == 2
-    assert g.step == "0.0"
+    assert g.step == "1.R"     # enter_view sets the step from the view now
+    assert g.view == "resource"
+    assert g.refresh_applied is False   # next round's 7.3 is armed again
 
 
-def test_end_round_advances_first_player_token():
+def test_apply_refresh_advances_first_player_token():
+    """7.4, and it happens BEFORE the refresh window opens - so that window
+    is run by the NEW first player, who gets the first opportunity in it."""
     g = GameState()
     assert g.first_player == 0
-    g.end_round()
+    g.apply_refresh()
     assert g.first_player == 1
     g.first_player = 3
-    g.end_round()
+    g.refresh_applied = False
+    g.apply_refresh()
     assert g.first_player == 0
 
 
@@ -131,10 +153,10 @@ def test_prev_step_at_first_step_stays_put():
 
 def test_next_step_past_last_step_ends_round():
     g = GameState()
-    g.step = "8.0"  # End of the round
+    g.step = "0.1"  # End of the round
     g.next_step()
     assert g.round == 2
-    assert g.step == "0.0"
+    assert g.step == "1.R"
 
 
 def test_current_step_action_window_flag():

@@ -390,12 +390,28 @@ def test_progress_zone_shows_sailing_column_regardless_of_view():
     assert well_disc_row in hw.display.calls
 
 
-def test_refresh_end_round_resets_view():
-    hw, pal, game, screen = _setup("refresh")
+def test_round_end_view_turns_the_round():
+    """The round turns on 0.1's CTA, not on the refresh view.
+
+    RR keeps them separate (7.5 Refresh phase ends, THEN 0.1 Round ends), and
+    refresh is an ordinary phase view now: its CTA is a plain phase handoff
+    like every other."""
+    hw, pal, game, screen = _setup("round_end")
     screen.draw(hw, game, pal)
+    assert game.round == 1                       # 0.1 belongs to THIS round
     screen.on_button(_find(screen, ("endround",)), game)
     assert game.round == 2
     assert game.view == "resource"
+
+
+def test_refresh_applies_7_3_and_7_4_on_entry():
+    hw, pal, game, screen = _setup("combat_player")
+    screen.draw(hw, game, pal)
+    before = [p.threat for p in game.players]
+    game.enter_view("refresh")
+    assert [p.threat for p in game.players] == [t + 1 for t in before]
+    assert game.first_player == 1
+    assert game.round == 1                       # still this round
 
 
 def test_totals_cards_renamed_with_currency_icons():
@@ -849,10 +865,16 @@ def test_phase_advance_uses_a_kicker_and_the_bare_phase_name():
 
 
 def test_action_ctas_are_a_single_line_with_no_kicker():
-    hw, pal, game, screen = _setup("refresh")
+    """Setup's CTA is an action, not a phase handoff, so it gets no kicker.
+
+    Refresh used to be the other example, with "End Round". It is not any
+    more: refresh is an ordinary phase now, and the round turns on round_end
+    (0.1). That removed the last CTA doing two jobs at once - End Round both
+    applied 7.3 and crossed the round boundary."""
+    hw, pal, game, screen = _setup("setup_game")
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "End Round" in texts
+    assert "Begin Round 1" in texts
     assert "NEXT PHASE" not in texts
 
 

@@ -31,7 +31,8 @@ VIEW_ORDER = ["resource", "aw_resource",
               "enc_optional", "aw_enc_optional",
               "enc_checks", "aw_enc_checks",
               "combat_shadow", "combat_enemy", "combat_player",
-              "refresh", "aw_refresh"]
+              "refresh", "aw_refresh",
+              "round_end"]
 
 WINDOW_PREFIX = "aw_"
 
@@ -73,6 +74,10 @@ VIEW_STEP = {
     "combat_enemy": "6.E",
     "combat_player": "6.P",
     "refresh": "7.R",
+    # 0.1 is still the CURRENT round's final step. RR: "This step formalizes
+    # the end of a game round. Proceed to step 0.0 of the next game round" -
+    # so the round counter turns on this view's CTA, not on arriving at it.
+    "round_end": "0.1",
 }
 # Window views share the step they follow: the window IS that step's window.
 for _pv in ("resource", "quest_commit", "quest_staging", "quest_resolution",
@@ -294,6 +299,7 @@ class GameState:
         self.pending_location_pick = None
         self.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         self.quest_resolved = False  # quest resolved this round
+        self.refresh_applied = False  # 7.3 / 7.4 done for this round
         self.quest_outcome = None    # "success" | "fail" | "tie" - last resolution
         self.quest_outcome_n = 0     # progress gained / threat taken
         self.quest_history = []      # by-round chart data, capped at last 20
@@ -412,11 +418,22 @@ class GameState:
         """Central view transition: sets the step and logs the phase start."""
         self.view = v
         self.step = VIEW_STEP[v]
-        if is_window_view(v):
+        if v == "round_end":
+            # Names the round being CLOSED, not the one beginning: 0.1 is
+            # still this round's final step. It is the one screen where two
+            # round numbers are live at once (this one, and the one the CTA
+            # offers), so the title carries the digit even though the R-chip
+            # already shows it.
+            self.log_event("End of Round %d" % self.round)
+        elif is_window_view(v):
             self.log_event("Action window: %s"
                            % VIEW_LABELS.get(phase_view_of(v), v))
         else:
             self.log_event("Phase: %s" % VIEW_LABELS.get(v, v))
+        # 7.3 and 7.4 happen on ARRIVAL at refresh, before its window opens.
+        # After the log line, so the log reads arrival-then-effect.
+        if v == "refresh":
+            self.apply_refresh()
 
     def next_view(self):
         """Where advance_view() would go from here, without going there.
@@ -586,11 +603,40 @@ class GameState:
             self.step = phases.STEP_ORDER[i - 1]
 
     # -- round flow --------------------------------------------------------
-    def end_round(self):
-        """Raise threat, rotate first player, bump round, reset to first step."""
-        for p in self.players:
+    def apply_refresh(self):
+        """Steps 7.3 and 7.4: raise each living player's threat, pass the token.
+
+        Called from enter_view() when the refresh view is entered, because RR
+        puts both BEFORE the refresh action window (the chart runs 7.3, 7.4,
+        ACTION WINDOW, 7.5). The player never performs them; the tracker does.
+
+        It must run inside a button handler's begin_action/add_delta bracket
+        (main.py), which enter_view always is - draw() runs OUTSIDE that
+        bracket, so doing this at draw time would leave a mutation no delta
+        records: invisible to undo, with its log lines mis-attributed to the
+        NEXT action.
+
+        Idempotent via refresh_applied, which is in snapshot(), so back
+        restores the threat and the flag together and re-advancing applies
+        exactly once.
+        """
+        if self.refresh_applied:
+            return False
+        for i, p in enumerate(self.players):
             if not p.eliminated:
-                self.adjust_threat(self.players.index(p), p.threat_per_round)
+                self.adjust_threat(i, p.threat_per_round)
+        self.first_player = (self.first_player + 1) % len(self.players)
+        self.refresh_applied = True
+        self.log_event("Refresh: threat raised, first player -> P%d"
+                       % (self.first_player + 1))
+        return True
+
+    def end_round(self):
+        """Close the round out: bump the counter and return to step 1.
+
+        7.3 and 7.4 are NOT here - they belong to apply_refresh(), which runs
+        when the refresh view is entered. This is 0.1 -> 0.0.
+        """
         for p in self.players:
             p.commit_touched = False
         # round stats: duration + per-player threat deltas + progress gained
@@ -607,17 +653,16 @@ class GameState:
             if pd:
                 parts.append("quest %+d" % pd)
             self.log_event("Round %d ended: %s" % (self.round, ", ".join(parts) if parts else "no changes"))
-        self.first_player = (self.first_player + 1) % len(self.players)
         self.round += 1
-        self.step = phases.STEP_ORDER[0]
-        self.view = VIEW_ORDER[0]    # rounds never revisit the setup phase
         # commits persist as next round's defaults; refresh the derived total
         self.willpower = sum(p.commit for p in self.players)
         self.quest_resolved = False
         self.quest_outcome = None
-        self.log_event("New round %d - threat raised, first player -> P%d"
-                       % (self.round, self.first_player + 1))
-        self.log_event("Phase: %s" % VIEW_LABELS[VIEW_ORDER[0]])
+        self.refresh_applied = False      # arm the next round's 7.3 / 7.4
+        self.log_event("New round %d begins" % self.round)
+        # enter_view rather than assigning view/step directly: that is what
+        # keeps the step, the log line and any on-entry rules effect in step.
+        self.enter_view(VIEW_ORDER[0])    # rounds never revisit setup
         self._snapshot_round()
 
     # -- quest / progress --------------------------------------------------
@@ -841,6 +886,7 @@ class GameState:
             "stage_idx": self.stage_idx,
             "card_idx": self.card_idx,
             "quest_resolved": self.quest_resolved,
+            "refresh_applied": self.refresh_applied,
             "quest_outcome": self.quest_outcome,
             "quest_outcome_n": self.quest_outcome_n,
             "game_over": dict(self.game_over) if self.game_over else None,
@@ -879,6 +925,7 @@ class GameState:
         self.stage_idx = m["stage_idx"]
         self.card_idx = m["card_idx"]
         self.quest_resolved = m["quest_resolved"]
+        self.refresh_applied = m["refresh_applied"]
         self.quest_outcome = m["quest_outcome"]
         self.quest_outcome_n = m["quest_outcome_n"]
         self.game_over = dict(m["game_over"]) if m["game_over"] else None
@@ -1085,6 +1132,7 @@ class GameState:
             "pending_progress_detail": self.pending_progress_detail,
             "pending_location_pick": self.pending_location_pick,
             "reminders": dict(self.reminders),
+            "refresh_applied": self.refresh_applied,
             "quest_resolved": self.quest_resolved,
             "quest_outcome": self.quest_outcome,
             "quest_outcome_n": self.quest_outcome_n,
@@ -1141,6 +1189,12 @@ class GameState:
         for k in g.reminders:
             if k in saved_rem:
                 g.reminders[k] = saved_rem[k]
+        # A save written before this flag existed, resumed AT or AFTER the
+        # refresh view, has already had its threat raised. Defaulting False
+        # there would raise it a second time on the next back-and-forward.
+        g.refresh_applied = d.get("refresh_applied",
+                                  d.get("view") in ("refresh", "aw_refresh",
+                                                    "round_end"))
         g.quest_resolved = d.get("quest_resolved", False)
         g.quest_outcome = d.get("quest_outcome", None)
         g.quest_outcome_n = d.get("quest_outcome_n", 0)

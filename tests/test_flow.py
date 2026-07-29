@@ -18,7 +18,8 @@ def test_view_order():
                           "enc_optional", "aw_enc_optional",
                           "enc_checks", "aw_enc_checks",
                           "combat_shadow", "combat_enemy", "combat_player",
-                          "refresh", "aw_refresh"]
+                          "refresh", "aw_refresh",
+                          "round_end"]
     # Planning has no window view: upstream words 2.2-2.3 "player actions
     # THROUGHOUT", so its guidance lives in the phase view. Neither combat
     # half has one either - both are "after each combat SUBSTEP", many windows
@@ -139,11 +140,15 @@ def test_no_pending_flag_when_already_eliminated():
     assert g.pending_elim is None
 
 
-def test_end_round_threat_bump_can_set_pending():
+def test_refresh_threat_bump_can_set_pending():
+    """The 7.3 raise can eliminate on ARRIVAL at the refresh view, before
+    anyone can act. That is correct per RR (50 is immediate) and it is why
+    the elimination warning has to be shown back in combat, the last window
+    that can still prevent it."""
     g = GameState()
     g.adjust_threat(2, 49)
     g.pending_elim = None
-    g.end_round()  # +1 -> 50
+    g.enter_view("refresh")        # apply_refresh runs on entry: +1 -> 50
     assert g.pending_elim == 2
 
 
@@ -275,7 +280,10 @@ def test_end_round_logs_duration_and_deltas():
     g.quest["points"] = 8
     g.quest["progress"] = 3
     t["v"] = 95000                 # 1m35s later
-    g.view = "refresh"
+    # Walk the boundary rather than calling end_round directly: the +1 comes
+    # from apply_refresh on entering the refresh view, and the round-stats
+    # line diffs against the round snapshot, so the order matters.
+    g.enter_view("refresh")
     g.end_round()
     stats = [e["text"] for e in g.log if "Round 1 ended" in e["text"]]
     assert stats, [e["text"] for e in g.log[-5:]]

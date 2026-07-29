@@ -284,6 +284,10 @@ export class ScreenPlay {
     const view = game.view;
     if (view === "quest_setup") {
       drawHeader(ctx, game, this.buttons, { title: "QUEST SETUP", roundLabel: "R0" });
+    } else if (view === "round_end") {
+      // The one screen where two round numbers are live at once: the round
+      // being closed, and the one its CTA offers.
+      drawHeader(ctx, game, this.buttons, { title: `End of Round ${game.round}` });
     } else if (isWindowView(view)) {
       // "ACTION WINDOW" is the screen's TITLE and belongs in the header,
       // where every other screen puts its title - not floating in the
@@ -428,7 +432,18 @@ export class ScreenPlay {
         { kind: "window", text: PHASE_WINDOW["refresh"] },
       ]);
       this._refreshThreatPreview(ctx, game, CONTENT_Y + bh + 8);
-      this._cta(ctx, game, "End Round", ["endround"]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS[game.nextPhaseView()]}`, ["advance"]);
+    } else if (view === "round_end") {
+      // 0.1. Not an action window - RR's chart puts the last one after 7.4 -
+      // so no purple treatment: this is a resolution checklist.
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
+      phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+        { kind: "framework", text: PHASE_FRAMEWORK["round_end"] },
+      ]);
+      this._cta(ctx, game,
+                `Next: ${VIEW_LABELS["resource"]} (Round ${game.round + 1})`,
+                ["endround"]);
     } else {
       this._playersZone(ctx, game);
       const flavor = { combat_enemy: [icons.DEFENSE, pal.green],
