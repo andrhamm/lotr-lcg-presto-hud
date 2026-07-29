@@ -147,3 +147,90 @@ def test_view_labels_cover_every_view():
     missing = [v for v in list(VIEW_ORDER) + list(VIEW_STEP)
                if v not in viewcopy.VIEW_LABELS]
     assert not missing, "views with no label: %s" % missing
+
+
+# --------------------------------------------------------------------------
+# Computed copy
+# --------------------------------------------------------------------------
+
+def _staging_window(**state):
+    """Draw the staging action window and return its text."""
+    from tests.fake_hardware import FakeHardware
+    from ui.theme import Palette
+    from ui.screen_play import ScreenPlay
+    from gamestate import GameState, VIEW_STEP
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = GameState(4, 25)
+    g.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 0}
+    g.active_location = None
+    for k, v in state.items():
+        setattr(g, k, v)
+    g.view = "aw_quest_staging"
+    g.step = VIEW_STEP[g.view]
+    s = ScreenPlay()
+    s.draw(hw, g, pal)
+    return " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+
+
+def test_staging_window_warns_on_a_pending_failure():
+    t = _staging_window(willpower=2, staging=7)
+    assert "Without actions" in t
+    assert "raises threat by 5" in t
+
+
+def test_staging_window_names_the_player_a_failure_would_eliminate():
+    from gamestate import GameState
+    g = GameState(4, 25)
+    g.players[2].threat = 46
+    t = _staging_window(willpower=2, staging=7, players=g.players)
+    assert "eliminated at 50" in t
+    assert "P3" in t
+
+
+def test_staging_window_says_a_tie_is_neither_outcome():
+    t = _staging_window(willpower=7, staging=7)
+    assert "no progress and no" in t
+    # +1 willpower turns a tie into a 1-progress success: the cheapest win on
+    # the board, and easy to miss because a tie reads as a failure.
+    assert "places 1" in t
+
+
+def test_staging_window_offers_the_exchange_rate_only_while_there_is_room():
+    """Past the stage's quest points the extra is DISCARDED (p.22), so the
+    same line would be advising a play that wastes cards."""
+    room = _staging_window(willpower=11, staging=7)
+    assert "places 1 more" in room
+
+    full = _staging_window(willpower=11, staging=7,
+                           quest={"stage_n": 2, "side": "B",
+                                  "points": 8, "progress": 8})
+    assert "is discarded" in full
+    assert "places 1 more" not in full
+
+
+def test_room_counts_the_active_location_not_just_the_quest():
+    """Progress fills the active location first and its overflow flows on to
+    the quest (RR 3.4). Testing the quest card alone would tell a player their
+    willpower is wasted while a location is still soaking it up."""
+    from gamestate import GameState
+    g = GameState(4, 25)
+    g.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 8}
+    g.active_location = {"points": 3, "progress": 0}
+    g.willpower, g.staging = 11, 7
+    _, _, room = g.quest_preview()
+    assert room == 3, "the unfilled location is still room"
+
+
+def test_combat_player_always_warns_about_refresh_elimination():
+    """Unconditional by design.
+
+    67 cards interact with the refresh threat raise and several replace it
+    outright, so a threshold built on threat_per_round fails silently and in
+    the dangerous direction - a player at 44 facing Nalir in a four-player
+    game (+1 per player) would get no warning at all.
+    """
+    from tests.scenes import SCENES
+    hw, _ = SCENES["play_combat_player"]()
+    t = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "refresh may eliminate" in t

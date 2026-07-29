@@ -10,6 +10,7 @@ import * as icons from "./icons.js";
 import { VIEW_ORDER, isWindowView, phaseViewOf } from "./gamestate.js";
 import { VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS, PHASE_FRAMEWORK, PHASE_WINDOW,
          PHASE_CAPTION, LOOP_FLOW, LOOP_LEGEND, SHIP_FLOW_NOTES,
+         STAGING_PENDING, COMBAT_LAST_CHANCE,
          SHIP_NOTES, STAGING, TRAVEL,
          OUTCOME, SAILING, QUEST_SETUP, CONFIRM, TOTALS,
          REFRESH } from "./viewcopy.js";
@@ -203,6 +204,9 @@ export class ScreenPlay {
 
     const notes = [];
     if (spec.note) notes.push(spec.note);
+    // Unconditional - see COMBAT_LAST_CHANCE. Nothing between 6.8.3's window
+    // and 7.3 lets a player act.
+    if (game.view === "combat_player") notes.push(COMBAT_LAST_CHANCE);
     if (game.sailing && SHIP_FLOW_NOTES[game.view]) notes.push(SHIP_FLOW_NOTES[game.view]);
     for (const para of notes) {
       for (const line of wrapText(para, BODY, full, measureText)) {
@@ -211,6 +215,26 @@ export class ScreenPlay {
       }
     }
     return yy + 4;
+  }
+
+  // The staging window's conditional line. The comparison itself lives in
+  // gamestate.questPreview() - two copies of a rule drift.
+  _pendingLine(game) {
+    const [outcome, n, room] = game.questPreview();
+    const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); };
+    if (outcome === "fail") {
+      const doomed = game.players.findIndex(
+        p => !p.eliminated && p.threat + n >= p.elimination);
+      if (doomed >= 0) {
+        return fmt(STAGING_PENDING.fail_elim, game.players[doomed].label, "threat");
+      }
+      return fmt(STAGING_PENDING.fail, "threat", n);
+    }
+    if (outcome === "tie") {
+      return fmt(STAGING_PENDING.tie, "threat", "willpower", "progress");
+    }
+    if (room > 0) return fmt(STAGING_PENDING.success_room, "willpower", "progress");
+    return fmt(STAGING_PENDING.success_full, "Progress", game.quest.points);
   }
 
   _drawActionWindow(ctx, game) {
@@ -223,7 +247,9 @@ export class ScreenPlay {
     // Whole paragraphs only - clipping a sentence mid-clause is exactly what
     // the design system forbids.
     const lines = [];
-    for (const para of (ACTION_WINDOW_TIPS[phaseViewOf(game.view)] ?? [])) {
+    const paras = [...(ACTION_WINDOW_TIPS[phaseViewOf(game.view)] ?? [])];
+    if (phaseViewOf(game.view) === "quest_staging") paras.push(this._pendingLine(game));
+    for (const para of paras) {
       const wrapped = wrapText(para, BODY, usable, measureText);
       if (lines.length + wrapped.length > maxLines) continue;
       lines.push(...wrapped);

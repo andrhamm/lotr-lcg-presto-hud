@@ -217,8 +217,10 @@ LOOP_FLOW = {
                 "reduce it.",
     },
     "combat_player": {
-        "intro": "In player order, each player may declare attacks on engaged "
-                 "enemies.",
+        # One line: the standing elimination note below needs two, and the
+        # rungs already carry the scope ("1 of their engaged enemies"). The
+        # modal "may" is what makes attacking optional, per the copy rules.
+        "intro": "In player order, each player may attack.",
         "rungs": [
             ("Active player exhausts characters to attack 1 of their engaged "
              "enemies", False,
@@ -273,7 +275,7 @@ ACTION_WINDOW_TIPS = {
     "quest_staging": [
         "This is the last action window before quest resolution.",
         "Confirm the tracker matches the board.",
-    ],
+    ],   # plus one CONDITIONAL line - see STAGING_PENDING
     "quest_resolution": [
         "This is the last action window before travel.",
     ],
@@ -363,3 +365,34 @@ TOTALS = {
 REFRESH = {
     "preview_caption": "current -> projected",
 }
+
+
+# The staging window's third line, chosen from the pending result. The view
+# already computes and shows that result, so the copy reacts to the actual
+# game state instead of coaching: three static drafts were rejected in review
+# for telling a player something any competent player already knows.
+#
+# "Without actions," prefixes the lines a player would want to change. A bare
+# "P3 is eliminated at 50" reads as a verdict already delivered, which on an
+# action-window screen is exactly wrong. The success lines drop the prefix:
+# nothing bad is pending, so the fact IS the invitation.
+STAGING_PENDING = {
+    "fail_elim": "Without actions, %s is eliminated at 50 %s.",
+    "fail": "Without actions, each player raises %s by %d.",
+    "tie": "Without actions, no progress and no %s. Each +1 %s places 1 %s.",
+    # Only true while the stage has room. Past its quest points the extra is
+    # DISCARDED (p.22), so the same line would be advising a wasted play.
+    "success_room": "Each +1 %s places 1 more %s.",
+    "success_full": "%s past %d is discarded.",
+}
+
+# Shown on combat_player unconditionally. It CANNOT be conditional: 67 cards
+# interact with the refresh threat raise and several replace it outright
+# (Nalir raises by 1 per player; Escape From Mount Gram substitutes a
+# different number), so a threshold test built on threat_per_round fails
+# silently and in the dangerous direction - a player at 44 facing Nalir in a
+# four-player game would get no warning at all. An always-on line costs one
+# line and never lies.
+# One line, because combat_player has room for exactly one. Both halves that
+# matter survive: the lever (lower threat) and the stake (refresh eliminates).
+COMBAT_LAST_CHANCE = "Lower threat now or refresh may eliminate."

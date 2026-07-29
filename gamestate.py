@@ -814,6 +814,44 @@ class GameState:
             self.quest["stage_n"] += 1
         self.quest["progress"] = 0
 
+    def quest_preview(self):
+        """What resolution WOULD do right now, without doing it.
+
+        The staging window's copy is conditional on the pending result, and
+        the view must not re-derive the comparison: resolve_quest() owns that
+        rule, and two copies of it drift.
+
+        Returns (outcome, n, room) where outcome is success/fail/tie, n is the
+        progress or threat that would follow, and room is how much progress
+        the board can still absorb - remaining quest points PLUS any unfilled
+        active-location capacity, because progress fills the location first
+        and its overflow flows on to the quest (RR 3.4). Testing the quest
+        card alone would tell a player their willpower is wasted while a
+        location is still soaking it up.
+        """
+        diff = self.willpower - self.staging
+        outcome = "success" if diff > 0 else ("fail" if diff < 0 else "tie")
+        room = max(0, self.quest["points"] - self.quest["progress"])
+        loc = self.active_location
+        if loc:
+            room += max(0, loc["points"] - loc["progress"])
+        return outcome, abs(diff), room
+
+    def would_be_eliminated_at_refresh(self):
+        """Players whose threat would cross the elimination level at 7.3.
+
+        NOT used to gate the combat warning: 67 cards interact with the
+        refresh raise and several replace it outright (Nalir raises by one
+        per player; Escape From Mount Gram substitutes a different number
+        entirely), so this sum can be wrong in the dangerous direction. It
+        exists for the preview row, which shows its own arithmetic.
+        """
+        out = []
+        for i, p in enumerate(self.players):
+            if not p.eliminated and p.threat + p.threat_per_round >= p.elimination:
+                out.append(i)
+        return out
+
     def resolve_quest(self, willpower, staging):
         """Compare willpower vs staging threat. Returns an outcome dict.
 

@@ -11,6 +11,7 @@ import phases
 from gamestate import VIEW_ORDER, is_window_view, phase_view_of
 from viewcopy import (VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS,
                       LOOP_FLOW, LOOP_LEGEND, SHIP_FLOW_NOTES,
+                      STAGING_PENDING, COMBAT_LAST_CHANCE,
                       PHASE_FRAMEWORK, PHASE_WINDOW, PHASE_CAPTION,
                       SHIP_NOTES, STAGING, TRAVEL, OUTCOME,
                       SAILING, QUEST_SETUP, CONFIRM, TOTALS, REFRESH)
@@ -158,6 +159,28 @@ class ScreenPlay:
     # would have got none of it, and a Back tap would have moved game.view
     # while the screen kept rendering a window for the view it had left.
 
+    def _pending_line(self, game):
+        """The staging window's conditional line, from the pending result.
+
+        The comparison itself lives in gamestate.quest_preview() - the view
+        must not re-derive it, because two copies of a rule drift.
+        """
+        outcome, n, room = game.quest_preview()
+        if outcome == "fail":
+            doomed = [i for i, p in enumerate(game.players)
+                      if not p.eliminated
+                      and p.threat + n >= p.elimination]
+            if doomed:
+                return STAGING_PENDING["fail_elim"] % (
+                    game.players[doomed[0]].label, "threat")
+            return STAGING_PENDING["fail"] % ("threat", n)
+        if outcome == "tie":
+            return STAGING_PENDING["tie"] % ("threat", "willpower", "progress")
+        if room > 0:
+            return STAGING_PENDING["success_room"] % ("willpower", "progress")
+        return STAGING_PENDING["success_full"] % ("Progress",
+                                                  game.quest["points"])
+
     def _draw_action_window(self, d, pal, game):
         # "ACTION WINDOW" is the screen's TITLE and belongs in the header,
         # where every other screen puts its title - not floating in the
@@ -172,7 +195,10 @@ class ScreenPlay:
         # Whole paragraphs only - clipping a sentence mid-clause is exactly
         # what the design system forbids.
         lines = []
-        for para in ACTION_WINDOW_TIPS.get(phase_view_of(game.view), ()):
+        paras = list(ACTION_WINDOW_TIPS.get(phase_view_of(game.view), ()))
+        if phase_view_of(game.view) == "quest_staging":
+            paras.append(self._pending_line(game))
+        for para in paras:
             wrapped = wrap_text(para, BODY, usable, d.measure_text)
             if len(lines) + len(wrapped) > max_lines:
                 continue
@@ -269,6 +295,10 @@ class ScreenPlay:
         notes = []
         if spec["note"]:
             notes.append(spec["note"])
+        if game.view == "combat_player":
+            # Unconditional on purpose - see COMBAT_LAST_CHANCE. Nothing
+            # between 6.8.3's window and 7.3 lets a player act.
+            notes.append(COMBAT_LAST_CHANCE)
         if game.sailing and game.view in SHIP_FLOW_NOTES:
             notes.append(SHIP_FLOW_NOTES[game.view])
         for para in notes:

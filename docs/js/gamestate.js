@@ -667,6 +667,24 @@ export class GameState {
     this.quest.progress = 0;
   }
 
+  // What resolution WOULD do right now, without doing it. The staging
+  // window's copy is conditional on this, and the view must not re-derive the
+  // comparison - resolveQuest() owns that rule, and two copies drift.
+  //
+  // room is remaining quest points PLUS unfilled active-location capacity,
+  // because progress fills the location first and its overflow flows on to
+  // the quest (RR 3.4). Testing the quest card alone would tell a player
+  // their willpower is wasted while a location is still soaking it up.
+  questPreview() {
+    const diff = this.willpower - this.staging;
+    const outcome = diff > 0 ? "success" : (diff < 0 ? "fail" : "tie");
+    let room = Math.max(0, this.quest.points - this.quest.progress);
+    if (this.active_location) {
+      room += Math.max(0, this.active_location.points - this.active_location.progress);
+    }
+    return [outcome, Math.abs(diff), room];
+  }
+
   resolveQuest(willpower, staging) {
     const diff = willpower - staging;
     this.quest_resolved = true;
