@@ -664,21 +664,22 @@ class ScreenPlay:
         (Task 8) - mirror of screen_play.js's _drawQuestSetup."""
         card = game.stages[game.stage_idx]["cards"][game.card_idx]
         a_face = next((f for f in card["faces"] if f["side"] == "A"), {})
-        stage_label = "STAGE %d%s" % (game.quest["stage_n"], game.quest["side"])
-        text_center(d, pal, stage_label, 240, CONTENT_Y, BODY, pal.amber)
-        name_y = CONTENT_Y + 22
-        card_name = truncate_text(a_face.get("name") or "", DISPLAY, 480 - 2 * MARGIN,
-                                  d.measure_text)
-        text_center(d, pal, card_name, 240, name_y, DISPLAY, pal.gold)
+        # No bespoke title block. A centred amber stage label over a
+        # DISPLAY-gold card name was this view's own invention - nothing else
+        # in the app presents content that way - and it pushed the actual
+        # instruction down the screen. The stage and the card name belong in
+        # the instruction, which is what the player is here to act on.
 
         # Framework treatment, like every other "this happens anyway" band in
         # the app: say what to DO, and let the card's own text live one tap
         # away behind View quest card. Printing the setup text here made this
         # screen a text dump with a button under it, and duplicated a card the
         # player can already open.
-        lead = (QUEST_SETUP["resolve"] if a_face.get("text")
-                else QUEST_SETUP["none"])
-        phase_block(d, pal, MARGIN, name_y + 30, 480 - 2 * MARGIN, [
+        stage_n = "%d%s" % (game.quest["stage_n"], game.quest["side"])
+        name = a_face.get("name") or ""
+        lead = (QUEST_SETUP["resolve"] % (stage_n, name) if a_face.get("text")
+                else QUEST_SETUP["none"] % stage_n)
+        phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
             ("framework", [lead,
                            QUEST_SETUP["then_flip"] % card["questPoints"]]),
         ])

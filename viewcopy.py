@@ -325,11 +325,14 @@ QUEST_SETUP = {
     # "View quest card", where a player reads it on the card that prints it.
     # This screen's job is to say what to DO, which is what a framework band
     # is for everywhere else in the app.
-    # No stage number or card name in these: the screen already shows both,
-    # in amber LABEL and DISPLAY gold, 20px above. Repeating them is the same
-    # fault the Quest Cards heading had.
-    "resolve": "Resolve the Setup text on this card.",
-    "none": "This card has no Setup text.",
+    # The stage and card name live HERE, in the instruction, not in a
+    # centred amber/DISPLAY-gold header above it. That header was bespoke to
+    # this one view - no other screen titles its content that way - and the
+    # tracker's job is to say what to do in the phase, not to present the
+    # card. Naming them in the sentence is not duplication once the bespoke
+    # header is gone; it is the sentence being self-contained.
+    "resolve": "Resolve the Setup text on Stage %s, %s.",
+    "none": "Stage %s has no Setup text.",
     "then_flip": "Then flip to side B, which has %d quest points.",
     "view": "View quest card",
     # An ACTION cta, so single-line with no NEXT PHASE kicker - the same shape

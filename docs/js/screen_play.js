@@ -629,11 +629,10 @@ export class ScreenPlay {
   _drawQuestSetup(ctx, game) {
     const card = game.stages[game.stage_idx].cards[game.card_idx];
     const aFace = card.faces.find(f => f.side === "A") ?? {};
-    const stageLabel = `STAGE ${game.quest.stage_n}${game.quest.side}`;
-    textCenter(ctx, stageLabel, 240, CONTENT_Y, BODY, pal.amber);
-    const nameY = CONTENT_Y + 22;
-    const cardName = truncateText(aFace.name ?? "", DISPLAY, 480 - 2 * MARGIN);
-    textCenter(ctx, cardName, 240, nameY, DISPLAY, pal.gold);
+    // No bespoke title block. A centred amber stage label over a
+    // DISPLAY-gold card name was this view's own invention - nothing else
+    // in the app presents content that way - and it pushed the actual
+    // instruction down the screen.
 
     // Framework treatment, like every other "this happens anyway" band in the
     // app: say what to DO, and let the card's own text live one tap away
@@ -641,8 +640,11 @@ export class ScreenPlay {
     // text dump with a button under it, duplicating a card the player can
     // already open. No stage number or card name in the copy either - the
     // screen shows both 20px above.
-    const lead = aFace.text ? QUEST_SETUP.resolve : QUEST_SETUP.none;
-    phaseBlock(ctx, MARGIN, nameY + 30, 480 - 2 * MARGIN, [
+    const stageN = `${game.quest.stage_n}${game.quest.side}`;
+    const lead = aFace.text
+      ? QUEST_SETUP.resolve.replace("%s", stageN).replace("%s", aFace.name || "")
+      : QUEST_SETUP.none.replace("%s", stageN);
+    phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
       { kind: "framework",
         text: [lead, QUEST_SETUP.then_flip.replace("%d", card.questPoints)] },
     ]);
