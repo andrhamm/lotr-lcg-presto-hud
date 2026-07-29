@@ -380,12 +380,41 @@ def test_locations_for_dedupes_by_name_and_set():
 
 
 def test_locations_for_defaults_null_points_and_threat_to_zero():
-    # 15 catalog locations carry a null questPoints on every face (variable
-    # or condition-explored cards) - they show 0 and the player edits it,
-    # same rule side_quests() uses for the variable "X" side quests.
+    # A card with no number on any face still reports 0 so every caller can
+    # keep doing arithmetic - but it now also says WHY there is no number,
+    # which is what stops the UI drawing that 0 as if the card printed it.
     packs = {"q": {"encounter": {"location": [_loc("Blind Alley", None, None, "Q")]}}}
     out = qc.locations_for({"slug": "q"}, packs)
     assert (out[0]["points"], out[0]["threat"]) == (0, 0)
+    # No marker at all upstream -> treated as X's poor cousin, not as a real 0.
+    assert out[0]["pointsKind"] == "x" and out[0]["threatKind"] == "x"
+
+
+def test_locations_for_reports_which_non_number_the_card_printed():
+    # THE gate for the X work. build_card_data emits threatKind/questPointsKind
+    # because upstream stores four different things in these columns and
+    # parse_int flattened them all to None:
+    #   "X"  the card prints a literal X   -> show the formula, or ask
+    #   "-"  the stat does not apply       -> draw nothing at all
+    # Collapsing them put a 0 on screen for both, and for threat a wrong 0
+    # silently under-reports the staging total.
+    packs = {"q": {"encounter": {"location": [{
+        "id": "x", "name": "Tangled Grove", "encounterSet": "Q",
+        "faces": [{"questPoints": None, "questPointsKind": "na",
+                   "threat": None, "threatKind": "x",
+                   "threatFormula": "the number of locations in the staging area"}]}]}}}
+    out = qc.locations_for({"slug": "q"}, packs)[0]
+    assert out["pointsKind"] == "na"
+    assert "pointsFormula" not in out          # nothing to define; the stat is N/A
+    assert out["threatKind"] == "x"
+    assert out["threatFormula"] == "the number of locations in the staging area"
+
+
+def test_locations_for_omits_the_marker_when_the_card_prints_a_number():
+    # The common case must stay exactly as it was - no marker, no formula, so
+    # nothing downstream has to special-case an ordinary location.
+    out = qc.locations_for(PASSAGE, LOC_PACKS)[0]
+    assert not any(k.endswith(("Kind", "Formula")) for k in out)
 
 
 def test_locations_for_takes_the_first_non_null_face():

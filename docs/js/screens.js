@@ -462,11 +462,15 @@ export class LocationPickModal {
     return result;
   }
 
-  _commit(points, contribution, name = null) {
+  // `entry` is the picker row, or null for the manual stepper. Its threat /
+  // *Kind / *Formula keys ride along onto the location record so the Progress
+  // screen can put a real threat back into staging, and can show the card's
+  // own definition of X rather than a 0.
+  _commit(points, contribution, name = null, entry = null) {
     if (this.mode === "new" && !this.game.active_location) {
-      this.game.travelTo(points, contribution, name);
+      this.game.travelTo(points, contribution, name, entry);
     } else {
-      this.game.changeLocation(points, contribution, name);
+      this.game.changeLocation(points, contribution, name, entry);
     }
   }
 
@@ -481,7 +485,7 @@ export class LocationPickModal {
     if (k === "back") { this.step = "list"; return "redraw"; }
     if (k === "travel") {
       const e = this.entries.find(x => x.id === this.selected);
-      if (e) this._commit(e.points ?? 0, e.threat ?? 0, e.name);
+      if (e) this._commit(e.points ?? 0, e.threat ?? 0, e.name, e);
       return this._leave();
     }
     if (k === "save") { this._commit(this.pts, this.contrib); return this._leave(); }

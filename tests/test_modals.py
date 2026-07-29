@@ -932,9 +932,40 @@ def test_location_pick_travel_commits_the_card_numbers_and_name():
     m.on_button(_find(m, ("row", "f")))
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("travel",))) == "close"
-    assert game.active_location == {"points": 3, "progress": 0, "name": "Old Forest Road"}
+    # The record now KEEPS the card's threat, not just spends it on the staging
+    # total: putting the location back into staging has to add the same number
+    # again, and by then the caller no longer has it.
+    assert game.active_location == {"points": 3, "progress": 0,
+                                    "name": "Old Forest Road", "threat": 1}
     assert game.staging == 5
     assert "Traveled to Old Forest Road" in game.log[-2]["text"]
+
+
+def test_location_pick_carries_the_x_metadata_onto_the_location():
+    # A location printing X for its threat must reach the location record with
+    # the marker AND the card's own definition of X, or the Progress screen has
+    # nothing to show but a 0 the card never printed.
+    entries = [{"id": "x", "name": "Tangled Grove", "points": 3, "threat": 0,
+                "set": "The Oath", "threatKind": "x",
+                "threatFormula": "the number of locations in the staging area"}]
+    hw, pal, game, m = _pick(entries=entries)
+    m.on_button(_find(m, ("row", "x")))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("travel",)))
+    loc = game.active_location
+    assert loc["threatKind"] == "x"
+    assert loc["threatFormula"] == "the number of locations in the staging area"
+    # points printed a real 3, so it carries no marker at all
+    assert "pointsKind" not in loc and "pointsFormula" not in loc
+
+
+def test_location_pick_manual_entry_stays_a_two_key_record():
+    # The manual stepper has no card behind it, so it must not gain any of the
+    # optional keys - old saves and hand-entered locations stay identical.
+    hw, pal, game, m = _pick(entries=[])
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("save",)))
+    assert game.active_location == {"points": m.pts, "progress": 0}
 
 
 def test_location_pick_hides_travel_until_a_row_is_picked():
@@ -987,7 +1018,8 @@ def test_location_pick_change_mode_replaces_and_warns():
     m.on_button(_find(m, ("row", "b")))
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("travel",)))
-    assert game.active_location == {"points": 4, "progress": 0, "name": "Forest Gate"}
+    assert game.active_location == {"points": 4, "progress": 0,
+                                    "name": "Forest Gate", "threat": 2}
 
 
 def test_location_pick_pages_a_long_union():

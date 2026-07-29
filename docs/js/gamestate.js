@@ -494,21 +494,40 @@ export class GameState {
   // the object keeps exactly the two keys it always had, so old saves and
   // hand-entered locations stay indistinguishable from today's - every label
   // site reads .name with a generic fallback.
-  _seatLocation(points, name) {
+  // Mirrors gamestate.py LOC_META / _seat_location. Every key is optional and
+  // absent for a manual entry, so a hand-typed location and an old save stay
+  // byte-identical to what they were.
+  //
+  // `threat` is the location's staging contribution, stored rather than only
+  // passed to _applyTravelStaging because putting the location BACK into
+  // staging has to add the same number again, and by then the caller no longer
+  // has it.
+  //
+  // `*Kind` / `*Formula` say why a stat has no number - see
+  // quest_catalog.locationsFor - so the Progress screen can show the card's
+  // own definition of X instead of a 0 it made up.
+  static LOC_META = ["threat", "pointsKind", "pointsFormula",
+                     "threatKind", "threatFormula"];
+
+  _seatLocation(points, name, meta = null) {
     const loc = { points, progress: 0 };
+    for (const k of GameState.LOC_META) {
+      const v = (meta ?? {})[k];
+      if (v !== null && v !== undefined) loc[k] = v;
+    }
     if (name) loc.name = name;
     return loc;
   }
 
-  travelTo(points, contribution = 0, name = null) {
-    this.active_location = this._seatLocation(points, name);
+  travelTo(points, contribution = 0, name = null, meta = null) {
+    this.active_location = this._seatLocation(points, name, meta);
     this.logEvent(`Traveled to ${name || "new location"} (${points} quest points)`);
     this._applyTravelStaging(contribution);
   }
 
-  changeLocation(points, contribution = 0, name = null) {
+  changeLocation(points, contribution = 0, name = null, meta = null) {
     const old = this.active_location;
-    this.active_location = this._seatLocation(points, name);
+    this.active_location = this._seatLocation(points, name, meta);
     const newLabel = name || "new";
     if (old) {
       this.logEvent(`Changed active location (${old.name || "old"} at ${old.progress}/${old.points} discarded) -> ${newLabel} (${points} quest points)`);

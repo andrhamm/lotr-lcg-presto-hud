@@ -584,7 +584,22 @@ class GameState:
             self.log_event("Staging area threat %d -> %d (traveled location)"
                            % (before, self.staging))
 
-    def _seat_location(self, points, name):
+    # Keys _seat_location copies from the picker's entry when present. Every
+    # one is optional and absent for a manual entry, so a hand-typed location
+    # and an old save stay byte-identical to what they were.
+    #
+    # `threat` is the location's staging contribution, and it is stored rather
+    # than only passed to _apply_travel_staging because putting the location
+    # BACK into staging has to add the same number again - the caller no
+    # longer has it by then.
+    #
+    # `*Kind` / `*Formula` say why a stat has no number: see
+    # quest_catalog.locations_for. Carried so the Progress screen can show the
+    # card's own definition of X instead of a 0 it made up.
+    LOC_META = ("threat", "pointsKind", "pointsFormula",
+                "threatKind", "threatFormula")
+
+    def _seat_location(self, points, name, meta=None):
         """The new active location. `name` is the catalog card name when the
         player picked one (LocationPickModal's list step); manual entry
         passes None and the dict keeps exactly the two keys it always had, so
@@ -592,19 +607,23 @@ class GameState:
         today's - every label site reads .get("name") with a generic
         fallback."""
         loc = {"points": points, "progress": 0}
+        for k in self.LOC_META:
+            v = (meta or {}).get(k)
+            if v is not None:
+                loc[k] = v
         if name:
             loc["name"] = name
         return loc
 
-    def travel_to(self, points, contribution=0, name=None):
-        self.active_location = self._seat_location(points, name)
+    def travel_to(self, points, contribution=0, name=None, meta=None):
+        self.active_location = self._seat_location(points, name, meta)
         self.log_event("Traveled to %s (%d quest points)"
                        % (name or "new location", points))
         self._apply_travel_staging(contribution)
 
-    def change_location(self, points, contribution=0, name=None):
+    def change_location(self, points, contribution=0, name=None, meta=None):
         old = self.active_location
-        self.active_location = self._seat_location(points, name)
+        self.active_location = self._seat_location(points, name, meta)
         new_label = name or "new"
         if old:
             self.log_event(

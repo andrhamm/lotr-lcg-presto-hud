@@ -993,11 +993,15 @@ class LocationPickModal:
             self.game.pending_progress_detail = True
         return result
 
-    def _commit(self, points, contribution, name=None):
+    def _commit(self, points, contribution, name=None, entry=None):
+        """`entry` is the picker row, or None for the manual stepper. Its
+        threat / *Kind / *Formula keys ride along onto the location record so
+        the Progress screen can put a real threat back into staging, and can
+        show the card's own definition of X rather than a 0."""
         if self.mode == "new" and self.game.active_location is None:
-            self.game.travel_to(points, contribution, name)
+            self.game.travel_to(points, contribution, name, entry)
         else:
-            self.game.change_location(points, contribution, name)
+            self.game.change_location(points, contribution, name, entry)
 
     def on_button(self, btn):
         k = btn.id[0]
@@ -1025,7 +1029,8 @@ class LocationPickModal:
         if k == "travel":
             e = next((x for x in self.entries if x["id"] == self.selected), None)
             if e:
-                self._commit(e.get("points") or 0, e.get("threat") or 0, e.get("name"))
+                self._commit(e.get("points") or 0, e.get("threat") or 0,
+                             e.get("name"), e)
             return self._leave()
         if k == "save":
             self._commit(self.pts, self.contrib)

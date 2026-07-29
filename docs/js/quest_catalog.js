@@ -231,19 +231,32 @@ export function locationsFor(scenario, packs) {
     const pack = bySlug[slug];
     if (!pack) continue;
     for (const card of pack.encounter?.location ?? []) {
-      const key = `${card.name} ${card.encounterSet}`;
+      const key = JSON.stringify([card.name, card.encounterSet]);
       if (seen.has(key)) continue;
       seen.add(key);
-      let points = 0, threat = 0;
-      for (const face of card.faces ?? []) {
-        if (!points && face.questPoints !== null && face.questPoints !== undefined) {
-          points = face.questPoints;
-        }
-        if (!threat && face.threat !== null && face.threat !== undefined) {
-          threat = face.threat;
-        }
+      // Mirrors quest_catalog.py's locations_for: when no face carries a
+      // number the printed value was not one, and `${key}Kind` says which of
+      // "x" (the card prints a literal X) / "na" (the stat does not apply) it
+      // was, with `${key}Formula` carrying the card's own definition of X
+      // where it has one. This used to flatten all of it to 0.
+      const faces = card.faces ?? [];
+      const stat = (name) => {
+        const has = (v) => v !== null && v !== undefined;
+        const val = faces.find(f => has(f[name]));
+        if (val) return { value: val[name] };
+        const kind = faces.find(f => f[name + "Kind"]);
+        const formula = faces.find(f => f[name + "Formula"]);
+        return { value: 0, kind: kind ? kind[name + "Kind"] : "x",
+                 formula: formula ? formula[name + "Formula"] : null };
+      };
+      const qp = stat("questPoints"), th = stat("threat");
+      const entry = { id: card.id, name: card.name, points: qp.value,
+                      threat: th.value, set: card.encounterSet };
+      for (const [s, key] of [[qp, "points"], [th, "threat"]]) {
+        if (s.kind) entry[key + "Kind"] = s.kind;
+        if (s.formula) entry[key + "Formula"] = s.formula;
       }
-      out.push({ id: card.id, name: card.name, points, threat, set: card.encounterSet });
+      out.push(entry);
     }
   }
   return out.sort(byName);

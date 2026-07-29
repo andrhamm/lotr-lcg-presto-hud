@@ -264,10 +264,23 @@ def locations_for(scenario, packs):
     NOT in the gather list are ignored.
 
     `points`/`threat` are the first non-null questPoints/threat across the
-    card's faces, else 0 - 15 catalog locations are variable or
-    condition-explored with a null questPoints on every face, and 21 are
-    multi-face. Same rule side_quests() uses for the variable "X" quests;
-    those show 0 and the player edits the real value at the table.
+    card's faces. When no face carries a number, the printed value was not a
+    number, and `pointsKind`/`threatKind` says which of the three it was:
+
+        "x"   the card prints a literal X. 58 faces do, mostly for threat.
+              `pointsFormula`/`threatFormula` carries the card's own
+              definition of X where it has one (40 of 58) - merged in by
+              build_card_data.py from tools/data/location_dynamic_distilled.
+        "na"  the stat does not apply at all. Lost Island has no quest
+              points: it flips, it never explores.
+        None  absent upstream. Unknown, same handling as "x" without a
+              formula.
+
+    This used to collapse to a flat 0 with the comment "those show 0 and the
+    player edits the real value at the table" - which put a 0 on screen for
+    both a card printing X and a card with no such stat, and for threat that
+    silently under-reports the staging total the player compares willpower
+    against.
 
     Deduped by (name, encounterSet): the same card can be reachable through
     two gather entries. `quantity` is deliberately NOT carried - the HUD does
@@ -285,16 +298,27 @@ def locations_for(scenario, packs):
             if key in seen:
                 continue
             seen[key] = True
-            points = 0
-            threat = 0
-            for face in card.get("faces") or []:
-                if not points and face.get("questPoints") is not None:
-                    points = face["questPoints"]
-                if not threat and face.get("threat") is not None:
-                    threat = face["threat"]
-            out.append({"id": card.get("id"), "name": card.get("name"),
-                        "points": points, "threat": threat,
-                        "set": card.get("encounterSet")})
+            entry = {"id": card.get("id"), "name": card.get("name"),
+                     "set": card.get("encounterSet")}
+            faces = card.get("faces") or []
+            for stat, out_key in (("questPoints", "points"),
+                                  ("threat", "threat")):
+                val = next((f[stat] for f in faces
+                            if f.get(stat) is not None), None)
+                if val is not None:
+                    entry[out_key] = val
+                    continue
+                # No number on any face: report WHICH non-number it was, and
+                # the formula when the card defines one.
+                kind = next((f.get(stat + "Kind") for f in faces
+                             if f.get(stat + "Kind")), None)
+                formula = next((f.get(stat + "Formula") for f in faces
+                                if f.get(stat + "Formula")), None)
+                entry[out_key] = 0
+                entry[out_key + "Kind"] = kind or "x"
+                if formula:
+                    entry[out_key + "Formula"] = formula
+            out.append(entry)
     out.sort(key=lambda l: l["name"] or "")
     return out
 
