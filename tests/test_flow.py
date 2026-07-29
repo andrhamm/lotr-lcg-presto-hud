@@ -9,7 +9,7 @@ from gamestate import GameState, VIEW_ORDER
 # -- views ----------------------------------------------------------------
 
 def test_view_order():
-    assert VIEW_ORDER == ["resource_planning", "quest_commit", "quest_staging",
+    assert VIEW_ORDER == ["resource", "planning", "quest_commit", "quest_staging",
                           "quest_resolution", "travel",
                           "enc_optional", "enc_checks",
                           "combat_shadow", "combat_enemy", "combat_player",
@@ -17,12 +17,14 @@ def test_view_order():
 
 
 def test_round_flow_first_view_is_resource_planning():
-    assert VIEW_ORDER[0] == "resource_planning"
+    assert VIEW_ORDER[0] == "resource"
 
 
 def test_advance_view_walks_forward():
     g = GameState()
     g.advance_view()            # leaves setup
+    g.advance_view()
+    assert g.view == "planning"     # Resource -> Planning, now separate phases
     g.advance_view()
     assert g.view == "quest_commit"
 
@@ -39,7 +41,7 @@ def test_end_round_resets_view():
     g = GameState()
     g.view = "refresh"
     g.end_round()
-    assert g.view == "resource_planning"
+    assert g.view == "resource"
 
 
 # -- per-player commits ---------------------------------------------------
@@ -99,10 +101,10 @@ def test_view_for_step_exact_and_phase_fallback():
     from gamestate import view_for_step
     assert view_for_step("3.2") == "quest_commit"      # exact
     assert view_for_step("6.2") == "combat_shadow"     # exact
-    assert view_for_step("1.1") == "resource_planning" # phase fallback
-    assert view_for_step("2.P") == "resource_planning" # planning merges
+    assert view_for_step("1.1") == "resource" # phase fallback
+    assert view_for_step("2.P") == "planning"          # its own view now
     assert view_for_step("5.4") == "enc_checks"        # encounter fallback
-    assert view_for_step("0.0") == "resource_planning"
+    assert view_for_step("0.0") == "resource"
 
 
 def test_crossing_elimination_sets_pending_flag():
@@ -211,10 +213,10 @@ def test_new_game_starts_at_setup_phase():
 def test_setup_advances_to_resource_planning_and_never_returns():
     g = GameState()
     g.advance_view()
-    assert g.view == "resource_planning"
+    assert g.view == "resource"
     g.view = "refresh"
     g.end_round()
-    assert g.view == "resource_planning"   # rounds skip setup forever
+    assert g.view == "resource"   # rounds skip setup forever
 
 
 
@@ -230,15 +232,17 @@ def test_entering_views_logs_phase_starts_with_time():
     g = GameState()
     t = _clocked(g)
     t["v"] = 5000
-    g.advance_view()   # setup -> resource_planning
+    g.advance_view()   # setup -> resource
     e = g.log[-1]
-    assert "Phase: Resource & Planning" in e["text"] or "round 1 begins" in e["text"].lower()
+    assert "Phase: Resource" in e["text"] or "round 1 begins" in e["text"].lower()
     starts = [e for e in g.log if e["text"].startswith("Phase:")]
     assert starts and starts[-1]["t"] == 5000
     t["v"] = 9000
-    g.advance_view()   # -> quest_commit
-    assert g.log[-1]["text"] == "Phase: Questing (Commit)"
+    g.advance_view()   # -> planning
+    assert g.log[-1]["text"] == "Phase: Planning"
     assert g.log[-1]["t"] == 9000
+    g.advance_view()   # -> quest_commit
+    assert g.log[-1]["text"] == "Phase: Questing: Commit"
 
 
 def test_end_round_logs_duration_and_deltas():

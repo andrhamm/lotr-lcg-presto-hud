@@ -48,6 +48,23 @@ def _play(view, mutate=None):
     return build
 
 
+def _aw_scene(view):
+    """The static action-window screen for one view. Not a modal - transient
+    ScreenPlay state, so the zones still open their usual editors."""
+    def build():
+        from ui.screen_play import ScreenPlay
+        hw = FakeHardware()
+        pal = Palette(hw.display)
+        g = _game()
+        g.view = view
+        g.step = VIEW_STEP[view]
+        s = ScreenPlay()
+        s.open_action_window(g)
+        s.draw(hw, g, pal)
+        return hw, s
+    return build
+
+
 def _quest_setup():
     # R0 pre-round-1 phase view: a scenario-preloaded game (Passage Through
     # Mirkwood shape - stage 1, 8 quest points) showing stage 1A's setup text,
@@ -356,6 +373,14 @@ def _log_replay_prep(g):
         g.add_delta(snap)
     g.undo()
     g.undo()
+
+
+def _aw_running(g):
+    pass
+
+
+def _aw_paused(g):
+    pass
 
 
 def _sailing_on(g):
@@ -1148,7 +1173,8 @@ SCENES = {
     "setup4": _setup([25, 27, 29, 31], first=3),
     "play_setup": _play("setup_game"),
     "play_setup_sailing": _play("setup_game", mutate=_sailing_on),
-    "play_resource_planning": _play("resource_planning"),
+    "play_resource": _play("resource"),
+    "play_planning": _play("planning"),
     "play_quest_sailing": _play("quest_sailing", mutate=_sailing_on),
     "play_quest_commit": _play("quest_commit"),
     "play_quest_commit_partial_confirm": _play("quest_commit", mutate=_partial_confirm),
@@ -1189,6 +1215,16 @@ SCENES = {
     "phases_screen_combat": _screen("ui.screen_phases", "ScreenPhases",
                                     prep=_step_prep("6.P")),
     "log": _screen("ui.screen_log", "ScreenLog", prep=_log_prep),
+    # One scene per action-window view - all ten, so the layout linter covers
+    # every piece of copy, not just a sample.
+    "aw_resource": _aw_scene("resource"),
+    "aw_quest_commit": _aw_scene("quest_commit"),
+    "aw_quest_staging": _aw_scene("quest_staging"),
+    "aw_quest_resolution": _aw_scene("quest_resolution"),
+    "aw_travel": _aw_scene("travel"),
+    "aw_enc_optional": _aw_scene("enc_optional"),
+    "aw_enc_checks": _aw_scene("enc_checks"),
+    "aw_refresh": _aw_scene("refresh"),
     "log_replay": _screen("ui.screen_log", "ScreenLog", prep=_log_replay_prep),
     "play_quest_staging_can_back": _play("quest_staging", mutate=_has_undo_history),
     "play_combat_player_can_back": _play("combat_enemy", mutate=_has_undo_history),

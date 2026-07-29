@@ -7,6 +7,11 @@ on the device. UI and hardware live elsewhere; this module only models state.
 import json
 
 import phases
+# Play-screen copy lives in one place so the web twin can be generated from
+# it rather than hand-mirrored. Re-exported here because callers and tests
+# have imported these names from gamestate since before viewcopy existed.
+from viewcopy import (VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS,  # noqa: F401
+                      OUTCOME)
 
 MAX_PLAYERS = 4
 DEFAULT_ELIMINATION = 50   # rulebook: eliminated when threat REACHES 50
@@ -14,7 +19,7 @@ DEFAULT_START_THREAT = 25  # varies by deck; editable per player at setup
 
 # Guided per-round flow. quest_resolution is entered only via a successful
 # resolve; advance_view otherwise skips from staging to travel.
-VIEW_ORDER = ["resource_planning", "quest_commit", "quest_staging",
+VIEW_ORDER = ["resource", "planning", "quest_commit", "quest_staging",
               "quest_resolution", "travel",
               "enc_optional", "enc_checks",
               "combat_shadow", "combat_enemy", "combat_player",
@@ -24,7 +29,8 @@ VIEW_ORDER = ["resource_planning", "quest_commit", "quest_staging",
 VIEW_STEP = {
     "setup_game": "0.0",
     "quest_setup": "0.0",
-    "resource_planning": "1.R",
+    "resource": "1.R",
+    "planning": "2.P",
     "quest_sailing": "3.1",
     "quest_commit": "3.2",
     "quest_staging": "3.3",
@@ -40,9 +46,9 @@ VIEW_STEP = {
 
 
 _PHASE_VIEW = {
-    "Beginning": "resource_planning",
-    "Resource": "resource_planning",
-    "Planning": "resource_planning",
+    "Beginning": "resource",
+    "Resource": "resource",
+    "Planning": "planning",
     "Quest": "quest_commit",
     "Travel": "travel",
     "Encounter": "enc_optional",
@@ -58,7 +64,7 @@ _STEP_VIEW["5.3"] = "enc_checks"
 _STEP_VIEW["5.4"] = "enc_checks"
 _STEP_VIEW["6.11"] = "combat_player"
 # jumping to 0.0 from the phases screen means round start, not game setup
-_STEP_VIEW["0.0"] = "resource_planning"
+_STEP_VIEW["0.0"] = "resource"
 
 
 def view_for_step(step_id):
@@ -73,22 +79,6 @@ def view_for_step(step_id):
 # is not blocked by defense; Surge/Doomed resolve on every reveal; Battle/Siege
 # quests commit ATK/DEF; shadow cards are discarded at the end of combat; one
 # Time counter is removed each refresh.
-VIEW_LABELS = {
-    "setup_game": "Setup",
-    "quest_setup": "Quest Setup",
-    "resource_planning": "Resource & Planning",
-    "quest_sailing": "Questing (Sailing)",
-    "quest_commit": "Questing (Commit)",
-    "quest_staging": "Questing (Staging)",
-    "quest_resolution": "Questing (Resolution)",
-    "travel": "Travel",
-    "enc_optional": "Encounter (Opt. Engage)",
-    "enc_checks": "Encounter (Checks)",
-    "combat_shadow": "Combat (Shadow Cards)",
-    "combat_enemy": "Combat (Enemy Attacks)",
-    "combat_player": "Combat (Player Attacks)",
-    "refresh": "Refresh",
-}
 
 
 def fmt_ms(ms):
@@ -97,17 +87,7 @@ def fmt_ms(ms):
     return "%dm%02ds" % (s // 60, s % 60)
 
 
-# Setup guidance — the real confusion is the ORDER of effects during quest
-# setup (rulebook p.10 + FAQ): resolve 1A's Setup text in printed order first;
-# keywords on setup reveals (Surge / Doomed / Guarded) DO resolve; the
-# encounter deck is shuffled AFTER any setup searches; only then flip 1A -> 1B.
-SETUP_TIP = [
-    "Draw 6 cards - one mulligan, you keep the 2nd hand.",
-    "Resolve stage 1A Setup text in printed order.",
-    "Keywords on setup reveals (Surge/Doomed) do resolve.",
-    "Shuffle the encounter deck AFTER setup searches,",
-    "then flip 1A -> 1B and begin.",
-]
+
 
 # Heading card facings, best -> worst (Grey Havens rulebook p.5). Only the sun
 # facing is "on-course"; the rest are "off-course". Facing names are the
@@ -395,6 +375,23 @@ class GameState:
         self.step = VIEW_STEP[v]
         self.log_event("Phase: %s" % VIEW_LABELS.get(v, v))
 
+    def next_view(self):
+        """Where advance_view() would go from here, without going there.
+
+        Lets the action-window screen label its CTA with the real destination
+        instead of a vague "Continue" - it sits between one step's view and
+        the next, so the next phase is exactly what it is handing off to.
+        """
+        if self.view == "quest_sailing":
+            return "quest_commit"
+        i = VIEW_ORDER.index(self.view)
+        nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
+        if self.view == "quest_staging":
+            nxt = "travel"
+        if self.view == "resource_planning" and self.sailing:
+            nxt = "quest_sailing"
+        return nxt
+
     def advance_view(self):
         """Move to the next view; staging skips resolution (that view is only
         entered by a successful resolve). The one-time setup phase leads into
@@ -410,12 +407,7 @@ class GameState:
         if self.view == "quest_sailing":
             self.enter_view("quest_commit")
             return
-        i = VIEW_ORDER.index(self.view)
-        nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
-        if self.view == "quest_staging":
-            nxt = "travel"
-        if self.view == "resource_planning" and self.sailing:
-            nxt = "quest_sailing"
+        nxt = self.next_view()
         self.enter_view(nxt)
         # a Sailing test begins by shifting one step off-course (rulebook p.6)
         if nxt == "quest_sailing":
@@ -731,7 +723,7 @@ class GameState:
             for i, p in enumerate(self.players):
                 if not p.eliminated:
                     self.adjust_threat(i, shortfall)
-            self.log_event("Quest failed. +%d threat to all" % shortfall)
+            self.log_event(OUTCOME["toast_fail"] % shortfall)
             outcome, n = "fail", shortfall
             result = {"outcome": outcome, "threat": n}
         else:
@@ -1059,7 +1051,10 @@ class GameState:
             p.commit = pd.get("commit", 0)
             p.commit_touched = pd.get("commit_touched", False)
             g.players.append(p)
-        g.view = d.get("view", VIEW_ORDER[0])
+        v = d.get("view", VIEW_ORDER[0])
+        # saves written before Resource and Planning were split carry the
+        # merged view id; land them on the Resource half.
+        g.view = "resource" if v == "resource_planning" else v
         g.round = d["round"]
         g.first_player = d["first_player"]
         g.step = d["step"]

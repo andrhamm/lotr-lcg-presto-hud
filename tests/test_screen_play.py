@@ -10,7 +10,7 @@ from ui.modals import LocationPickModal
 from gamestate import GameState
 
 
-def _setup(view="resource_planning"):
+def _setup(view="resource"):
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
@@ -47,20 +47,35 @@ def _has_window(hw, pal):
     return "window" in _bars(hw, pal)
 
 
-def test_resource_planning_advances_to_commit():
-    hw, pal, game, screen = _setup("resource_planning")
+def test_resource_advances_to_planning():
+    """Resource and Planning are separate phases with separate action windows,
+    so they are separate views - 2.P used to be the only action-window step
+    with no view of its own."""
+    hw, pal, game, screen = _setup("resource")
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("advance",)), game)
+    assert game.view == "planning"
+
+
+def test_planning_advances_to_commit():
+    hw, pal, game, screen = _setup("planning")
     screen.draw(hw, game, pal)
     screen.on_button(_find(screen, ("advance",)), game)
     assert game.view == "quest_commit"
 
 
-def test_resource_planning_shows_framework_and_window_blocks():
-    hw, pal, game, screen = _setup("resource_planning")
+def test_resource_and_planning_each_show_only_their_own_copy():
+    hw, pal, game, screen = _setup("resource")
     screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert _has_framework(hw, pal) and _has_window(hw, pal)
-    accents = [c[5] for c in hw.display.calls if c[0] == "rect" and c[1] == 8 and c[3] == 4]
-    assert pal.red in accents and pal.green in accents
+    t = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "gains a resource" in t
+    assert "allies and attachments" not in t     # that is Planning's step
+
+    hw, pal, game, screen = _setup("planning")
+    screen.draw(hw, game, pal)
+    t = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "allies and attachments" in t
+    assert "gains a resource" not in t
 
 
 def test_commit_view_shows_willpower_tokens_in_players_matrix():
@@ -291,7 +306,7 @@ def test_progress_zone_shows_quest_loc_side_labels_and_remaining_values():
 def test_progress_zone_tap_present_and_sq_add_card_dropped():
     # The +SQ placeholder card is gone; every play view routes progress edits
     # (incl. adding side quests) through the Questing Progress view.
-    for view in ("resource_planning", "quest_commit", "quest_staging",
+    for view in ("resource", "quest_commit", "quest_staging",
                  "enc_optional", "refresh", "travel"):
         hw, pal, game, screen = _setup(view)
         screen.draw(hw, game, pal)
@@ -302,7 +317,7 @@ def test_progress_zone_tap_present_and_sq_add_card_dropped():
 
 def test_progress_detail_opens_questing_progress_modal():
     from ui.modals import QuestingProgressModal
-    hw, pal, game, screen = _setup("resource_planning")
+    hw, pal, game, screen = _setup("resource")
     screen.draw(hw, game, pal)
     result = screen.on_button(_find(screen, ("progress_detail",)), game)
     assert isinstance(result[1], QuestingProgressModal)
@@ -338,7 +353,7 @@ def test_zone_geometry_is_the_narrow_read_only_layout():
 
 
 def test_progress_zone_caps_columns_keeping_oldest_side_quests_and_sailing():
-    hw, pal, game, screen = _setup("resource_planning")
+    hw, pal, game, screen = _setup("resource")
     game.active_location = {"points": 5, "progress": 0}
     game.sailing = True
     game.side_quests = [{"points": 5, "progress": 0} for _ in range(10)]
@@ -370,7 +385,7 @@ def test_refresh_end_round_resets_view():
     screen.draw(hw, game, pal)
     screen.on_button(_find(screen, ("endround",)), game)
     assert game.round == 2
-    assert game.view == "resource_planning"
+    assert game.view == "resource"
 
 
 def test_totals_cards_renamed_with_currency_icons():
@@ -520,7 +535,7 @@ def test_setup_view_tip_and_quest_points_then_begin():
         screen.draw(hw, game, pal)
     assert game.quest["points"] == 8
     screen.on_button(_find(screen, ("advance",)), game)
-    assert game.view == "resource_planning"
+    assert game.view == "resource"
     assert any("needs 8" in e["text"] for e in game.log)
 
 
@@ -572,7 +587,7 @@ def test_quest_setup_flip_to_b_enters_round_1():
     result = screen.on_button(_find(screen, ("flip_to_b",)), game)
     assert result is True
     assert game.quest["side"] == "B" and game.quest["points"] == 8
-    assert game.view == "resource_planning"        # VIEW_ORDER[0]
+    assert game.view == "resource"        # VIEW_ORDER[0]
     assert all(not p.commit_touched for p in game.players)
     assert game._round_snap is not None
     messages = [e["text"] for e in game.log]
@@ -753,7 +768,7 @@ def test_every_label_fits_between_the_nav_squares():
 
 def test_nav_rule_is_drawn_full_width():
     from ui.screen_play import NAV_RULE_Y
-    hw, pal, game, screen = _setup("resource_planning")
+    hw, pal, game, screen = _setup("resource")
     screen.draw(hw, game, pal)
     rules = [c for c in hw.display.calls
              if c[0] == "rect" and c[2] == NAV_RULE_Y and c[3] == 480 and c[4] == 1]
@@ -761,14 +776,14 @@ def test_nav_rule_is_drawn_full_width():
 
 
 def test_back_square_absent_with_no_history():
-    hw, pal, game, screen = _setup("resource_planning")
+    hw, pal, game, screen = _setup("resource")
     screen.draw(hw, game, pal)
     assert "back" not in _ids(screen)
 
 
 def test_back_square_appears_with_history_and_undoes():
     from ui.screen_play import NAV_W, CTA_H, CTA_Y, MARGIN
-    hw, pal, game, screen = _setup("resource_planning")
+    hw, pal, game, screen = _setup("resource")
     screen.draw(hw, game, pal)
     snap = game.begin_action()
     screen.on_button(_find(screen, ("advance",)), game)
@@ -778,7 +793,7 @@ def test_back_square_appears_with_history_and_undoes():
     assert (back.x, back.y, back.w, back.h) == (MARGIN, CTA_Y, NAV_W, CTA_H)
     assert back.w == back.h == CTA_H          # square by construction
     assert screen.on_button(back, game) is True
-    assert game.view == "resource_planning"
+    assert game.view == "resource"
 
 
 def test_forward_hit_area_spans_label_and_arrow():
@@ -797,14 +812,14 @@ def test_label_frame_does_not_move_when_back_appears():
     hw, pal, game, screen = _setup("travel")
     screen.draw(hw, game, pal)
     before = [c[2] for c in hw.display.calls
-              if c[0] == "text" and str(c[1]) == "Encounter (Opt. Engage)"]
+              if c[0] == "text" and str(c[1]) == "Encounter: Opt. Engage"]
     snap = game.begin_action()
     game.adjust_threat(0, 1)
     game.add_delta(snap)
     hw.display.calls.clear()
     screen.draw(hw, game, pal)
     after = [c[2] for c in hw.display.calls
-             if c[0] == "text" and str(c[1]) == "Encounter (Opt. Engage)"]
+             if c[0] == "text" and str(c[1]) == "Encounter: Opt. Engage"]
     assert before and before == after
 
 
@@ -813,8 +828,8 @@ def test_phase_advance_uses_a_kicker_and_the_bare_phase_name():
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert "NEXT PHASE" in texts
-    assert "Combat (Player Attacks)" in texts
-    assert "Next: Combat (Player Attacks)" not in texts
+    assert "Combat: Player Attacks" in texts
+    assert "Next: Combat: Player Attacks" not in texts
 
 
 def test_action_ctas_are_a_single_line_with_no_kicker():
@@ -827,7 +842,7 @@ def test_action_ctas_are_a_single_line_with_no_kicker():
 
 def test_back_is_a_noop_when_history_is_empty():
     from ui.widgets import Button
-    hw, pal, game, screen = _setup("resource_planning")
+    hw, pal, game, screen = _setup("resource")
     screen.draw(hw, game, pal)
     assert screen.on_button(Button(("back",), 0, 0, 1, 1), game) is None
 

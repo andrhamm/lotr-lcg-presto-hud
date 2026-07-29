@@ -20,10 +20,13 @@ def _done_button(d, pal):
 
 
 def draw_header(d, pal, game, buttons, highlight=None, title=None,
-                close=False, close_left=False, round_label=None):
+                close=False, close_left=False, round_label=None,
+                title_pen=None):
     """Standard header. Default: R# (tap -> log) | view label (tap -> phases)
     | Set. (tap -> settings).
     title: static center text instead of the view label.
+    title_pen: override the title colour (the action-window screen uses
+    pal.purple, the established accent for action windows).
     close: DONE on the right closes the screen (Settings).
     close_left: the R# label is highlighted and tapping it again closes
     (Game Log — toggle behavior)."""
@@ -36,7 +39,8 @@ def draw_header(d, pal, game, buttons, highlight=None, title=None,
     center = title if title is not None else VIEW_LABEL.get(
         getattr(game, "view", None), phases.step(game.step)["phase"])
     scale = BODY if len(center) > 12 else DISPLAY
-    text_center(d, pal, center, 240, 12 if scale == BODY else 8, scale, pal.gold)
+    text_center(d, pal, center, 240, 12 if scale == BODY else 8, scale,
+                title_pen if title_pen is not None else pal.gold)
 
     if close:
         _done_button(d, pal)

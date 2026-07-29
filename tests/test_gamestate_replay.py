@@ -128,7 +128,7 @@ def test_undo_walks_back_through_several_actions():
     _act(g, lambda: g.enter_view("quest_staging"))
     assert g.view == "quest_staging"
     assert g.undo() and g.view == "quest_commit"
-    assert g.undo() and g.view == "resource_planning"
+    assert g.undo() and g.view == "resource"
     assert g.undo() and g.willpower == 0
     assert g.can_undo() is False
 
@@ -283,7 +283,7 @@ def test_replay_round_trips_through_json():
     assert g2.replay_step == g.replay_step
     assert g2.deltas == g.deltas
     assert g2.undo() is True
-    assert g2.view == "resource_planning"
+    assert g2.view == "resource"
 
 
 def test_replay_from_dict_tolerates_a_missing_or_corrupt_file():
@@ -407,7 +407,7 @@ def test_back_across_a_round_boundary_reverts_everything_end_round_did():
     assert (g.players[0].threat, g.players[1].threat) == (26, 26)  # +1 each
     assert g.first_player == 1
     assert g.round == 2
-    assert g.view == "resource_planning"
+    assert g.view == "resource"
 
     assert g.undo() is True
     assert (g.players[0].threat, g.players[1].threat, g.first_player, g.round) == before

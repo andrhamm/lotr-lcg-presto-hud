@@ -6,7 +6,11 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
-import { VIEW_ORDER, VIEW_LABELS, SETUP_TIP } from "./gamestate.js";
+import { VIEW_ORDER } from "./gamestate.js";
+import { VIEW_LABELS, SETUP_TIP, PHASE_FRAMEWORK, PHASE_WINDOW,
+         PHASE_CAPTION, COMBAT_FLOW, SHIP_NOTES, STAGING, TRAVEL,
+         OUTCOME, SAILING, QUEST_SETUP, CONFIRM, TOTALS,
+         REFRESH } from "./viewcopy.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal,
          PlayersDetailModal, RemindersModal, LocationPickModal, SideQuestsModal,
          QuestConfigModal, StageCompleteModal, SailingModal,
@@ -27,25 +31,9 @@ const NAV_PAD = 8;        // clearance between a nav square and the label
 // engagement costs, so the risk framing is rules-verified explanatory copy
 // tied to the numbers already on screen (players-zone threat tokens), not a
 // fabricated cost comparison against data the app doesn't have.
-const PHASE_FRAMEWORK = {
-  enc_checks: "One check engages one enemy: the highest engagement cost that is <= your threat.",
-  combat_shadow: "Deal 1 facedown shadow card to each engaged enemy, in player order - highest engagement cost first.",
-  combat_enemy: "Choose an enemy -> exhaust a defender (optional) -> shadow effect -> damage, one at a time.",
-  combat_player: "Choose an enemy -> exhaust attackers -> total ATK -> damage, one enemy at a time.",
-};
-const PHASE_WINDOW = {
-  enc_optional: "In player order, each player may engage 1 enemy - engagement cost does not matter here.",
-  enc_checks: "Responses.",
-  combat_shadow: "Responses.",
-  combat_enemy: "Responses at each step.",
-  combat_player: "Responses at each step.",
-};
-const PHASE_CAPTION = {
-  enc_optional: "Your threat decides which enemies can engage you next.",
-  enc_checks: "In player order, repeating until no enemy in staging can engage anyone.",
-  combat_enemy: "In player order; each player resolves all their enemies before the next. Undefended: all damage to one of your heroes.",
-  combat_player: "In player order; each player makes all their attacks before the next. 1 attack per engaged enemy, and attacking is optional.",
-};
+// See ui/screen_play.py - three phases get their action-window guidance here
+// rather than on a dedicated screen, because upstream does not describe them
+// as a discrete window following the step.
 
 export class ScreenPlay {
   constructor() {
@@ -192,14 +180,14 @@ export class ScreenPlay {
     const allDone = living.length > 0 && done.length === living.length;
     const b = new Button(["confirm_all"], MARGIN, y, 480 - 2 * MARGIN, 40);
     bevel(ctx, b.x, b.y, b.w, b.h, allDone ? pal.card : pal.btn);
-    const label = allDone ? "All players confirmed"
+    const label = allDone ? CONFIRM.all
                           : `Confirm all commits (${done.length}/${living.length})`;
     textCenter(ctx, label, 240, y + 12, BODY, allDone ? pal.dim : pal.tan);
     if (!allDone) this.buttons.push(b);
     return y + 48;
   }
 
-  // Live "current -> projected" threat per living player, flagged red when the
+  // Live REFRESH.preview_caption threat per living player, flagged red when the
   // projected value crosses the same danger threshold _playersZone uses
   // (proj >= elimination - 10). Eliminated players are skipped: their threat is
   // capped at their elimination level and does not keep rising. Height: 48
@@ -306,19 +294,27 @@ export class ScreenPlay {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       this._drawQuestSetup(ctx, game);
-    } else if (view === "resource_planning") {
+    } else if (view === "resource") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-        { kind: "framework", text: "1 resource to each of your heroes, then each player draws 1 card - all at once." },
-        { kind: "window", text: "In player order, play allies and attachments from hand - the only step that allows it." },
+        { kind: "framework", text: PHASE_FRAMEWORK["resource"] },
       ]);
-      this._cta(ctx, game, `Next: ${VIEW_LABELS[game.sailing ? "quest_sailing" : "quest_commit"]}`, ["advance"]);
+      this._cta(ctx, game, `Next: ${VIEW_LABELS["planning"]}`, ["advance"]);
+    } else if (view === "planning") {
+      this._playersZone(ctx, game);
+      this._progressZone(ctx, game);
+      phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+        { kind: "framework", text: PHASE_FRAMEWORK["planning"] },
+        { kind: "window", text: PHASE_WINDOW["planning"] },
+      ]);
+      const nxt = game.sailing ? "quest_sailing" : "quest_commit";
+      this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt]}`, ["advance"]);
     } else if (view === "quest_commit") {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
-        [{ kind: "window", text: "In player order, exhaust characters to commit them and add their willpower." }]);
+        [{ kind: "window", text: PHASE_WINDOW["quest_commit"] }]);
       const cy = this._drawConfirmAll(ctx, game, CONTENT_Y + bh + 8);
       this._totalsRow(ctx, game, cy, false, ["wp", "stg"]);
       this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_staging}`, ["advance"]);
@@ -327,7 +323,7 @@ export class ScreenPlay {
       this._progressZone(ctx, game);
       if (!game.sailing) {
         notePanel(ctx, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                  ["No Sailing keyword on this quest.", "Enable it if the stage says Sailing."]);
+                  [SAILING.no_keyword, SAILING.enable_hint]);
         const eb = new Button(["sail_toggle"], MARGIN, CONTENT_Y + 96,
                               480 - 2 * MARGIN, 52);
         bevel(ctx, eb.x, eb.y, eb.w, eb.h, pal.btn);
@@ -366,11 +362,11 @@ export class ScreenPlay {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-        { kind: "framework", text: "1 card per player, one at a time - resolve each When Revealed before the next." },
-        { kind: "window", text: "Responses to the reveal." },
+        { kind: "framework", text: STAGING.framework },
+        { kind: "window", text: STAGING.window },
       ]);
       // Gaps are 4, not 8: the framework line grew to two lines when it
-      // gained the "one at a time / resolve each When Revealed" rule, and the
+      // gained the STAGING.short rule, and the
       // totals row has to stay clear of the CTA. Re-laid out rather than
       // shrinking the text - see the design system.
       const my = CONTENT_Y + bh + 4;
@@ -387,8 +383,8 @@ export class ScreenPlay {
       this._playersZone(ctx, game);
       this._progressZone(ctx, game);
       const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-        { kind: "framework", text: "Simultaneously ready all exhausted cards; each player's threat +1. Pass the token clockwise." },
-        { kind: "window", text: "Responses." },
+        { kind: "framework", text: PHASE_FRAMEWORK["refresh"] },
+        { kind: "window", text: PHASE_WINDOW["refresh"] },
       ]);
       this._refreshThreatPreview(ctx, game, CONTENT_Y + bh + 8);
       this._cta(ctx, game, "End Round", ["endround"]);
@@ -397,10 +393,7 @@ export class ScreenPlay {
       const flavor = { combat_enemy: [icons.DEFENSE, pal.green],
                        combat_player: [icons.ATTACK, pal.tan] }[view];
       this._progressZone(ctx, game);
-      const shipNotes = {
-        combat_enemy: "Ships: only a ship can defend a ship-enemy. Undefended ship attacks must damage a ship you control.",
-        combat_player: "Ships: your ships attack only ship-enemies - but any character may attack a ship-enemy.",
-      };
+      const shipNotes = SHIP_NOTES;
       const sections = [];
       if (PHASE_FRAMEWORK[view]) {
         const fw = game.sailing && shipNotes[view]
@@ -493,7 +486,7 @@ export class ScreenPlay {
     const usable = tipW - 28;
     const raw = aFace.text;
     const body = (raw === null || raw === undefined || raw === "")
-      ? "No setup instructions for this stage." : raw;
+      ? QUEST_SETUP.none : raw;
     let lines = wrapText(body, BODY, usable);
     if (lines.length > maxLines) {
       lines = lines.slice(0, maxLines);
@@ -505,7 +498,7 @@ export class ScreenPlay {
     rect(ctx, tipX + 4, tipY + 4, tipW - 8, tipH - 8, pal.border_gold);
     rect(ctx, tipX + 6, tipY + 6, tipW - 12, tipH - 12, pal.scroll);
     rect(ctx, tipX, tipY, tipW, ribbonH, pal.border_gold);
-    textLeft(ctx, "QUEST SETUP - resolve now", tipX + 10, tipY + 6, BODY, pal.bg, false);
+    textLeft(ctx, QUEST_SETUP.banner, tipX + 10, tipY + 6, BODY, pal.bg, false);
     let ly = tipY + ribbonH + padTop;
     for (const ln of lines) {
       textLeft(ctx, ln, tipX + 14, ly, BODY, pal.tan);
@@ -525,20 +518,20 @@ export class ScreenPlay {
   _drawTravel(ctx, game) {
     const loc = game.active_location;
     const fw = loc
-      ? "No travel while a location is active - explore it first."
-      : "The group may travel to 1 location - the first player has the final say.";
+      ? TRAVEL.blocked
+      : TRAVEL.open;
     const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
       [{ kind: "framework", text: fw }, { kind: "window", text: "Responses." }]);
     const y = CONTENT_Y + bh + 10;
     if (!loc) {
       const tb = new Button(["travel_new"], MARGIN, y, 480 - 2 * MARGIN, 56);
       bevel(ctx, tb.x, tb.y, tb.w, tb.h, pal.btn);
-      textCenter(ctx, "Travel to location", 240, y + 18, BODY, pal.tan);
+      textCenter(ctx, TRAVEL.btn_travel, 240, y + 18, BODY, pal.tan);
       this.buttons.push(tb);
     } else {
       const cb = new Button(["travel_change"], MARGIN, y, 480 - 2 * MARGIN, 48);
       panel(ctx, cb.x, cb.y, cb.w, cb.h);
-      textCenter(ctx, "Replace location (card effect)", 240, y + 14, BODY, pal.muted);
+      textCenter(ctx, TRAVEL.btn_replace, 240, y + 14, BODY, pal.muted);
       this.buttons.push(cb);
     }
     this._cta(ctx, game, `Next: ${VIEW_LABELS.enc_optional}`, ["advance"]);
@@ -549,7 +542,7 @@ export class ScreenPlay {
       return ["TRAIL", `Quested successfully! +${game.quest_outcome_n} progress`, "green"];
     if (game.quest_outcome === "fail")
       return ["THREAT_SM", `Quest failed. +${game.quest_outcome_n} threat to all`, "red"];
-    return [null, "Quest unsuccessful - a tie, no change", "amber"];
+    return [null, OUTCOME.toast_tie, "amber"];
   }
 
   _drawResolution(ctx, game) {
@@ -564,7 +557,7 @@ export class ScreenPlay {
       rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
       icons.drawIcon(ctx, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold);
       // line 1: outcome + a broken heart marking the failed quest
-      const l1 = fail ? "Quest failed. " : "Quest unsuccessful - a tie. ";
+      const l1 = fail ? "Quest failed. " : OUTCOME.card_tie;
       textLeft(ctx, l1, tx, ty0 + 8, BODY, pal.muted);
       drawHeart(ctx, tx + measureText(l1, BODY) + 8, ty0 + 8 + 8, 7, true, pal.red);
       // line 2
@@ -577,7 +570,7 @@ export class ScreenPlay {
         textLeft(ctx, `rose by ${game.quest_outcome_n}.`, ax + icons.THREAT_SM[0] + 6, y2,
                  BODY, pal.muted);
       } else {
-        textLeft(ctx, "No progress placed, no threat gained.", tx, y2, BODY, pal.muted);
+        textLeft(ctx, OUTCOME.tie_line2, tx, y2, BODY, pal.muted);
       }
       this._cta(ctx, game, `Next: ${VIEW_LABELS.travel}`, ["advance"]);
       return;
@@ -618,7 +611,7 @@ export class ScreenPlay {
       // rules caption -> BODY (334px of the 464 available). hy moves from +50
       // to +56 to clear the taller line; the table below shifts 6px and still
       // ends 38px clear of the CTA.
-      textCenter(ctx, "Location fills first, then the quest", 240, HEADER_H + 32,
+      textCenter(ctx, OUTCOME.alloc_caption, 240, HEADER_H + 32,
                  BODY, pal.dim);
       hy = HEADER_H + 56;
     }
@@ -660,7 +653,7 @@ export class ScreenPlay {
 
     if (discard > 0) {
       panel(ctx, MARGIN, y, rw, 44, pal.card);
-      textLeft(ctx, "Unplaced (discarded)", 20, y + 14, BODY, pal.dim);
+      textLeft(ctx, OUTCOME.alloc_unplaced, 20, y + 14, BODY, pal.dim);
       textCenter(ctx, String(discard), cxGoal, y + 8, DISPLAY, pal.red);
       y += 50;
     }
@@ -712,12 +705,12 @@ export class ScreenPlay {
       return true;
     }
     if (k === "wp") {
-      return ["modal", new CounterModal("Questing willpower total", game.willpower,
+      return ["modal", new CounterModal(TOTALS.willpower_modal, game.willpower,
         v => { game.willpower = v; }, "willpower")];
     }
     if (k === "enc_rem") return ["modal", new RemindersModal(game)];
     if (k === "stg") {
-      return ["modal", new CounterModal("Staging area threat", game.staging,
+      return ["modal", new CounterModal(TOTALS.staging_modal, game.staging,
         v => { game.staging = v; }, "threat")];
     }
     if (k === "wp-") { game.willpower = Math.max(0, game.willpower - 1); return true; }

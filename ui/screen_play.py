@@ -1,13 +1,18 @@
 """Play screen - guided per-round flow, one view per stage.
 
-resource_planning -> [quest_sailing] -> quest_commit (per-player willpower) ->
+resource -> planning -> [quest_sailing] -> quest_commit (per-player willpower) ->
 quest_staging (totals with -/+) -> quest_resolution (spreadsheet placement) ->
 travel -> encounter -> combat -> refresh (end round). The header navigates.
 
 Mirror of docs/js/screen_play.js - keep the two in lockstep.
 """
 
-from gamestate import VIEW_ORDER, VIEW_LABELS, SETUP_TIP
+import phases
+from gamestate import VIEW_ORDER
+from viewcopy import (VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS,
+                      PHASE_FRAMEWORK, PHASE_WINDOW, PHASE_CAPTION,
+                      COMBAT_FLOW, SHIP_NOTES, STAGING, TRAVEL, OUTCOME,
+                      SAILING, QUEST_SETUP, CONFIRM, TOTALS, REFRESH)
 from ui.header import draw_header, HEADER_H
 from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
@@ -28,31 +33,8 @@ NAV_W = CTA_H          # back / forward are matching squares, CTA_H on a side
 NAV_RULE_Y = 400       # 1px rule dividing the content area from the bottom nav
 ARROW = 22             # arrow glyph size inside a nav square
 NAV_PAD = 8            # clearance between a nav square and the label between them
+AW_TICKS = 150         # 3s at the 0.02s main-loop tick
 
-# Threat-as-risk framing for Encounter & Combat (M2 Task 6): the app tracks
-# each player's live threat but not individual enemy cards or their
-# engagement costs, so the risk framing is rules-verified explanatory copy
-# tied to the numbers already on screen (players-zone threat tokens), not a
-# fabricated cost comparison against data the app doesn't have.
-PHASE_FRAMEWORK = {
-    "enc_checks": "One check engages one enemy: the highest engagement cost that is <= your threat.",
-    "combat_shadow": "Deal 1 facedown shadow card to each engaged enemy, in player order - highest engagement cost first.",
-    "combat_enemy": "Choose an enemy -> exhaust a defender (optional) -> shadow effect -> damage, one at a time.",
-    "combat_player": "Choose an enemy -> exhaust attackers -> total ATK -> damage, one enemy at a time.",
-}
-PHASE_WINDOW = {
-    "enc_optional": "In player order, each player may engage 1 enemy - engagement cost does not matter here.",
-    "enc_checks": "Responses.",
-    "combat_shadow": "Responses.",
-    "combat_enemy": "Responses at each step.",
-    "combat_player": "Responses at each step.",
-}
-PHASE_CAPTION = {
-    "enc_optional": "Your threat decides which enemies can engage you next.",
-    "enc_checks": "In player order, repeating until no enemy in staging can engage anyone.",
-    "combat_enemy": "In player order; each player resolves all their enemies before the next. Undefended: all damage to one of your heroes.",
-    "combat_player": "In player order; each player makes all their attacks before the next. 1 attack per engaged enemy, and attacking is optional.",
-}
 
 
 def draw_notif_pie(d, pal, cx, cy, r, frac, color="amber"):
@@ -83,6 +65,7 @@ class ScreenPlay:
         self.notif_edge = "amber" # banner/pie color (leadership purple for windows)
         self.alloc = None         # resolution-view allocation state
         self.toast = None         # [(icon, text, color)] picked up by the main loop
+        self.action_window = None # view whose window screen is showing, or None
 
     # -- shared pieces -----------------------------------------------------
     def _players_zone(self, d, pal, game):
@@ -160,6 +143,100 @@ class ScreenPlay:
         # 210px at BODY inside the 258px zone, so it needs no re-layout.
         text_left(d, pal, "quest points remaining", 174, ZONE_TOP + 66, BODY, pal.dim)
         self.buttons.append(Button(("progress_detail",), 174, ZONE_TOP - 2, 298, 90))
+
+    # -- action-window screen ----------------------------------------------
+    # A static contextual page shown in front of a step that opens a player
+    # action window. No timer and no "Perform Actions" button: those existed
+    # only to let a 3s auto-advance be frozen, and there is no auto-advance.
+    # The player leaves when they are ready, like every other view.
+    AW_Y0 = 146                       # top of the copy band, under the zones
+    AW_MAX_BOTTOM = NAV_RULE_Y - 10   # copy must clear the nav rule
+
+    def open_action_window(self, game):
+        self.action_window = game.view
+
+    def close_action_window(self):
+        self.action_window = None
+
+    def _draw_action_window(self, d, pal, game):
+        # "ACTION WINDOW" is the screen's TITLE and belongs in the header,
+        # where every other screen puts its title - not floating in the
+        # content area competing with the copy.
+        y0 = self.AW_Y0
+        w = 480 - 2 * MARGIN
+        gutter = len(icons.LEADERSHIP) + 14
+        usable = w - 16 - 12 - gutter
+        lh = 10 * BODY + 6
+        band_top, band_bottom = y0, self.AW_MAX_BOTTOM
+        max_lines = max(1, (band_bottom - band_top - 16) // lh)
+        # Whole paragraphs only - clipping a sentence mid-clause is exactly
+        # what the design system forbids.
+        lines = []
+        for para in ACTION_WINDOW_TIPS.get(game.view, ()):
+            wrapped = wrap_text(para, BODY, usable, d.measure_text)
+            if len(lines) + len(wrapped) > max_lines:
+                continue
+            lines.extend(wrapped)
+        # centre the panel in the band rather than letting it hug the title
+        ph = max(len(lines) * lh + 16, len(icons.LEADERSHIP) + 14)
+        ty = band_top + max(0, (band_bottom - band_top - ph) // 2)
+        note_panel(d, pal, MARGIN, ty, w, lines, BODY, 0, icons.LEADERSHIP)
+        # The window hands off to the NEXT step, so the CTA names it - the same
+        # "Next: X" every phase view uses, which the nav bar renders as the
+        # NEXT PHASE kicker over the destination.
+        self._cta(d, pal, game, "Next: %s" % VIEW_LABELS[game.next_view()],
+                  ("aw_close",))
+
+    # Combat substeps, in resolution order. Both halves of the combat phase
+    # are a LOOP - the substeps run once per enemy / per attack - and upstream
+    # says a player-action window opens after each substep, not once at the
+    # end. A prose arrow-chain could carry the order but not the looping, so
+    # this draws the sequence and the loop instead.
+    COMBAT_FLOW = COMBAT_FLOW      # module constant, kept as a class alias
+    FLOW_X = 44            # left gutter holds the loop arrow
+    FLOW_ROW = 42
+
+    def _combat_flow(self, d, pal, game, y0):
+        caption, note, steps = self.COMBAT_FLOW[game.view]
+        n = len(steps)
+        rows = [y0 + i * self.FLOW_ROW for i in range(n)]
+        # loop arrow: down the gutter from the last row back up to the first
+        gx = 20
+        d.set_pen(pal.border_gold)
+        d.rectangle(gx, rows[0] + 6, 2, rows[-1] - rows[0])       # the spine
+        d.rectangle(gx, rows[-1] + 6, self.FLOW_X - gx - 8, 2)     # bottom stub
+        d.rectangle(gx, rows[0] + 6, self.FLOW_X - gx - 8, 2)      # top stub
+        # arrowhead at the top, pointing into the first step
+        ax = self.FLOW_X - 8
+        d.triangle(ax, rows[0] + 1, ax, rows[0] + 13, ax + 9, rows[0] + 7)
+        # flavour icon, top-right of the flow (kept from the prose version)
+        mask, pen = {"combat_enemy": (icons.DEFENSE, pal.green),
+                     "combat_player": (icons.ATTACK, pal.tan)}[game.view]
+        icons.draw(d, mask, 480 - MARGIN - len(mask), y0 - 2, pen)
+        for label, ry in zip(steps, rows):
+            tx = self.FLOW_X + 6
+            text_left(d, pal, label, tx, ry, BODY, pal.tan)
+            # ", then actions" in the action-window purple, inline after each
+            # substep - it says what a dot plus a legend had to explain, and
+            # it is upstream's own phrasing ("then player actions"). Longest
+            # row lands at 450px of 472.
+            text_left(d, pal, ", then actions",
+                      tx + d.measure_text(label, BODY) + 4, ry, BODY, pal.purple)
+        cy = rows[-1] + self.FLOW_ROW - 10
+        # wrap rather than trusting the string to fit - the first draft of
+        # these notes ran 508px against 464 of screen
+        yy = cy
+        # Ships note only when the scenario is a Sailing quest - real rules
+        # content the prose version carried; dropping it silently would have
+        # been a regression (caught by test_combat_enemy_sailing_...).
+        ship = {"combat_enemy": "Ships: only a ship can defend a ship-enemy.",
+                "combat_player": "Ships: your ships attack only ship-enemies."}
+        extra = (ship[game.view],) if game.sailing else ()
+        for para in (caption, note) + extra:
+            for line in wrap_text(para, BODY, 480 - 2 * MARGIN, d.measure_text):
+                text_left(d, pal, line, MARGIN, yy, BODY, pal.dim)
+                yy += 24
+        return yy + 4
 
     def _cta(self, d, pal, game, label, id, fill=None, fg=None):
         """The bottom nav bar: a 1px rule, then matching square arrow buttons
@@ -260,11 +337,24 @@ class ScreenPlay:
         d.set_pen(pal.bg)
         d.clear()
         view = game.view
-        if view == "quest_setup":
+        if self.action_window:
+            # Phase, not a coined position name: it comes straight from
+            # phases.py and is accurate for all ten windows. The step id in
+            # the round stamp (R1 3.2 vs R1 3.3) is what distinguishes two
+            # windows inside the same phase.
+            draw_header(d, pal, game, self.buttons, title_pen=pal.purple,
+                        title="ACTION WINDOW - %s"
+                              % phases.step(game.step)["phase"].upper())
+        elif view == "quest_setup":
             draw_header(d, pal, game, self.buttons, title="QUEST SETUP", round_label="R0")
         else:
             draw_header(d, pal, game, self.buttons)
 
+        if self.action_window:
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
+            self._draw_action_window(d, pal, game)
+            return
         if view == "setup_game":
             th = note_panel(d, pal, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP)
             # This view's two rows are the tallest stack on any play screen and
@@ -296,12 +386,19 @@ class ScreenPlay:
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
             self._draw_quest_setup(d, pal, game)
-        elif view == "resource_planning":
+        elif view == "resource":
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
             phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-                ("framework", "1 resource to each of your heroes, then each player draws 1 card - all at once."),
-                ("window", "In player order, play allies and attachments from hand - the only step that allows it."),
+                ("framework", PHASE_FRAMEWORK["resource"]),
+            ])
+            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["planning"], ("advance",))
+        elif view == "planning":
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
+            phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+                ("framework", PHASE_FRAMEWORK["planning"]),
+                ("window", PHASE_WINDOW["planning"]),
             ])
             nxt = "quest_sailing" if game.sailing else "quest_commit"
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS[nxt], ("advance",))
@@ -309,7 +406,7 @@ class ScreenPlay:
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
             bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
-                             [("window", "In player order, exhaust characters to commit them and add their willpower.")])
+                             [("window", PHASE_WINDOW["quest_commit"])])
             cy = self._draw_confirm_all(d, pal, game, CONTENT_Y + bh + 8)
             self._totals_row(d, pal, game, cy, tappable=("wp", "stg"))
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_staging"], ("advance",))
@@ -327,17 +424,23 @@ class ScreenPlay:
             self._players_zone(d, pal, game)
             self._progress_zone(d, pal, game)
             bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-                ("framework", "Simultaneously ready all exhausted cards; each player's threat +1. Pass the token clockwise."),
-                ("window", "Responses."),
+                ("framework", PHASE_FRAMEWORK["refresh"]),
+                ("window", PHASE_WINDOW["refresh"]),
             ])
             self._refresh_threat_preview(d, pal, game, CONTENT_Y + bh + 8)
             self._cta(d, pal, game, "End Round", ("endround",))
+        elif view in self.COMBAT_FLOW:
+            # Combat is a loop, so it gets the flow diagram rather than a
+            # prose arrow-chain: the chain could carry the order but not the
+            # repetition, and the windows sit INSIDE the loop.
+            self._players_zone(d, pal, game)
+            self._progress_zone(d, pal, game)
+            self._combat_flow(d, pal, game, CONTENT_Y + 6)
+            nxt = VIEW_ORDER[(VIEW_ORDER.index(view) + 1) % len(VIEW_ORDER)]
+            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS[nxt], ("advance",))
         else:
             self._players_zone(d, pal, game)
-            ship_notes = {
-                "combat_enemy": "Ships: only a ship can defend a ship-enemy. Undefended ship attacks must damage a ship you control.",
-                "combat_player": "Ships: your ships attack only ship-enemies - but any character may attack a ship-enemy.",
-            }
+            ship_notes = SHIP_NOTES
             flavor = {"combat_enemy": (icons.DEFENSE, pal.green),
                       "combat_player": (icons.ATTACK, pal.tan)}.get(view)
             self._progress_zone(d, pal, game)
@@ -416,8 +519,8 @@ class ScreenPlay:
         self._progress_zone(d, pal, game)
         if not game.sailing:
             note_panel(d, pal, MARGIN, CONTENT_Y + 6, 480 - 2 * MARGIN,
-                       ["No Sailing keyword on this quest.",
-                        "Enable it if the stage says Sailing."])
+                       [SAILING["no_keyword"],
+                        SAILING["enable_hint"]])
             eb = Button(("sail_toggle",), MARGIN, CONTENT_Y + 96, 480 - 2 * MARGIN, 52)
             bevel(d, pal, eb.x, eb.y, eb.w, eb.h, pal.btn)
             icons.draw(d, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold)
@@ -458,11 +561,11 @@ class ScreenPlay:
         self._players_zone(d, pal, game)
         self._progress_zone(d, pal, game)
         bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
-            ("framework", "1 card per player, one at a time - resolve each When Revealed before the next."),
-            ("window", "Responses to the reveal."),
+            ("framework", STAGING["framework"]),
+            ("window", STAGING["window"]),
         ])
         # Gaps are 4, not 8: the framework line grew to two lines when it
-        # gained the "one at a time / resolve each When Revealed" rule, and
+        # gained the STAGING["short"] rule, and
         # the totals row has to stay clear of the CTA. Re-laid out rather
         # than shrinking the text - see the design system.
         my = CONTENT_Y + bh + 4
@@ -496,7 +599,7 @@ class ScreenPlay:
         ribbon_h, pad_top, line_h, pad_bottom, max_lines = 28, 10, 24, 10, 4
         usable = tip_w - 28
         raw = a_face.get("text")
-        body = raw if raw else "No setup instructions for this stage."
+        body = raw if raw else QUEST_SETUP["none"]
         lines = wrap_text(body, BODY, usable, measure=d.measure_text)
         if len(lines) > max_lines:
             lines = lines[:max_lines]
@@ -513,7 +616,7 @@ class ScreenPlay:
         d.rectangle(tip_x + 6, tip_y + 6, tip_w - 12, tip_h - 12)
         d.set_pen(pal.border_gold)
         d.rectangle(tip_x, tip_y, tip_w, ribbon_h)
-        text_left(d, pal, "QUEST SETUP - resolve now", tip_x + 10, tip_y + 6, BODY, pal.bg,
+        text_left(d, pal, QUEST_SETUP["banner"], tip_x + 10, tip_y + 6, BODY, pal.bg,
                   shadow=False)
         ly = tip_y + ribbon_h + pad_top
         for ln in lines:
@@ -527,7 +630,7 @@ class ScreenPlay:
         text_center(d, pal, "View quest card", 240, card_btn.y + 14, BODY, pal.tan)
         self.buttons.append(card_btn)
 
-        self._cta(d, pal, game, "Flip to Side B  ->  %d qp" % card["questPoints"], ("flip_to_b",))
+        self._cta(d, pal, game, QUEST_SETUP["flip"] % card["questPoints"], ("flip_to_b",))
 
     def _draw_confirm_all(self, d, pal, game, y):
         """One-tap 'everyone's commit is reviewed' button for the commit view -
@@ -539,8 +642,8 @@ class ScreenPlay:
         all_done = len(done) == len(living) and living
         b = Button(("confirm_all",), MARGIN, y, 480 - 2 * MARGIN, 40)
         bevel(d, pal, b.x, b.y, b.w, b.h, pal.card if all_done else pal.btn)
-        label = ("All players confirmed" if all_done else
-                 "Confirm all commits (%d/%d)" % (len(done), len(living)))
+        label = (CONFIRM["all"] if all_done else
+                 CONFIRM["partial"] % (len(done), len(living)))
         text_center(d, pal, label, 240, y + 12, BODY,
                     pal.dim if all_done else pal.tan)
         if not all_done:
@@ -548,7 +651,7 @@ class ScreenPlay:
         return y + 48
 
     def _refresh_threat_preview(self, d, pal, game, y):
-        """Live "current -> projected" threat per living player, flagged red
+        """Live REFRESH["preview_caption"] threat per living player, flagged red
         when the projected value crosses the same danger threshold
         _players_zone uses (proj >= elimination - 10). Eliminated players are
         skipped - their threat is capped at their elimination level and does
@@ -569,29 +672,29 @@ class ScreenPlay:
 
     def _draw_travel(self, d, pal, game):
         loc = game.active_location
-        fw = ("No travel while a location is active - explore it first." if loc else
-              "The group may travel to 1 location - the first player has the final say.")
+        fw = (TRAVEL["blocked"] if loc else
+              TRAVEL["open"])
         bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
                          [("framework", fw), ("window", "Responses.")])
         y = CONTENT_Y + bh + 10
         if loc is None:
             tb = Button(("travel_new",), MARGIN, y, 480 - 2 * MARGIN, 56)
             bevel(d, pal, tb.x, tb.y, tb.w, tb.h, pal.btn)
-            text_center(d, pal, "Travel to location", 240, y + 18, BODY, pal.tan)
+            text_center(d, pal, TRAVEL["btn_travel"], 240, y + 18, BODY, pal.tan)
             self.buttons.append(tb)
         else:
             cb = Button(("travel_change",), MARGIN, y, 480 - 2 * MARGIN, 48)
             panel(d, pal, cb.x, cb.y, cb.w, cb.h, fill=pal.card)
-            text_center(d, pal, "Replace location (card effect)", 240, y + 14, BODY, pal.muted)
+            text_center(d, pal, TRAVEL["btn_replace"], 240, y + 14, BODY, pal.muted)
             self.buttons.append(cb)
         self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["enc_optional"], ("advance",))
 
     def _outcome_toast(self, game):
         if game.quest_outcome == "success":
-            return ("TRAIL", "Quested successfully! +%d progress" % game.quest_outcome_n, "green")
+            return ("TRAIL", OUTCOME["toast_success"] % game.quest_outcome_n, "green")
         if game.quest_outcome == "fail":
-            return ("THREAT_SM", "Quest failed. +%d threat to all" % game.quest_outcome_n, "red")
-        return (None, "Quest unsuccessful - a tie, no change", "amber")
+            return ("THREAT_SM", OUTCOME["toast_fail"] % game.quest_outcome_n, "red")
+        return (None, OUTCOME["toast_tie"], "amber")
 
     def _draw_resolution(self, d, pal, game):
         if game.quest_outcome != "success":
@@ -607,7 +710,7 @@ class ScreenPlay:
             d.set_pen(pal.border_gold)
             d.rectangle(MARGIN, ty0, 4, th)
             icons.draw(d, icons.PIPE, MARGIN + 10, ty0 + 8, pal.gold)
-            l1 = "Quest failed. " if fail else "Quest unsuccessful - a tie. "
+            l1 = "Quest failed. " if fail else OUTCOME["card_tie"]
             text_left(d, pal, l1, tx, ty0 + 8, BODY, pal.muted)
             draw_heart(d, pal, tx + d.measure_text(l1, BODY) + 8, ty0 + 8 + 8, 7, True, pal.red)
             y2 = ty0 + 8 + lh
@@ -619,7 +722,7 @@ class ScreenPlay:
                 text_left(d, pal, "rose by %d." % game.quest_outcome_n,
                           ax + len(icons.THREAT_SM) + 6, y2, BODY, pal.muted)
             else:
-                text_left(d, pal, "No progress placed, no threat gained.", tx, y2, BODY,
+                text_left(d, pal, OUTCOME["tie_line2"], tx, y2, BODY,
                           pal.muted)
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["travel"], ("advance",))
             return
@@ -659,7 +762,7 @@ class ScreenPlay:
             # rules caption -> BODY (334px of the 464 available). hy moves from
             # +50 to +56 to clear the taller line; the table below shifts 6px
             # and still ends 38px clear of the CTA.
-            text_center(d, pal, "Location fills first, then the quest", 240, HEADER_H + 32,
+            text_center(d, pal, OUTCOME["alloc_caption"], 240, HEADER_H + 32,
                         BODY, pal.dim)
             hy = HEADER_H + 56
         # ALL-CAPS column heads over a dense table - LABEL is right here.
@@ -699,7 +802,7 @@ class ScreenPlay:
 
         if discard > 0:
             panel(d, pal, MARGIN, y, rw, 44, fill=pal.card)
-            text_left(d, pal, "Unplaced (discarded)", 20, y + 14, BODY, pal.dim)
+            text_left(d, pal, OUTCOME["alloc_unplaced"], 20, y + 14, BODY, pal.dim)
             text_center(d, pal, str(discard), cx_goal, y + 8, DISPLAY, pal.red)
             y += 50
 
@@ -756,7 +859,7 @@ class ScreenPlay:
         if k == "wp":
             def set_wp(v, game=game):
                 game.willpower = v
-            return ("modal", CounterModal("Questing willpower total", game.willpower,
+            return ("modal", CounterModal(TOTALS["willpower_modal"], game.willpower,
                                           on_commit=set_wp, icon="willpower"))
         if k == "enc_rem":
             from ui.modals import RemindersModal
@@ -764,7 +867,7 @@ class ScreenPlay:
         if k == "stg":
             def set_stg(v, game=game):
                 game.staging = v
-            return ("modal", CounterModal("Staging area threat", game.staging,
+            return ("modal", CounterModal(TOTALS["staging_modal"], game.staging,
                                           on_commit=set_stg, icon="threat"))
         if k == "wp-":
             game.willpower = max(0, game.willpower - 1)

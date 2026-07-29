@@ -488,7 +488,7 @@ class RemindersModal:
             text_left(d, pal, label, 76, y + 12, BODY, pal.tan if on else pal.muted)
             from ui.header import VIEW_LABEL
             # "At <view>", not "Notifies at <view>": at BODY the archery row
-            # ("Combat (Shadow Cards)" plus the staging condition) runs 22px
+            # ("Combat: Shadow Cards" plus the staging condition) runs 22px
             # past the row at the longer wording. Shortening the copy is the
             # fix; shrinking the caption is not (see the design system spec).
             if key == "archery":

@@ -9,8 +9,11 @@ Before this milestone the identical scenario took 29 taps. M3 got it to 22,
 Those were REVERTED (2026-07-28): the players-zone tokens are read-only
 status, not controls - 24px halves were too small to hit deliberately and too
 easy to hit by accident. Threat now goes through the Players modal, which
-costs an open and a close, so the same round is 24 taps. That is the honest
-price of the revert, recorded here rather than hidden by relaxing the walk.
+costs an open and a close, so the same round became 24 taps.
+
+Then Resource and Planning were split into their own views (2.P was the only
+action-window step with no view of its own), which adds one more advance:
+25. Both increases are recorded here rather than hidden by relaxing the walk.
 """
 import os
 import sys
@@ -22,7 +25,7 @@ from ui.theme import Palette
 from ui.screen_play import ScreenPlay
 from gamestate import GameState
 
-TAP_BUDGET = 24
+TAP_BUDGET = 25
 
 
 def test_common_round_hits_tap_budget():
@@ -34,7 +37,7 @@ def test_common_round_hits_tap_budget():
     for p in game.players:
         p.commit_touched = False                  # fresh round: nobody reviewed yet
     game.active_location = {"points": 6, "progress": 2}
-    game.view = "resource_planning"
+    game.view = "resource"
     game.step = "1.R"
     screen = ScreenPlay()
     state = {"modal": None, "taps": 0}
@@ -51,7 +54,9 @@ def test_common_round_hits_tap_budget():
             state["modal"] = None
         return result
 
-    tap(("advance",))                              # 1: resource_planning -> quest_commit
+    tap(("advance",))                              # 1: resource -> planning
+    assert game.view == "planning"
+    tap(("advance",))                              # 2: planning -> quest_commit
     assert game.view == "quest_commit"
 
     tap(("players_detail",))                       # 2: open PlayersDetailModal

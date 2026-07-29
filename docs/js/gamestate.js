@@ -1,35 +1,30 @@
 // Port of gamestate.py — method-for-method. Keep the two in lockstep:
 // web-first changes land here, then mirror into gamestate.py.
 import { STEP_ORDER, step as phaseStep } from "./phases.js";
+// Copy is GENERATED from viewcopy.py so the twins cannot drift.
+import { VIEW_LABELS, SETUP_TIP, OUTCOME } from "./viewcopy.js";
+export { VIEW_LABELS, SETUP_TIP };
 
 export const MAX_PLAYERS = 4;
 export const DEFAULT_ELIMINATION = 50;
 export const DEFAULT_START_THREAT = 25;
 
-export const VIEW_ORDER = ["resource_planning", "quest_commit", "quest_staging",
+export const VIEW_ORDER = ["resource", "planning", "quest_commit", "quest_staging",
   "quest_resolution", "travel", "enc_optional", "enc_checks",
   "combat_shadow", "combat_enemy", "combat_player", "refresh"];
 
 export const VIEW_STEP = {
-  setup_game: "0.0", quest_setup: "0.0", resource_planning: "1.R", quest_sailing: "3.1",
+  setup_game: "0.0", quest_setup: "0.0", resource: "1.R", planning: "2.P", quest_sailing: "3.1",
   quest_commit: "3.2",
   quest_staging: "3.3", quest_resolution: "3.4", travel: "4.2",
   enc_optional: "5.2", enc_checks: "5.3", combat_shadow: "6.2",
   combat_enemy: "6.E", combat_player: "6.P", refresh: "7.R",
 };
 
-export const VIEW_LABELS = {
-  setup_game: "Setup", quest_setup: "Quest Setup", resource_planning: "Resource & Planning",
-  quest_sailing: "Questing (Sailing)", quest_commit: "Questing (Commit)", quest_staging: "Questing (Staging)",
-  quest_resolution: "Questing (Resolution)", travel: "Travel",
-  enc_optional: "Encounter (Opt. Engage)", enc_checks: "Encounter (Checks)",
-  combat_shadow: "Combat (Shadow Cards)", combat_enemy: "Combat (Enemy Attacks)",
-  combat_player: "Combat (Player Attacks)", refresh: "Refresh",
-};
 
 const PHASE_VIEW = {
-  Beginning: "resource_planning", Resource: "resource_planning",
-  Planning: "resource_planning", Quest: "quest_commit", Travel: "travel",
+  Beginning: "resource", Resource: "resource",
+  Planning: "planning", Quest: "quest_commit", Travel: "travel",
   Encounter: "enc_optional", Combat: "combat_shadow", Refresh: "refresh",
   End: "refresh",
 };
@@ -38,7 +33,7 @@ for (const [v, s] of Object.entries(VIEW_STEP)) STEP_VIEW[s] = v;
 STEP_VIEW["5.3"] = "enc_checks";
 STEP_VIEW["5.4"] = "enc_checks";
 STEP_VIEW["6.11"] = "combat_player";
-STEP_VIEW["0.0"] = "resource_planning";
+STEP_VIEW["0.0"] = "resource";
 
 export function viewForStep(stepId) {
   if (stepId in STEP_VIEW) return STEP_VIEW[stepId];
@@ -50,13 +45,6 @@ export function fmtMs(ms) {
   return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
 }
 
-export const SETUP_TIP = [
-  "Draw 6 cards - one mulligan, you keep the 2nd hand.",
-  "Resolve stage 1A Setup text in printed order.",
-  "Keywords on setup reveals (Surge/Doomed) do resolve.",
-  "Shuffle the encounter deck AFTER setup searches,",
-  "then flip 1A -> 1B and begin.",
-];
 
 // Heading card facings, best -> worst (Grey Havens rulebook p.5). Only
 // the sun facing is "on-course"; the rest are "off-course". Facing names
@@ -613,7 +601,7 @@ export class GameState {
     } else if (diff < 0) {
       const shortfall = -diff;
       this.players.forEach((p, i) => { if (!p.eliminated) this.adjustThreat(i, shortfall); });
-      this.logEvent(`Quest failed. +${shortfall} threat to all`);
+      this.logEvent(OUTCOME.toast_fail.replace("%d", shortfall));
       outcome = "fail"; n = shortfall;
       result = { outcome, threat: n };
     } else {
@@ -893,7 +881,10 @@ export class GameState {
       p.commit_touched = pd.commit_touched ?? false;
       return p;
     });
-    g.view = d.view ?? VIEW_ORDER[0];
+    // saves written before Resource and Planning were split carry the merged
+    // view id; land them on the Resource half.
+    const _v = d.view ?? VIEW_ORDER[0];
+    g.view = _v === "resource_planning" ? "resource" : _v;
     g.round = d.round;
     g.first_player = d.first_player;
     g.step = d.step;

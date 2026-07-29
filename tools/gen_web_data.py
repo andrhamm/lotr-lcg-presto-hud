@@ -1,6 +1,6 @@
-"""Regenerate docs/js data modules (phases, icon masks, text metrics) from the
-Python firmware source, guaranteeing web/device parity. Run after changing
-phases.py, ui/icons.py, or the font metrics."""
+"""Regenerate docs/js data modules (phases, icon masks, text metrics, copy)
+from the Python firmware source, guaranteeing web/device parity. Run after
+changing phases.py, ui/icons.py, viewcopy.py, or the font metrics."""
 # The generation logic lives inline in the repo history; simplest invocation:
 #   python3 tools/gen_web_data.py
 import json
@@ -9,6 +9,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import phases
+import viewcopy
 from ui import icons
 from tests.fake_hardware import BITMAP8_W
 
@@ -57,4 +58,14 @@ out.append("""export function measureText(s, scale = 1) {
   return (w + s.length - 1) * scale;
 }""")
 open(os.path.join(root, "metrics.js"), "w").write("\n".join(out))
+
+# Play-screen copy. Every uppercase dict/list in viewcopy is exported verbatim,
+# so adding a new copy group needs no change here. Tuples become JS arrays -
+# COMBAT_FLOW's (caption, note, [rungs]) reads as a 3-element array.
+out = ["// GENERATED from viewcopy.py - do not edit (tools/gen_web_data.py)"]
+for n in sorted(d for d in dir(viewcopy)
+                if d.isupper() and isinstance(getattr(viewcopy, d), (dict, list))):
+    out.append("export const %s = %s;" % (n, json.dumps(getattr(viewcopy, n))))
+open(os.path.join(root, "viewcopy.js"), "w").write("\n".join(out) + "\n")
+
 print("regenerated docs/js data modules")
