@@ -19,7 +19,8 @@ from ui.header import draw_header, HEADER_H
 from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
                         note_panel, phase_block, willpower_staging_meter, wrap_text,
-                        BAND_PAD, band_line_h,
+                        BAND_PAD, band_line_h, pill, pill_width,
+                        PILL_H, PILL_GAP, PILL_ROW_GAP,
                         truncate_text, draw_heart, draw_flag, disc, arc_runs, token,
                         arrow_left, arrow_right,
                         wx_small)
@@ -70,90 +71,106 @@ class ScreenPlay:
         self.toast = None         # [(icon, text, color)] picked up by the main loop
 
     # -- shared pieces -----------------------------------------------------
-    def _players_zone(self, d, pal, game):
-        """Flipped 3-row players matrix: P# header / threat token / willpower
-        token, one shared tap target over the whole zone (columns are fixed -
-        up to MAX_PLAYERS - not width-sized off the live player count).
+    MAX_ZONE_ROWS = 2      # a 4-player game needs two; more than that starts
+                           # eating the content band it exists to hand back
 
-        The tokens are READ-ONLY. 77f2e11 made each threat token two 24px
-        tap-halves (-1 / +1) to skip a modal round-trip, which meant widening
-        the columns 32 -> 48px and pushing the progress zone right. That was
-        reverted: these are status readouts, and at 24px they were both too
-        small to hit reliably and too easy to hit by accident while holding
-        the device. Threat is edited in the Players modal, which has room for
-        real targets."""
-        pcx = [50, 82, 114, 146]
-        threat_cy, will_cy = ZONE_TOP + 40, ZONE_TOP + 72
-        text_center(d, pal, "P", 18, ZONE_TOP + 2, BODY, pal.muted)
-        # player threat helm keeps its red identity (charcoal dropshadow)
-        icons.draw(d, icons.THREAT, 8, threat_cy - 9, pal.bevel_d)
-        icons.draw(d, icons.THREAT, 7, threat_cy - 10, pal.red)
-        icons.draw(d, icons.WILLPOWER, 7, will_cy - 10, pal.gold)
+    def _stat_zone(self, d, pal, game):
+        """The top zone: a flowing row of segmented pills. Returns the y below
+        the last row, which is what the content band anchors to.
+
+        This replaces two fixed 90px matrices (players, then progress) with
+        pills that take only the room they need, so a small game gets its
+        space back: 1-3 players fit one row and start content 66px higher, 4
+        players take two rows and gain 33px. The zone reflows when a side
+        quest is added or a location explored - that is a deliberate accept,
+        since it only happens on an explicit action and the alternatives
+        either surrender the saving or need a "pending layout" concept
+        nothing else here has.
+
+        The pills are READ-ONLY status, same as the tokens they replace: each
+        one is a tap target only so it can open the detail modal that already
+        edits these values.
+        """
+        pills = []
+        # the legend: what the two value columns mean, stated once
+        pills.append((("players_detail",),
+                      [("text", "P", "slate"),
+                       ("icon", icons.THREAT, "red"),
+                       ("icon", icons.WILLPOWER, "gold")],
+                      None, False, False))
         for i, p in enumerate(game.players):
-            cx = pcx[i]
-            if i == game.first_player:
-                d.set_pen(pal.gold)
-                d.rectangle(cx - 12, ZONE_TOP - 2, 24, 19)
-                text_center(d, pal, str(i + 1), cx, ZONE_TOP + 1, BODY, pal.bg, shadow=False)
-            else:
-                text_center(d, pal, str(i + 1), cx, ZONE_TOP + 1, BODY, pal.tan)
             danger = p.threat >= p.elimination - 10
-            tfrac = p.threat / p.elimination if p.elimination > 0 else 0
-            token(d, pal, cx, threat_cy, 14, 2,
-                  "OUT" if p.eliminated else str(p.threat),
-                  pal.red if p.eliminated else pal.value, tfrac,
-                  pal.red if danger else pal.gold, pal.dim)
-            if game.view == "quest_commit":
-                wp_fill = pal.gold if p.commit_touched else pal.dim
-            else:
-                wp_fill = pal.gold
-            token(d, pal, cx, will_cy, 14, 2, p.commit, pal.value, 1.0, wp_fill, pal.dim)
-        self.buttons.append(Button(("players_detail",), 8, ZONE_TOP - 2, 156, 90))
+            pills.append((("players_detail",),
+                          [("text", str(i + 1), "slate"),
+                           ("text", str(p.threat), "red"),
+                           ("text", str(p.commit), "gold")],
+                          pal.red if danger else None,
+                          i == game.first_player,
+                          p.eliminated))
 
-    def _progress_zone(self, d, pal, game):
-        """Flipped progress header + one circle row: Q / L / S1..Sn / sailing,
-        one shared tap target over the whole zone. Columns are capped to what
-        fits; overflow drops the newest side quests (Q, L, the oldest sides,
-        and sailing always stay). Back at x=174 / 9 columns now that the
-        players zone no longer needs 36px for inline threat taps."""
-        d.set_pen(pal.border)
-        d.rectangle(168, ZONE_TOP, 1, 90)
-        cols = [("Q", game.quest["progress"], game.quest["points"])]
+        prog = [("Q", game.quest["progress"], game.quest["points"])]
         if game.active_location is not None:
-            cols.append(("L", game.active_location["progress"], game.active_location["points"]))
-        side_cols = [("S%d" % (i + 1), sq["progress"], sq["points"])
-                     for i, sq in enumerate(game.side_quests)]
-        max_cols = (472 - 174) // 32
-        fixed = len(cols) + (1 if game.sailing else 0)
-        side_budget = max(0, max_cols - fixed)
-        all_cols = cols + side_cols[:side_budget]
-        for i, (label, prog, pts) in enumerate(all_cols):
-            cx = 190 + i * 32
-            text_center(d, pal, label, cx, ZONE_TOP + 2, BODY, pal.tan)
-            rem = max(0, pts - prog)
-            frac = prog / pts if pts > 0 else 0
-            token(d, pal, cx, ZONE_TOP + 40, 14, 2, rem, pal.value, frac, pal.gold, pal.dim)
+            prog.append(("L", game.active_location["progress"],
+                         game.active_location["points"]))
+        for i, sq in enumerate(game.side_quests):
+            prog.append(("S%d" % (i + 1), sq["progress"], sq["points"]))
+        for label, done, total in prog:
+            pills.append((("progress_detail",),
+                          [("text", label, "slate"),
+                           ("text", str(max(0, total - done)), "gold")],
+                          None, False, False))
+
         if game.sailing:
-            scx = 190 + len(all_cols) * 32
-            icons.draw(d, icons.WHEEL_SM, scx - 8, ZONE_TOP, pal.gold)
-            disc(d, scx, ZONE_TOP + 40, 14, pal.well)
-            for rank, (a0, a1) in enumerate([(272, 360), (0, 88), (92, 178), (182, 268)]):
-                arc_runs(d, scx, ZONE_TOP + 40, 14, 11, a0, a1,
-                         pal.dim if rank < game.heading else pal.gold)
-            wx_small(d, pal, game.heading, scx, ZONE_TOP + 40, 6)
-        # a rules caption (what the ring numeral means), not chrome - BODY.
-        # 210px at BODY inside the 258px zone, so it needs no re-layout.
-        text_left(d, pal, "quest points remaining", 174, ZONE_TOP + 66, BODY, pal.dim)
-        self.buttons.append(Button(("progress_detail",), 174, ZONE_TOP - 2, 298, 90))
+            wx = [icons.SUN, icons.CLOUD, icons.RAIN, icons.STORM][game.heading]
+            pills.append((("progress_detail",),
+                          [("icon", icons.WHEEL_SM, "gold"),
+                           ("icon", wx, "tan")],
+                          None, False, False))
+
+        # Cap the zone at MAX_ROWS and drop the NEWEST side quests to fit,
+        # exactly the policy the fixed-column zone had (Q, L, the oldest
+        # sides and sailing always stay). Without it the row flows on
+        # forever: ten side quests is four rows, straight through the content
+        # band and off the screen.
+        def rows_for(items):
+            x, rows = MARGIN, 1
+            for _bid, segs, _b, _r, _dd in items:
+                w = pill_width(segs)
+                if x > MARGIN and x + w > 480 - MARGIN:
+                    x, rows = MARGIN, rows + 1
+                x += w + PILL_GAP
+            return rows
+
+        while rows_for(pills) > self.MAX_ZONE_ROWS:
+            drop = next((i for i in range(len(pills) - 1, -1, -1)
+                         if pills[i][1][0][0] == "text"
+                         and pills[i][1][0][1].startswith("S")), None)
+            if drop is None:
+                break            # nothing left that is safe to drop
+            pills.pop(drop)
+
+        x, y = MARGIN, ZONE_TOP
+        for bid, segs, border, ribbon, dead in pills:
+            w = pill_width(segs)
+            if x > MARGIN and x + w > 480 - MARGIN:
+                x, y = MARGIN, y + PILL_H + PILL_ROW_GAP
+            pill(d, pal, x, y, segs, border, ribbon, dead)
+            self.buttons.append(Button(bid, x, y, w, PILL_H))
+            x += w + PILL_GAP
+        # The content band anchors here rather than to a constant, which is
+        # the whole point of the compaction: a one-row zone hands ~66px back
+        # to the view, a two-row zone ~33px.
+        self.content_y = y + PILL_H + 10
+        return self.content_y
 
     # -- action-window screen ----------------------------------------------
     # A static contextual page shown in front of a step that opens a player
     # action window. No timer and no "Perform Actions" button: those existed
     # only to let a 3s auto-advance be frozen, and there is no auto-advance.
     # The player leaves when they are ready, like every other view.
-    AW_Y0 = CONTENT_Y                 # top of the copy band - the same line
-                                      # every phase view starts its band on;
-                                      # this was 146, off by 4 for no reason
+    # The action window's copy band starts at self.content_y, the same line
+    # every phase view's band starts on - it is set by _stat_zone and moves
+    # with the zone's height.
     AW_MAX_BOTTOM = NAV_RULE_Y - 10   # copy must clear the nav rule
 
     # There is no open/close pair: a window is a real view, so entering and
@@ -188,7 +205,7 @@ class ScreenPlay:
         # "ACTION WINDOW" is the screen's TITLE and belongs in the header,
         # where every other screen puts its title - not floating in the
         # content area competing with the copy.
-        y0 = self.AW_Y0
+        y0 = self.content_y
         w = 480 - 2 * MARGIN
         usable = w - 16 - 12
         lh = band_line_h(BODY)
@@ -469,6 +486,9 @@ class ScreenPlay:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
+        # Views that draw no stat zone (the pre-game screens) keep the old
+        # fixed line; _stat_zone overwrites this with its own bottom edge.
+        self.content_y = CONTENT_Y
         view = game.view
         if is_window_view(view):
             # Phase, not a coined position name: it comes straight from
@@ -493,8 +513,7 @@ class ScreenPlay:
             draw_header(d, pal, game, self.buttons)
 
         if is_window_view(view):
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
+            self._stat_zone(d, pal, game)
             self._draw_action_window(d, pal, game)
             return
         if view == "setup_game":
@@ -525,22 +544,19 @@ class ScreenPlay:
             self.buttons.append(sb)
             self._cta(d, pal, game, "Begin Round 1", ("advance",))
         elif view == "quest_setup":
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
+            self._stat_zone(d, pal, game)
             self._draw_quest_setup(d, pal, game)
         elif view == "resource":
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
-            phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+            self._stat_zone(d, pal, game)
+            phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN, [
                 ("framework", PHASE_FRAMEWORK["resource"]),
             ])
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["planning"], ("advance",))
         elif view == "quest_commit":
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
-            bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+            self._stat_zone(d, pal, game)
+            bh = phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN,
                              [("window", PHASE_WINDOW["quest_commit"])])
-            cy = self._draw_confirm_all(d, pal, game, CONTENT_Y + bh + 8)
+            cy = self._draw_confirm_all(d, pal, game, self.content_y + bh + 8)
             self._totals_row(d, pal, game, cy, tappable=("wp", "stg"))
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_staging"], ("advance",))
         elif view == "quest_sailing":
@@ -550,13 +566,11 @@ class ScreenPlay:
         elif view == "quest_resolution":
             self._draw_resolution(d, pal, game)
         elif view == "travel":
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
+            self._stat_zone(d, pal, game)
             self._draw_travel(d, pal, game)
         elif view == "refresh":
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
-            bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+            self._stat_zone(d, pal, game)
+            bh = phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN, [
                 ("framework", PHASE_FRAMEWORK["refresh"]),
                 ("window", PHASE_WINDOW["refresh"]),
             ])
@@ -566,9 +580,8 @@ class ScreenPlay:
         elif view == "round_end":
             # 0.1. Not an action window - RR's chart puts the last one after
             # 7.4 - so no purple treatment: this is a resolution checklist.
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
-            phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+            self._stat_zone(d, pal, game)
+            phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN, [
                 ("framework", PHASE_FRAMEWORK["round_end"]),
             ])
             self._cta(d, pal, game,
@@ -579,33 +592,31 @@ class ScreenPlay:
             # Combat is a loop, so it gets the flow diagram rather than a
             # prose arrow-chain: the chain could carry the order but not the
             # repetition, and the windows sit INSIDE the loop.
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
-            self._loop_flow(d, pal, game, CONTENT_Y)
+            self._stat_zone(d, pal, game)
+            self._loop_flow(d, pal, game, self.content_y)
             self._cta(d, pal, game,
                       "Next: %s" % VIEW_LABELS[game.next_phase_view()],
                       ("advance",))
         else:
-            self._players_zone(d, pal, game)
+            self._stat_zone(d, pal, game)
             flavor = {"combat_enemy": (icons.DEFENSE, pal.green),
                       "combat_player": (icons.ATTACK, pal.tan)}.get(view)
-            self._progress_zone(d, pal, game)
             sections = []
             if PHASE_FRAMEWORK.get(view):
                 fw = PHASE_FRAMEWORK[view]
                 sections.append(("framework", fw))
             if PHASE_WINDOW.get(view):
                 sections.append(("window", PHASE_WINDOW[view]))
-            bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, sections,
+            bh = phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN, sections,
                              34 if flavor else 0)
             if flavor:
                 icons.draw(d, flavor[0], 480 - MARGIN - 34,
-                           CONTENT_Y + (bh - 20) // 2, flavor[1])
+                           self.content_y + (bh - 20) // 2, flavor[1])
             if PHASE_CAPTION.get(view):
                 # a rules caption: BODY, wrapped over as many lines as it needs
                 # (every one of these is 2 lines, ending by y=316).
                 cap_w = 480 - 2 * (MARGIN + 4)
-                cy = CONTENT_Y + bh + 10
+                cy = self.content_y + bh + 10
                 for ln in wrap_text(PHASE_CAPTION[view], BODY, cap_w, d.measure_text):
                     text_left(d, pal, ln, MARGIN + 4, cy, BODY, pal.dim)
                     cy += 24
@@ -663,21 +674,20 @@ class ScreenPlay:
                                    480 - 2 * MARGIN, th))
 
     def _draw_sailing(self, d, pal, game):
-        self._players_zone(d, pal, game)
-        self._progress_zone(d, pal, game)
+        self._stat_zone(d, pal, game)
         if not game.sailing:
-            note_panel(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+            note_panel(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN,
                        [SAILING["no_keyword"],
                         SAILING["enable_hint"]])
-            eb = Button(("sail_toggle",), MARGIN, CONTENT_Y + 96, 480 - 2 * MARGIN, 52)
+            eb = Button(("sail_toggle",), MARGIN, self.content_y + 96, 480 - 2 * MARGIN, 52)
             bevel(d, pal, eb.x, eb.y, eb.w, eb.h, pal.btn)
-            icons.draw(d, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold)
-            text_center(d, pal, "Enable Sailing", 254, CONTENT_Y + 96 + 16, BODY, pal.tan)
+            icons.draw(d, icons.WHEEL, 130, self.content_y + 96 + 14, pal.gold)
+            text_center(d, pal, "Enable Sailing", 254, self.content_y + 96 + 16, BODY, pal.tan)
             self.buttons.append(eb)
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_commit"], ("advance",))
             return
         # tip: pipe medallion top-left; wheel glyph inline in the sentence
-        tw, ty0 = 480 - 2 * MARGIN, CONTENT_Y
+        tw, ty0 = 480 - 2 * MARGIN, self.content_y
         gutt, lh = 28 + 14, band_line_h(BODY)
         th = 3 * lh + 2 * BAND_PAD
         d.set_pen(pal.card_hi)
@@ -706,9 +716,8 @@ class ScreenPlay:
         self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_commit"], ("advance",))
 
     def _draw_staging(self, d, pal, game):
-        self._players_zone(d, pal, game)
-        self._progress_zone(d, pal, game)
-        bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+        self._stat_zone(d, pal, game)
+        bh = phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN, [
             ("framework", STAGING["framework"]),
             ("window", STAGING["window"]),
         ])
@@ -716,7 +725,7 @@ class ScreenPlay:
         # gained the STAGING["short"] rule, and
         # the totals row has to stay clear of the CTA. Re-laid out rather
         # than shrinking the text - see the design system.
-        my = CONTENT_Y + bh + 4
+        my = self.content_y + bh + 4
         mh = willpower_staging_meter(d, pal, MARGIN, my, 480 - 2 * MARGIN,
                                      game.willpower, game.staging)
         self._totals_row(d, pal, game, my + mh + 4, with_steppers=True)
@@ -744,7 +753,7 @@ class ScreenPlay:
         name = a_face.get("name") or ""
         lead = (QUEST_SETUP["resolve"] % (stage_n, name) if a_face.get("text")
                 else QUEST_SETUP["none"] % stage_n)
-        phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+        phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN, [
             ("framework", [lead,
                            QUEST_SETUP["then_flip"] % game.quest["stage_n"]]),
         ])
@@ -780,9 +789,9 @@ class ScreenPlay:
         loc = game.active_location
         fw = (TRAVEL["blocked"] if loc else
               TRAVEL["open"])
-        bh = phase_block(d, pal, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+        bh = phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN,
                          [("framework", fw), ("window", "Responses.")])
-        y = CONTENT_Y + bh + 10
+        y = self.content_y + bh + 10
         if loc is None:
             tb = Button(("travel_new",), MARGIN, y, 480 - 2 * MARGIN, 56)
             bevel(d, pal, tb.x, tb.y, tb.w, tb.h, pal.btn)
@@ -805,10 +814,9 @@ class ScreenPlay:
     def _draw_resolution(self, d, pal, game):
         if game.quest_outcome != "success":
             # fail / tie: no placement - just report the outcome and move on
-            self._players_zone(d, pal, game)
-            self._progress_zone(d, pal, game)
+            self._stat_zone(d, pal, game)
             fail = game.quest_outcome == "fail"
-            ty0, gutt, lh = CONTENT_Y, 28 + 14, band_line_h(BODY)
+            ty0, gutt, lh = self.content_y, 28 + 14, band_line_h(BODY)
             tx = MARGIN + 12 + gutt
             th = 2 * lh + 2 * BAND_PAD
             d.set_pen(pal.card_hi)

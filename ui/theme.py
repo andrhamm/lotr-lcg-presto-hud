@@ -27,17 +27,37 @@ LABEL = 1     # ALL-CAPS section labels + dense tabular metadata ONLY
 # site, and a sentence may never use them.
 
 
+# Source RGB for the pens something needs to SHADE, plus the one new pen.
+# A pen is an opaque handle - it cannot be dimmed, only replaced - so anything
+# wanting "the same colour, turned down" has to start from the numbers. These
+# are the single source for the pens built from them below; see
+# Palette.shaded().
+RGB = {
+    "bg":     (16, 12, 9),
+    "card":   (36, 32, 21),
+    "well":   (24, 20, 12),
+    "border": (60, 54, 35),
+    "gold":   (214, 180, 110),
+    "red":    (247, 101, 62),
+    "tan":    (200, 186, 144),
+    "slate":  (124, 138, 152),
+}
+SLATE = RGB["slate"]
+DIM_FACTOR = 0.55      # an eliminated stat pill: low enough to recede, high
+                       # enough to still read what the player finished on
+
+
 class Palette:
     def __init__(self, d):
         # ground
-        self.bg = d.create_pen(16, 12, 9)
-        self.card = d.create_pen(36, 32, 21)
+        self.bg = d.create_pen(*RGB["bg"])
+        self.card = d.create_pen(*RGB["card"])
         self.card_hi = d.create_pen(48, 44, 29)
-        self.border = d.create_pen(60, 54, 35)
+        self.border = d.create_pen(*RGB["border"])
         self.border_gold = d.create_pen(150, 118, 48)
         # ink
-        self.gold = d.create_pen(214, 180, 110)
-        self.tan = d.create_pen(200, 186, 144)
+        self.gold = d.create_pen(*RGB["gold"])
+        self.tan = d.create_pen(*RGB["tan"])
         self.muted = d.create_pen(180, 162, 118)
         # stat-value ink (threat / willpower / progress) - one constant colour
         self.value = self.gold
@@ -45,7 +65,7 @@ class Palette:
         # semantics
         self.green = d.create_pen(136, 168, 92)
         self.amber = d.create_pen(214, 164, 70)
-        self.red = d.create_pen(247, 101, 62)
+        self.red = d.create_pen(*RGB["red"])
         # weather (heading facing glyphs)
         self.cloud = d.create_pen(185, 188, 198)
         self.sky = d.create_pen(95, 168, 230)
@@ -67,7 +87,7 @@ class Palette:
         # true black-ish ink (staging threat value/icon, shadows)
         self.outline = d.create_pen(0, 0, 0)
         # inset value well
-        self.well = d.create_pen(24, 20, 12)
+        self.well = d.create_pen(*RGB["well"])
         # lighter row-stripe background (by-round chart: makes black ink read)
         self.row_stripe = d.create_pen(66, 60, 42)
         # placeholder fill for undrawn scenario/set icons (Scenario Options -
@@ -76,6 +96,33 @@ class Palette:
         # parchment fill for the Quest Setup scroll-style tip (deliberately
         # distinct from the standard note-panel card_hi background)
         self.scroll = d.create_pen(30, 26, 17)
+        # Chrome labels. Every other ink here is the same warm hue at a
+        # different lightness, so a label beside a gold stat value could only
+        # ever differ from it by brightness - and at BODY on a dark ground
+        # that reads as the same colour. This is the one deliberately COOL
+        # entry, and it is reserved for labels that name a value rather than
+        # being one (the stat pills' header segments).
+        self.slate = d.create_pen(*SLATE)
+
+        self._d = d
+        self._shaded = {}
+
+    # -- shading -----------------------------------------------------------
+    def shaded(self, name, factor=DIM_FACTOR):
+        """A pen's own colour at `factor` brightness.
+
+        Needed because a pen is an opaque handle - it cannot be dimmed, only
+        replaced - so anything that wants "the same thing, turned down" has to
+        go back to the RGB. Eliminated stat pills shade every colour they use
+        through here, which is what makes them read as the same object turned
+        off rather than as a different object drawn in one flat grey.
+        """
+        key = (name, factor)
+        if key not in self._shaded:
+            r, g, b = RGB[name]
+            self._shaded[key] = self._d.create_pen(
+                int(r * factor), int(g * factor), int(b * factor))
+        return self._shaded[key]
 
     def threat_pen(self, threat):
         if threat >= 35:

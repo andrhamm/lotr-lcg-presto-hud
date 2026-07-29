@@ -84,16 +84,18 @@ def test_resource_and_planning_each_show_only_their_own_copy():
     assert "gains a resource" not in t
 
 
-def test_commit_view_shows_willpower_tokens_in_players_matrix():
-    # Willpower now lives inside the flipped players zone (one shared tap
-    # target) rather than a per-player row of "commit" buttons.
+def test_commit_view_shows_each_players_willpower_in_their_stat_pill():
+    """Willpower is the third segment of a player's pill, not a per-player
+    "commit" button. One tap target per pill, all routing to the same detail
+    modal - the pills are status, and the tap only opens the editor."""
     hw, pal, game, screen = _setup("quest_commit")
     for i, c in enumerate((7, 8, 5, 6)):
         game.set_commit(i, c)
     screen.draw(hw, game, pal)
     ids = _ids(screen)
-    assert ids.count("players_detail") == 1
     assert "commit" not in ids
+    # the legend pill plus one per player
+    assert ids.count("players_detail") == len(game.players) + 1
     texts = _texts(hw)
     for c in (7, 8, 5, 6):
         assert str(c) in texts
@@ -124,15 +126,19 @@ def test_players_zone_tokens_are_read_only():
     assert ("players_detail",) in ids
 
 
-def test_players_zone_is_a_single_tap_target_over_the_whole_zone():
+def test_stat_pills_are_read_only_status():
+    """Each pill is a tap target only so it can open the detail modal that
+    already edits these values. Nothing edits a stat inline: 77f2e11 tried
+    that with 24px tap-halves on the threat token and it was both too small
+    to hit and too easy to hit by accident while holding the device."""
     hw, pal, game, screen = _setup("combat_shadow")
     screen.draw(hw, game, pal)
-    zone = [b for b in screen.buttons if b.id == ("players_detail",)]
-    assert len(zone) == 1
-    others = [b for b in screen.buttons
-              if b.id[0] in ("threat", "willpower", "commit")
-              and b.x < zone[0].x + zone[0].w and b.y < zone[0].y + zone[0].h]
-    assert not others, "nothing may sit on top of the players zone: %s" % [b.id for b in others]
+    zone = [b for b in screen.buttons
+            if b.id[0] in ("players_detail", "progress_detail")]
+    assert zone, "the stat zone has no tap targets at all"
+    inline = [b.id for b in screen.buttons
+              if b.id[0] in ("threat", "willpower", "commit")]
+    assert not inline, "stats are edited in the modal, never inline: %s" % inline
 
 
 def test_staging_view_has_direct_steppers():
@@ -333,61 +339,74 @@ def test_progress_detail_opens_questing_progress_modal():
     assert isinstance(result[1], QuestingProgressModal)
 
 
-def test_commit_view_shows_zones_then_note_at_content_y():
-    from ui.screen_play import ZONE_TOP, CONTENT_Y
+def test_commit_view_shows_the_stat_zone_then_the_note():
+    from ui.screen_play import ZONE_TOP
     hw, pal, game, screen = _setup("quest_commit")
     screen.draw(hw, game, pal)
-    assert "Q" in _texts(hw)                         # progress zone quest column
+    assert "Q" in _texts(hw)                         # the quest progress pill
     players = _find(screen, ("players_detail",))
     progress = _find(screen, ("progress_detail",))
-    assert players.y == ZONE_TOP - 2 and progress.y == ZONE_TOP - 2
-    assert players.x == 8 and progress.x == 174
+    assert players.y == ZONE_TOP                     # first row starts the zone
+    assert players.x == 8
+    # progress pills follow the players, so they are at or below them
+    assert progress.y >= players.y
     # RR 3.2 p.23: commitment is in player order - not simultaneous and not
     # secret - so the copy has to say so. Joined: the line wraps.
     assert "In player order, exhaust characters to commit" in " ".join(_texts(hw))
     assert "commit_tip" not in [b.id[0] for b in screen.buttons]
 
 
-def test_zone_geometry_is_the_narrow_read_only_layout():
-    """Back to 32px threat columns / 9 progress columns. The 48px columns
-    only existed to make room for inline threat taps, which are gone."""
-    from ui.screen_play import ZONE_TOP
+def test_the_stat_zone_hands_its_unused_space_back_to_the_view():
+    """The point of the pills: the zone takes only the room it needs, and the
+    content band starts under it rather than at a fixed line. Two fixed 90px
+    matrices always ended at 136 no matter how few players were in the game."""
+    from ui.screen_play import ZONE_TOP, PILL_H, CONTENT_Y
     hw, pal, game, screen = _setup("refresh")
     game.active_location = None
     game.side_quests = []
+    game.players = game.players[:2]
     screen.draw(hw, game, pal)
-    players = _find(screen, ("players_detail",))
-    progress = _find(screen, ("progress_detail",))
-    assert (players.x, players.y, players.w, players.h) == (8, ZONE_TOP - 2, 156, 90)
-    assert (progress.x, progress.y, progress.w, progress.h) == (174, ZONE_TOP - 2, 298, 90)
+    # legend + 2 players + Q fit one row, so content starts a row's height in
+    assert screen.content_y == ZONE_TOP + PILL_H + 10
+    assert screen.content_y < CONTENT_Y, (
+        "a two-player game should start higher than the old fixed line")
 
 
-def test_progress_zone_caps_columns_keeping_oldest_side_quests_and_sailing():
+def test_stat_zone_caps_its_rows_keeping_oldest_side_quests_and_sailing():
+    """Pills wrap, so without a cap ten side quests would flow straight
+    through the content band and off the screen. Same overflow policy the
+    fixed-column zone had: Q, L, the oldest sides and sailing stay."""
+    from ui.screen_play import ZONE_TOP, PILL_H, PILL_ROW_GAP
     hw, pal, game, screen = _setup("resource")
     game.active_location = {"points": 5, "progress": 0}
     game.sailing = True
     game.side_quests = [{"points": 5, "progress": 0} for _ in range(10)]
     screen.draw(hw, game, pal)
     texts = _texts(hw)
-    # maxCols = (472-174)//32 = 9; fixed = Q + L + sailing = 3 -> 6 sides kept
-    for lab in ("Q", "L", "S1", "S2", "S3", "S4", "S5", "S6"):
+    for lab in ("Q", "L", "S1"):
         assert lab in texts
-    for lab in ("S7", "S8", "S9", "S10"):
-        assert lab not in texts                      # newest sides dropped
+    assert "S10" not in texts                        # newest sides dropped
+    bottom = ZONE_TOP + screen.MAX_ZONE_ROWS * PILL_H \
+        + (screen.MAX_ZONE_ROWS - 1) * PILL_ROW_GAP
+    assert screen.content_y <= bottom + 10, "the zone grew past its row cap"
 
 
-def test_progress_zone_shows_sailing_column_regardless_of_view():
-    # Old behaviour gated the heading card to specific views via a
-    # show_heading flag; the flipped zone shows it whenever game.sailing is
-    # true, on every view - this scene never rendered a heading card before.
-    from ui.screen_play import ZONE_TOP
+def test_stat_zone_shows_the_sailing_pill_regardless_of_view():
+    """Sailing rides along as its own two-segment pill (wheel + the heading's
+    weather glyph) whenever game.sailing is true, on every view."""
+    hw, pal, game, screen = _setup("travel")
+    game.sailing = False
+    screen.draw(hw, game, pal)
+    without = len([b for b in screen.buttons if b.id == ("progress_detail",)])
+
     hw, pal, game, screen = _setup("travel")
     game.sailing = True
     game.heading = 2
     screen.draw(hw, game, pal)
-    scx = 190 + 32                                   # Q is the only other column
-    well_disc_row = ("rect", scx - 14, ZONE_TOP + 40, 29, 1, pal.well)
-    assert well_disc_row in hw.display.calls
+    with_sail = len([b for b in screen.buttons if b.id == ("progress_detail",)])
+    # icons rasterize to runs of 1px rects, so the mask cannot be asserted on
+    # directly - the pill's own tap target is the observable thing
+    assert with_sail == without + 1, "sailing adds no pill"
 
 
 def test_round_end_view_turns_the_round():

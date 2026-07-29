@@ -195,18 +195,22 @@ def test_l8_content_bands_start_on_the_content_line(scene):
 
     Anchoring is the rule; how tall the band grows is the copy's business.
     """
-    from ui.screen_play import CONTENT_Y, NAV_RULE_Y
+    from ui.screen_play import NAV_RULE_Y
     if scene in _NOT_A_BAND_VIEW:
         return
-    hw, _ = SCENES[scene]()
+    hw, obj = SCENES[scene]()
+    # The anchor is per-draw now: the stat pills take only the room they need,
+    # so a 3-player game starts its content ~66px higher than a 4-player one.
+    # Ask the screen where it put the line rather than assuming 150.
+    cy = obj.content_y
     tops = [c[2] for c in hw.display.calls
             if c[0] == "rect" and c[4] >= 40 and c[3] > 300
-            and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y]
+            and cy - 6 <= c[2] < NAV_RULE_Y]
     if not tops:
         return                      # a loop-diagram view draws no band at all
-    assert min(tops) == CONTENT_Y, (
-        "%s: content band starts at y=%d, not CONTENT_Y=%d"
-        % (scene, min(tops), CONTENT_Y))
+    assert min(tops) == cy, (
+        "%s: content band starts at y=%d, not the content line %d"
+        % (scene, min(tops), cy))
 
 
 # --------------------------------------------------------------------------
@@ -241,14 +245,15 @@ def test_accent_bars_follow_the_colour_vocabulary(scene):
     same idea in green. The resolution-failure band was gold too, reporting a
     threat raise that had already happened.
     """
-    from ui.screen_play import CONTENT_Y, NAV_RULE_Y
+    from ui.screen_play import NAV_RULE_Y
     from ui.theme import Palette
     from tests.fake_hardware import FakeHardware
     pal = Palette(FakeHardware().display)
-    hw, _ = SCENES[scene]()
+    hw, obj = SCENES[scene]()
+    cy = obj.content_y
     gold = [c for c in hw.display.calls
             if c[0] == "rect" and c[3] == 4 and c[4] >= 12
-            and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y and c[5] == pal.border_gold]
+            and cy - 6 <= c[2] < NAV_RULE_Y and c[5] == pal.border_gold]
     if gold and scene not in _GOLD_OK:
         raise AssertionError(
             "%s draws the gold hint bar. Gold means 'a hint, not a rule' - if "
@@ -259,14 +264,15 @@ def test_accent_bars_follow_the_colour_vocabulary(scene):
 @pytest.mark.parametrize("scene", sorted(s for s in SCENES if s.startswith("play_aw_")))
 def test_action_windows_wear_the_green_window_bar(scene):
     """An action window IS "your window to act" - the thing green means."""
-    from ui.screen_play import CONTENT_Y, NAV_RULE_Y
+    from ui.screen_play import NAV_RULE_Y
     from ui.theme import Palette
     from tests.fake_hardware import FakeHardware
     pal = Palette(FakeHardware().display)
-    hw, _ = SCENES[scene]()
+    hw, obj = SCENES[scene]()
+    cy = obj.content_y
     bars = {c[5] for c in hw.display.calls
             if c[0] == "rect" and c[3] == 4 and c[4] >= 12
-            and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y}
+            and cy - 6 <= c[2] < NAV_RULE_Y}
     assert pal.green in bars, "%s: action-window band is not green" % scene
 
 
@@ -298,16 +304,17 @@ def test_every_phase_view_states_framework_or_window(scene):
     screens that simply stopped saying it. Planning was among them, which is
     the phase that is nothing BUT your window.
     """
-    from ui.screen_play import CONTENT_Y, NAV_RULE_Y
+    from ui.screen_play import NAV_RULE_Y
     from ui.theme import Palette
     from tests.fake_hardware import FakeHardware
     pal = Palette(FakeHardware().display)
     if scene in _NO_BAR_OK:
         return
-    hw, _ = SCENES[scene]()
+    hw, obj = SCENES[scene]()
+    cy = obj.content_y
     bars = {c[5] for c in hw.display.calls
             if c[0] == "rect" and c[3] == 4 and c[4] >= 12
-            and CONTENT_Y - 6 <= c[2] < NAV_RULE_Y}
+            and cy - 6 <= c[2] < NAV_RULE_Y}
     assert bars & {pal.red, pal.green, pal.border_gold}, (
         "%s guides the player but draws no accent bar, so it never says "
         "whether this happens anyway or is the player's window" % scene)

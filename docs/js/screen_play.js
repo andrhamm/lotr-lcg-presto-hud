@@ -2,7 +2,8 @@
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
          truncateText, ribbon, notePanel, phaseBlock, willpowerStagingMeter,
          drawHeart, drawFlag, disc, arcRuns, wxSmall, token,
-         BAND_PAD, bandLineH,
+         BAND_PAD, bandLineH, pill, pillWidth,
+         PILL_H, PILL_GAP, PILL_ROW_GAP,
          arrowLeft, arrowRight,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
@@ -33,7 +34,7 @@ const FLOW_GAP = 2;
 const TICK_W = 14;        // purple window marker, right-aligned
 // Top of the copy band - the same line every phase view starts its band
 // on; this was 146, off by 4 for no reason.
-const AW_Y0 = CONTENT_Y;
+// the action window's band starts at this.contentY (set by _statZone)
 const AW_MAX_BOTTOM = NAV_RULE_Y - 10;  // copy must clear the nav rule   // 1px rule dividing the content area from the nav
 const ARROW = 22;         // arrow glyph size inside a nav square
 const NAV_PAD = 8;        // clearance between a nav square and the label
@@ -48,6 +49,10 @@ const NAV_PAD = 8;        // clearance between a nav square and the label
 // as a discrete window following the step.
 
 export class ScreenPlay {
+  // a 4-player game needs two rows; more than that starts eating the content
+  // band the zone exists to hand back
+  static MAX_ZONE_ROWS = 2;
+
   constructor() {
     this.buttons = [];
     this.banner = null;      // [text, kind, view]
@@ -69,70 +74,87 @@ export class ScreenPlay {
   // these are status readouts, and at 24px they were both too small to hit
   // reliably and too easy to hit by accident. Threat is edited in the Players
   // modal, which has room for real targets.
-  _playersZone(ctx, game) {
-    const pcx = [50, 82, 114, 146];
-    const threatCy = ZONE_TOP + 40, willCy = ZONE_TOP + 72;
-    textCenter(ctx, "P", 18, ZONE_TOP + 2, BODY, pal.muted);
-    // player threat helm keeps its red identity (charcoal dropshadow)
-    icons.drawIcon(ctx, icons.THREAT, 8, threatCy - 9, pal.bevel_d);
-    icons.drawIcon(ctx, icons.THREAT, 7, threatCy - 10, pal.red);
-    icons.drawIcon(ctx, icons.WILLPOWER, 7, willCy - 10, pal.gold);
+  // The top zone: a flowing row of segmented pills. Sets and returns
+  // this.contentY, the line the content band anchors to.
+  //
+  // Replaces two fixed 90px matrices with pills that take only the room they
+  // need, so a small game gets its space back: 1-3 players fit one row and
+  // start content 66px higher, 4 players take two rows and gain 33px. The
+  // zone reflows when a side quest is added or a location explored - a
+  // deliberate accept, since it only happens on an explicit action.
+  //
+  // The pills are READ-ONLY status, same as the tokens they replace: each is
+  // a tap target only so it can open the detail modal that already edits
+  // these values.
+  _statZone(ctx, game) {
+    const pills = [];
+    pills.push([["players_detail"],
+                [["text", "P", "slate"],
+                 ["icon", icons.THREAT, "red"],
+                 ["icon", icons.WILLPOWER, "gold"]], null, false, false]);
     game.players.forEach((p, i) => {
-      const cx = pcx[i];
-      if (i === game.first_player) {
-        rect(ctx, cx - 12, ZONE_TOP - 2, 24, 19, pal.gold);
-        textCenter(ctx, String(i + 1), cx, ZONE_TOP + 1, BODY, pal.bg, false);
-      } else {
-        textCenter(ctx, String(i + 1), cx, ZONE_TOP + 1, BODY, pal.tan);
-      }
       const danger = p.threat >= p.elimination - 10;
-      const tfrac = p.elimination > 0 ? p.threat / p.elimination : 0;
-      token(ctx, cx, threatCy, 14, 2, p.eliminated ? "OUT" : String(p.threat),
-            p.eliminated ? pal.red : pal.value, tfrac,
-            danger ? pal.red : pal.gold, pal.dim);
-      const wpFill = game.view === "quest_commit"
-        ? (p.commit_touched ? pal.gold : pal.dim) : pal.gold;
-      token(ctx, cx, willCy, 14, 2, p.commit, pal.value, 1.0, wpFill, pal.dim);
+      pills.push([["players_detail"],
+                  [["text", String(i + 1), "slate"],
+                   ["text", String(p.threat), "red"],
+                   ["text", String(p.commit), "gold"]],
+                  danger ? pal.red : null,
+                  i === game.first_player, p.eliminated]);
     });
-    this.buttons.push(new Button(["players_detail"], 8, ZONE_TOP - 2, 156, 90));
-  }
 
-  // Flipped progress header + one circle row: Q / L / S1..Sn / sailing, one
-  // shared tap target over the whole zone. Columns are capped to what fits;
-  // overflow drops the newest side quests. Back at x=174 / 9 columns now that
-  // the players zone no longer needs 36px for inline threat taps.
-  _progressZone(ctx, game) {
-    rect(ctx, 168, ZONE_TOP, 1, 90, pal.border);
-    const cols = [["Q", game.quest.progress, game.quest.points]];
+    const prog = [["Q", game.quest.progress, game.quest.points]];
     if (game.active_location) {
-      cols.push(["L", game.active_location.progress, game.active_location.points]);
+      prog.push(["L", game.active_location.progress, game.active_location.points]);
     }
-    const sideCols = game.side_quests.map((sq, i) => [`S${i + 1}`, sq.progress, sq.points]);
-    const maxCols = Math.floor((472 - 174) / 32);
-    const fixed = cols.length + (game.sailing ? 1 : 0);
-    const sideBudget = Math.max(0, maxCols - fixed);
-    const allCols = cols.concat(sideCols.slice(0, sideBudget));
-    allCols.forEach(([label, prog, pts], i) => {
-      const cx = 190 + i * 32;
-      textCenter(ctx, label, cx, ZONE_TOP + 2, BODY, pal.tan);
-      const rem = Math.max(0, pts - prog);
-      const frac = pts > 0 ? prog / pts : 0;
-      token(ctx, cx, ZONE_TOP + 40, 14, 2, rem, pal.value, frac, pal.gold, pal.dim);
-    });
+    game.side_quests.forEach((sq, i) => prog.push([`S${i + 1}`, sq.progress, sq.points]));
+    for (const [label, done, total] of prog) {
+      pills.push([["progress_detail"],
+                  [["text", label, "slate"],
+                   ["text", String(Math.max(0, total - done)), "gold"]],
+                  null, false, false]);
+    }
     if (game.sailing) {
-      const scx = 190 + allCols.length * 32;
-      icons.drawIcon(ctx, icons.WHEEL_SM, scx - 8, ZONE_TOP, pal.gold);
-      disc(ctx, scx, ZONE_TOP + 40, 14, pal.well);
-      [[272, 360], [0, 88], [92, 178], [182, 268]].forEach(([a0, a1], rank) => {
-        arcRuns(ctx, scx, ZONE_TOP + 40, 14, 11, a0, a1,
-                rank < game.heading ? pal.dim : pal.gold);
-      });
-      wxSmall(ctx, game.heading, scx, ZONE_TOP + 40, 6);
+      const wx = [icons.SUN, icons.CLOUD, icons.RAIN, icons.STORM][game.heading];
+      pills.push([["progress_detail"],
+                  [["icon", icons.WHEEL_SM, "gold"], ["icon", wx, "tan"]],
+                  null, false, false]);
     }
-    // a rules caption (what the ring numeral means), not chrome - BODY.
-    // 210px at BODY inside the 258px zone, so it needs no re-layout.
-    textLeft(ctx, "quest points remaining", 174, ZONE_TOP + 66, BODY, pal.dim);
-    this.buttons.push(new Button(["progress_detail"], 174, ZONE_TOP - 2, 298, 90));
+
+    // Cap the zone at MAX_ZONE_ROWS and drop the NEWEST side quests to fit,
+    // exactly the policy the fixed-column zone had. Without it the row flows
+    // on forever: ten side quests is four rows, straight through the content
+    // band and off the screen.
+    const rowsFor = items => {
+      let x = MARGIN, rows = 1;
+      for (const [, segs] of items) {
+        const w = pillWidth(segs);
+        if (x > MARGIN && x + w > 480 - MARGIN) { x = MARGIN; rows += 1; }
+        x += w + PILL_GAP;
+      }
+      return rows;
+    };
+    while (rowsFor(pills) > ScreenPlay.MAX_ZONE_ROWS) {
+      let drop = -1;
+      for (let i = pills.length - 1; i >= 0; i--) {
+        const head = pills[i][1][0];
+        if (head[0] === "text" && head[1].startsWith("S")) { drop = i; break; }
+      }
+      if (drop < 0) break;
+      pills.splice(drop, 1);
+    }
+
+    let x = MARGIN, y = ZONE_TOP;
+    for (const [bid, segs, border, ribbon, dead] of pills) {
+      const w = pillWidth(segs);
+      if (x > MARGIN && x + w > 480 - MARGIN) { x = MARGIN; y += PILL_H + PILL_ROW_GAP; }
+      pill(ctx, x, y, segs, border, ribbon, dead, icons);
+      this.buttons.push(new Button(bid, x, y, w, PILL_H));
+      x += w + PILL_GAP;
+    }
+    // The content band anchors here rather than to a constant, which is the
+    // whole point of the compaction.
+    this.contentY = y + PILL_H + 10;
+    return this.contentY;
   }
 
   // The bottom nav bar: a 1px rule, then matching square arrow buttons at each
@@ -273,7 +295,7 @@ export class ScreenPlay {
   }
 
   _drawActionWindow(ctx, game) {
-    const y0 = AW_Y0, w = 480 - 2 * MARGIN;
+    const y0 = this.contentY, w = 480 - 2 * MARGIN;
     const usable = w - 16 - 12;
     const lh = bandLineH(BODY);
     const bandTop = y0, bandBottom = AW_MAX_BOTTOM;
@@ -413,6 +435,9 @@ export class ScreenPlay {
   draw(ctx, game) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
+    // Views that draw no stat zone (the pre-game screens) keep the old fixed
+    // line; _statZone overwrites this with its own bottom edge.
+    this.contentY = CONTENT_Y;
     const view = game.view;
     if (view === "quest_setup") {
       // Same spelling as VIEW_LABELS.quest_setup, which is what any CTA
@@ -435,8 +460,7 @@ export class ScreenPlay {
     }
 
     if (isWindowView(view)) {
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
+      this._statZone(ctx, game);
       this._drawActionWindow(ctx, game);
       return;
     }
@@ -470,49 +494,44 @@ export class ScreenPlay {
       this.buttons.push(sb);
       this._cta(ctx, game, "Begin Round 1", ["advance"]);
     } else if (view === "quest_setup") {
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
+      this._statZone(ctx, game);
       this._drawQuestSetup(ctx, game);
     } else if (view === "resource") {
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
-      phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+      this._statZone(ctx, game);
+      phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
         { kind: "framework", text: PHASE_FRAMEWORK["resource"] },
       ]);
       this._cta(ctx, game, `Next: ${VIEW_LABELS["planning"]}`, ["advance"]);
     } else if (view in LOOP_FLOW) {
       // Four views are genuinely loops and share one widget: Planning, the
       // engagement checks, and both combat halves.
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
-      this._loopFlow(ctx, game, CONTENT_Y);
+      this._statZone(ctx, game);
+      this._loopFlow(ctx, game, this.contentY);
       const nxt = (view === "planning" && game.sailing)
         ? "quest_sailing" : game.nextPhaseView();
       this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt]}`, ["advance"]);
     } else if (view === "quest_commit") {
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
-      const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+      this._statZone(ctx, game);
+      const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN,
         [{ kind: "window", text: PHASE_WINDOW["quest_commit"] }]);
-      const cy = this._drawConfirmAll(ctx, game, CONTENT_Y + bh + 8);
+      const cy = this._drawConfirmAll(ctx, game, this.contentY + bh + 8);
       this._totalsRow(ctx, game, cy, false, ["wp", "stg"]);
       this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_staging}`, ["advance"]);
     } else if (view === "quest_sailing") {
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
+      this._statZone(ctx, game);
       if (!game.sailing) {
-        notePanel(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+        notePanel(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN,
                   [SAILING.no_keyword, SAILING.enable_hint]);
-        const eb = new Button(["sail_toggle"], MARGIN, CONTENT_Y + 96,
+        const eb = new Button(["sail_toggle"], MARGIN, this.contentY + 96,
                               480 - 2 * MARGIN, 52);
         bevel(ctx, eb.x, eb.y, eb.w, eb.h, pal.btn);
-        icons.drawIcon(ctx, icons.WHEEL, 130, CONTENT_Y + 96 + 14, pal.gold);
-        textCenter(ctx, "Enable Sailing", 254, CONTENT_Y + 96 + 16, BODY, pal.tan);
+        icons.drawIcon(ctx, icons.WHEEL, 130, this.contentY + 96 + 14, pal.gold);
+        textCenter(ctx, "Enable Sailing", 254, this.contentY + 96 + 16, BODY, pal.tan);
         this.buttons.push(eb);
         this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       } else {
         // tip (pipe medallion top-left; wheel glyph inline in the sentence)
-        const tw = 480 - 2 * MARGIN, ty0 = CONTENT_Y;
+        const tw = 480 - 2 * MARGIN, ty0 = this.contentY;
         const gutt = 28 + 14, lh = bandLineH(BODY), th = 3 * lh + 2 * BAND_PAD;
         rect(ctx, MARGIN, ty0, tw, th, pal.card_hi);
         rect(ctx, MARGIN, ty0, 4, th, pal.border_gold);
@@ -538,9 +557,8 @@ export class ScreenPlay {
         this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_commit}`, ["advance"]);
       }
     } else if (view === "quest_staging") {
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
-      const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+      this._statZone(ctx, game);
+      const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
         { kind: "framework", text: STAGING.framework },
         { kind: "window", text: STAGING.window },
       ]);
@@ -548,20 +566,18 @@ export class ScreenPlay {
       // gained the STAGING.short rule, and the
       // totals row has to stay clear of the CTA. Re-laid out rather than
       // shrinking the text - see the design system.
-      const my = CONTENT_Y + bh + 4;
+      const my = this.contentY + bh + 4;
       const mh = willpowerStagingMeter(ctx, MARGIN, my, 480 - 2 * MARGIN, game.willpower, game.staging);
       this._totalsRow(ctx, game, my + mh + 4, true);
       this._cta(ctx, game, `Next: ${VIEW_LABELS.quest_resolution}`, ["stage_advance"]);
     } else if (view === "quest_resolution") {
       this._drawResolution(ctx, game);
     } else if (view === "travel") {
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
+      this._statZone(ctx, game);
       this._drawTravel(ctx, game);
     } else if (view === "refresh") {
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
-      const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+      this._statZone(ctx, game);
+      const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
         { kind: "framework", text: PHASE_FRAMEWORK["refresh"] },
         { kind: "window", text: PHASE_WINDOW["refresh"] },
       ]);
@@ -569,19 +585,17 @@ export class ScreenPlay {
     } else if (view === "round_end") {
       // 0.1. Not an action window - RR's chart puts the last one after 7.4 -
       // so no purple treatment: this is a resolution checklist.
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
-      phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+      this._statZone(ctx, game);
+      phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
         { kind: "framework", text: PHASE_FRAMEWORK["round_end"] },
       ]);
       this._cta(ctx, game,
                 `Next: ${VIEW_LABELS["resource"]} (Round ${game.round + 1})`,
                 ["endround"]);
     } else {
-      this._playersZone(ctx, game);
+      this._statZone(ctx, game);
       const flavor = { combat_enemy: [icons.DEFENSE, pal.green],
                        combat_player: [icons.ATTACK, pal.tan] }[view];
-      this._progressZone(ctx, game);
       const sections = [];
       if (PHASE_FRAMEWORK[view]) {
         const fw = PHASE_FRAMEWORK[view];
@@ -589,16 +603,16 @@ export class ScreenPlay {
       }
       if (PHASE_WINDOW[view]) sections.push({ kind: "window", text: PHASE_WINDOW[view] });
       const reserve = flavor ? 34 : 0;
-      const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, sections, reserve);
+      const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, sections, reserve);
       if (flavor) {
         icons.drawIcon(ctx, flavor[0], 480 - MARGIN - 34,
-                       CONTENT_Y + Math.floor((bh - 20) / 2), flavor[1]);
+                       this.contentY + Math.floor((bh - 20) / 2), flavor[1]);
       }
       if (PHASE_CAPTION[view]) {
         // a rules caption: BODY, wrapped over as many lines as it needs
         // (every one of these is 2 lines, ending by y=316).
         const capW = 480 - 2 * (MARGIN + 4);
-        let cy = CONTENT_Y + bh + 10;
+        let cy = this.contentY + bh + 10;
         for (const ln of wrapText(PHASE_CAPTION[view], BODY, capW)) {
           textLeft(ctx, ln, MARGIN + 4, cy, BODY, pal.dim);
           cy += 24;
@@ -672,7 +686,7 @@ export class ScreenPlay {
     const lead = aFace.text
       ? QUEST_SETUP.resolve.replace("%s", stageN).replace("%s", aFace.name || "")
       : QUEST_SETUP.none.replace("%s", stageN);
-    phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN, [
+    phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN, [
       { kind: "framework",
         text: [lead, QUEST_SETUP.then_flip.replace("%s", game.quest.stage_n)] },
     ]);
@@ -692,9 +706,9 @@ export class ScreenPlay {
     const fw = loc
       ? TRAVEL.blocked
       : TRAVEL.open;
-    const bh = phaseBlock(ctx, MARGIN, CONTENT_Y, 480 - 2 * MARGIN,
+    const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN,
       [{ kind: "framework", text: fw }, { kind: "window", text: "Responses." }]);
-    const y = CONTENT_Y + bh + 10;
+    const y = this.contentY + bh + 10;
     if (!loc) {
       const tb = new Button(["travel_new"], MARGIN, y, 480 - 2 * MARGIN, 56);
       bevel(ctx, tb.x, tb.y, tb.w, tb.h, pal.btn);
@@ -720,10 +734,9 @@ export class ScreenPlay {
   _drawResolution(ctx, game) {
     if (game.quest_outcome !== "success") {
       // fail / tie: no placement - just report the outcome and move on
-      this._playersZone(ctx, game);
-      this._progressZone(ctx, game);
+      this._statZone(ctx, game);
       const fail = game.quest_outcome === "fail";
-      const ty0 = CONTENT_Y, gutt = 28 + 14, tx = MARGIN + 12 + gutt,
+      const ty0 = this.contentY, gutt = 28 + 14, tx = MARGIN + 12 + gutt,
             lh = bandLineH(BODY);
       const th = 2 * lh + 2 * BAND_PAD;
       rect(ctx, MARGIN, ty0, 480 - 2 * MARGIN, th, pal.card_hi);

@@ -446,3 +446,130 @@ def draw_weather(d, pal, idx, cx, cy, r):
     mask = getattr(_icons, name)
     size = len(mask)
     _icons.draw(d, mask, int(cx - size / 2), int(cy - size / 2), getattr(pal, pen_attr))
+
+
+# --------------------------------------------------------------------------
+# Stat pills
+# --------------------------------------------------------------------------
+#
+# The play screen's top zone: a flowing row of segmented pills, one per player
+# and one per progress track, replacing the two fixed 90px matrices.
+#
+#     [ P > (threat) | (willpower) ]  [ 1 < 25 | 3 ]  [ 2 > 28 | 2 ]  [ Q > 6 ]
+#
+# Segment 0 is the pill's HEADER - "P", the player number, "Q"/"L"/"S1". It has
+# its own darker ground, a slate label, and a notched right edge, so it reads
+# as a label FOR the segments after it rather than as a peer of them. The
+# legend pill's two value segments carry the threat helm and willpower star;
+# every player pill then drops the icons and lets the NUMBERS wear those same
+# colours.
+#
+# Segments are FIXED width, not content width, so every player pill is the
+# same size and the wrap is predictable instead of shifting as numbers change.
+#
+# Two shapes, one geometry, inverted:
+#   * a plain header pushes its notch OUT to a point
+#   * the FIRST PLAYER's header takes the notch IN - the same V-notch bitten
+#     out of the right end that ribbon_h uses - and fills gold with its number
+#     knocked out. Subtractive and rare, against additive and universal.
+PILL_H = 28            # fits the 20px icon masks plus 4px of air
+PILL_CAP = 3           # chamfer at each end; the device has no rounded rect,
+                       # so a "pill" is a rect with its end columns drawn short
+PILL_NOTCH = 6
+PILL_GAP = 6
+PILL_ROW_GAP = 5
+# Sized from the widest real content: header "S2" is 18px, and the widest
+# thing in a value slot is the 24px weather glyph ("100" is 26px, so a
+# three-digit threat still fits).
+PILL_HEAD_W = 28
+PILL_VAL_W = 30
+
+
+def _pill_shape(d, x, y, w, h, pen):
+    """A rect with both ends chamfered - as close to a pill as rectangle and
+    triangle get at this resolution."""
+    d.set_pen(pen)
+    c = PILL_CAP
+    d.rectangle(x + c, y, w - 2 * c, h)
+    d.rectangle(x, y + c, c, h - 2 * c)
+    d.rectangle(x + w - c, y + c, c, h - 2 * c)
+    d.rectangle(x + 1, y + 1, c - 1, c - 1)
+    d.rectangle(x + w - c, y + 1, c - 1, c - 1)
+    d.rectangle(x + 1, y + h - c, c - 1, c - 1)
+    d.rectangle(x + w - c, y + h - c, c - 1, c - 1)
+
+
+def _pill_slash(d, x, y, w, h, pen, t=3):
+    """A diagonal strike, stepped out of 1px rects - the device has no line
+    primitive, and a triangle this thin renders as a wedge."""
+    d.set_pen(pen)
+    for i in range(max(1, w)):
+        py = y + h - 1 - int(i * (h - 1) / float(max(1, w - 1)))
+        d.rectangle(x + i, max(y, py - t // 2), 1, t)
+
+
+def pill_width(segs):
+    """Fixed width by role: segment 0 is the header, the rest are values."""
+    return (PILL_HEAD_W + PILL_NOTCH + (len(segs) - 1) * PILL_VAL_W
+            + (len(segs) - 2))
+
+
+def pill(d, pal, x, y, segs, border=None, ribbon=False, dead=False):
+    """Draw one pill. `segs` is [(kind, value, colour_name), ...] where kind is
+    "text" or "icon" and colour_name indexes theme.RGB, so an eliminated pill
+    can shade every colour it uses through Palette.shaded()."""
+    def ink(name):
+        return pal.shaded(name) if dead else getattr(pal, name)
+
+    w = pill_width(segs)
+    # The border is never shaded - it is the pill's own outline - and a dead
+    # pill drops the red elimination warning back to the standard border: that
+    # warning is about a threat ABOUT to end the player, and once they are out
+    # the slash is the statement.
+    edge = ink("border") if dead else (border if border is not None else pal.border)
+    _pill_shape(d, x, y, w, PILL_H, edge)
+    _pill_shape(d, x + 1, y + 1, w - 2, PILL_H - 2, ink("card"))
+
+    hw = PILL_HEAD_W
+    d.set_pen(ink("gold") if ribbon else ink("well"))
+    if ribbon:
+        # the ribbon takes the bite: ground through the notch column, then a
+        # wedge of the pill's own fill cut back out of its right end
+        d.rectangle(x + 1, y + 1, hw + PILL_NOTCH - 1, PILL_H - 2)
+        d.set_pen(ink("card"))
+        d.triangle(x + hw + PILL_NOTCH, y + 1,
+                   x + hw + PILL_NOTCH, y + PILL_H - 1,
+                   x + hw, y + PILL_H // 2)
+    else:
+        # a plain header inverts it: ground stops at the segment edge and the
+        # point extends past it
+        d.rectangle(x + 1, y + 1, hw - 1, PILL_H - 2)
+        d.triangle(x + hw, y + 1, x + hw, y + PILL_H - 1,
+                   x + hw + PILL_NOTCH, y + PILL_H // 2)
+
+    _pill_seg(d, pal, segs[0], x + 1, hw, y, ink("bg" if ribbon else "slate"))
+    cx = x + hw + PILL_NOTCH
+    for i, seg in enumerate(segs[1:]):
+        if i > 0:
+            d.set_pen(ink("border"))
+            d.rectangle(cx, y + 1, 1, PILL_H - 2)
+            cx += 1
+        _pill_seg(d, pal, seg, cx, PILL_VAL_W, y, ink(seg[2]))
+        cx += PILL_VAL_W
+
+    if dead:
+        # the one thing NOT shaded - it is the mark that says why
+        _pill_slash(d, x + 5, y + 6, w - 10, PILL_H - 12, pal.red)
+    return w
+
+
+def _pill_seg(d, pal, seg, cx, sw, y, pen):
+    from ui import icons as _icons
+    if seg[0] == "icon":
+        mask = seg[1]
+        _icons.draw(d, mask, cx + (sw - len(mask)) // 2,
+                    y + (PILL_H - len(mask)) // 2, pen)
+    else:
+        tw = d.measure_text(seg[1], BODY)
+        text_left(d, pal, seg[1], cx + (sw - tw) // 2,
+                  y + (PILL_H - 8 * BODY) // 2, BODY, pen, shadow=False)

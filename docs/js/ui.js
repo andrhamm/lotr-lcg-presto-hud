@@ -21,16 +21,31 @@ export const LABEL = 1;     // ALL-CAPS section labels + dense metadata ONLY
 
 const rgb = (r, g, b) => `rgb(${r},${g},${b})`;
 
+// Source RGB for the pens something needs to SHADE, plus the one new pen.
+// Anything wanting "the same colour, turned down" has to start from the
+// numbers; see pal.shaded().
+export const RGB = {
+  bg: [16, 12, 9], card: [36, 32, 21], well: [24, 20, 12],
+  border: [60, 54, 35], gold: [214, 180, 110], red: [247, 101, 62],
+  tan: [200, 186, 144], slate: [124, 138, 152],
+};
+export const DIM_FACTOR = 0.55;   // an eliminated stat pill
+
 export const pal = {
-  bg: rgb(16, 12, 9), card: rgb(36, 32, 21), card_hi: rgb(48, 44, 29),
-  border: rgb(60, 54, 35), border_gold: rgb(150, 118, 48),
-  gold: rgb(214, 180, 110), tan: rgb(200, 186, 144), muted: rgb(180, 162, 118),
+  bg: rgb(...RGB.bg), card: rgb(...RGB.card), card_hi: rgb(48, 44, 29),
+  border: rgb(...RGB.border), border_gold: rgb(150, 118, 48),
+  gold: rgb(...RGB.gold), tan: rgb(...RGB.tan), muted: rgb(180, 162, 118),
   dim: rgb(162, 146, 100), green: rgb(136, 168, 92), amber: rgb(214, 164, 70),
-  red: rgb(247, 101, 62), btn: rgb(52, 42, 26), btn_ok: rgb(40, 50, 26),
+  red: rgb(...RGB.red), btn: rgb(52, 42, 26), btn_ok: rgb(40, 50, 26),
   ok_fg: rgb(158, 196, 104), btn_no: rgb(56, 26, 18), no_fg: rgb(224, 112, 80),
   tab_active: rgb(30, 24, 15), bevel_l: rgb(96, 86, 54), bevel_d: rgb(7, 5, 3),
   shadow: rgb(34, 30, 24),
-  purple: rgb(166, 122, 196), outline: rgb(0, 0, 0), well: rgb(24, 20, 12),
+  purple: rgb(166, 122, 196), outline: rgb(0, 0, 0), well: rgb(...RGB.well),
+  // The one deliberately COOL entry, reserved for labels that NAME a value
+  // rather than being one (the stat pills' header segments). Every other
+  // ink is the same warm hue at a different lightness, so a label beside a
+  // gold stat value could only differ from it by brightness.
+  slate: rgb(...RGB.slate),
   value: rgb(214, 180, 110), brown: rgb(104, 70, 34),
   row_stripe: rgb(66, 60, 42),
   // placeholder fill for undrawn scenario/set icons (Scenario Options - real
@@ -40,6 +55,13 @@ export const pal = {
   // distinct from the standard note-panel card_hi background)
   scroll: rgb(30, 26, 17),
   threatPen(t) { return t >= 35 ? this.red : t >= 20 ? this.amber : this.green; },
+  // A pen's own colour at `f` brightness. Eliminated stat pills shade every
+  // colour they use through here, which is what makes them read as the same
+  // object turned off rather than a different object in one flat grey.
+  shaded(name, f = DIM_FACTOR) {
+    const [r, g, b] = RGB[name];
+    return rgb(Math.floor(r * f), Math.floor(g * f), Math.floor(b * f));
+  },
 };
 
 export class Button {
@@ -471,4 +493,111 @@ export function drawWeather(ctx, idx, cx, cy, r) {
     ctx.lineTo(cx + r * 0.05, cy + r * 0.56);
     ctx.closePath(); ctx.fill();
   }
+}
+
+
+// --------------------------------------------------------------------------
+// Stat pills - mirror of ui/widgets.py
+// --------------------------------------------------------------------------
+//
+// Segment 0 is the pill's HEADER ("P", a player number, "Q"/"L"/"S1"): its own
+// darker ground, a slate label, and a notched right edge, so it reads as a
+// label FOR the segments after it rather than a peer of them. Segments are
+// FIXED width so the wrap is predictable instead of shifting as numbers change.
+//
+// Two shapes, one geometry, inverted: a plain header pushes its notch OUT to a
+// point; the FIRST PLAYER's header takes the notch IN - the same V bitten out
+// of the right end that ribbonH uses - and fills gold with its number knocked
+// out. Subtractive and rare, against additive and universal.
+export const PILL_H = 28;
+export const PILL_CAP = 3;
+export const PILL_NOTCH = 6;
+export const PILL_GAP = 6;
+export const PILL_ROW_GAP = 5;
+export const PILL_HEAD_W = 28;   // widest header is "S2" at 18px
+export const PILL_VAL_W = 30;    // widest value slot is the 24px weather glyph
+
+function pillShape(ctx, x, y, w, h, pen) {
+  const c = PILL_CAP;
+  rect(ctx, x + c, y, w - 2 * c, h, pen);
+  rect(ctx, x, y + c, c, h - 2 * c, pen);
+  rect(ctx, x + w - c, y + c, c, h - 2 * c, pen);
+  rect(ctx, x + 1, y + 1, c - 1, c - 1, pen);
+  rect(ctx, x + w - c, y + 1, c - 1, c - 1, pen);
+  rect(ctx, x + 1, y + h - c, c - 1, c - 1, pen);
+  rect(ctx, x + w - c, y + h - c, c - 1, c - 1, pen);
+}
+
+// A diagonal strike, stepped out of 1px rects - the device has no line
+// primitive, and a triangle this thin renders as a wedge.
+function pillSlash(ctx, x, y, w, h, pen, t = 3) {
+  for (let i = 0; i < Math.max(1, w); i++) {
+    const py = y + h - 1 - Math.floor(i * (h - 1) / Math.max(1, w - 1));
+    rect(ctx, x + i, Math.max(y, py - Math.floor(t / 2)), 1, t, pen);
+  }
+}
+
+export function pillWidth(segs) {
+  return PILL_HEAD_W + PILL_NOTCH + (segs.length - 1) * PILL_VAL_W
+       + (segs.length - 2);
+}
+
+function pillSeg(ctx, seg, cx, sw, y, pen, icons) {
+  if (seg[0] === "icon") {
+    const mask = seg[1];
+    icons.drawIcon(ctx, mask, cx + Math.floor((sw - mask[0]) / 2),
+                   y + Math.floor((PILL_H - mask[0]) / 2), pen);
+  } else {
+    const tw = measureText(seg[1], BODY);
+    textLeft(ctx, seg[1], cx + Math.floor((sw - tw) / 2),
+             y + Math.floor((PILL_H - 8 * BODY) / 2), BODY, pen, false);
+  }
+}
+
+export function pill(ctx, x, y, segs, border, ribbon, dead, icons) {
+  const ink = name => (dead ? pal.shaded(name) : pal[name]);
+  const w = pillWidth(segs);
+  // The border is never shaded - it is the pill's own outline - and a dead
+  // pill drops the red elimination warning back to the standard border: that
+  // warning is about a threat ABOUT to end the player, and once they are out
+  // the slash is the statement.
+  const edge = dead ? ink("border") : (border ?? pal.border);
+  pillShape(ctx, x, y, w, PILL_H, edge);
+  pillShape(ctx, x + 1, y + 1, w - 2, PILL_H - 2, ink("card"));
+
+  const hw = PILL_HEAD_W;
+  const headBg = ribbon ? ink("gold") : ink("well");
+  if (ribbon) {
+    // the ribbon takes the bite
+    rect(ctx, x + 1, y + 1, hw + PILL_NOTCH - 1, PILL_H - 2, headBg);
+    ctx.fillStyle = ink("card");
+    ctx.beginPath();
+    ctx.moveTo(x + hw + PILL_NOTCH, y + 1);
+    ctx.lineTo(x + hw + PILL_NOTCH, y + PILL_H - 1);
+    ctx.lineTo(x + hw, y + PILL_H / 2);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    // a plain header inverts it, to a point
+    rect(ctx, x + 1, y + 1, hw - 1, PILL_H - 2, headBg);
+    ctx.fillStyle = headBg;
+    ctx.beginPath();
+    ctx.moveTo(x + hw, y + 1);
+    ctx.lineTo(x + hw, y + PILL_H - 1);
+    ctx.lineTo(x + hw + PILL_NOTCH, y + PILL_H / 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  pillSeg(ctx, segs[0], x + 1, hw, y, ink(ribbon ? "bg" : "slate"), icons);
+  let cx = x + hw + PILL_NOTCH;
+  segs.slice(1).forEach((seg, i) => {
+    if (i > 0) { rect(ctx, cx, y + 1, 1, PILL_H - 2, ink("border")); cx += 1; }
+    pillSeg(ctx, seg, cx, PILL_VAL_W, y, ink(seg[2]), icons);
+    cx += PILL_VAL_W;
+  });
+
+  // the one thing NOT shaded - it is the mark that says why
+  if (dead) pillSlash(ctx, x + 5, y + 6, w - 10, PILL_H - 12, pal.red);
+  return w;
 }
