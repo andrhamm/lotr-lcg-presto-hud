@@ -228,17 +228,34 @@ def test_players_detail_modal_threat_step_adjusts_and_logs():
     assert any("P1 threat %d -> %d" % (before, before + 1) in e["text"] for e in game.log)
 
 
-def test_players_detail_modal_willpower_step_touches_commit_and_logs():
+def test_players_detail_modal_willpower_step_sets_the_commit_and_logs():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
     m = modals.PlayersDetailModal(game)
     m.draw(hw, game, pal)
-    game.players[1].commit_touched = False
     assert m.on_button(_find(m, ("w", 1, 1))) is None
     assert game.players[1].commit == 1
-    assert game.players[1].commit_touched is True
+    # a per-player edit makes the sum authoritative again
+    assert game.willpower_detached is False
     assert any("P2 committed 1 willpower" in e["text"] for e in game.log)
+
+
+def test_opening_the_players_modal_resyncs_a_detached_total():
+    """The two sources must never quietly disagree. While the total was set
+    directly the per-player values were still stored - just no longer what the
+    total said - so opening the view that shows them adopts them again."""
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.set_commit(0, 4)
+    game.set_willpower(11)
+    assert game.willpower_detached is True
+
+    modals.PlayersDetailModal(game)          # opening it is the resync
+    assert game.willpower == 4
+    assert game.willpower_detached is False
+    assert game.players[0].commit == 4       # the stored value was never lost
 
 
 def test_players_detail_modal_inline_edit_pad_commits_on_ok_and_returns_to_grid():
@@ -246,13 +263,10 @@ def test_players_detail_modal_inline_edit_pad_commits_on_ok_and_returns_to_grid(
     pal = Palette(hw.display)
     game = GameState()
     game.set_commit(2, 3)
-    game.players[2].commit_touched = False
     m = modals.PlayersDetailModal(game)
     m.draw(hw, game, pal)
-    # opening the willpower editor (token tap) touches the commit immediately
     assert m.on_button(_find(m, ("w", 2, "edit"))) is None
     assert m.edit is not None
-    assert game.players[2].commit_touched is True
     m.draw(hw, game, pal)                       # edit-mode redraw (grid replaced)
     m.on_button(_find(m, ("step", 5)))
     assert m.on_button(_find(m, ("ok",))) is None      # never closes the outer modal

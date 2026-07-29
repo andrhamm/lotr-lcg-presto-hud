@@ -167,24 +167,76 @@ def test_current_step_action_window_flag():
     assert g.action_window_open() is False
 
 
-def test_commit_touched_lifecycle():
+def test_editing_the_total_detaches_the_player_breakdown():
+    """Two ways into the questing total - the player widgets and the Questing
+    For stepper - and they must never quietly disagree. Setting the total
+    directly makes the per-player numbers no longer add up to it, which the
+    pills show as "?" rather than asserting a breakdown that is not true."""
     from gamestate import GameState
-    g = GameState()
-    assert g.players[0].commit_touched is False
-    g.set_commit(0, 5)
-    assert g.players[0].commit_touched is True
-    g.touch_commit(1)
-    assert g.players[1].commit_touched is True
-    g.end_round()
-    assert all(p.commit_touched is False for p in g.players)
+    g = GameState(3, 25)
+    g.set_commit(0, 4)
+    g.set_commit(1, 3)
+    assert g.willpower == 7 and g.willpower_detached is False
+
+    g.set_willpower(11)
+    assert g.willpower == 11
+    assert g.willpower_detached is True
+    # the stored per-player values are NOT lost - they are just no longer
+    # what the total says
+    assert [p.commit for p in g.players] == [4, 3, 0]
 
 
-def test_commit_touched_round_trips():
+def test_typing_a_total_that_matches_the_players_is_not_detached():
+    """Nothing is out of sync, so there is nothing to flag."""
+    from gamestate import GameState
+    g = GameState(3, 25)
+    g.set_commit(0, 4)
+    g.set_commit(1, 3)
+    g.set_willpower(7)
+    assert g.willpower_detached is False
+
+
+def test_resync_adopts_the_player_breakdown_as_the_total():
+    """Opening the players view is what makes the two agree again."""
+    from gamestate import GameState
+    g = GameState(3, 25)
+    g.set_commit(0, 4)
+    g.set_commit(1, 3)
+    g.set_willpower(11)
+    assert g.resync_willpower() == 7
+    assert g.willpower == 7 and g.willpower_detached is False
+
+
+def test_editing_a_player_reattaches_the_total():
+    """The other direction: a per-player edit makes the sum authoritative
+    again without needing the view to be reopened."""
+    from gamestate import GameState
+    g = GameState(3, 25)
+    g.set_willpower(11)
+    assert g.willpower_detached is True
+    g.set_commit(0, 2)
+    assert g.willpower == 2 and g.willpower_detached is False
+
+
+def test_the_log_never_implies_a_breakdown_it_does_not_have():
+    """When the total is set directly the per-player split is unknown, so the
+    entry says what IS known - a total - and not who committed it."""
+    from gamestate import GameState
+    g = GameState(3, 25)
+    g.set_commit(0, 4)
+    g.set_willpower(11)
+    assert "Players committed 11 willpower to the quest" == g.log[-1]["text"]
+
+
+def test_detached_flag_round_trips():
     from gamestate import GameState
     g = GameState()
     g.set_commit(0, 3)
+    g.set_willpower(9)
     g2 = GameState.from_dict(g.to_dict())
-    assert g2.players[0].commit_touched is True
+    assert g2.willpower == 9
+    assert g2.willpower_detached is True
+    assert g2.players[0].commit == 3
 
 
 def test_quest_history_records_each_resolution():
@@ -209,19 +261,3 @@ def test_quest_history_caps_at_20():
     assert len(g.quest_history) == 20
 
 
-def test_confirm_all_commits_touches_only_living_players():
-    g = GameState()
-    g.adjust_threat(1, 50)                     # P2 eliminated (default elimination 50)
-    g.confirm_all_commits()
-    assert g.players[0].commit_touched is True
-    assert g.players[1].commit_touched is False
-    assert g.players[2].commit_touched is True
-    assert g.players[3].commit_touched is True
-
-
-def test_confirm_all_commits_does_not_change_values():
-    g = GameState()
-    g.set_commit(0, 3)
-    g.confirm_all_commits()
-    assert g.players[0].commit == 3
-    assert g.players[1].commit == 0

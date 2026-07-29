@@ -190,7 +190,6 @@ export class Player {
     this.eliminated = false;
     this.elimination = DEFAULT_ELIMINATION;
     this.commit = 0;
-    this.commit_touched = false;
   }
 }
 
@@ -220,7 +219,15 @@ export class GameState {
     this.active_location = null;
     this.side_quests = [];       // {points, progress, name?} - name is optional
                                   // (absent/null on old saves)
-    this.willpower = 0;
+    this.willpower = 0;          // questing total; normally the sum of the
+                                 // per-player commits
+    // True once the TOTAL has been set directly to something the per-player
+    // commits do not add up to. There are two ways into this number - the
+    // player widgets and the Questing For stepper - and they must never
+    // quietly disagree: while this is set the pills show "?" instead of a
+    // breakdown that is no longer true, and opening the players view adopts
+    // the breakdown again (see resyncWillpower).
+    this.willpower_detached = false;
     this.staging = 0;
     this.pending_budget = 0;
     this.pending_elim = null;
@@ -316,8 +323,8 @@ export class GameState {
 
   setCommit(index, value) {
     this.players[index].commit = Math.max(0, value);
-    this.players[index].commit_touched = true;
     this.willpower = this.players.reduce((a, p) => a + p.commit, 0);
+    this.willpower_detached = false;
   }
 
   // Set the committed-willpower total, logging the change. A setter rather
@@ -327,10 +334,20 @@ export class GameState {
   // appeared in the log.
   setWillpower(value) {
     const v = Math.max(0, value);
+    // Setting the total directly is the one way the two sources can disagree
+    // - unless the value happens to match the sum, in which case nothing is
+    // out of sync and there is nothing to flag.
+    const detached = v !== this.players.reduce((n, p) => n + p.commit, 0);
     if (v !== this.willpower) {
-      this.logEvent(`Willpower total ${this.willpower} -> ${v}`);
+      // Two different facts, so two different sentences. Once the total is
+      // set directly the per-player breakdown is unknown, and the log must
+      // not imply one it does not have.
+      this.logEvent(detached
+        ? `Players committed ${v} willpower to the quest`
+        : `Willpower total ${v}, matching the player breakdown`);
       this.willpower = v;
     }
+    this.willpower_detached = detached;
     return this.willpower;
   }
 
@@ -344,14 +361,20 @@ export class GameState {
     return this.staging;
   }
 
-  touchCommit(i) {
-    this.players[i].commit_touched = true;
-  }
-
-  confirmAllCommits() {
-    // One-tap "same as last round": marks every living player's willpower
-    // commit as reviewed (ring goes gold) without changing any value.
-    this.players.forEach(p => { if (!p.eliminated) p.commit_touched = true; });
+  // Adopt the per-player breakdown as the questing total again.
+  //
+  // Called when the players view is opened. The stored per-player values were
+  // never lost while the total was detached - they are simply no longer what
+  // the total says - so opening the view that shows them is the moment to
+  // make the two agree again.
+  resyncWillpower() {
+    const total = this.players.reduce((n, p) => n + p.commit, 0);
+    if (total !== this.willpower) {
+      this.logEvent(`Willpower total ${this.willpower} -> ${total} (re-synced to the players)`);
+    }
+    this.willpower = total;
+    this.willpower_detached = false;
+    return total;
   }
 
   _totalProgress() {
@@ -414,7 +437,6 @@ export class GameState {
     if (this.view === "setup_game") {
       this.logEvent(`Setup complete - round 1 begins (quest ${this.questLabel()} needs ${this.quest.points})`);
       this.enterView(VIEW_ORDER[0]);
-      this.players.forEach(p => p.commit_touched = false);
       this._snapshotRound();
       return;
     }
@@ -529,7 +551,6 @@ export class GameState {
   // Close the round out. 7.3 and 7.4 are NOT here - they belong to
   // applyRefresh(). This is 0.1 -> 0.0.
   endRound() {
-    this.players.forEach(p => p.commit_touched = false);
     const snap = this._round_snap;
     if (snap) {
       const parts = [];
@@ -751,12 +772,13 @@ export class GameState {
     return {
       players: Object.fromEntries(this.players.map((p, i) => [String(i), {
         threat: p.threat, eliminated: p.eliminated,
-        commit: p.commit, commit_touched: p.commit_touched }])),
+        commit: p.commit }])),
       quest: { ...this.quest },
       active_location: this.active_location ? { ...this.active_location } : null,
       side_quests: keyed(this.side_quests),
       quest_history: keyed(this.quest_history),
       willpower: this.willpower,
+      willpower_detached: this.willpower_detached,
       staging: this.staging,
       sailing: this.sailing,
       heading: this.heading,
@@ -785,8 +807,8 @@ export class GameState {
       p.threat = pd.threat;
       p.eliminated = pd.eliminated;
       p.commit = pd.commit;
-      p.commit_touched = pd.commit_touched;
     });
+    this.willpower_detached = m.willpower_detached ?? false;
     this.quest = { ...m.quest };
     this.active_location = m.active_location ? { ...m.active_location } : null;
     this.side_quests = unkeyed(m.side_quests);
@@ -961,14 +983,15 @@ export class GameState {
       players: this.players.map(p => ({
         label: p.label, threat: p.threat, starting_threat: p.starting_threat,
         threat_per_round: p.threat_per_round, eliminated: p.eliminated,
-        elimination: p.elimination, commit: p.commit, commit_touched: p.commit_touched })),
+        elimination: p.elimination, commit: p.commit })),
       view: this.view, round: this.round, first_player: this.first_player,
       step: this.step, quest: { ...this.quest },
       scenario: this.scenario, stages: this.stages,
       stage_idx: this.stage_idx, card_idx: this.card_idx,
       active_location: this.active_location ? { ...this.active_location } : null,
       side_quests: this.side_quests.map(s => ({ ...s })),
-      willpower: this.willpower, staging: this.staging,
+      willpower: this.willpower, willpower_detached: this.willpower_detached,
+      staging: this.staging,
       pending_budget: this.pending_budget, pending_elim: this.pending_elim,
       pending_quest_card: this.pending_quest_card,
       pending_side_quest_pick: this.pending_side_quest_pick,
@@ -999,7 +1022,6 @@ export class GameState {
       p.eliminated = pd.eliminated;
       p.elimination = pd.elimination ?? DEFAULT_ELIMINATION;
       p.commit = pd.commit ?? 0;
-      p.commit_touched = pd.commit_touched ?? false;
       return p;
     });
     // saves written before Resource and Planning were split carry the merged
@@ -1017,6 +1039,7 @@ export class GameState {
     g.active_location = d.active_location ? { ...d.active_location } : null;
     g.side_quests = (d.side_quests ?? []).map(s => ({ ...s }));
     g.willpower = d.willpower ?? 0;
+    g.willpower_detached = d.willpower_detached ?? false;
     g.staging = d.staging ?? 0;
     g.pending_budget = d.pending_budget ?? 0;
     g.pending_elim = d.pending_elim ?? null;

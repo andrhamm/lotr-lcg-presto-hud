@@ -308,14 +308,18 @@ class PlayersDetailModal:
 
     def __init__(self, game):
         self.game = game
+        # Opening this view is what re-syncs the two sources. The per-player
+        # values were never lost while the total was detached - they are just
+        # no longer what the total says - so the moment the view that shows
+        # them opens, they become the truth again and the pills stop showing
+        # "?". See GameState.resync_willpower.
+        game.resync_willpower()
         self.buttons = []
         self.edit = None   # (i, stat, CounterState) while the inline pad is open
 
     def _open_edit(self, i, stat):
         game = self.game
         cur = game.players[i].threat if stat == "threat" else game.players[i].commit
-        if stat == "willpower":
-            game.touch_commit(i)
         # CounterState's default max (99) is a cosmetic pad ceiling, not a
         # game rule - adjust_threat/set_commit have no upper bound. Widen it
         # so opening the pad on an already-high value (e.g. a spammed-past-99
@@ -474,7 +478,6 @@ class PlayersDetailModal:
                 if after != before:
                     self.game.log_event("P%d threat %d -> %d" % (i + 1, before, after))
             else:
-                self.game.touch_commit(i)
                 before = self.game.players[i].commit
                 nxt = max(0, before + action)
                 if nxt != before:

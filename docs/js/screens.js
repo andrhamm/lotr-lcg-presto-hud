@@ -514,6 +514,11 @@ export class PlayersDetailModal {
 
   constructor(game) {
     this.game = game;
+    // Opening this view is what re-syncs the two sources. The per-player
+    // values were never lost while the total was detached - they are just no
+    // longer what the total says - so the moment the view that shows them
+    // opens, they become the truth again and the pills stop showing "?".
+    game.resyncWillpower();
     this.buttons = [];
     this.edit = null;   // { i, stat, state: CounterState } while the inline pad is open
   }
@@ -521,7 +526,6 @@ export class PlayersDetailModal {
   _openEdit(i, stat) {
     const game = this.game;
     const cur = stat === "threat" ? game.players[i].threat : game.players[i].commit;
-    if (stat === "willpower") game.touchCommit(i);
     // CounterState's default max (99) is a cosmetic pad ceiling, not a game
     // rule - adjustThreat/setCommit have no upper bound. Widen it so opening
     // the pad on an already-high value (e.g. a spammed-past-99 threat) can
@@ -648,7 +652,6 @@ export class PlayersDetailModal {
         const after = this.game.players[i].threat;
         if (after !== before) this.game.logEvent(`P${i + 1} threat ${before} -> ${after}`);
       } else {
-        this.game.touchCommit(i);
         const before = this.game.players[i].commit;
         const next = Math.max(0, before + action);
         if (next !== before) {

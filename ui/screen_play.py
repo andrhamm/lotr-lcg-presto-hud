@@ -14,7 +14,7 @@ from viewcopy import (VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS,
                       STAGING_PENDING, COMBAT_LAST_CHANCE,
                       PHASE_FRAMEWORK, PHASE_WINDOW, PHASE_CAPTION,
                       STAGING, TRAVEL, OUTCOME,
-                      SAILING, QUEST_SETUP, CONFIRM, TOTALS, REFRESH)
+                      SAILING, QUEST_SETUP, TOTALS, REFRESH)
 from ui.header import draw_header, HEADER_H
 from ui.theme import DISPLAY, BODY, LABEL
 from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
@@ -100,10 +100,14 @@ class ScreenPlay:
                       None, False, False))
         for i, p in enumerate(game.players):
             danger = p.threat >= p.elimination - 10
+            # "?" while the total has been set directly: the stored per-player
+            # value is still there, it is just no longer what the total says,
+            # and showing it would assert a breakdown that does not add up.
+            wp = "?" if game.willpower_detached else str(p.commit)
             pills.append((("players_detail",),
                           [("text", str(i + 1), "slate"),
                            ("text", str(p.threat), "red"),
-                           ("text", str(p.commit), "gold")],
+                           ("text", wp, "gold")],
                           pal.red if danger else None,
                           i == game.first_player,
                           p.eliminated))
@@ -556,8 +560,8 @@ class ScreenPlay:
             self._stat_zone(d, pal, game)
             bh = phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN,
                              [("window", PHASE_WINDOW["quest_commit"])])
-            cy = self._draw_confirm_all(d, pal, game, self.content_y + bh + 8)
-            self._totals_row(d, pal, game, cy, tappable=("wp", "stg"))
+            self._totals_row(d, pal, game, self.content_y + bh + 8,
+                             tappable=("wp", "stg"))
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["quest_staging"], ("advance",))
         elif view == "quest_sailing":
             self._draw_sailing(d, pal, game)
@@ -767,24 +771,6 @@ class ScreenPlay:
 
         self._cta(d, pal, game, QUEST_SETUP["begin"], ("flip_to_b",))
 
-    def _draw_confirm_all(self, d, pal, game, y):
-        """One-tap 'everyone's commit is reviewed' button for the commit view -
-        replaces the old per-player CommitModal round-trip. Caption counts
-        confirmed living players; once all are confirmed it reads as done and
-        the button goes inert. Returns the y for whatever follows."""
-        living = [p for p in game.players if not p.eliminated]
-        done = [p for p in living if p.commit_touched]
-        all_done = len(done) == len(living) and living
-        b = Button(("confirm_all",), MARGIN, y, 480 - 2 * MARGIN, 40)
-        bevel(d, pal, b.x, b.y, b.w, b.h, pal.card if all_done else pal.btn)
-        label = (CONFIRM["all"] if all_done else
-                 CONFIRM["partial"] % (len(done), len(living)))
-        text_center(d, pal, label, 240, y + 12, BODY,
-                    pal.dim if all_done else pal.tan)
-        if not all_done:
-            self.buttons.append(b)
-        return y + 48
-
     def _draw_travel(self, d, pal, game):
         loc = game.active_location
         fw = (TRAVEL["blocked"] if loc else
@@ -970,23 +956,17 @@ class ScreenPlay:
         if k == "flip_to_b":
             # Mirrors advance_view's setup_game -> round-1 branch (custom-quest
             # path), but for a scenario game: flip 1A -> 1B first, then the
-            # same round-1 entry (log, enter view, reset commits, snapshot).
+            # same round-1 entry (log, enter view, snapshot).
             pts = game.flip_to_b()
             game.log_event("Setup complete - round 1 begins (quest %s needs %d)"
                            % (game.quest_label(), pts))
             game.enter_view(VIEW_ORDER[0])
-            for p in game.players:
-                p.commit_touched = False
             game._snapshot_round()
             self.banner = None
             return True
         if k == "players_detail":
             from ui.modals import PlayersDetailModal
             return ("modal", PlayersDetailModal(game))
-        if k == "confirm_all":
-            game.confirm_all_commits()
-            game.log_event("Confirmed all player commits")
-            return True
         if k == "wp":
             def set_wp(v, game=game):
                 game.set_willpower(v)

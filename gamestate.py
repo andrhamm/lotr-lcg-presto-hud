@@ -241,7 +241,6 @@ class Player:
         self.eliminated = False
         self.elimination = DEFAULT_ELIMINATION
         self.commit = 0  # willpower committed; persists as next round's default
-        self.commit_touched = False  # willpower ring state: committed this round?
 
 
 class GameState:
@@ -267,7 +266,15 @@ class GameState:
         self.side_quests = []        # list of {"points": int, "progress": int,
                                       #           "name": str|None (optional,
                                       #           absent/None on old saves)}
-        self.willpower = 0           # transient questing input
+        self.willpower = 0           # questing total; normally the sum of the
+                                     # per-player commits
+        # True once the TOTAL has been set directly to something the per-player
+        # commits do not add up to. There are two ways into this number - the
+        # player widgets and the Questing For stepper - and they must never
+        # quietly disagree: while this is set the pills show "?" instead of a
+        # breakdown that is no longer true, and opening the players view
+        # adopts the breakdown again (see resync_willpower).
+        self.willpower_detached = False
         self.staging = 0             # transient questing input (staging area threat)
         self.pending_budget = 0      # success progress awaiting placement
         self.pending_elim = None     # player index that just crossed elimination
@@ -385,8 +392,8 @@ class GameState:
     def set_commit(self, index, value):
         """Set a player's committed willpower; total willpower = sum of commits."""
         self.players[index].commit = max(0, value)
-        self.players[index].commit_touched = True
         self.willpower = sum(p.commit for p in self.players)
+        self.willpower_detached = False
 
     def set_willpower(self, value):
         """Set the committed-willpower total, logging the change.
@@ -397,9 +404,20 @@ class GameState:
         the attribute, so none of them appeared in the log.
         """
         v = max(0, value)
+        # Setting the total directly is the one way the two sources can
+        # disagree - unless the value happens to match the sum, in which case
+        # nothing is out of sync and there is nothing to flag.
+        detached = v != sum(p.commit for p in self.players)
         if v != self.willpower:
-            self.log_event("Willpower total %d -> %d" % (self.willpower, v))
+            # Two different facts, so two different sentences. Once the total
+            # is set directly the per-player breakdown is unknown, and the log
+            # must not imply one it does not have; when the typed total does
+            # match the players' own numbers, it is not hiding anything.
+            self.log_event(
+                ("Players committed %d willpower to the quest" % v) if detached
+                else ("Willpower total %d, matching the player breakdown" % v))
             self.willpower = v
+        self.willpower_detached = detached
         return self.willpower
 
     def set_staging(self, value):
@@ -411,17 +429,21 @@ class GameState:
             self.staging = v
         return self.staging
 
-    def touch_commit(self, index):
-        """Mark a player's commit as touched this round (willpower ring visual)."""
-        self.players[index].commit_touched = True
+    def resync_willpower(self):
+        """Adopt the per-player breakdown as the questing total again.
 
-    def confirm_all_commits(self):
-        """One-tap 'same as last round' - marks every living player's
-        willpower commit as reviewed (ring goes gold) without changing any
-        value."""
-        for p in self.players:
-            if not p.eliminated:
-                p.commit_touched = True
+        Called when the players view is opened. The stored per-player values
+        were never lost while the total was detached - they are simply no
+        longer what the total says - so opening the view that shows them is
+        the moment to make the two agree again.
+        """
+        total = sum(p.commit for p in self.players)
+        if total != self.willpower:
+            self.log_event("Willpower total %d -> %d (re-synced to the players)"
+                           % (self.willpower, total))
+        self.willpower = total
+        self.willpower_detached = False
+        return total
 
     # -- view flow ---------------------------------------------------------
     def _total_progress(self):
@@ -503,8 +525,6 @@ class GameState:
             self.log_event("Setup complete - round 1 begins (quest %s needs %d)"
                            % (self.quest_label(), self.quest["points"]))
             self.enter_view(VIEW_ORDER[0])
-            for p in self.players:
-                p.commit_touched = False
             self._snapshot_round()
             return
         if self.view == "quest_sailing":
@@ -660,8 +680,6 @@ class GameState:
         7.3 and 7.4 are NOT here - they belong to apply_refresh(), which runs
         when the refresh view is entered. This is 0.1 -> 0.0.
         """
-        for p in self.players:
-            p.commit_touched = False
         # round stats: duration + per-player threat deltas + progress gained
         snap = self._round_snap
         if snap:
@@ -679,6 +697,7 @@ class GameState:
         self.round += 1
         # commits persist as next round's defaults; refresh the derived total
         self.willpower = sum(p.commit for p in self.players)
+        self.willpower_detached = False
         self.quest_resolved = False
         self.quest_outcome = None
         self.refresh_applied = False      # arm the next round's 7.3 / 7.4
@@ -922,8 +941,7 @@ class GameState:
         return {
             "players": {str(i): {"threat": p.threat,
                                  "eliminated": p.eliminated,
-                                 "commit": p.commit,
-                                 "commit_touched": p.commit_touched}
+                                 "commit": p.commit}
                         for i, p in enumerate(self.players)},
             "quest": dict(self.quest),
             "active_location": (dict(self.active_location)
@@ -933,6 +951,7 @@ class GameState:
             "quest_history": {str(i): dict(e)
                               for i, e in enumerate(self.quest_history)},
             "willpower": self.willpower,
+            "willpower_detached": self.willpower_detached,
             "staging": self.staging,
             "sailing": self.sailing,
             "heading": self.heading,
@@ -962,7 +981,8 @@ class GameState:
             p.threat = pd["threat"]
             p.eliminated = pd["eliminated"]
             p.commit = pd["commit"]
-            p.commit_touched = pd["commit_touched"]
+
+        self.willpower_detached = m.get("willpower_detached", False)
         self.quest = dict(m["quest"])
         self.active_location = (dict(m["active_location"])
                                 if m["active_location"] else None)
@@ -1172,7 +1192,7 @@ class GameState:
                          "eliminated": p.eliminated,
                          "elimination": p.elimination,
                          "commit": p.commit,
-                         "commit_touched": p.commit_touched} for p in self.players],
+                         } for p in self.players],
             "view": self.view,
             "round": self.round,
             "first_player": self.first_player,
@@ -1185,6 +1205,7 @@ class GameState:
             "active_location": dict(self.active_location) if self.active_location else None,
             "side_quests": [dict(s) for s in self.side_quests],
             "willpower": self.willpower,
+            "willpower_detached": self.willpower_detached,
             "staging": self.staging,
             "pending_budget": self.pending_budget,
             "pending_elim": self.pending_elim,
@@ -1221,7 +1242,7 @@ class GameState:
             p.eliminated = pd["eliminated"]
             p.elimination = pd.get("elimination", DEFAULT_ELIMINATION)
             p.commit = pd.get("commit", 0)
-            p.commit_touched = pd.get("commit_touched", False)
+
             g.players.append(p)
         v = d.get("view", VIEW_ORDER[0])
         # saves written before Resource and Planning were split carry the
@@ -1238,6 +1259,7 @@ class GameState:
         g.active_location = dict(d["active_location"]) if d["active_location"] else None
         g.side_quests = [dict(s) for s in d["side_quests"]]
         g.willpower = d.get("willpower", 0)
+        g.willpower_detached = d.get("willpower_detached", False)
         g.staging = d.get("staging", 0)
         g.pending_budget = d.get("pending_budget", 0)
         g.pending_elim = d.get("pending_elim", None)

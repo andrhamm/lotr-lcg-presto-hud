@@ -365,11 +365,6 @@ QUEST_SETUP = {
     "begin": "Begin Round 1",
 }
 
-CONFIRM = {
-    "all": "All players confirmed",
-    "partial": "Confirm all commits (%d/%d)",
-}
-
 TOTALS = {
     "willpower": "Questing for",
     "staging": "Staging area",

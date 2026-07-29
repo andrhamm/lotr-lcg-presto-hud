@@ -484,27 +484,31 @@ def test_commit_tip_button_is_gone():
     assert "commit_tip" not in [b.id[0] for b in screen.buttons]
 
 
-def test_confirm_all_button_marks_every_living_player_touched():
+def test_the_commit_view_has_no_confirm_ritual():
+    """Committing willpower per player, then confirming it, is gone. The two
+    sources that remain are the player widgets and the Questing For stepper,
+    and they are kept in sync rather than ratified."""
     hw, pal, game, screen = _setup("quest_commit")
-    game.adjust_threat(1, 50)                  # P2 eliminated
     screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("confirm_all",)), game)
-    assert game.players[0].commit_touched is True
-    assert game.players[1].commit_touched is False
-    assert game.players[2].commit_touched is True
-    assert game.players[3].commit_touched is True
+    ids = _ids(screen)
+    assert "confirm_all" not in ids
+    assert "wp+" in ids and "wp-" in ids       # the Questing For tool stays
 
 
-def test_confirm_all_button_caption_reflects_progress():
+def test_editing_the_total_makes_the_player_pills_say_unknown():
+    """The per-player values are still stored, but they no longer add up to
+    the total, so the pills must not assert a breakdown that is not true."""
     hw, pal, game, screen = _setup("quest_commit")
-    game.players[0].commit_touched = True
-    game.players[1].commit_touched = True
+    game.set_commit(0, 4)
     screen.draw(hw, game, pal)
-    assert "Confirm all commits (2/4)" in _texts(hw)
-    for p in game.players:
-        p.commit_touched = True
+    assert "4" in _texts(hw)
+
+    hw, pal, game, screen = _setup("quest_commit")
+    game.set_commit(0, 4)
+    game.set_willpower(11)
     screen.draw(hw, game, pal)
-    assert "All players confirmed" in _texts(hw)
+    texts = _texts(hw)
+    assert texts.count("?") == len(game.players)
 
 
 def test_notification_overlay_draws_with_pie_and_dismiss():
@@ -626,14 +630,11 @@ _QS_STAGES = [{"stage": 1, "cards": [{"questPoints": 8, "victory": None, "sailin
 def test_quest_setup_flip_to_b_enters_round_1():
     hw, pal, game, screen = _setup("quest_setup")
     game.preload_scenario(_QS_SCN, _QS_STAGES)
-    for p in game.players:
-        p.commit_touched = True
     screen.draw(hw, game, pal)
     result = screen.on_button(_find(screen, ("flip_to_b",)), game)
     assert result is True
     assert game.quest["side"] == "B" and game.quest["points"] == 8
     assert game.view == "resource"        # VIEW_ORDER[0]
-    assert all(not p.commit_touched for p in game.players)
     assert game._round_snap is not None
     messages = [e["text"] for e in game.log]
     assert any("Setup complete" in m and "1B" in m and "8" in m for m in messages)

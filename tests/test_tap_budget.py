@@ -76,13 +76,13 @@ def test_common_round_hits_tap_budget():
     tap(("players_detail",))                       # 2: open PlayersDetailModal
     tap(("w", 2, -1))                               # 3: P3 commit 2 -> 1
     tap(("close",))                                 # 4: close modal
-    tap(("confirm_all",))                           # 5: mark P1/P2/P4 reviewed too
     tap(("advance",))                               # -> the Commit window
     assert game.view == "aw_quest_commit"
     tap(("advance",))                               # -> quest_staging
     assert game.view == "quest_staging"
     assert game.willpower == 10                     # 3+4+1+2
-    assert all(p.commit_touched for p in game.players)
+    # the total is the players' own sum, so nothing is detached
+    assert game.willpower_detached is False
 
     tap(("stg+",)); tap(("stg+",)); tap(("stg+",))  # 7,8,9: +3 staging
     tap(("stage_advance",))                         # 10: -> quest_resolution
