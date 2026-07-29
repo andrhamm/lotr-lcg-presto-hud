@@ -1,6 +1,7 @@
 """Regenerate docs/js data modules (phases, icon masks, text metrics, copy)
 from the Python firmware source, guaranteeing web/device parity. Run after
-changing phases.py, ui/icons.py, viewcopy.py, or the font metrics."""
+changing phases.py, ui/icons.py, viewcopy.py, xtargets.py, or the font
+metrics."""
 # The generation logic lives inline in the repo history; simplest invocation:
 #   python3 tools/gen_web_data.py
 import json
@@ -10,6 +11,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import phases
 import viewcopy
+import xtargets
 from ui import icons
 from tests.fake_hardware import BITMAP8_W
 
@@ -68,5 +70,46 @@ for n in sorted(d for d in dir(viewcopy)
                 and isinstance(getattr(viewcopy, d), (dict, list, str))):
     out.append("export const %s = %s;" % (n, json.dumps(getattr(viewcopy, n))))
 open(os.path.join(root, "viewcopy.js"), "w").write("\n".join(out) + "\n")
+
+# What a printed X counts (xtargets.py). The TABLE is generated; the tiny bit
+# of arithmetic that reads it is hand-mirrored below, because a generator that
+# emitted functions would be a code generator rather than a data one.
+out = ["// GENERATED from xtargets.py - do not edit (tools/gen_web_data.py)"]
+for n in sorted(d for d in dir(xtargets)
+                if d.isupper() or d.startswith("AUTO_")):
+    v = getattr(xtargets, n)
+    if isinstance(v, (dict, list, str)):
+        out.append("export const %s = %s;" % (n, json.dumps(v)))
+out.append("""
+export function labelFor(target) {
+  return TARGETS[target]?.label ?? null;
+}
+
+export function autoFor(target) {
+  return TARGETS[target]?.auto ?? null;
+}
+
+// value = mul * count + add, never below zero.
+export function valueOf(count, mul = 1, add = 0) {
+  return Math.max(0, mul * count + add);
+}
+
+// The number to put on screen, or null when the player has not supplied a
+// count yet. An auto target ignores `count` and recomputes from the tracked
+// value - that is the whole point of tagging those three separately: "X is 4
+// per player" must follow the player count without anyone touching a stepper.
+export function resolve(spec, { count = null, players = 1, stage = 1,
+                                highestThreat = 0 } = {}) {
+  if (!spec) return null;
+  const mul = spec.mul ?? 1, add = spec.add ?? 0;
+  switch (autoFor(spec.target)) {
+    case AUTO_PLAYERS: return valueOf(players, mul, add);
+    case AUTO_STAGE: return valueOf(stage, mul, add);
+    case AUTO_HIGHEST_THREAT: return valueOf(highestThreat, mul, add);
+  }
+  if (count === null) return null;
+  return valueOf(count, mul, add);
+}""")
+open(os.path.join(root, "xtargets.js"), "w").write("\n".join(out) + "\n")
 
 print("regenerated docs/js data modules")

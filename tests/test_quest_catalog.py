@@ -402,19 +402,23 @@ def test_locations_for_reports_which_non_number_the_card_printed():
         "id": "x", "name": "Tangled Grove", "encounterSet": "Q",
         "faces": [{"questPoints": None, "questPointsKind": "na",
                    "threat": None, "threatKind": "x",
-                   "threatFormula": "the number of locations in the staging area"}]}]}}}
+                   "threatX": {"text": "the number of locations in the staging area",
+                               "target": "locations_in_staging"}}]}]}}}
     out = qc.locations_for({"slug": "q"}, packs)[0]
     assert out["pointsKind"] == "na"
-    assert "pointsFormula" not in out          # nothing to define; the stat is N/A
+    assert "pointsX" not in out               # nothing to define; the stat is N/A
     assert out["threatKind"] == "x"
-    assert out["threatFormula"] == "the number of locations in the staging area"
+    # The CODED X: `target` is an xtargets enum, so the count control can be
+    # built without anyone parsing `text`.
+    assert out["threatX"]["target"] == "locations_in_staging"
+    assert out["threatX"]["text"] == "the number of locations in the staging area"
 
 
 def test_locations_for_omits_the_marker_when_the_card_prints_a_number():
     # The common case must stay exactly as it was - no marker, no formula, so
     # nothing downstream has to special-case an ordinary location.
     out = qc.locations_for(PASSAGE, LOC_PACKS)[0]
-    assert not any(k.endswith(("Kind", "Formula")) for k in out)
+    assert not any(k.endswith(("Kind", "X")) for k in out)
 
 
 def test_locations_for_takes_the_first_non_null_face():

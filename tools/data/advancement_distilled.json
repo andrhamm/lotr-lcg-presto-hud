@@ -44,7 +44,11 @@
  },
  "challenge-of-the-wainriders::1::Wainrider Camp": {
   "advance": "Defeated by filling its quest points, then a racing defense test.",
-  "quest_points": "+4 quest points per player"
+  "quest_points": {
+   "mul": 4,
+   "target": "players",
+   "text": "+4 quest points per player"
+  }
  },
  "challenge-of-the-wainriders::2::First Sprint": {
   "advance": "On defeat, a racing attack test; pass sends excess progress to the next stage, fail deals 1 damage to each character."
@@ -112,7 +116,11 @@
  },
  "into-the-pit-nightmare::2::Goblin Ambush": {
   "advance": "Advances once progress here reaches X, added only when an enemy is defeated.",
-  "quest_points": "X is 1 plus the number of players in the game"
+  "quest_points": {
+   "add": 1,
+   "target": "players",
+   "text": "X is 1 plus the number of players in the game"
+  }
  },
  "journey-down-the-anduin::3::Ambush on the Shore": {
   "advance": "The players win once there are no enemies in play."
@@ -181,14 +189,22 @@
  },
  "sundown-on-the-shire::4::Flight to Woodhall": {
   "advance": "Defeated by filling its quest points; the players win the game.",
-  "quest_points": "X is 15 per player"
+  "quest_points": {
+   "mul": 15,
+   "target": "players",
+   "text": "X is 15 per player"
+  }
  },
  "temple-of-doom::1::The Forgotten Temple": {
   "advance": "Advances to the topmost stage 2A and joins the victory display at 2 resource tokens here."
  },
  "temple-of-doom::5::The Lord of Middle-earth": {
   "advance": "Capped at X progress per round (cost of cards discarded) and blocked once 4 quest stages are in the victory display.",
-  "quest_points": "+4 quest points per player"
+  "quest_points": {
+   "mul": 4,
+   "target": "players",
+   "text": "+4 quest points per player"
+  }
  },
  "temple-of-the-deceived::1::Searching the Island": {
   "advance": "Progress here may be redirected onto a location in the staging area instead."
@@ -221,7 +237,10 @@
   "lose": "Otherwise Lake-town burns and the players lose the game."
  },
  "the-battle-of-the-pelennor-fields::2::Retreat from Osgiliath": {
-  "quest_points": "X is the total cost of each ally in the staging area"
+  "quest_points": {
+   "target": "ally_cost_in_staging",
+   "text": "X is the total cost of each ally in the staging area"
+  }
  },
  "the-battle-of-the-pelennor-fields::4::Rohan has Come!": {
   "advance": "Advances to stage 5A at quest phase end (Forced); progress here damages enemies instead."
@@ -239,7 +258,11 @@
   "advance": "The players win the game when there are no enemies in play."
  },
  "the-caves-of-nibin-dum::2::Surprise Attack": {
-  "quest_points": "+4 quest points for each enemy in play"
+  "quest_points": {
+   "mul": 4,
+   "target": "enemies_in_play",
+   "text": "+4 quest points for each enemy in play"
+  }
  },
  "the-caves-of-nibin-dum::3::The Chasm": {
   "advance": "Advances to stage 4A after Cracked Pillar leaves play as an explored location."
@@ -268,7 +291,12 @@
  },
  "the-fate-of-wilderland::1::Urdug's Assault": {
   "advance": "Advances once The Goblins' Assault has X or more progress.",
-  "quest_points": "X is 2 plus 2 per player"
+  "quest_points": {
+   "add": 2,
+   "mul": 2,
+   "target": "players",
+   "text": "X is 2 plus 2 per player"
+  }
  },
  "the-fate-of-wilderland::2::Outflanked": {
   "advance": "Advances at round's end once The Goblins' Assault has X or more progress; X is 4 plus 4 per player."
@@ -297,7 +325,11 @@
  },
  "the-hunt-for-the-dreadnaught::1::Searching the High Seas": {
   "advance": "Advances once quest points fill, but only at the end of the quest phase; capped at 5 progress per player each round.",
-  "quest_points": "global quest point value of 8 per player among all groups"
+  "quest_points": {
+   "mul": 8,
+   "target": "players",
+   "text": "global quest point value of 8 per player among all groups"
+  }
  },
  "the-hunt-for-the-dreadnaught::2::Destroy the Dreadnaught": {
   "advance": "The players win when the Dreadnaught is destroyed."
@@ -404,7 +436,11 @@
  },
  "the-scouring-of-the-shire::5::The Very Last Stroke": {
   "advance": "Progress caps at Saruman's tokens; defeating it wins the game, but only once he's gone.",
-  "quest_points": "X is 6 per player"
+  "quest_points": {
+   "mul": 6,
+   "target": "players",
+   "text": "X is 6 per player"
+  }
  },
  "the-siege-of-annuminas::1::Rebuild the Defenses": {
   "advance": "Advances to stage 2 at 4 resources (1 per round); progress boosts city strength instead."
@@ -454,7 +490,10 @@
  },
  "the-woodland-realm::3::To the Elvenking's Halls": {
   "advance": "Filling its quest points defeats the stage, and the players win the game.",
-  "quest_points": "X is equal to the threat level of the player with the highest threat level."
+  "quest_points": {
+   "target": "highest_threat",
+   "text": "X is equal to the threat level of the player with the highest threat level."
+  }
  },
  "to-catch-an-orc::1::Orders from Orthanc": {
   "advance": "When revealed, each player adds a Mountain location to staging, then advances to stage 2."

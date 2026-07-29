@@ -672,8 +672,12 @@ def merge_advancement(scenarios, distilled):
                 if not entry:
                     continue
                 for src, dst in (("advance", "advance"), ("lose", "lose"),
-                                 ("quest_points", "questPointsFormula")):
+                                 ("quest_points", "questPointsX")):
                     if entry.get(src):
+                        # advance/lose are sentences; quest_points is the CODED
+                        # X, {"text", "target", "mul", "add"} - see xtargets.py.
+                        # Carried whole: the UI reads .text to show and .target
+                        # to build the control, and nothing parses the prose.
                         card[dst] = entry[src]
                 hit += 1
     return hit
@@ -696,8 +700,8 @@ def merge_location_x(scenarios, distilled):
                 if not entry:
                     continue
                 for src, stat, dst in (
-                        ("quest_points", "questPoints", "questPointsFormula"),
-                        ("threat", "threat", "threatFormula")):
+                        ("quest_points", "questPoints", "questPointsX"),
+                        ("threat", "threat", "threatX")):
                     if entry.get(src) and face.get(stat + "Kind") == "x":
                         face[dst] = entry[src]
                         hit += 1

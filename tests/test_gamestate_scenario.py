@@ -50,14 +50,18 @@ def test_flip_marks_a_condition_stage_and_carries_its_sentence():
     assert q["mode"] == "condition"
     assert q["advance"] == "The players win when Bolg is destroyed."
     assert q["lose"] == "Otherwise the players lose the game."
-    assert "formula" not in q
+    assert "x" not in q
 
 
 def test_flip_marks_a_stage_whose_target_is_a_formula():
     q = _flip({"questPoints": 0, "questPointsKind": "x",
-               "questPointsFormula": "+4 quest points per player"})
+               "questPointsX": {"text": "+4 quest points per player",
+                                "target": "players", "mul": 4}})
     assert q["mode"] == "formula"
-    assert q["formula"] == "+4 quest points per player"
+    # The coded X, not a sentence to re-parse: `text` is only ever shown,
+    # `target` names what to count. See xtargets.py.
+    assert q["x"]["target"] == "players"
+    assert q["x"]["mul"] == 4
 
 
 def test_flip_leaves_a_genuine_zero_alone():
@@ -84,7 +88,7 @@ def test_flip_clears_stale_condition_state_on_the_next_stage():
     g.stage_idx = 1
     g.flip_to_b()
     assert g.quest["mode"] == "points"
-    assert "advance" not in g.quest and "formula" not in g.quest
+    assert "advance" not in g.quest and "x" not in g.quest
 
 
 def test_serialization_round_trips_scenario():

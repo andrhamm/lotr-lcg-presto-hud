@@ -966,7 +966,8 @@ def test_location_config_save_keeps_the_card_metadata():
     game.active_location = {
         "points": 3, "progress": 1, "name": "Tangled Grove", "threat": 4,
         "threatKind": "x",
-        "threatFormula": "the number of locations in the staging area"}
+        "threatX": {"text": "the number of locations in the staging area",
+                    "target": "locations_in_staging"}}
     m = modals.LocationConfigModal(game)
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("prog", 1)))
@@ -976,7 +977,7 @@ def test_location_config_save_keeps_the_card_metadata():
     assert loc["name"] == "Tangled Grove"
     assert loc["threat"] == 4
     assert loc["threatKind"] == "x"
-    assert loc["threatFormula"] == "the number of locations in the staging area"
+    assert loc["threatX"]["target"] == "locations_in_staging"
 
 
 def test_location_config_threat_starts_blank_when_x_is_undefined():
@@ -1005,16 +1006,17 @@ def test_location_pick_carries_the_x_metadata_onto_the_location():
     # nothing to show but a 0 the card never printed.
     entries = [{"id": "x", "name": "Tangled Grove", "points": 3, "threat": 0,
                 "set": "The Oath", "threatKind": "x",
-                "threatFormula": "the number of locations in the staging area"}]
+                "threatX": {"text": "the number of locations in the staging area",
+                            "target": "locations_in_staging"}}]
     hw, pal, game, m = _pick(entries=entries)
     m.on_button(_find(m, ("row", "x")))
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("travel",)))
     loc = game.active_location
     assert loc["threatKind"] == "x"
-    assert loc["threatFormula"] == "the number of locations in the staging area"
+    assert loc["threatX"]["target"] == "locations_in_staging"
     # points printed a real 3, so it carries no marker at all
-    assert "pointsKind" not in loc and "pointsFormula" not in loc
+    assert "pointsKind" not in loc and "pointsX" not in loc
 
 
 def test_location_pick_manual_entry_stays_a_two_key_record():

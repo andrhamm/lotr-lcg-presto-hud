@@ -1708,7 +1708,11 @@ export class LocationConfigModal {
     this.prog = loc ? loc.progress : 0;
     this.name = loc?.name ?? null;
     this.threat = loc?.threat ?? 0;
-    this.threatFormula = loc?.threatFormula ?? null;
+    // The coded X: {text, target, mul, add}. `text` is the card's own words,
+    // shown as-is; `target` is the xtargets enum the count control will be
+    // built from. See xtargets.py.
+    this.threatX = loc?.threatX ?? null;
+    this.threatFormula = this.threatX?.text ?? null;
     // An X with no formula has no number to show yet, and 0 would be a claim
     // the card never made. One tap on "+" makes it a real value.
     this.threatBlank = loc?.threatKind === "x" && !this.threat;
@@ -1822,7 +1826,7 @@ export class QuestConfigModal {
         ty += 22;
       }
     } else {
-      textLeft(ctx, this.q.formula ? "Quest points = X" : "Quest points",
+      textLeft(ctx, this.q.x ? "Quest points = X" : "Quest points",
                30, 228, BODY, pal.tan);
       stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 300, 214, String(this.q.points), 150, 52);
     }

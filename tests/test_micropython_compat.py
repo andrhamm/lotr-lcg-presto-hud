@@ -34,12 +34,12 @@ DEVICE_MODULES = {
 # Our own modules, which are deployed alongside.
 LOCAL_MODULES = {
     "gamestate", "phases", "leds", "hardware", "quest_catalog", "ui",
-    "viewcopy",
+    "viewcopy", "xtargets",
 }
 
 FIRMWARE_FILES = (
     ["gamestate.py", "main.py", "phases.py", "leds.py", "hardware.py",
-     "quest_catalog.py", "viewcopy.py"]
+     "quest_catalog.py", "viewcopy.py", "xtargets.py"]
     + [os.path.join("ui", f) for f in sorted(os.listdir(os.path.join(ROOT, "ui")))
        if f.endswith(".py")]
 )

@@ -60,7 +60,10 @@ import re
 import sys
 import unicodedata
 
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+import xtargets  # noqa: E402  (needs ROOT on the path)
 SCENARIOS = os.path.join(ROOT, "docs", "data", "scenarios")
 DISTILLED = os.path.join(ROOT, "tools", "data", "advancement_distilled.json")
 LOCATIONS = os.path.join(ROOT, "tools", "data",
@@ -217,6 +220,26 @@ def x_printing_locations():
     return out
 
 
+def check_coded(field, value, face, text):
+    """(ok, reason) for one card's coded X.
+
+    The formula is no longer a bare sentence: it is {"text", "target", "mul",
+    "add"}, where `target` is an xtargets enum naming what to count and the two
+    integers say what to do with it (value = mul * count + add). Nothing parses
+    the prose - `text` is only ever SHOWN - so this checks the code as well as
+    the words: an unknown target would draw a stepper with no label.
+    """
+    if not isinstance(value, dict):
+        return False, "not coded (expected {text, target}), got %r" % type(value).__name__
+    target = value.get("target")
+    if target not in xtargets.TARGETS:
+        return False, "unknown xtargets target %r" % target
+    for k in ("mul", "add"):
+        if k in value and not isinstance(value[k], int):
+            return False, "%s must be an int, got %r" % (k, value[k])
+    return check_formula(field, value.get("text") or "", face, text)
+
+
 def check_formula(field, value, face, text):
     """(ok, reason) for one location X formula. Renders inline after a label,
     so it is a lowercase fragment, not a sentence."""
@@ -254,7 +277,7 @@ def validate_locations():
         text = face.get("text") or ""
         for field in ("quest_points", "threat"):
             if entry.get(field):
-                ok, why = check_formula(field, entry[field], face, text)
+                ok, why = check_coded(field, entry[field], face, text)
                 if not ok:
                     failures.append((key, field, why))
     return distilled, faces, failures, unknown
@@ -280,11 +303,18 @@ def main():
                 if not ok:
                     failures.append((key, field, why))
         if entry.get("quest_points"):
-            # A formula, not prose: ground it, skip the sentence rules.
-            bad = ground(_norm(entry["quest_points"]), text)
-            if bad:
+            qp = entry["quest_points"]
+            if not isinstance(qp, dict):
+                failures.append((key, "quest_points", "not coded"))
+            elif qp.get("target") not in xtargets.TARGETS:
                 failures.append((key, "quest_points",
-                                 "not grounded: %s" % ", ".join(bad)))
+                                 "unknown xtargets target %r" % qp.get("target")))
+            else:
+                # A formula, not prose: ground the words, skip sentence rules.
+                bad = ground(_norm(qp.get("text")), text)
+                if bad:
+                    failures.append((key, "quest_points",
+                                     "not grounded: %s" % ", ".join(bad)))
 
     covered = len(distilled) - len(unknown)
     print("%d zero-quest-point stage cards in the catalog" % len(stages))

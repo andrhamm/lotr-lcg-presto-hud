@@ -237,24 +237,25 @@ export function locationsFor(scenario, packs) {
       // Mirrors quest_catalog.py's locations_for: when no face carries a
       // number the printed value was not one, and `${key}Kind` says which of
       // "x" (the card prints a literal X) / "na" (the stat does not apply) it
-      // was, with `${key}Formula` carrying the card's own definition of X
-      // where it has one. This used to flatten all of it to 0.
+      // was, with `${key}X` carrying the CODED definition where the card has
+      // one - {text, target, mul, add}, so nothing parses the prose. See
+      // xtargets.py. This used to flatten all of it to 0.
       const faces = card.faces ?? [];
       const stat = (name) => {
         const has = (v) => v !== null && v !== undefined;
         const val = faces.find(f => has(f[name]));
         if (val) return { value: val[name] };
         const kind = faces.find(f => f[name + "Kind"]);
-        const formula = faces.find(f => f[name + "Formula"]);
+        const coded = faces.find(f => f[name + "X"]);
         return { value: 0, kind: kind ? kind[name + "Kind"] : "x",
-                 formula: formula ? formula[name + "Formula"] : null };
+                 x: coded ? coded[name + "X"] : null };
       };
       const qp = stat("questPoints"), th = stat("threat");
       const entry = { id: card.id, name: card.name, points: qp.value,
                       threat: th.value, set: card.encounterSet };
       for (const [s, key] of [[qp, "points"], [th, "threat"]]) {
         if (s.kind) entry[key + "Kind"] = s.kind;
-        if (s.formula) entry[key + "Formula"] = s.formula;
+        if (s.x) entry[key + "X"] = s.x;
       }
       out.push(entry);
     }

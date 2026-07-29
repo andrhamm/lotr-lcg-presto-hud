@@ -126,7 +126,7 @@ class QuestConfigModal:
                 ty += 22
         else:
             label = "Quest points"
-            if self.q.get("formula"):
+            if self.q.get("x"):
                 label = "Quest points = X"
             text_left(d, pal, label, 30, 228, BODY, pal.tan)
             stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 300, 214,
@@ -204,7 +204,11 @@ class LocationConfigModal:
         self.prog = loc["progress"] if loc else 0
         self.name = (loc or {}).get("name")
         self.threat = (loc or {}).get("threat") or 0
-        self.threat_formula = (loc or {}).get("threatFormula")
+        # The coded X: {"text", "target", "mul", "add"}. `text` is the card's
+        # own words, shown as-is; `target` is the xtargets enum the count
+        # control will be built from. See xtargets.py.
+        self.threat_x = (loc or {}).get("threatX")
+        self.threat_formula = (self.threat_x or {}).get("text")
         # An X with no formula has no number to show yet, and 0 would be a
         # claim the card never made. Once the player taps "+" it is a real
         # value like any other.

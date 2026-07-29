@@ -268,9 +268,11 @@ def locations_for(scenario, packs):
     number, and `pointsKind`/`threatKind` says which of the three it was:
 
         "x"   the card prints a literal X. 58 faces do, mostly for threat.
-              `pointsFormula`/`threatFormula` carries the card's own
-              definition of X where it has one (40 of 58) - merged in by
-              build_card_data.py from tools/data/location_dynamic_distilled.
+              `pointsX`/`threatX` carries the CODED definition where the card
+              has one (40 of 58) - {"text", "target", "mul", "add"}, merged in
+              by build_card_data.py. `text` is the card's own words, for
+              showing; `target` is an xtargets enum naming what to count, so
+              nothing has to parse the prose. See xtargets.py.
         "na"  the stat does not apply at all. Lost Island has no quest
               points: it flips, it never explores.
         None  absent upstream. Unknown, same handling as "x" without a
@@ -312,12 +314,12 @@ def locations_for(scenario, packs):
                 # the formula when the card defines one.
                 kind = next((f.get(stat + "Kind") for f in faces
                              if f.get(stat + "Kind")), None)
-                formula = next((f.get(stat + "Formula") for f in faces
-                                if f.get(stat + "Formula")), None)
+                coded = next((f.get(stat + "X") for f in faces
+                              if f.get(stat + "X")), None)
                 entry[out_key] = 0
                 entry[out_key + "Kind"] = kind or "x"
-                if formula:
-                    entry[out_key + "Formula"] = formula
+                if coded:
+                    entry[out_key + "X"] = coded
             out.append(entry)
     out.sort(key=lambda l: l["name"] or "")
     return out

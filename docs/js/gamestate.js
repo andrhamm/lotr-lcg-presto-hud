@@ -510,8 +510,8 @@ export class GameState {
   // `*Kind` / `*Formula` say why a stat has no number - see
   // quest_catalog.locationsFor - so the Progress screen can show the card's
   // own definition of X instead of a 0 it made up.
-  static LOC_META = ["threat", "pointsKind", "pointsFormula",
-                     "threatKind", "threatFormula"];
+  static LOC_META = ["threat", "pointsKind", "pointsX",
+                     "threatKind", "threatX"];
 
   _seatLocation(points, name, meta = null) {
     const loc = { points, progress: 0 };
@@ -627,16 +627,16 @@ export class GameState {
     const card = this.stages[this.stage_idx].cards[this.card_idx];
     this.quest.side = "B";
     this.quest.points = card.questPoints;
-    const kind = card.questPointsKind, formula = card.questPointsFormula;
-    if (formula) {
+    const kind = card.questPointsKind, coded = card.questPointsX;
+    if (coded) {
       this.quest.mode = "formula";
-      this.quest.formula = formula;
+      this.quest.x = coded;
     } else if (kind === "na" || (!card.questPoints && kind)) {
       this.quest.mode = "condition";
-      delete this.quest.formula;
+      delete this.quest.x;
     } else {
       this.quest.mode = "points";
-      delete this.quest.formula;
+      delete this.quest.x;
     }
     for (const k of ["advance", "lose"]) {
       if (card[k]) this.quest[k] = card[k];

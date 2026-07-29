@@ -600,8 +600,8 @@ class GameState:
     # `*Kind` / `*Formula` say why a stat has no number: see
     # quest_catalog.locations_for. Carried so the Progress screen can show the
     # card's own definition of X instead of a 0 it made up.
-    LOC_META = ("threat", "pointsKind", "pointsFormula",
-                "threatKind", "threatFormula")
+    LOC_META = ("threat", "pointsKind", "pointsX",
+                "threatKind", "threatX")
 
     def _seat_location(self, points, name, meta=None):
         """The new active location. `name` is the catalog card name when the
@@ -772,16 +772,16 @@ class GameState:
         self.quest["side"] = "B"
         self.quest["points"] = card["questPoints"]
         kind = card.get("questPointsKind")
-        formula = card.get("questPointsFormula")
-        if formula:
+        coded = card.get("questPointsX")
+        if coded:
             self.quest["mode"] = "formula"
-            self.quest["formula"] = formula
+            self.quest["x"] = coded
         elif kind == "na" or (not card["questPoints"] and kind):
             self.quest["mode"] = "condition"
-            self.quest.pop("formula", None)
+            self.quest.pop("x", None)
         else:
             self.quest["mode"] = "points"
-            self.quest.pop("formula", None)
+            self.quest.pop("x", None)
         for k in ("advance", "lose"):
             if card.get(k):
                 self.quest[k] = card[k]
