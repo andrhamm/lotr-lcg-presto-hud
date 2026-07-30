@@ -3,6 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import json as _json
 import gamestate
 
 STAGES = [
@@ -91,13 +92,52 @@ def test_flip_clears_stale_condition_state_on_the_next_stage():
     assert "advance" not in g.quest and "x" not in g.quest
 
 
-def test_serialization_round_trips_scenario():
+def test_serialization_round_trips_the_scenario_id_not_its_assets():
+    # The save carries the scenario ID and the position in it, NOT the card
+    # tree - a save should reference an asset, not embed a copy. The resume
+    # path re-reads `stages` from the catalog with the slug.
     g = _g(); g.preload_scenario({"slug":"p","name":"P","pack":"Core Set","cycle":"Core Set",
         "source":"official","kind":"quest","nightmare":False,"mode":"Standard"}, STAGES)
     g.card_idx = 0; g.stage_idx = 0
-    d = g.to_dict(); g2 = gamestate.GameState.from_dict(d)
-    assert g2.scenario["slug"] == "p" and g2.stages[0]["cards"][0]["questPoints"] == 8
+    d = g.to_dict()
+    assert "stages" not in d
+    g2 = gamestate.GameState.from_dict(d)
+    assert g2.scenario["slug"] == "p"
     assert g2.stage_idx == 0 and g2.card_idx == 0
+    assert g2.stages == []                    # until the catalog re-read lands
+
+
+def test_an_old_save_that_embedded_its_stages_still_loads():
+    g = _g(); g.preload_scenario({"slug":"p","name":"P","pack":"Core Set","cycle":"Core Set",
+        "source":"official","kind":"quest","nightmare":False,"mode":"Standard"}, STAGES)
+    d = g.to_dict()
+    d["stages"] = STAGES                      # as saves written before this look
+    g2 = gamestate.GameState.from_dict(d)
+    assert g2.stages[0]["cards"][0]["questPoints"] == 8
+
+
+def test_rehydrate_stages_replaces_the_tree_without_disturbing_play():
+    g = _g(); g.preload_scenario({"slug":"p","name":"P","pack":"Core Set","cycle":"Core Set",
+        "source":"official","kind":"quest","nightmare":False,"mode":"Standard"}, STAGES)
+    g.flip_to_b()
+    g.quest["progress"] = 5
+    fresh = _json.loads(_json.dumps(STAGES))
+    fresh[0]["cards"][0]["faces"][0]["text"] = "corrected text"
+    assert g.rehydrate_stages(fresh) is True
+    assert g.stages[0]["cards"][0]["faces"][0]["text"] == "corrected text"
+    # live play is untouched - the numbers live on `quest`
+    assert g.quest["progress"] == 5 and g.quest["side"] == "B"
+
+
+def test_rehydrate_stages_refuses_a_tree_that_cannot_host_the_position():
+    # stage_idx/card_idx index into it, so a scenario that lost a stage
+    # upstream would leave the game pointing past the end.
+    g = _g(); g.preload_scenario({"slug":"p","name":"P","pack":"Core Set","cycle":"Core Set",
+        "source":"official","kind":"quest","nightmare":False,"mode":"Standard"}, STAGES)
+    g.stage_idx = len(STAGES) - 1
+    assert g.rehydrate_stages([STAGES[0]]) is False
+    assert len(g.stages) == len(STAGES)       # kept what it had
+    assert g.rehydrate_stages([]) is False
 
 def test_from_dict_defaults_when_absent():
     g = gamestate.GameState.from_dict(gamestate.GameState(1, 25).to_dict())

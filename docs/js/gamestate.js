@@ -646,6 +646,20 @@ export class GameState {
 
   // Load a quest-picker scenario: scn is metadata (slug/name/pack/...),
   // stages is the stage/card tree. Resets quest to stage 1 side A.
+  // Replace the in-memory stage tree with a freshly-read one. Refuses the
+  // swap when the new tree cannot host the position the game is already at -
+  // stage_idx/card_idx index into it. Never touches `quest`, where the live
+  // stage number, side, points and progress are, so refreshing does not
+  // disturb play. Mirror of gamestate.py's rehydrate_stages.
+  rehydrateStages(stages) {
+    if (!stages || !stages.length) return false;
+    if (this.stage_idx >= stages.length) return false;
+    const cards = (stages[this.stage_idx] || {}).cards || [];
+    if (this.card_idx >= cards.length) return false;
+    this.stages = stages;
+    return true;
+  }
+
   preloadScenario(scn, stages) {
     this.scenario = scn;
     this.stages = JSON.parse(JSON.stringify(stages));
@@ -1127,7 +1141,13 @@ export class GameState {
         elimination: p.elimination, commit: p.commit })),
       view: this.view, round: this.round, first_player: this.first_player,
       step: this.step, quest: { ...this.quest },
-      scenario: this.scenario, stages: this.stages,
+      scenario: this.scenario,
+      // `stages` is NOT saved. It is scenario ASSET data - the full card tree
+      // - and a save should reference an asset by id, not embed a copy.
+      // Embedding it meant every data correction stopped at the save
+      // boundary, and it put a median 2 KB of card data into the state blob.
+      // `scenario` carries the slug; main.js re-reads the tree with it on
+      // resume. fromDict still ACCEPTS a saved `stages` for older saves.
       stage_idx: this.stage_idx, card_idx: this.card_idx,
       active_locations: this.active_locations.map(l => ({ ...l })),
       side_quests: this.side_quests.map(s => ({ ...s })),

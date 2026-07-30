@@ -98,12 +98,37 @@ def save_prefs(prefs):
         pass
 
 
+def _rehydrate_stages(game):
+    """Re-read a resumed game's stage tree from the catalog.
+
+    The save carries the scenario's SLUG, not its cards (see
+    GameState.to_dict). This is where the assets come back, so a card-data
+    correction reaches a game already in progress instead of stopping at the
+    save boundary.
+
+    Best-effort by design: a custom game has no scenario, a slug can go
+    missing from the catalog, and flash reads fail. Any of those leaves
+    whatever from_dict loaded - an old save's embedded copy, or nothing - and
+    the game still plays.
+    """
+    slug = (game.scenario or {}).get("slug")
+    if not slug:
+        return False
+    try:
+        data = quest_catalog.load_scenario(slug)
+        stages = ((data or {}).get("quest") or {}).get("stages") or []
+    except Exception:
+        return False
+    return game.rehydrate_stages(stages)
+
+
 def load_saved():
     """Return (game, meta) or (None, None)."""
     try:
         with open(STATE_PATH) as f:
             d = json.load(f)
         game = GameState.from_dict(d["state"])
+        _rehydrate_stages(game)
         t = d.get("saved_at")
         if t:
             lt = time.localtime(t)

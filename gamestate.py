@@ -793,6 +793,32 @@ class GameState:
         self._snapshot_round()
 
     # -- quest / progress --------------------------------------------------
+    def rehydrate_stages(self, stages):
+        """Replace the in-memory stage tree with a freshly-read one.
+
+        The counterpart to dropping `stages` from the save: a resumed game
+        gets its assets back from the catalog rather than from its own stale
+        copy, so a card-data correction reaches games already in progress.
+
+        Refuses the swap when the new tree cannot host the position the game
+        is already at - `stage_idx` and `card_idx` index into it, so a
+        scenario that lost a stage upstream would otherwise leave the game
+        pointing past the end. Returns True if it took.
+
+        Never touches `quest`: the live stage number, side, points and
+        progress live there, so refreshing the tree does not disturb play.
+        The corrected numbers are picked up at the next flip.
+        """
+        if not stages:
+            return False
+        if self.stage_idx >= len(stages):
+            return False
+        cards = (stages[self.stage_idx] or {}).get("cards") or []
+        if self.card_idx >= len(cards):
+            return False
+        self.stages = stages
+        return True
+
     def preload_scenario(self, scn, stages):
         """Load a quest-picker scenario: scn is metadata (slug/name/pack/...),
         stages is the stage/card tree. Resets quest to stage 1 side A.
@@ -1360,7 +1386,19 @@ class GameState:
             "step": self.step,
             "quest": dict(self.quest),
             "scenario": self.scenario,
-            "stages": self.stages,
+            # `stages` is NOT saved. It is scenario ASSET data - the full
+            # card tree - and a save should reference an asset by id, not
+            # embed a copy of it. Embedding it meant every data correction
+            # stopped at the save boundary: fixing 15 quest cards whose side B
+            # repeated side A left every in-progress game still showing the
+            # old text, because the game was replaying its own copy. It also
+            # put a median 2 KB (worst 7.9 KB) of card data into a ~1.3 KB
+            # state file, rewritten on every save.
+            #
+            # `scenario` carries the slug, which is the id. The resume path in
+            # main.py / main.js re-reads the stage tree from the catalog with
+            # it. from_dict still ACCEPTS a saved `stages` so games written
+            # before this keep working until that re-read lands.
             "stage_idx": self.stage_idx,
             "card_idx": self.card_idx,
             "active_locations": [dict(l) for l in self.active_locations],
@@ -1418,6 +1456,9 @@ class GameState:
         g.step = d["step"]
         g.quest = dict(d["quest"])
         g.scenario = d.get("scenario")
+        # Old saves embedded the stage tree; new ones do not (see to_dict).
+        # Accepted either way, and the resume path replaces it from the
+        # catalog when a scenario slug is present.
         g.stages = d.get("stages", [])
         g.stage_idx = d.get("stage_idx", 0)
         g.card_idx = d.get("card_idx", 0)

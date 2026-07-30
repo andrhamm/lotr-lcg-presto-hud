@@ -250,6 +250,30 @@ function main() {
   // resume: the boot path already defers every catalog fetch this way. A
   // resume that never backs out never pays for it. Never throws - a failure
   // leaves the placeholders and the caller falls back to the source page.
+  // Re-read a resumed game's stage tree from the catalog.
+  //
+  // The save carries the scenario's SLUG, not its cards (see
+  // GameState.toDict). This is where the assets come back, so a card-data
+  // correction reaches a game already in progress instead of stopping at the
+  // save boundary.
+  //
+  // Eager, unlike rehydratePickers below: the pickers are only needed if the
+  // player backs out, but the stage tree is what the Quest Cards screen and
+  // every flip read, so it should be in place before the first tap that wants
+  // it. Best-effort - a custom game has no scenario, a slug can go missing,
+  // and fetches fail; any of those leaves whatever fromDict loaded and the
+  // game still plays.
+  async function rehydrateStages() {
+    try {
+      const slug = game.scenario?.slug;
+      if (!slug) return;
+      const data = await loadScenario(slug);
+      if (game.rehydrateStages(data?.quest?.stages ?? [])) dirty = true;
+    } catch (e) {
+      console.warn("resume: could not re-read the stage tree", e);
+    }
+  }
+
   async function rehydratePickers() {
     try {
       if (!catalogIndex) catalogIndex = await loadIndex();
@@ -306,7 +330,7 @@ function main() {
           modal.tips = tipsCache;
         }
       } else if (kind === "boot") {
-        if (result[1] === "resume") active = "play";
+        if (result[1] === "resume") { active = "play"; rehydrateStages(); }
         else if (result[1] === "about") { navStack.push("boot"); active = "about"; }
         else { screens.setup.hasSave = saveExists(); active = "setup"; }
       } else if (kind === "open_repo") {
