@@ -177,7 +177,22 @@ RELEASE_DATES = {
     'Attack on Dol Guldur': "2018-02", "The Wizard's Quest": "2019-06",
     'The Woodland Realm': "2019-06", 'The Mines of Moria': "2020-07",
     'Escape from Khazad-dum': "2020-07", 'The Hunt for the Dreadnaught': "2020-12",
-    'Two-Player Limited Edition Starter': None, 'Dark of Mirkwood': "2022-02",
+    # Both printings of The Oath / The Caves of Nibin-Dum date to the Dark of
+    # Mirkwood release. The starter was previously None, which left the two
+    # quests as the only dateless rows in the chooser - but FFG's own
+    # announcement dates the pack that made them generally available: "with
+    # The Dark of Mirkwood coming in the first quarter of 2022, we can finally
+    # say that we fulfilled that oath" (4 Nov 2021). 2022-02 is the month the
+    # two release-date sources already agreed on for that pack, and it sits
+    # inside the Q1 the article states.
+    #
+    # This is availability, not first printing: the quests were originally
+    # exclusive to the Limited Collector's Edition, whose own month neither
+    # source carries. Dating them to a limited edition almost nobody could buy
+    # would be the less useful of the two true answers.
+    # https://www.fantasyflightgames.com/en/news/2021/11/4/the-dark-of-mirkwood/
+    'Two-Player Limited Edition Starter': "2022-02",
+    'Dark of Mirkwood': "2022-02",
 }
 
 def _official(cycle, packs):
