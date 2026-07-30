@@ -7,6 +7,7 @@ on the device. UI and hardware live elsewhere; this module only models state.
 import json
 
 import phases
+import xtargets
 # Play-screen copy lives in one place so the web twin can be generated from
 # it rather than hand-mirrored. Re-exported here because callers and tests
 # have imported these names from gamestate since before viewcopy existed.
@@ -293,6 +294,12 @@ class GameState:
         # modal, so the router (main.py) opens LocationConfigModal on the next
         # tick, exactly like pending_location_pick.
         self.pending_location_detail = False
+        # Progress screen's "History" button: the log is a screen, not a modal,
+        # so the router does the nav once the modal has closed.
+        self.pending_progress_history = False
+        # Progress row ">" on the quest: opens QuestConfigModal (the editor),
+        # which links on to the read-only card.
+        self.pending_quest_config = False
                                            # tap wants SideQuestPickModal
                                            # opened once the Progress-detail
                                            # modal has closed (same
@@ -617,6 +624,17 @@ class GameState:
                 loc[k] = v
         if name:
             loc["name"] = name
+        # An AUTO X resolves the moment the card is placed. The other two
+        # shapes wait for a count the player supplies on the row sheet, but
+        # "X is the number of players" has no control to wait for - there is
+        # nothing to ask - so without this the location would sit at no threat
+        # at all and under-report the staging total.
+        auto = xtargets.resolve(
+            loc.get("threatX"), players=len(self.players),
+            stage=self.quest.get("stage_n", 1),
+            highest_threat=max([p.threat for p in self.players] or [0]))
+        if auto is not None and xtargets.auto_for(loc["threatX"].get("target")):
+            loc["threat"] = auto
         return loc
 
     def travel_to(self, points, contribution=0, name=None, meta=None):
@@ -1271,6 +1289,8 @@ class GameState:
             "pending_side_quest_pick": self.pending_side_quest_pick,
             "pending_progress_detail": self.pending_progress_detail,
             "pending_location_detail": self.pending_location_detail,
+            "pending_progress_history": self.pending_progress_history,
+            "pending_quest_config": self.pending_quest_config,
             "pending_location_pick": self.pending_location_pick,
             "reminders": dict(self.reminders),
             "refresh_applied": self.refresh_applied,
@@ -1326,6 +1346,8 @@ class GameState:
         g.pending_side_quest_pick = d.get("pending_side_quest_pick", False)
         g.pending_progress_detail = d.get("pending_progress_detail", False)
         g.pending_location_detail = d.get("pending_location_detail", False)
+        g.pending_progress_history = d.get("pending_progress_history", False)
+        g.pending_quest_config = d.get("pending_quest_config", False)
         g.pending_location_pick = d.get("pending_location_pick", None)
         g.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         saved_rem = d.get("reminders", {})

@@ -405,3 +405,14 @@ STAGING_PENDING = {
 # One line, because combat_player has room for exactly one. Both halves that
 # matter survive: the lever (lower threat) and the stake (refresh eliminates).
 COMBAT_LAST_CHANCE = "Lower threat now or refresh may eliminate."
+
+# Progress screen, framework band. The placement ORDER is a rule the player
+# acts on, and getting it wrong loses progress: RR p.15 - the active location
+# takes progress first, up to its own quest points, and only the remainder goes
+# to the quest card. Each resolves the moment it is full, which is why
+# exploring a location can advance the quest in the same motion (and why p.22's
+# "excess is discarded" applies to the quest, not to the location).
+PROGRESS_PLACEMENT = ("Progress fills the active location first, then the "
+                      "current quest. Each resolves the moment it is full, so "
+                      "exploring a location can advance the quest in the same "
+                      "motion.")

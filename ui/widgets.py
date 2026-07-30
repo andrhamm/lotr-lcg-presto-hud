@@ -280,34 +280,67 @@ def phase_block(d, pal, x, y, w, sections, reserve_right=0):
     return h
 
 
-def threat_stat(d, pal, x, y, value, scale=1, pen=None, shadow=True):
-    """A staging-threat icon and its number, in BLACK.
+def stat_pill(d, pal, x, y, threat, points, h=24, label="QP",
+              measure_only=False):
+    """Two-segment capsule: [threat icon + value | points + label].
 
-    design/stat-system.md: staging and enemy threat is never red - red is the
-    player's own threat track. willpower_staging_meter already draws it in
-    pal.outline; this is the same treatment for the places that were using
-    pal.red by mistake (the location picker's rows and its manual step).
+    The horizontal sibling of token(), the main screen's circular stat widget -
+    same idea (a value on its own ground) laid out for a list row.
 
-    Black ink on a dark ground needs help, so unless `shadow` is off both the
-    icon and the number get a 1px light offset underneath. That is the same
-    emboss trick the picker's own header already used, just the other way round:
-    there a dark shadow sat under light ink, here a light one sits under dark.
+    The LEFT segment carries a light fill so the threat can be BLACK, which
+    design/stat-system.md requires (staging threat is never red; red is the
+    player's own track). That is the only reason the fill exists: the screen
+    ground is (16,12,9) and black on it is invisible. A bare 1px "shadow" did
+    nothing for a 16px glyph, and a plain light box behind the icon read as an
+    artefact rather than a widget - hence a real two-part pill.
+
+    The RIGHT segment stays on the card ground with the points in gold, so the
+    two numbers never read as the same kind of thing: one is threat the location
+    adds to staging, the other is what it takes to explore.
+
+    Corners are chamfered a pixel rather than rounded - PicoGraphics has no
+    rounded rect, and at 24px tall one pixel is all a capsule needs.
     """
     from ui import icons as _icons
-    mask = _icons.THREAT if scale == 1 else _icons.THREAT
-    ink = pen or pal.outline
-    if shadow:
-        _icons.draw(d, mask, x + 1, y + 1, pal.bevel_l, scale=scale)
-    _icons.draw(d, mask, x, y, ink, scale=scale)
-    w = len(mask) * scale
-    if value is None:
+    mask = _icons.THREAT_SM
+    iw = len(mask)
+    ts = str(threat if threat is not None else 0)
+    ps = str(points if points is not None else 0)
+    wa = 6 + iw + 4 + d.measure_text(ts, BODY) + 6
+    wb = 6 + d.measure_text(ps, BODY) + 4 + d.measure_text(label, LABEL) + 6
+    w = wa + wb
+    # Callers that right-align the pill need its width BEFORE they can place
+    # it. Measuring by drawing off-screen (which is what the picker did, at
+    # y=-99) puts rects outside the panel and stacks every row's numbers at one
+    # point - 8 layout-linter failures, and invisible on a real screen because
+    # the device just clips them.
+    if measure_only:
         return w
-    s = str(value)
-    tx, ty = x + w + 6, y + 3
-    if shadow:
-        text_left(d, pal, s, tx + 1, ty + 1, BODY, pal.bevel_l, shadow=False)
-    text_left(d, pal, s, tx, ty, BODY, ink, shadow=False)
-    return w + 6 + d.measure_text(s, BODY)
+    # body (right segment's ground), then the light left segment over it
+    d.set_pen(pal.card_hi)
+    d.rectangle(x, y, w, h)
+    d.set_pen(pal.dim)
+    d.rectangle(x, y, wa, h)
+    # chamfer: bite one pixel out of each corner so it reads as a capsule
+    d.set_pen(pal.bg)
+    for cx in (x, x + w - 1):
+        d.rectangle(cx, y, 1, 1)
+        d.rectangle(cx, y + h - 1, 1, 1)
+    # segment divider
+    d.set_pen(pal.bg)
+    d.rectangle(x + wa, y + 2, 1, h - 4)
+    # left: black on the light ground
+    _icons.draw(d, mask, x + 6, y + (h - iw) // 2, pal.outline)
+    text_left(d, pal, ts, x + 6 + iw + 4, y + (h - 16) // 2 + 2, BODY,
+              pal.outline, shadow=False)
+    # right: the number the player acts on, in the app's value gold
+    px = x + wa + 6
+    text_left(d, pal, ps, px, y + (h - 16) // 2 + 2, BODY, pal.gold)
+    # LABEL is the smaller tier, so it needs MORE top offset than the BODY
+    # number to share a baseline with it, not less.
+    text_left(d, pal, label, px + d.measure_text(ps, BODY) + 4,
+              y + (h - 16) // 2 + 8, LABEL, pal.muted)
+    return w
 
 
 def willpower_staging_meter(d, pal, x, y, w, willpower, staging):

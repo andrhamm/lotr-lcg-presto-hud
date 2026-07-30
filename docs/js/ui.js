@@ -296,28 +296,54 @@ export function phaseBlock(ctx, x, y, w, sections, reserveRight = 0) {
 // "willpower vs staging, live" stat from design/design-review.md's
 // Quest-Staging row. Reuses the existing outcome-sentence wording
 // verbatim. Fixed height: 64.
-// A staging-threat icon and its number, in BLACK.
+// Two-segment capsule: [threat icon + value | points + label].
 //
-// design/stat-system.md: staging and enemy threat is never red - red is the
-// player's own threat track. willpowerStagingMeter already draws it in
-// pal.outline; this is the same treatment for the places that were using
-// pal.red by mistake (the location picker's rows and its manual step).
+// The horizontal sibling of token(), the main screen's circular stat widget -
+// same idea (a value on its own ground) laid out for a list row.
 //
-// Black ink on a dark ground needs help, so unless `shadow` is off both the
-// icon and the number get a 1px light offset underneath - the same emboss trick
-// the picker's header used, inverted: a light shadow under dark ink.
-export function threatStat(ctx, x, y, value, { scale = 1, pen = null,
-                                               shadow = true } = {}) {
-  const ink = pen ?? pal.outline;
-  if (shadow) icons.drawIcon(ctx, icons.THREAT, x + 1, y + 1, pal.bevel_l, scale);
-  icons.drawIcon(ctx, icons.THREAT, x, y, ink, scale);
-  const w = icons.THREAT.length * scale;
-  if (value === null || value === undefined) return w;
-  const s = String(value);
-  const tx = x + w + 6, ty = y + 3;
-  if (shadow) textLeft(ctx, s, tx + 1, ty + 1, BODY, pal.bevel_l, false);
-  textLeft(ctx, s, tx, ty, BODY, ink, false);
-  return w + 6 + measureText(s, BODY);
+// The LEFT segment carries a light fill so the threat can be BLACK, which
+// design/stat-system.md requires (staging threat is never red; red is the
+// player's own track). That is the only reason the fill exists: the screen
+// ground is (16,12,9) and black on it is invisible. A bare 1px "shadow" did
+// nothing for a 16px glyph, and a plain light box behind the icon read as an
+// artefact rather than a widget - hence a real two-part pill.
+//
+// The RIGHT segment stays on the card ground with the points in gold, so the two
+// numbers never read as the same kind of thing: one is threat the location adds
+// to staging, the other is what it takes to explore.
+//
+// NOTE: JS icon masks are [size, rows], so the width is mask[0]. `.length` is 2
+// and using it silently collapsed an earlier version of this widget.
+export function statPill(ctx, x, y, threat, points,
+                          { h = 24, label = "QP", measure = false } = {}) {
+  const iw = icons.THREAT_SM[0];
+  const ts = String(threat ?? 0);
+  const ps = String(points ?? 0);
+  const wa = 6 + iw + 4 + measureText(ts, BODY) + 6;
+  const wb = 6 + measureText(ps, BODY) + 4 + measureText(label, LABEL) + 6;
+  const w = wa + wb;
+  // Callers that right-align the pill need its width BEFORE they can place it.
+  // Measuring by drawing off-screen puts rects outside the panel and stacks
+  // every row's numbers at one point.
+  if (measure) return w;
+  rect(ctx, x, y, w, h, pal.card_hi);
+  rect(ctx, x, y, wa, h, pal.dim);
+  // chamfer: bite one pixel out of each corner so it reads as a capsule
+  for (const cx of [x, x + w - 1]) {
+    rect(ctx, cx, y, 1, 1, pal.bg);
+    rect(ctx, cx, y + h - 1, 1, 1, pal.bg);
+  }
+  rect(ctx, x + wa, y + 2, 1, h - 4, pal.bg);
+  icons.drawIcon(ctx, icons.THREAT_SM, x + 6, y + Math.floor((h - iw) / 2), pal.outline);
+  textLeft(ctx, ts, x + 6 + iw + 4, y + Math.floor((h - 16) / 2) + 2, BODY,
+           pal.outline, false);
+  const px = x + wa + 6;
+  textLeft(ctx, ps, px, y + Math.floor((h - 16) / 2) + 2, BODY, pal.gold);
+  // LABEL is the smaller tier, so it needs MORE top offset than the BODY number
+  // to share a baseline with it, not less.
+  textLeft(ctx, label, px + measureText(ps, BODY) + 4,
+           y + Math.floor((h - 16) / 2) + 8, LABEL, pal.muted);
+  return w;
 }
 
 export function willpowerStagingMeter(ctx, x, y, w, willpower, staging) {

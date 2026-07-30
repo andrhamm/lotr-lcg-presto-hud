@@ -350,23 +350,23 @@ _QPM_STAGES = [{"stage": 1, "cards": [{"questPoints": 8, "victory": None, "saili
     "faces": [{"side": "A", "name": "x", "text": None}, {"side": "B", "name": "x", "text": None}]}]}]
 
 
-def test_questing_progress_modal_quest_card_button_present_only_with_stages():
+def test_questing_progress_modal_quest_row_always_has_a_detail_chevron():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()   # no preload_scenario: game.stages == [] (custom game)
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    assert not any(b.id == ("quest_card",) for b in m.buttons)
+    assert not any(b.id == ("detail", "q", None) for b in m.buttons)
 
     game.preload_scenario({"slug": "p", "name": "P", "pack": "Core Set", "cycle": "Core Set",
                            "source": "official", "kind": "quest", "nightmare": False,
                            "mode": "Standard"}, _QPM_STAGES)
     m2 = modals.QuestingProgressModal(game)
     m2.draw(hw, game, pal)
-    assert any(b.id == ("quest_card",) for b in m2.buttons)
+    assert any(b.id == ("detail", "q", None) for b in m2.buttons)
 
 
-def test_questing_progress_modal_quest_card_tap_flags_pending_and_closes():
+def test_questing_progress_modal_quest_row_opens_the_editor():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
@@ -376,8 +376,8 @@ def test_questing_progress_modal_quest_card_tap_flags_pending_and_closes():
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     assert game.pending_quest_card is False
-    assert m.on_button(_find(m, ("quest_card",))) == "close"
-    assert game.pending_quest_card is True
+    assert m.on_button(_find(m, ("detail", "q", None))) == "close"
+    assert game.pending_quest_config is True
 
 
 def test_questing_progress_modal_quest_card_button_does_not_overlap_current_editor():
@@ -393,15 +393,15 @@ def test_questing_progress_modal_quest_card_button_does_not_overlap_current_edit
                            "mode": "Standard"}, _QPM_STAGES)
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    qc = _find(m, ("quest_card",))
+    qc = _find(m, ("detail", "q", None))
     cur_minus = _find(m, ("qP-", None))
     assert qc.x + qc.w <= cur_minus.x
     # and editors were pushed first, so they'd win on overlap regardless
     ids = [b.id for b in m.buttons]
-    assert ids.index(("qP-", None)) < ids.index(("quest_card",))
-    assert ids.index(("qP+", None)) < ids.index(("quest_card",))
-    assert ids.index(("qT-", None)) < ids.index(("quest_card",))
-    assert ids.index(("qT+", None)) < ids.index(("quest_card",))
+    assert ids.index(("qP-", None)) < ids.index(("detail", "q", None))
+    assert ids.index(("qP+", None)) < ids.index(("detail", "q", None))
+    assert ids.index(("qT-", None)) < ids.index(("detail", "q", None))
+    assert ids.index(("qT+", None)) < ids.index(("detail", "q", None))
 
 
 def test_questing_progress_modal_location_current_bump_explores_when_done():
@@ -564,13 +564,13 @@ def test_questing_progress_modal_add_location_opens_the_picker():
     game.active_location = None
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("addloc",))) == "close"
+    assert m.on_button(_find(m, ("add_loc",))) == "close"
     assert game.pending_location_pick == {"mode": "new", "back": "progress"}
     assert game.active_location is None      # nothing seated until you pick
     assert not [e for e in game.log if "location" in e["text"]]
 
 
-def test_questing_progress_modal_heading_radio_sets_heading_and_logs():
+def test_questing_progress_history_heading_radio_sets_heading_and_logs():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
@@ -951,15 +951,15 @@ def test_progress_location_row_opens_the_detail_sheet():
     game.active_location = {"points": 3, "progress": 1, "name": "Tangled Grove"}
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("loc_detail",))) == "close"
+    assert m.on_button(_find(m, ("detail", "l", None))) == "close"
     assert game.pending_location_detail is True
 
 
-def test_location_config_save_keeps_the_card_metadata():
-    # The save handler used to REPLACE the record with {points, progress},
-    # dropping the card name, its threat and the *Kind/*Formula keys the picker
-    # had just filled in - so editing progress silently cost you the threat
-    # that "Back to staging" needs.
+def test_location_config_edit_keeps_the_card_metadata():
+    # The commit used to REPLACE the record with {points, progress}, dropping
+    # the card name, its threat and the *Kind/*Formula keys the picker had just
+    # filled in - so editing progress silently cost you the threat that
+    # "Back to staging" needs. It now merges onto the existing record instead.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
@@ -971,7 +971,7 @@ def test_location_config_save_keeps_the_card_metadata():
     m = modals.LocationConfigModal(game)
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("prog", 1)))
-    assert m.on_button(_find(m, ("save",))) == "close"
+    assert not any(b.id[0] in ("save", "cancel") for b in m.buttons)
     loc = game.active_location
     assert loc["progress"] == 2
     assert loc["name"] == "Tangled Grove"
@@ -1137,7 +1137,7 @@ def test_threat_count_control_does_the_arithmetic():
     assert "Threat" in texts and "= X" in texts
     # 3 enemies -> threat 4, and one tap makes it 4 -> 5.
     m.on_button(_find(m, ("count", 1)))
-    m.on_button(_find(m, ("save",)))
+    # No save tap: the sheet has no Save, so the tap itself is the commit.
     # Stores the COUNT, not just the result: storing only the result would go
     # stale the moment the board changes.
     assert game.active_location["threatCount"] == 4
@@ -1156,7 +1156,8 @@ def test_threat_auto_target_needs_no_control_at_all():
     m.draw(hw, game, pal)
     assert m.threat_shape == "auto"
     assert not any(b.id[0] == "count" for b in m.buttons)
-    m.on_button(_find(m, ("save",)))
+    # Nothing to tap and no Save to press, so the number cannot come from this
+    # sheet at all - _seat_location resolves it when the card is placed.
     assert game.active_location["threat"] == len(game.players)
 
 
@@ -1199,10 +1200,10 @@ def test_location_config_threat_starts_blank_when_x_is_undefined():
     m.draw(hw, game, pal)
     assert m.threat_blank is True
     assert "the card prints X and defines it elsewhere" in " ".join(_texts(hw))
-    # One tap makes it a real value, and it survives the save.
+    # One tap makes it a real value, and the tap IS the commit - there is no
+    # Save on this sheet.
     m.on_button(_find(m, ("threat", 1)))
     assert m.threat_blank is False
-    m.on_button(_find(m, ("save",)))
     assert game.active_location["threat"] == 1
 
 

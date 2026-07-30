@@ -4,7 +4,7 @@
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          stepper, wrapText, truncateText, ribbon, ribbonH, notePanel, drawWeather,
          disc, arcRuns, ring, token, wxSmall, BAND_PAD, bandLineH,
-         DISPLAY, BODY, LABEL , threatStat } from "./ui.js";
+         DISPLAY, BODY, LABEL , statPill } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as xtargets from "./xtargets.js";
 import * as icons from "./icons.js";
@@ -246,7 +246,6 @@ export class PlayerSettingsModal {
       this.game.logEvent(`P${this.i + 1} settings: start ${this.st}, +${this.tpr}/round, elim ${this.elim}`);
       return "close";
     }
-    if (k === "cancel") return "cancel";
     return null;
   }
 }
@@ -400,12 +399,12 @@ export class LocationPickModal {
       pickRadio(ctx, 30, y + 22, on);
       textLeft(ctx, truncateText(e.name ?? "", BODY, S.NAME_MAX_W), 52, y + 13, BODY,
                on ? pal.tan : pal.muted);
-      // Threat, then quest points - quest points take the right edge because
-      // they are the number the player acts on.
-      // Black, not red: staging threat is never red (design/stat-system.md).
-      threatStat(ctx, S.THREAT_X, y + 10, e.threat ?? 0);
-      const qp = `${e.points ?? 0} qp`;
-      textLeft(ctx, qp, 456 - measureText(qp, BODY), y + 13, BODY, on ? pal.gold : pal.tan);
+      // One pill carrying both numbers instead of a loose icon, a loose number
+      // and a separate "N qp": threat (black, on the light segment that makes
+      // black possible) then quest points. Right-aligned so the column lines up
+      // however long the name is.
+      const pw = statPill(ctx, 0, 0, e.threat ?? 0, e.points ?? 0, { measure: true });
+      statPill(ctx, 458 - pw, y + 8, e.threat ?? 0, e.points ?? 0);
       rect(ctx, 8, y + S.ROW_H, 456, 1, pal.border);
       this.buttons.push(new Button(["row", e.id], 8, y, 456, S.ROW_H));
       y += S.ROW_STRIDE;
@@ -477,8 +476,10 @@ export class LocationPickModal {
     textLeft(ctx, "Quest points", 60, y + 14, BODY, pal.tan);
     stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 250, y, String(this.pts), 170, 48);
     y += 54;
-    const tw = threatStat(ctx, 60, y + 12, null);
-    textLeft(ctx, "Contribution", 60 + tw + 8, y + 14, BODY, pal.tan);
+    // No icon here: a threat glyph with no value beside it had nowhere legible
+    // to sit (black on the ground is invisible, and a plate around an empty icon
+    // reads as a bug). The words carry it.
+    textLeft(ctx, "Threat contribution", 60, y + 14, BODY, pal.tan);
     stepper(ctx, this.buttons, ["ctr", -1], ["ctr", 1], 250, y, String(this.contrib), 170, 48);
     y += 54;
     textLeft(ctx, "leaves the staging area while it is active", 60, y, BODY, pal.dim);
@@ -1862,6 +1863,12 @@ export class LocationConfigModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
+    // Back rides in the title bar, not at the bottom: the count shape's threat
+    // block pushes the action grid down past y=420, so a pinned bottom button
+    // lands on top of "Replaced". Top-left is where the mock puts it anyway,
+    // and it matches every other sub-view's way back.
+    textLeft(ctx, "< Progress", 10, 12, BODY, pal.tan);
+    this.buttons.push(new Button(["close"], 0, 0, 150, 40));
     textCenter(ctx, "Active Location", 240, 12, DISPLAY, pal.gold);
     if (this.name) {
       textCenter(ctx, truncateText(this.name, BODY, 440), 240, 46, BODY, pal.tan);
@@ -1881,68 +1888,111 @@ export class LocationConfigModal {
       textLeft(ctx, "the card prints X and defines it elsewhere", 30, y, BODY, pal.dim);
       y += 22;
     }
-    // Clamped: the threat block is variable-height, and unclamped it walked
-    // into the footer's Cancel/Save at y=404.
     // RR: progress is NOT lost when a location returns to the staging area -
     // Impassable Chasm has to SAY "remove all progress tokens", which it would
     // not need to if returning did it.
-    if (this.has && y < 300) {
+    if (this.has && y < 296) {
       textLeft(ctx, "Back to staging keeps its progress.", 30, y, BODY, pal.dim);
       y += 22;
     }
-    const nb = new Button(["none"], 30, Math.min(Math.max(y + 8, 296), 340), 420, 52);
-    panel(ctx, nb.x, nb.y, nb.w, nb.h, pal.btn_no, pal.no_fg);
-    textCenter(ctx, "Set none (no active location)", nb.x + nb.w / 2, nb.y + 16,
-               BODY, pal.no_fg);
-    this.buttons.push(nb);
-    footer(ctx, this.buttons);
+    // The four ways a location leaves, each NAMED - JS had only a vague
+    // "Set none (no active location)", which is what "the additional actions
+    // are not labeled" was about. "Back to staging" is only honest because the
+    // record carries the card's threat: it puts the right number back.
+    //
+    // Floor only, no ceiling: a ceiling pinned the grid however tall the
+    // threat block got, and the count shape ends near 342.
+    y = Math.max(y + 6, 288);
+    const acts = [["Explored", ["explored"], pal.green],
+                  ["Back to staging", ["tostaging"], pal.tan],
+                  ["Replaced", ["replaced"], pal.tan],
+                  ["Remove", ["none"], pal.no_fg]];
+    acts.forEach(([label, bid, pen], i) => {
+      const b = new Button(bid, 30 + (i % 2) * 212, y + Math.floor(i / 2) * 50,
+                           200, 44);
+      if (pen === pal.no_fg) panel(ctx, b.x, b.y, b.w, b.h, pal.btn_no, pal.no_fg);
+      else bevel(ctx, b.x, b.y, b.w, b.h, pal.btn, false, 3);
+      textCenter(ctx, label, b.x + b.w / 2, b.y + 12, BODY, pen);
+      this.buttons.push(b);
+    });
+    // No Done and no Cancel: there is nothing to commit. Every tap applies
+    // immediately, the way PlayersDetailModal already works, so the only
+    // control this sheet needs is the way back - drawn in the title bar at the
+    // top of this method, which also gives the threat block the 64px the count
+    // shape needs.
+  }
+
+  // Write the edit through NOW. The sheet has no Save, so every tap lands
+  // here. Starts from the EXISTING record rather than replacing it - a
+  // wholesale replace dropped the card name, its threat and the *Kind/*X keys
+  // the picker had just filled in.
+  _apply() {
+    const loc = { ...(this.game.active_location ?? {}) };
+    loc.points = this.pts;
+    loc.progress = this.prog;
+    if (this.threatShape === "auto" || this.threatShape === "count") {
+      // Store the COUNT and recompute: storing only the result would go stale
+      // the moment the board changes.
+      if (this.threatCount !== null) loc.threatCount = this.threatCount;
+      loc.threat = this._resolved() ?? 0;
+    } else if (this.threat || !this.threatBlank) {
+      loc.threat = this.threat;
+    }
+    this.game.active_location = loc;
   }
 
   onButton(btn) {
     const k = btn.id[0];
     if (k === "pts") {
       this.pts = Math.max(1, Math.min(30, this.pts + btn.id[1]));
-      this.has = true; return null;
+      this.has = true; this._apply(); return null;
     }
     if (k === "prog") {
       this.prog = Math.max(0, Math.min(99, this.prog + btn.id[1]));
-      this.has = true; return null;
+      this.has = true; this._apply(); return null;
     }
     if (k === "count") {
       this.threatCount = Math.max(0, Math.min(60, (this.threatCount ?? 0) + btn.id[1]));
-      this.has = true; return null;
+      this.has = true; this._apply(); return null;
     }
     if (k === "threat") {
       this.threat = Math.max(0, Math.min(30, this.threat + btn.id[1]));
       this.threatBlank = false;   // a tap makes it a real value
-      this.has = true; return null;
+      this.has = true; this._apply(); return null;
     }
     if (k === "none") {
-      if (this.game.active_location) this.game.logEvent("Active location cleared");
+      if (this.game.active_location) this.game.logEvent("Active location removed");
       this.game.active_location = null;
       return "close";
     }
-    if (k === "save") {
-      // Start from the EXISTING record. Replacing it wholesale drops the card
-      // name, its threat and the *Kind/*Formula keys the picker filled in.
-      const loc = { ...(this.game.active_location ?? {}) };
-      loc.points = this.pts;
-      loc.progress = this.prog;
-      if (this.threatShape === "auto" || this.threatShape === "count") {
-        // Store the COUNT and recompute: storing only the result would make it
-        // stale the moment the board changes.
-        if (this.threatCount !== null) loc.threatCount = this.threatCount;
-        loc.threat = this._resolved() ?? 0;
-      } else if (this.threat || !this.threatBlank) {
-        loc.threat = this.threat;
-      }
-      if (JSON.stringify(loc) !== JSON.stringify(this.game.active_location)) {
-        this.game.logEvent(`Active location set to ${this.prog}/${this.pts} progress, ${this.threat} threat`);
-      }
-      this.game.active_location = loc;
+    if (k === "explored") {
+      if (this.game.active_location) this.game.logEvent("Active location Explored");
+      this.game.active_location = null;
       return "close";
     }
-    if (k === "cancel") return "cancel";
+    if (k === "tostaging") {
+      // The record carries the card's threat, so staging gets the right number
+      // back rather than a guess. RR: progress is NOT lost, so nothing is
+      // zeroed here.
+      const loc = this.game.active_location ?? {};
+      const back = loc.threat ?? 0;
+      this.game.staging += back;
+      this.game.logEvent(`Active location to staging (+${back} threat, ${loc.progress ?? 0} progress kept)`);
+      this.game.active_location = null;
+      return "close";
+    }
+    if (k === "replaced") {
+      this.game.pending_location_pick = { mode: "change", back: "progress" };
+      return "close";
+    }
+    if (k === "close") {
+      // One summary line for the whole visit; a log entry per stepper tap
+      // would bury the round.
+      if (this.has) {
+        this.game.logEvent(`Active location set to ${this.prog}/${this.pts} progress, ${this.threat} threat`);
+      }
+      return "close";
+    }
     return null;
   }
 }

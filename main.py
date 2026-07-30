@@ -344,6 +344,23 @@ def main():
             dirty = True
             continue
 
+        # The Progress modal's History button: a screen, not a modal, so the
+        # nav happens here once the modal is gone.
+        if modal is None and active == "play" and game.pending_progress_history:
+            game.pending_progress_history = False
+            active = "log"
+            dirty = True
+            continue
+
+        # The Progress modal's Quest row: open the quest editor.
+        if modal is None and active == "play" and game.pending_quest_config:
+            from ui.modals import QuestConfigModal
+            game.pending_quest_config = False
+            game.pending_progress_detail = True
+            modal = QuestConfigModal(game)
+            dirty = True
+            continue
+
         # The Progress modal's Location row: open the location's detail sheet.
         # Reopening Progress afterwards is what pending_progress_detail already
         # does for the location picker, so the player lands back where they

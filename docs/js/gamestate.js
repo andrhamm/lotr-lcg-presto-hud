@@ -3,6 +3,7 @@
 import { STEP_ORDER, step as phaseStep } from "./phases.js";
 // Copy is GENERATED from viewcopy.py so the twins cannot drift.
 import { VIEW_LABELS, SETUP_TIP, OUTCOME } from "./viewcopy.js";
+import { autoFor, resolve as resolveX } from "./xtargets.js";
 export { VIEW_LABELS, SETUP_TIP };
 
 export const MAX_PLAYERS = 4;
@@ -520,6 +521,17 @@ export class GameState {
       if (v !== null && v !== undefined) loc[k] = v;
     }
     if (name) loc.name = name;
+    // An AUTO X resolves the moment the card is placed. The other two shapes
+    // wait for a count the player supplies on the row sheet, but "X is the
+    // number of players" has no control to wait for - there is nothing to ask
+    // - so without this the location would sit at no threat at all and
+    // under-report the staging total.
+    const auto = resolveX(loc.threatX, {
+      players: this.players.length,
+      stage: this.quest.stage_n ?? 1,
+      highestThreat: Math.max(0, ...this.players.map((p) => p.threat)),
+    });
+    if (auto !== null && autoFor(loc.threatX?.target)) loc.threat = auto;
     return loc;
   }
 

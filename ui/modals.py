@@ -10,8 +10,12 @@ import random
 from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         stepper, draw_weather, token, circ_btn, disc, arc_runs,
                         ring, wx_small, wrap_text, truncate_text, ribbon, ribbon_h,
-                        threat_stat, BAND_PAD, band_line_h)
+                        stat_pill, phase_block, BAND_PAD, band_line_h)
 from ui.counter import CounterState
+from viewcopy import PROGRESS_PLACEMENT
+
+# Card gutter, matching the play screen's own band inset.
+MARGIN = 8
 import xtargets
 from ui import icons
 from gamestate import HEADINGS
@@ -270,11 +274,7 @@ class LocationConfigModal:
         Returns the y to continue at."""
         shape = self.threat_shape
         if shape in ("auto", "count"):
-            value = xtargets.resolve(
-                self.threat_x, count=self.threat_count,
-                players=len(self.game.players),
-                stage=self.game.quest.get("stage_n", 1),
-                highest_threat=max([p.threat for p in self.game.players] or [0]))
+            value = self._resolved()
             self._computed(d, pal, y, "Threat", value)
             # +40, not +34: the value is DISPLAY-sized (24px tall drawn at
             # y+10), so a 34 step put the formula's first line inside its
@@ -305,6 +305,12 @@ class LocationConfigModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
+        # Back rides in the title bar, not at the bottom: the count shape's
+        # threat block pushes the action grid down past y=420, so a pinned
+        # bottom button lands on top of "Replaced". Top-left is where the mock
+        # puts it anyway, and it matches every other sub-view's way back.
+        text_left(d, pal, "< Progress", 10, 12, BODY, pal.tan)
+        self.buttons.append(Button(("close",), 0, 0, 150, 40))
         text_center(d, pal, "Active Location", 240, 12, DISPLAY, pal.gold)
         if self.name:
             text_center(d, pal, truncate_text(self.name, BODY, 440, d.measure_text),
@@ -335,71 +341,138 @@ class LocationConfigModal:
         # the footer's Cancel/Save at y=404.
         # RR: progress is NOT lost when a location returns to the staging area -
         # Impassable Chasm has to SAY "remove all progress tokens", which it
-        # would not need to if returning did it. The note was in the approved
-        # mock and got dropped when this sheet was rewritten.
-        if self.has and y < 300:
+        # would not need to if returning did it.
+        if self.has and y < 296:
             text_left(d, pal, "Back to staging keeps its progress.",
                       30, y, BODY, pal.dim)
             y += 22
-        none_b = Button(("none",), 30, min(max(y + 8, 296), 340), 420, 52)
-        panel(d, pal, none_b.x, none_b.y, none_b.w, none_b.h, fill=pal.btn_no, border=pal.no_fg)
-        text_center(d, pal, "Set none (no active location)", none_b.x + none_b.w / 2,
-                    none_b.y + 16, BODY, pal.no_fg)
-        self.buttons.append(none_b)
+        # The four ways a location leaves, each NAMED. These used to be two
+        # unlabelled 24px icon circles on the Progress row plus a vague
+        # "Set none (no active location)" here, which is what "the additional
+        # actions are not labeled, not clear what they do" was about.
+        #
+        # "Back to staging" is only honest because the record now carries the
+        # card's threat: it can put the right number back without asking.
+        # Follows y with a FLOOR only. The previous ceiling (min(..., 300))
+        # pinned the grid at 300 however tall the threat block got, so in the
+        # count shape - computed value, two formula lines and a count stepper,
+        # ending near 342 - the actions were drawn straight through the stepper.
+        y = max(y + 6, 288)
+        acts = (("Explored", ("explored",), pal.green),
+                ("Back to staging", ("tostaging",), pal.tan),
+                ("Replaced", ("replaced",), pal.tan),
+                ("Remove", ("none",), pal.no_fg))
+        for i, (label, bid, pen) in enumerate(acts):
+            bx = 30 + (i % 2) * 212
+            by = y + (i // 2) * 50
+            b = Button(bid, bx, by, 200, 44)
+            if pen is pal.no_fg:
+                panel(d, pal, b.x, b.y, b.w, b.h, fill=pal.btn_no,
+                      border=pal.no_fg)
+            else:
+                bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn, t=3)
+            text_center(d, pal, label, b.x + b.w / 2, b.y + 12, BODY, pen)
+            self.buttons.append(b)
 
-        _footer(d, pal, self.buttons)
+        # No Done and no Cancel: there is nothing to commit. Every stepper tap
+        # applies to the game immediately and logs, the way PlayersDetailModal
+        # already works, so the only control this sheet needs is the way back -
+        # drawn in the title bar at the top of this method. Two commit
+        # affordances on a page with nothing to commit was the design note;
+        # removing them also gives the threat block the 64px it needs in the
+        # count shape, which no clamp could reclaim.
+
+    def _apply(self):
+        """Write the edit through to the game NOW.
+
+        The sheet has no Save, so every tap lands here. Starts from the
+        EXISTING record rather than replacing it - a wholesale replace used to
+        drop the card name, its threat and the *Kind/*X keys the picker had
+        just filled in.
+        """
+        g = self.game
+        loc = dict(g.active_location or {})
+        loc["points"] = self.pts
+        loc["progress"] = self.prog
+        if self.threat_shape in ("auto", "count"):
+            # The count is the player's input and the threat is derived, so
+            # store the COUNT and recompute - storing only the result would go
+            # stale the moment the board changes.
+            if self.threat_count is not None:
+                loc["threatCount"] = self.threat_count
+            loc["threat"] = self._resolved() or 0
+        elif self.threat or not self.threat_blank:
+            loc["threat"] = self.threat
+        g.active_location = loc
+
+    def _resolved(self):
+        g = self.game
+        return xtargets.resolve(
+            self.threat_x, count=self.threat_count,
+            players=len(g.players),
+            stage=g.quest.get("stage_n", 1),
+            highest_threat=max([p.threat for p in g.players] or [0]))
 
     def on_button(self, btn):
         k = btn.id[0]
         if k == "pts":
             self.pts = max(1, min(30, self.pts + btn.id[1]))
             self.has = True
+            self._apply()
             return None
         if k == "prog":
             self.prog = max(0, min(99, self.prog + btn.id[1]))
             self.has = True
+            self._apply()
             return None
         if k == "count":
             self.threat_count = max(0, min(60, (self.threat_count or 0) + btn.id[1]))
             self.has = True
+            self._apply()
             return None
         if k == "threat":
             self.threat = max(0, min(30, self.threat + btn.id[1]))
             self.threat_blank = False   # a tap makes it a real value
             self.has = True
+            self._apply()
             return None
         if k == "none":
             if self.game.active_location is not None:
-                self.game.log_event("Active location cleared")
+                self.game.log_event("Active location removed")
             self.game.active_location = None
             return "close"
-        if k == "save":
-            # Start from the EXISTING record. Replacing it wholesale used to
-            # drop the card name, its threat and the *Kind/*Formula keys -
-            # everything the picker had just filled in.
-            loc = dict(self.game.active_location or {})
-            loc["points"] = self.pts
-            loc["progress"] = self.prog
-            if self.threat_shape in ("auto", "count"):
-                # The count is the player's input and the threat is derived, so
-                # store the count and recompute - storing only the result would
-                # make it stale the moment the board changes.
-                if self.threat_count is not None:
-                    loc["threatCount"] = self.threat_count
-                loc["threat"] = xtargets.resolve(
-                    self.threat_x, count=self.threat_count,
-                    players=len(self.game.players),
-                    stage=self.game.quest.get("stage_n", 1),
-                    highest_threat=max([p.threat for p in self.game.players] or [0])) or 0
-            elif self.threat or not self.threat_blank:
-                loc["threat"] = self.threat
-            if loc != self.game.active_location:
-                self.game.log_event("Active location set to %d/%d progress, "
-                                    "%d threat" % (self.prog, self.pts, self.threat))
-            self.game.active_location = loc
+        if k == "explored":
+            if self.game.active_location is not None:
+                self.game.log_event("Active location Explored")
+            self.game.active_location = None
             return "close"
-        if k == "cancel":
-            return "cancel"
+        if k == "tostaging":
+            # The record carries the card's threat, so the staging total gets
+            # the right number back rather than a guess. RR: progress is NOT
+            # lost, so nothing is zeroed here.
+            loc = self.game.active_location or {}
+            back = loc.get("threat") or 0
+            self.game.staging += back
+            self.game.log_event("Active location to staging (+%d threat, "
+                                "%d progress kept)"
+                                % (back, loc.get("progress") or 0))
+            self.game.active_location = None
+            return "close"
+        if k == "replaced":
+            # A card swapped it: reopen the picker in change mode rather than
+            # making the player clear this one and add another.
+            self.game.pending_location_pick = {"mode": "change",
+                                               "back": "progress"}
+            return "close"
+        if k == "close":
+            # One summary line for the whole visit, the way the Progress modal
+            # batches its own edits - a log entry per stepper tap would bury
+            # the round.
+            if self.has:
+                self.game.log_event("Active location set to %d/%d progress, "
+                                    "%d threat"
+                                    % (self.prog, self.pts, self.threat))
+            return "close"
         return None
 
 
@@ -421,14 +494,22 @@ class SideQuestsModal:
         for i, s in enumerate(sq):
             panel(d, pal, 24, y, 432, 56, fill=pal.card)
             text_left(d, pal, "SQ%d  %d/%d" % (i + 1, s["progress"], s["points"]), 36, y + 18, BODY, pal.tan)
-            mn = Button(("pts", i, -1), 250, y + 6, 44, 44)
-            pl = Button(("pts", i, 1), 302, y + 6, 44, 44)
-            rm = Button(("rm", i), 400, y + 6, 44, 44)
+            mn = Button(("pts", i, -1), 214, y + 6, 44, 44)
+            pl = Button(("pts", i, 1), 264, y + 6, 44, 44)
+            # Completing a side quest was an unlabelled green pennant icon on
+            # the Progress row. That row is a card with one big stepper now, so
+            # the action lives here with a name on it - and it is a DIFFERENT
+            # outcome from removing one: a completed side quest goes to the
+            # victory display, a removed one never happened.
+            dn = Button(("done", i), 320, y + 6, 60, 44)
+            rm = Button(("rm", i), 392, y + 6, 52, 44)
             button(d, pal, mn, "-", DISPLAY)
             button(d, pal, pl, "+", DISPLAY)
+            bevel(d, pal, dn.x, dn.y, dn.w, dn.h, pal.btn, t=3)
+            text_center(d, pal, "Done", dn.x + dn.w / 2, dn.y + 13, BODY, pal.green)
             panel(d, pal, rm.x, rm.y, rm.w, rm.h, fill=pal.btn_no, border=pal.no_fg)
             text_center(d, pal, "x", rm.x + rm.w / 2, rm.y + 10, DISPLAY, pal.no_fg)
-            self.buttons.extend([mn, pl, rm])
+            self.buttons.extend([mn, pl, dn, rm])
             y += 62
 
         add = Button(("add",), 24, min(y, 320), 432, 52)
@@ -458,6 +539,13 @@ class SideQuestsModal:
             if sq["points"] != was:
                 self.game.log_event("Side quest %d quest points %d -> %d"
                                     % (i + 1, was, sq["points"]))
+            return None
+        if k == "done":
+            # Completed, not removed: it goes to the victory display, so the log
+            # has to say which of the two happened.
+            i = btn.id[1]
+            self.game.side_quests.pop(i)
+            self.game.log_event("Side quest %d completed" % (i + 1))
             return None
         if k == "rm":
             self.game.side_quests.pop(btn.id[1])
@@ -1109,12 +1197,14 @@ class LocationPickModal:
             # quest points are the number the player acts on, so they take
             # the right edge where every other list in the app puts its
             # headline figure.
-            # Black, not red: staging threat is never red (design/stat-system.md,
-            # and willpower_staging_meter has always drawn it this way).
-            threat_stat(d, pal, self.THREAT_X, y + 10, e.get("threat") or 0)
-            qp_s = "%d qp" % (e.get("points") or 0)
-            qw = d.measure_text(qp_s, BODY)
-            text_left(d, pal, qp_s, 456 - qw, y + 13, BODY, pal.gold if on else pal.tan)
+            # One pill carrying both numbers instead of a loose icon, a loose
+            # number and a separate "N qp": threat (black, on the light segment
+            # that makes black possible) then quest points. Right-aligned so the
+            # column lines up however long the name is.
+            pw = stat_pill(d, pal, 0, 0, e.get("threat") or 0,
+                           e.get("points") or 0, measure_only=True)
+            stat_pill(d, pal, 458 - pw, y + 8, e.get("threat") or 0,
+                      e.get("points") or 0)
             d.set_pen(pal.border)
             d.rectangle(8, y + self.ROW_H, 456, 1)
             self.buttons.append(Button(("row", e["id"]), 8, y, 456, self.ROW_H))
@@ -1191,8 +1281,10 @@ class LocationPickModal:
         stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 250, y,
                 str(self.pts), 170, 48)
         y += 54
-        tw = threat_stat(d, pal, 60, y + 12, None)
-        text_left(d, pal, "Contribution", 60 + tw + 8, y + 14, BODY, pal.tan)
+        # No icon here: a threat glyph with no value beside it had nowhere legible
+        # to sit (black on the ground is invisible, and a plate around an empty
+        # icon reads as a bug). The words carry it.
+        text_left(d, pal, "Threat contribution", 60, y + 14, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("ctr", -1), ("ctr", 1), 250, y,
                 str(self.contrib), 170, 48)
         y += 54
@@ -1395,7 +1487,9 @@ class QuestingProgressModal:
     def __init__(self, game):
         self.game = game
         self.buttons = []
-        self.loc_prompt = None   # {"stage": "choose"|"pts"|"contrib", ...} or None
+        self.add_prompt = False  # "+ Add" asks Location or Side quest
+        self.history = False     # the by-round chart + heading sub-view
+        self.page = 0
         self._snap = self._snapshot()
 
     def _snapshot(self):
@@ -1460,67 +1554,198 @@ class QuestingProgressModal:
             d.triangle(cx - 3, cy - 5, cx + 4, cy - 3, cx - 3, cy - 1)
         self.buttons.append(Button(id, cx - 12, cy - 12, 24, 24))
 
-    def _row(self, d, pal, it, y):
-        g = self.game
-        cy = y + 8
-        if it["kind"] == "l_add":
-            b = Button(("addloc",), 12, y + 7, 140, 24)
-            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-            text_center(d, pal, "+ Add location", b.x + b.w / 2, b.y + 5, BODY, pal.tan)
-            self.buttons.append(b)
+    # -- the mock's row vocabulary -------------------------------------------
+    # A row is a card with a coloured accent down its left edge (green =
+    # location, gold = quest/side quest), the entity's glyph and name, its
+    # printed quest points as dense metadata, a ">" into its own detail sheet,
+    # and ONE big stepper cluster reading "progress / target" over a fill bar.
+    #
+    # The old row was 38px with two small circular editors side by side and
+    # four 24px icon buttons crowded to the right - "tap targets are tiny, and
+    # very different from the Players screen controls". The target stepper is
+    # gone from the row entirely: editing a target is a detail-sheet job, which
+    # is also what labels the actions the icons never named.
+    ROW_H = 76
+    ROW_H_COMPACT = 54
+    ROW_GAP = 5
+
+    def _glyph(self, d, pal, kind, x, y, pen):
+        d.set_pen(pen)
+        if kind == "l":
+            d.rectangle(x + 7, y + 2, 2, 16)
+            d.rectangle(x, y + 4, 11, 6)
+            d.triangle(x + 11, y + 4, x + 11, y + 10, x + 16, y + 7)
+            d.rectangle(x + 4, y + 17, 8, 2)
+        elif kind == "q":
+            d.rectangle(x + 1, y + 1, 14, 18)
+            d.set_pen(pal.card)
+            d.rectangle(x + 3, y + 3, 10, 14)
+            d.set_pen(pen)
+            for dy in (6, 9):
+                d.rectangle(x + 5, y + dy, 6, 1)
+            d.rectangle(x + 5, y + 12, 4, 1)
+        else:
+            d.rectangle(x, y + 3, 18, 14)
+            d.set_pen(pal.card)
+            d.rectangle(x + 2, y + 5, 14, 10)
+            d.set_pen(pen)
+            d.rectangle(x + 4, y + 8, 8, 1)
+            d.rectangle(x + 4, y + 11, 5, 1)
+
+    def _fill_bar(self, d, pal, x, y, w, h, prog, pts, accent, at_target):
+        if w <= 0:
             return
-        if it["kind"] == "q":
+        d.set_pen(pal.well)
+        d.rectangle(x, y, w, h)
+        fw = int(w * min(1.0, (prog / pts) if pts else 0))
+        if fw > 0:
+            d.set_pen(pal.amber if at_target else accent)
+            d.rectangle(x, y, fw, h)
+
+    def _stepper_cluster(self, d, pal, cx_plus, cy, r, prog, pts, at_target,
+                         id_minus, id_plus):
+        """"progress / target" between one big - and one big +. The pair is
+        r=22 rather than the old 10, and the value carries its own denominator
+        so the row needs no second editor. + goes dead at the target: RR p.22
+        excess is discarded, so there is nothing past it to record."""
+        val = "%d / %d" % (prog, pts)
+        vw = d.measure_text(val, DISPLAY)
+        cx_minus = cx_plus - (vw + 2 * r + 26)
+        vx = cx_minus + r + 13
+        for cx, glyph, on, bid in ((cx_minus, "-", prog > 0, id_minus),
+                                   (cx_plus, "+", not at_target, id_plus)):
+            disc(d, cx, cy, r, pal.btn if on else pal.card_hi)
+            arc_runs(d, cx, cy, r, r - 2, 0, 360,
+                     pal.bevel_l if on else pal.border)
+            text_center(d, pal, glyph, cx, cy - 8, DISPLAY,
+                        pal.tan if on else pal.dim)
+            if on:
+                self.buttons.append(Button(bid, cx - r, cy - r, 2 * r, 2 * r))
+        text_left(d, pal, val, vx, cy - 12, DISPLAY,
+                  pal.amber if at_target else pal.gold)
+        return cx_minus - r
+
+    def _section(self, d, pal, y, label, count=None):
+        text_left(d, pal, label, MARGIN + 2, y, LABEL, pal.muted)
+        if count:
+            w = d.measure_text(label, LABEL)
+            text_left(d, pal, count, MARGIN + 10 + w, y, LABEL, pal.dim)
+        return y + 14
+
+    def _row(self, d, pal, it, y, compact=False):
+        g = self.game
+        kind = it["kind"]
+        cond = kind == "q" and g.quest.get("mode") == "condition"
+        # A condition row carries two lines of the card's own sentence AND a
+        # count-only stepper, so it needs more than a bar row does.
+        h = 96 if cond else (self.ROW_H_COMPACT if compact else self.ROW_H)
+        if kind == "q":
             prog, pts, pfx, idx = g.quest["progress"], g.quest["points"], "q", None
-        elif it["kind"] == "l":
-            prog, pts, pfx, idx = (g.active_location["progress"], g.active_location["points"],
-                                   "l", None)
+            accent, meta = pal.gold, "STAGE %s" % g.quest_label()
+        elif kind == "l":
+            loc = g.active_location
+            prog, pts, pfx, idx = loc["progress"], loc["points"], "l", None
+            accent = pal.green
+            meta = "%d QP" % pts if pts else None
         else:
-            s = g.side_quests[it["idx"]]
-            prog, pts, pfx, idx = s["progress"], s["points"], "s", it["idx"]
-        # The quest row's title doubles as a tap target opening the read-only
-        # QuestCardModal (M4-B, second entry point) - gold ink hints it's
-        # interactive, matching this row alone (Location/Side Quest titles
-        # stay plain). The button is pushed AFTER the Current/Target editors
-        # below so their hit regions win on any overlap; its own bounds
-        # (x 12-130) sit left of the Current editor's leftmost hit-box
-        # (x=136) by construction, so there should be no real overlap to
-        # arbitrate.
-        quest_card_tappable = it["kind"] == "q" and bool(g.stages)
-        # The Location row's title does the same for its detail sheet - the
-        # only way to reach the location's threat, which "Back to staging"
-        # needs. Gold ink is this screen's existing hint for a tappable title.
-        loc_tappable = it["kind"] == "l"
-        # 118px matches the quest_card tap target's fixed width below (and
-        # the room left before the Current editor's leftmost hit-box at
-        # x=136) - a real catalog side-quest name (up to ~20 chars) can
-        # otherwise run into the Current/Target editors, unlike the old
-        # always-short generic labels ("Quest 1A", "Location", "Side Quest 3").
-        name_s = truncate_text(it["name"], BODY, 118, d.measure_text)
-        text_left(d, pal, name_s, 12, y, BODY,
-                  pal.gold if (quest_card_tappable or loc_tappable) else pal.tan)
-        # A stage that advances on a condition has no target to edit, and a 0
-        # in the Target column reads as "worth nothing" rather than "not
-        # scored this way". Draw the same blank rule the location sheet uses
-        # and drop the stepper entirely - the card's own sentence needs more
-        # than 38px, so it lives on the detail sheet (QuestConfigModal).
-        no_target = it["kind"] == "q" and g.quest.get("mode") == "condition"
-        self._val_editor2(d, pal, 178, cy, prog, (prog / pts if pts else 0), True,
-                          (pfx + "P-", idx), (pfx + "P+", idx))
-        if no_target:
-            d.set_pen(pal.dim)
-            d.rectangle(300 - 15, cy - 1, 30, 3)
-        else:
-            self._val_editor2(d, pal, 300, cy, pts, 0, False,
-                              (pfx + "T-", idx), (pfx + "T+", idx))
-        if it.get("removable"):
-            self._icon_btn(d, pal, 400, cy, 11, "done", (pfx + "done", idx))
-            self._icon_btn(d, pal, 436, cy, 11, "x", (pfx + "X", idx))
-        if it.get("advanceable"):
-            self._icon_btn(d, pal, 400, cy, 11, "adv", ("qAdv",))
-        if quest_card_tappable:
-            self.buttons.append(Button(("quest_card",), 12, y, 118, self.ROW_H))
-        if loc_tappable:
-            self.buttons.append(Button(("loc_detail",), 12, y, 118, self.ROW_H))
+            sq = g.side_quests[it["idx"]]
+            prog, pts, pfx, idx = sq["progress"], sq["points"], "s", it["idx"]
+            accent = pal.gold
+            meta = "%d QP" % pts if pts else None
+        at_target = bool(pts) and prog >= pts
+        panel(d, pal, MARGIN, y, 480 - 2 * MARGIN, h, fill=pal.card,
+              border=pal.border)
+        d.set_pen(accent)
+        d.rectangle(MARGIN, y, 4, h)
+        # A stage that advances on a condition has no bar to fill and no target
+        # to count toward, so the card's own sentence takes the space instead.
+        if cond:
+            self._glyph(d, pal, kind, MARGIN + 14, y + 5, accent)
+            text_left(d, pal, truncate_text(it["name"], BODY, 236,
+                                            d.measure_text),
+                      MARGIN + 40, y + 8, BODY, pal.tan)
+            mw = d.measure_text("NO QUEST POINTS", LABEL)
+            text_left(d, pal, "NO QUEST POINTS", 480 - MARGIN - 28 - mw,
+                      y + 10, LABEL, pal.dim)
+            text_left(d, pal, ">", 480 - MARGIN - 18, y + 6, BODY, pal.gold)
+            ty = y + 36
+            lines = wrap_text(g.quest.get("advance") or
+                              "This stage advances on a condition, not on "
+                              "progress.", BODY, 480 - 2 * MARGIN - 56,
+                              d.measure_text)
+            for ln in lines[:2]:
+                text_left(d, pal, ln, MARGIN + 40, ty, BODY, pal.dim)
+                ty += 22
+            if len(lines) > 2:
+                text_left(d, pal, "[...] more", MARGIN + 40, ty, BODY, pal.gold)
+            # Still a stepper, just no denominator: a condition stage can carry
+            # progress (some place it and discard it, some ignore it), it simply
+            # has no target to fill. Dropping the control entirely would have
+            # left the player nowhere to count.
+            cy = y + h - 26
+            for cx, glyph, on, bid in ((404, "-", prog > 0, ("qP-", None)),
+                                       (452, "+", True, ("qP+", None))):
+                disc(d, cx, cy, 18, pal.btn if on else pal.card_hi)
+                arc_runs(d, cx, cy, 18, 16, 0, 360,
+                         pal.bevel_l if on else pal.border)
+                text_center(d, pal, glyph, cx, cy - 8, DISPLAY,
+                            pal.tan if on else pal.dim)
+                if on:
+                    self.buttons.append(Button(bid, cx - 18, cy - 18, 36, 36))
+            text_left(d, pal, str(prog), 372, cy - 12, DISPLAY, pal.gold)
+            self.buttons.append(Button(("detail", kind, idx), MARGIN, y,
+                                       340, 34))
+            return y + h + self.ROW_GAP
+        if compact:
+            cy = y + h // 2 - 3
+            left = self._stepper_cluster(d, pal, 480 - MARGIN - 30, cy, 18,
+                                         prog, pts, at_target,
+                                         (pfx + "P-", idx), (pfx + "P+", idx))
+            self._glyph(d, pal, kind, MARGIN + 14, cy - 10, accent)
+            text_left(d, pal, truncate_text(it["name"], BODY,
+                                            left - (MARGIN + 40) - 10,
+                                            d.measure_text),
+                      MARGIN + 40, cy - 8, BODY, pal.tan)
+            self._fill_bar(d, pal, MARGIN + 14, y + h - 9,
+                           left - (MARGIN + 28), 4, prog, pts, accent, at_target)
+            self.buttons.append(Button(("detail", kind, idx), MARGIN, y,
+                                       left - MARGIN - 10, h))
+            return y + h + self.ROW_GAP
+        self._glyph(d, pal, kind, MARGIN + 14, y + 5, accent)
+        text_left(d, pal, truncate_text(it["name"], BODY, 236, d.measure_text),
+                  MARGIN + 40, y + 8, BODY, pal.tan)
+        if meta:
+            mw = d.measure_text(meta, LABEL)
+            text_left(d, pal, meta, 480 - MARGIN - 28 - mw, y + 10, LABEL, pal.dim)
+        text_left(d, pal, ">", 480 - MARGIN - 18, y + 6, BODY, pal.gold)
+        cy = y + 48
+        left = self._stepper_cluster(d, pal, 480 - MARGIN - 36, cy, 22,
+                                     prog, pts, at_target,
+                                     (pfx + "P-", idx), (pfx + "P+", idx))
+        self._fill_bar(d, pal, MARGIN + 14, cy - 3, left - (MARGIN + 28), 6,
+                       prog, pts, accent, at_target)
+        # The whole title band opens the detail sheet - the ">" is the hint, not
+        # the hit-box. Pushed last so the stepper hit-boxes win any overlap.
+        self.buttons.append(Button(("detail", kind, idx), MARGIN, y,
+                                   480 - 2 * MARGIN, 40))
+        return y + h + self.ROW_GAP
+
+    def _bottom_bar(self, d, pal, page, pages):
+        y = 420
+        for label, x, w, bid in (("History", 12, 118, ("history",)),
+                                 ("+ Add", 138, 96, ("add",))):
+            b = Button(bid, x, y, w, 46)
+            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
+            text_center(d, pal, label, x + w // 2, y + 14, BODY, pal.tan)
+            self.buttons.append(b)
+        if pages > 1:
+            for label, x, bid in (("Up", 288, ("older",)), ("Down", 382, ("newer",))):
+                b = Button(bid, x, y, 86, 46)
+                bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
+                text_center(d, pal, label, x + 43, y + 14, BODY, pal.tan)
+                self.buttons.append(b)
+            text_center(d, pal, "%d/%d" % (page + 1, pages), 262, y + 14,
+                        BODY, pal.muted)
 
     def draw(self, hw, game, pal):
         from ui.header import modal_header
@@ -1528,28 +1753,100 @@ class QuestingProgressModal:
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        if self.loc_prompt:
-            self._draw_loc_prompt(d, pal)
+        if self.add_prompt:
+            self._draw_add_prompt(d, pal)
             return
-        modal_header(d, pal, game, "Progress", self.buttons)
+        if self.history:
+            self._draw_history(d, pal)
+            return
+        # DONE becomes RESOLVE when something is sitting at its target. Closing
+        # ALREADY runs the resolve flow (main.py checks needs_resolution() on
+        # close), so a separate "Resolve now" button was a second control doing
+        # the first one's job - the label just has to admit what DONE will do.
+        ready = game.needs_resolution() if hasattr(game, "needs_resolution") else False
+        modal_header(d, pal, game, "Progress", self.buttons,
+                     cta="RESOLVE" if ready else "DONE", cta_ready=ready)
+        y = 46 + phase_block(d, pal, MARGIN, 46, 480 - 2 * MARGIN,
+                             [("framework", PROGRESS_PLACEMENT)]) + 8
 
-        text_left(d, pal, "QUEST POINTS", 12, 48, LABEL, pal.muted)
-        text_center(d, pal, "CURRENT", 178, 48, LABEL, pal.dim)
-        text_center(d, pal, "TARGET", 300, 48, LABEL, pal.dim)
-
+        # Location BEFORE quest: progress fills the location first, and the
+        # band directly above says so. Reading order should match the rule.
         items = self._items()
-        for i, it in enumerate(items):
-            self._row(d, pal, it, self.ROWS_Y0 + i * self.ROW_H)
-        n = len(items)
+        order = {"l": 0, "l_add": 0, "q": 1, "s": 2}
+        rows = sorted((it for it in items if it["kind"] != "l_add"),
+                      key=lambda it: order[it["kind"]])
+        avail = 420 - y - 8
 
-        add_y = self.ROWS_Y0 + n * self.ROW_H - 4
-        add = Button(("add",), 12, add_y, 120, 24)
-        bevel(d, pal, add.x, add.y, add.w, add.h, pal.btn)
-        text_center(d, pal, "+ Side quest", add.x + add.w / 2, add.y + 5, BODY, pal.tan)
-        self.buttons.append(add)
+        def fits(compact):
+            rh = (self.ROW_H_COMPACT if compact else self.ROW_H) + self.ROW_GAP
+            # Sections are emitted once per GROUP, not per row, so the worst
+            # case is one header per distinct kind on the page.
+            per = max(1, (avail - 3 * 14) // rh)
+            return per, max(1, (len(rows) + per - 1) // per)
 
+        # Prefer shrinking the rows over paging them: a lone side quest stranded
+        # on page 2 is worse than three compact rows on page 1.
+        per_page, pages = fits(False)
+        compact = False
+        if pages > 1:
+            per_c, pages_c = fits(True)
+            if pages_c < pages:
+                compact, per_page, pages = True, per_c, pages_c
+        self.page = min(self.page, pages - 1)
+        shown = rows[self.page * per_page:(self.page + 1) * per_page]
+
+        SECTION = {"l": "ACTIVE LOCATION", "q": "CURRENT QUEST",
+                   "s": "SIDE QUESTS"}
+        last_kind = None
+        for it in shown:
+            if it["kind"] != last_kind:
+                count = None
+                if it["kind"] == "s":
+                    n = sum(1 for r in rows if r["kind"] == "s")
+                    count = str(n) if n > 1 else None
+                y = self._section(d, pal, y, SECTION[it["kind"]], count)
+                last_kind = it["kind"]
+            y = self._row(d, pal, it, y, compact)
+        if not game.active_location and self.page == 0:
+            text_left(d, pal, "No active location.", MARGIN + 4, y, BODY, pal.dim)
+            y += 24
+        self._bottom_bar(d, pal, self.page, pages)
+        return
+
+    def _draw_add_prompt(self, d, pal):
+        """"+ Location" and "+ Side quest" were two permanent buttons mid-screen
+        for occasional actions. Merged into one "+ Add" that asks which - the
+        same in-modal prompt pattern the removal prompt used to use, because a
+        modal cannot open another."""
+        from ui.header import modal_header
+        modal_header(d, pal, self.game, "Add", self.buttons)
+        y = 90
+        for label, bid, note in (
+                ("Location", ("add_loc",), "the one you just travelled to"),
+                ("Side quest", ("add_sq",), "a player side quest in play")):
+            b = Button(bid, 40, y, 400, 62)
+            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn, t=3)
+            text_left(d, pal, label, b.x + 20, b.y + 8, BODY, pal.tan)
+            text_left(d, pal, note, b.x + 20, b.y + 34, BODY, pal.dim)
+            self.buttons.append(b)
+            y += 74
+        c = Button(("add_cancel",), 40, y + 10, 400, 48)
+        panel(d, pal, c.x, c.y, c.w, c.h, fill=pal.btn_no, border=pal.no_fg)
+        text_center(d, pal, "Cancel", 240, c.y + 14, BODY, pal.no_fg)
+        self.buttons.append(c)
+
+    def _draw_history(self, d, pal):
+        """The by-round chart and, for a sailing game, the heading radios.
+
+        Both used to sit permanently below the rows, which is what made "round
+        summary section has poor layout when early in the game" true - an empty
+        chart held 130px hostage every round before the first resolve. They are
+        one tap away now instead, behind the bottom bar's History button.
+        """
+        from ui.header import modal_header
+        modal_header(d, pal, self.game, "History", self.buttons)
         if self.game.sailing:
-            heading_y = self.ROWS_Y0 + n * self.ROW_H + 34
+            heading_y = 60
             text_left(d, pal, "Heading", 12, heading_y, BODY, pal.tan)
             cy = heading_y + 4
             for i in range(4):
@@ -1562,6 +1859,10 @@ class QuestingProgressModal:
                 self.buttons.append(Button(("hd_set", i), cx - 14, cy - 14, 28, 28))
 
         self._draw_chart(d, pal)
+        b = Button(("hist_back",), 12, 420, 140, 46)
+        bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
+        text_center(d, pal, "< Progress", b.x + b.w // 2, b.y + 14, BODY, pal.tan)
+        self.buttons.append(b)
 
     def _draw_chart(self, d, pal):
         """Absolutely positioned near the bottom regardless of how many rows
@@ -1609,53 +1910,6 @@ class QuestingProgressModal:
         caption = "WILLPOWER / STAGING / RESULT" + (" / HEADING" if self.game.sailing else "")
         text_center(d, pal, caption, 240, ry + 4, LABEL, pal.dim)
 
-    def _draw_loc_prompt(self, d, pal):
-        lp = self.loc_prompt
-        if lp["stage"] == "choose":
-            self._draw_loc_choose(d, pal)
-        elif lp["stage"] == "pts":
-            self._draw_loc_pts(d, pal)
-        else:
-            self._draw_loc_contrib(d, pal)
-
-    def _draw_loc_choose(self, d, pal):
-        loc = self.game.active_location
-        text_center(d, pal, "Location removed", 240, 30, DISPLAY, pal.gold)
-        text_center(d, pal, "What happened to it?", 240, 70, BODY, pal.tan)
-        text_center(d, pal, "%d/%d progress will be discarded" % (loc["progress"], loc["points"]),
-                    240, 94, BODY, pal.dim)
-
-        def opt(y, id, label, sub):
-            b = Button((id,), 24, y, 432, 64)
-            bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn, t=3)
-            text_center(d, pal, label, 240, y + 12, DISPLAY, pal.tan)
-            text_center(d, pal, sub, 240, y + 42, BODY, pal.dim)
-            self.buttons.append(b)
-
-        opt(120, "lp_replaced", "Replaced", "enter the new location's quest points")
-        opt(196, "lp_staging", "To staging", "its threat returns to the staging area")
-        opt(272, "lp_discard", "Discard", "no replacement")
-        cancel = Button(("lp_cancel",), 24, 356, 432, 56)
-        bevel(d, pal, cancel.x, cancel.y, cancel.w, cancel.h, pal.btn_no, t=3)
-        text_center(d, pal, "Cancel", 240, cancel.y + 18, BODY, pal.no_fg)
-        self.buttons.append(cancel)
-
-    def _draw_loc_pts(self, d, pal):
-        text_center(d, pal, "Replace location", 240, 30, DISPLAY, pal.gold)
-        text_left(d, pal, "Quest points", 60, 216, BODY, pal.tan)
-        stepper(d, pal, self.buttons, ("lp_pts", -1), ("lp_pts", 1), 250, 200,
-               str(self.loc_prompt["pts"]), 170, 60)
-        _footer(d, pal, self.buttons, save_label="Confirm")
-
-    def _draw_loc_contrib(self, d, pal):
-        text_center(d, pal, "Location to staging", 240, 30, DISPLAY, pal.gold)
-        icons.draw(d, icons.THREAT, 60, 208, pal.red)
-        text_left(d, pal, "Contribution", 88, 216, BODY, pal.tan)
-        stepper(d, pal, self.buttons, ("lp_ctr", -1), ("lp_ctr", 1), 250, 200,
-               str(self.loc_prompt["state"].preview), 170, 60)
-        text_left(d, pal, "added to the staging area", 60, 270, BODY, pal.dim)
-        _footer(d, pal, self.buttons, save_label="Confirm")
-
     def _clamp_adj(self, cur, delta, cap=None):
         """Step a value, clamped. `cap` is the row's own target: progress
         cannot exceed the quest points it is filling.
@@ -1675,8 +1929,6 @@ class QuestingProgressModal:
 
     def on_button(self, btn):
         g = self.game
-        if self.loc_prompt:
-            return self._on_loc_prompt_button(btn)
         k = btn.id[0]
         a = btn.id[1] if len(btn.id) > 1 else None
         up = k.endswith("+")
@@ -1718,9 +1970,6 @@ class QuestingProgressModal:
             g.log_event("Active location Explored")
             g.active_location = None
             self._snap = self._snapshot()
-            return None
-        if k == "lX":
-            self.loc_prompt = {"stage": "choose"}
             return None
         if k in ("sP-", "sP+"):
             s = g.side_quests[a]
@@ -1772,6 +2021,48 @@ class QuestingProgressModal:
             g.pending_quest_card = True
             self._log_changes()
             return "close"
+        if k == "detail":
+            # The row's ">" opens that entity's own sheet, which is where the
+            # target lives now and where the icon-button actions finally get
+            # labels. One modal at a time, so close-and-flag like "quest_card".
+            kind = btn.id[1]
+            if kind == "q":
+                # The EDITOR, not the card: this is where quest points and the
+                # advance sentence live, and it links on to the card itself.
+                g.pending_quest_config = True
+            elif kind == "l":
+                g.pending_location_detail = True
+            else:
+                g.pending_side_quest_pick = True
+            self._log_changes()
+            return "close"
+        if k == "add":
+            # "+ Location" and "+ Side quest" were two permanent buttons for
+            # occasional actions; one "+ Add" asks which.
+            self.add_prompt = True
+            return "redraw"
+        if k == "add_loc":
+            self.add_prompt = False
+            g.pending_location_pick = {"mode": "new", "back": "progress"}
+            self._log_changes()
+            return "close"
+        if k == "add_sq":
+            self.add_prompt = False
+            g.pending_side_quest_pick = True
+            self._log_changes()
+            return "close"
+        if k == "add_cancel":
+            self.add_prompt = False
+            return "redraw"
+        if k == "history":
+            self.history = True
+            return "redraw"
+        if k == "hist_back":
+            self.history = False
+            return "redraw"
+        if k in ("older", "newer"):
+            self.page = max(0, self.page + (-1 if k == "older" else 1))
+            return "redraw"
         if k == "loc_detail":
             # Same one-modal-at-a-time dance as "quest_card" above: close, flag,
             # and let the router open LocationConfigModal on the next pass.
@@ -1806,52 +2097,6 @@ class QuestingProgressModal:
             elif g.quest["points"] > 0 and g.quest["progress"] >= g.quest["points"]:
                 g.pending_resolution = "auto"
             return "close"
-        return None
-
-    def _on_loc_prompt_button(self, btn):
-        from ui.counter import CounterState
-        g = self.game
-        k = btn.id[0]
-        lp = self.loc_prompt
-        if lp["stage"] == "choose":
-            if k == "lp_replaced":
-                self.loc_prompt = {"stage": "pts", "pts": 3}
-                return None
-            if k == "lp_staging":
-                self.loc_prompt = {"stage": "contrib", "state": CounterState(2, 0, 9)}
-                return None
-            if k == "lp_discard":
-                g.log_event("Active location removed")
-                g.active_location = None
-                self._snap = self._snapshot()
-                self.loc_prompt = None
-                return None
-            if k == "lp_cancel":
-                self.loc_prompt = None
-                return None
-            return None
-        # pts / contrib sub-stages share the generic _footer() ids
-        if k == "cancel":
-            self.loc_prompt = {"stage": "choose"}
-            return None
-        if k == "save":
-            if lp["stage"] == "pts":
-                g.change_location(lp["pts"], 0)
-            else:
-                lp["state"].confirm()
-                v = lp["state"].value
-                g.staging += v
-                g.active_location = None
-                g.log_event("Active location to staging (+%d threat)" % v)
-            self._snap = self._snapshot()
-            self.loc_prompt = None
-            return None
-        if k == "lp_pts":
-            lp["pts"] = max(1, min(30, lp["pts"] + btn.id[1]))
-            return None
-        if k == "lp_ctr":
-            lp["state"].tap(btn.id[1])
-            return None
         return None
 
     def _log_changes(self):

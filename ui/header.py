@@ -28,12 +28,25 @@ SUBTITLE_HEADER_H = 52
 from gamestate import VIEW_LABELS as VIEW_LABEL
 
 
-def _done_button(d, pal):
-    """Upper-right DONE bevel button: the universal "commit and dismiss"
-    affordance shared by draw_header's close case and modal_header (same
-    geometry, same pens)."""
-    bevel(d, pal, 408, 4, 64, 32, pal.btn_ok)
-    text_center(d, pal, "DONE", 440, 12, BODY, pal.ok_fg)
+def _done_button(d, pal, label="DONE", ready=False):
+    """Upper-right commit-and-dismiss bevel button, shared by draw_header's
+    close case and modal_header (same geometry, same pens).
+
+    Widens for a longer label the same way draw_header's round stamp does -
+    "RESOLVE" does not fit DONE's 64px. Returns (x, y, w, h) so the caller
+    registers a hit-box that matches what was drawn; a fixed 64 would have left
+    the wider button's left third dead.
+
+    `ready` swaps the ink to amber: the Progress screen relabels this RESOLVE
+    when something is sitting at its target, and the colour is the same
+    at-target signal its value tokens already use.
+    """
+    w = max(64, d.measure_text(label, BODY) + 20)
+    x = 472 - w
+    bevel(d, pal, x, 4, w, 32, pal.btn_ok)
+    text_center(d, pal, label, x + w // 2, 12, BODY,
+                pal.amber if ready else pal.ok_fg)
+    return x, 4, w, 32
 
 
 def draw_header(d, pal, game, buttons, highlight=None, title=None,
@@ -95,7 +108,7 @@ def draw_header(d, pal, game, buttons, highlight=None, title=None,
         buttons.append(Button(("nav", "settings"), 330, 0, 150, h))
 
 
-def modal_header(d, pal, game, title, buttons):
+def modal_header(d, pal, game, title, buttons, cta="DONE", cta_ready=False):
     """Shared header for full-screen modals: round id upper-left, centred
     title, and a DONE button upper-right that pushes id ("close",) (each
     modal's on_button maps "close" to its own commit-and-dismiss / dismiss
@@ -110,5 +123,5 @@ def modal_header(d, pal, game, title, buttons):
     text_center(d, pal, title, 240, 8, DISPLAY, pal.gold)
     d.set_pen(pal.border)
     d.rectangle(0, HEADER_H, 480, 1)
-    _done_button(d, pal)
-    buttons.append(Button(("close",), 408, 4, 64, 32))
+    x, y, w, h = _done_button(d, pal, cta, cta_ready)
+    buttons.append(Button(("close",), x, y, w, h))
