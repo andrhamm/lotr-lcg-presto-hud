@@ -103,14 +103,27 @@ class QuestConfigModal:
         self.q = dict(game.quest)
         self.sail = game.sailing
         self.buttons = []
+        # What it looked like on the way in, so close can log ONE summary line
+        # instead of one per stepper tap.
+        self._was = (self.q["stage_n"], self.q["side"], self.q["points"],
+                     self.q["progress"])
+
+    def _apply(self):
+        """Write the edit through NOW. The sheet has no Save, so every tap
+        lands here - the same live-edit model PlayersDetailModal and the
+        location sheet use."""
+        self.game.quest = dict(self.q)
 
     def draw(self, hw, game, pal):
+        from ui.header import modal_header
         d = hw.display
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        text_center(d, pal, "Quest  %d%s" % (self.q["stage_n"], self.q["side"]),
-                    240, 24, DISPLAY, pal.gold)
+        modal_header(d, pal, game,
+                     "Quest  %d%s" % (self.q["stage_n"], self.q["side"]),
+                     self.buttons, cta=None,
+                     back=("< Progress", ("close",)))
 
         text_left(d, pal, "Stage number", 30, 84, BODY, pal.tan)
         stepper(d, pal, self.buttons, ("n", -1), ("n", 1), 300, 70, str(self.q["stage_n"]), 150, 52)
@@ -180,19 +193,25 @@ class QuestConfigModal:
             text_center(d, pal, "Advance stage (progress -> 0)", adv.x + adv.w / 2, adv.y + 14, BODY, pal.tan)
             self.buttons.append(adv)
 
-        _footer(d, pal, self.buttons)
+        # No Done and no Cancel: every tap has already landed on the game.
+        # The sheet edits a live copy the way PlayersDetailModal does, so the
+        # only control it needs is the way back - and this sheet is reached
+        # from the Progress row's chevron, which is where it returns to.
 
     def on_button(self, btn):
         k = btn.id[0]
         if k == "n":
             self.q["stage_n"] = max(1, min(9, self.q["stage_n"] + btn.id[1]))
+            self._apply()
             return None
         if k == "side":
             i = (ord(self.q["side"][0]) - 65 + btn.id[1] + 8) % 8   # cycle A-H
             self.q["side"] = chr(65 + i)
+            self._apply()
             return None
         if k == "pts":
             self.q["points"] = max(0, min(30, self.q["points"] + btn.id[1]))
+            self._apply()
             return None
         if k == "adv":
             if self.q["side"] == "A":
@@ -201,6 +220,7 @@ class QuestConfigModal:
                 self.q["side"] = "A"
                 self.q["stage_n"] += 1
             self.q["progress"] = 0
+            self._apply()
             return None
         if k == "force_adv":
             # One modal at a time, so flag and close - main.py opens
@@ -212,19 +232,6 @@ class QuestConfigModal:
             return "close"
         if k == "sail":
             self.sail = not self.sail
-            return None
-        if k == "save":
-            was = self.game.quest
-            if (self.q["stage_n"], self.q["side"], self.q["points"],
-                    self.q["progress"]) != (was["stage_n"], was["side"],
-                                            was["points"], was["progress"]):
-                # One entry on commit, not one per stepper tap: this modal
-                # edits a scratch copy and only applies here.
-                self.game.log_event(
-                    "Quest set to stage %d%s, %d/%d progress"
-                    % (self.q["stage_n"], self.q["side"],
-                       self.q["progress"], self.q["points"]))
-            self.game.quest = self.q
             if self.sail != self.game.sailing:
                 self.game.sailing = self.sail
                 self.game.log_event(
@@ -232,6 +239,19 @@ class QuestConfigModal:
                     if self.sail else "Sailing disabled")
                 if self.sail:
                     self.game.heading = 0
+            return None
+        if k == "close":
+            # One summary line for the whole visit - a log entry per stepper
+            # tap would bury the round. Sailing logs as it happens, above,
+            # because it is a game-wide switch rather than a value edit.
+            now = (self.q["stage_n"], self.q["side"], self.q["points"],
+                   self.q["progress"])
+            if now != self._was:
+                self.game.log_event(
+                    "Quest set to stage %d%s, %d/%d progress"
+                    % (self.q["stage_n"], self.q["side"],
+                       self.q["progress"], self.q["points"]))
+            self._apply()
             return "close"
         if k == "cancel":
             return "cancel"
@@ -2088,7 +2108,11 @@ class QuestingProgressModal:
             elif kind == "l":
                 g.pending_location_detail = True
             else:
-                g.pending_side_quest_pick = True
+                # SideQuestsModal, where Done and Remove live - NOT the add
+                # picker. This raised pending_side_quest_pick, so a row's own
+                # chevron opened "choose a side quest to add" and there was no
+                # way to reach the row's own actions at all.
+                g.pending_side_quest_detail = True
             self._log_changes()
             return "close"
         if k == "add":

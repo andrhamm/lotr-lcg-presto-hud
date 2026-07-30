@@ -516,11 +516,21 @@ function main() {
       }
       dirty = true;
     }
+    // A side-quest ROW's ">" - the sheet with Done and Remove on it, which is
+    // a different modal from the add picker below. Neither twin constructed
+    // SideQuestsModal at all before this. No fetch: the record already carries
+    // everything the sheet shows.
+    if (!modal && active === "play" && game.pending_side_quest_detail) {
+      game.pending_side_quest_detail = false;
+      modal = new SideQuestsModal(game);
+      dirty = true;
+    }
     // Progress-detail "+ Side quest" tap (SideQuestPickModal entry point):
     // same pending-flag pattern as pending_quest_card above - the picker
     // needs a catalog fetch, which QuestingProgressModal.onButton can't
     // await mid-tap without breaking the modal-replaces-modal invariant, so
     // it flags this instead and the fetch happens here, once modal is null.
+    //
     // pending_side_quest_pick is cleared synchronously so a later tick can't
     // re-enter this block while the fetch is in flight. A missing/
     // unreadable catalog (loadPlayerSideQuests() resolves []) skips the

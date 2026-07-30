@@ -114,8 +114,13 @@ export function modalHeader(ctx, game, title, buttons,
   // titles" is one row of the table, not two.
   textCenter(ctx, title, 240, 8, DISPLAY, pal.gold);
   rect(ctx, 0, HEADER_H, 480, 1, pal.border);
-  const [x, y, w, h] = doneButton(ctx, cta, ctaReady);
-  buttons.push(new Button(["close"], x, y, w, h));
+  // cta null suppresses the DONE button entirely. A sheet with nothing to
+  // commit and a "< Progress" already in the left slot had two controls doing
+  // one job, and both pushed the same ["close"] id.
+  if (cta !== null) {
+    const [x, y, w, h] = doneButton(ctx, cta, ctaReady);
+    buttons.push(new Button(["close"], x, y, w, h));
+  }
 }
 
 // Circular -/+ (or similar single-glyph) button: btn disc + light affordance
@@ -289,14 +294,22 @@ export class SideQuestsModal {
     sq.forEach((s, i) => {
       panel(ctx, 24, y, 432, 56);
       textLeft(ctx, `SQ${i + 1}  ${s.progress}/${s.points}`, 36, y + 18, BODY, pal.tan);
-      const mn = new Button(["pts", i, -1], 250, y + 6, 44, 44);
-      const pl = new Button(["pts", i, 1], 302, y + 6, 44, 44);
-      const rm = new Button(["rm", i], 400, y + 6, 44, 44);
+      const mn = new Button(["pts", i, -1], 214, y + 6, 44, 44);
+      const pl = new Button(["pts", i, 1], 264, y + 6, 44, 44);
+      // Completing a side quest was an unlabelled green pennant icon on the
+      // Progress row. That row is a card with one big stepper now, so the
+      // action lives here with a name on it - and it is a DIFFERENT outcome
+      // from removing one: a completed side quest goes to the victory display,
+      // a removed one never happened. This twin had only the remove.
+      const dn = new Button(["done", i], 320, y + 6, 60, 44);
+      const rm = new Button(["rm", i], 392, y + 6, 52, 44);
       button(ctx, this.buttons, mn, "-", DISPLAY);
       button(ctx, this.buttons, pl, "+", DISPLAY);
-      bevel(ctx, rm.x, rm.y, rm.w, rm.h, pal.btn_no);
-      textCenter(ctx, "x", rm.x + 22, rm.y + 10, DISPLAY, pal.no_fg);
-      this.buttons.push(mn, pl, rm);
+      bevel(ctx, dn.x, dn.y, dn.w, dn.h, pal.btn, false, 3);
+      textCenter(ctx, "Done", dn.x + Math.floor(dn.w / 2), dn.y + 13, BODY, pal.green);
+      panel(ctx, rm.x, rm.y, rm.w, rm.h, pal.btn_no, pal.no_fg);
+      textCenter(ctx, "x", rm.x + Math.floor(rm.w / 2), rm.y + 10, DISPLAY, pal.no_fg);
+      this.buttons.push(mn, pl, dn, rm);
       y += 62;
     });
     const add = new Button(["add"], 24, Math.min(y, 320), 432, 52);
@@ -324,6 +337,11 @@ export class SideQuestsModal {
       if (s.points !== was) {
         this.game.logEvent(`Side quest ${btn.id[1] + 1} quest points ${was} -> ${s.points}`);
       }
+      return null;
+    }
+    if (k === "done") {
+      this.game.side_quests.splice(btn.id[1], 1);
+      this.game.logEvent(`Side quest ${btn.id[1] + 1} completed`);
       return null;
     }
     if (k === "rm") {
@@ -1429,7 +1447,11 @@ export class QuestingProgressModal {
       } else if (kind === "l") {
         g.pending_location_detail = true;
       } else {
-        g.pending_side_quest_pick = true;
+        // SideQuestsModal, where Done and Remove live - NOT the add picker.
+        // This raised pending_side_quest_pick, so a row's own chevron opened
+        // "choose a side quest to add" and there was no way to reach the row's
+        // own actions at all.
+        g.pending_side_quest_detail = true;
       }
       this._logChanges();
       return "close";
@@ -2154,11 +2176,23 @@ export class QuestConfigModal {
     this.q = { ...game.quest };
     this.sail = game.sailing;
     this.buttons = [];
+    // What it looked like on the way in, so close can log ONE summary line
+    // instead of one per stepper tap.
+    this._was = [this.q.stage_n, this.q.side, this.q.points, this.q.progress].join("/");
   }
+
+  // Write the edit through NOW. The sheet has no Save, so every tap lands
+  // here - the same live-edit model PlayersDetailModal and the location sheet
+  // use.
+  _apply() {
+    this.game.quest = { ...this.q };
+  }
+
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, `Quest  ${this.q.stage_n}${this.q.side}`, 240, 24, DISPLAY, pal.gold);
+    modalHeader(ctx, this.game, `Quest  ${this.q.stage_n}${this.q.side}`,
+                this.buttons, { back: ["< Progress", ["close"]], cta: null });
     textLeft(ctx, "Stage number", 30, 84, BODY, pal.tan);
     stepper(ctx, this.buttons, ["n", -1], ["n", 1], 300, 70, String(this.q.stage_n), 150, 52);
     textLeft(ctx, "Side", 30, 156, BODY, pal.tan);
@@ -2195,38 +2229,65 @@ export class QuestConfigModal {
     textCenter(ctx, this.sail ? "On" : "Off", sb.x + 75, sb.y + 14, BODY,
                this.sail ? pal.bg : pal.tan, false);
     this.buttons.push(sb);
-    const adv = new Button(["adv"], 30, 344, 420, 48);
-    bevel(ctx, adv.x, adv.y, adv.w, adv.h, pal.btn);
-    textCenter(ctx, "Advance stage (progress -> 0)", adv.x + 210, adv.y + 14, BODY, pal.tan);
-    this.buttons.push(adv);
-    footer(ctx, this.buttons);
+    // A catalog game advances through the GUIDED flow, which knows about
+    // branch alternatives, victory and the location credit. A custom game has
+    // no ResolutionModal to open, so it keeps the manual edit it has always
+    // had. Showing both would be two buttons named "advance" that do
+    // different things.
+    if (this.game.stages.length) {
+      // The only way in for a stage with no quest points: ~137 of ~400 stage
+      // cards advance on a condition, so there is no target to cross and
+      // nothing to trigger the flow on its own.
+      const fa = new Button(["force_adv"], 30, 344, 205, 48);
+      bevel(ctx, fa.x, fa.y, fa.w, fa.h, pal.btn);
+      textCenter(ctx, "Advance anyway", fa.x + Math.floor(fa.w / 2), fa.y + 14, BODY, pal.tan);
+      this.buttons.push(fa);
+      const vc = new Button(["quest_card"], 245, 344, 205, 48);
+      bevel(ctx, vc.x, vc.y, vc.w, vc.h, pal.btn);
+      textCenter(ctx, "View quest card", vc.x + Math.floor(vc.w / 2), vc.y + 14, BODY, pal.tan);
+      this.buttons.push(vc);
+    } else {
+      const adv = new Button(["adv"], 30, 344, 420, 48);
+      bevel(ctx, adv.x, adv.y, adv.w, adv.h, pal.btn);
+      textCenter(ctx, "Advance stage (progress -> 0)", adv.x + 210, adv.y + 14, BODY, pal.tan);
+      this.buttons.push(adv);
+    }
+    // No Done and no Cancel: every tap has already landed on the game. The
+    // only control this sheet needs is the way back, in the header above.
   }
   onButton(btn) {
     const k = btn.id[0];
-    if (k === "n") { this.q.stage_n = Math.max(1, Math.min(9, this.q.stage_n + btn.id[1])); return null; }
+    if (k === "n") {
+      this.q.stage_n = Math.max(1, Math.min(9, this.q.stage_n + btn.id[1]));
+      this._apply(); return null;
+    }
     if (k === "side") {
       const i = (this.q.side.charCodeAt(0) - 65 + btn.id[1] + 8) % 8;   // cycle A-H
       this.q.side = String.fromCharCode(65 + i);
-      return null;
+      this._apply(); return null;
     }
-    if (k === "pts") { this.q.points = Math.max(0, Math.min(30, this.q.points + btn.id[1])); return null; }
+    if (k === "pts") {
+      this.q.points = Math.max(0, Math.min(30, this.q.points + btn.id[1]));
+      this._apply(); return null;
+    }
     if (k === "adv") {
       if (this.q.side === "A") this.q.side = "B";
       else { this.q.side = "A"; this.q.stage_n += 1; }
       this.q.progress = 0;
-      return null;
+      this._apply(); return null;
     }
-    if (k === "sail") { this.sail = !this.sail; return null; }
-    if (k === "save") {
-      const was = this.game.quest;
-      if (this.q.stage_n !== was.stage_n || this.q.side !== was.side
-          || this.q.points !== was.points || this.q.progress !== was.progress) {
-        // One entry on commit, not one per stepper tap: this modal edits a
-        // scratch copy and only applies here.
-        this.game.logEvent(`Quest set to stage ${this.q.stage_n}${this.q.side}, `
-                           + `${this.q.progress}/${this.q.points} progress`);
-      }
-      this.game.quest = this.q;
+    if (k === "force_adv") {
+      // One modal at a time, so flag and close - main.js opens ResolutionModal
+      // on the next tick, same pattern as quest_card.
+      this.game.pending_resolution = "forced";
+      return "close";
+    }
+    if (k === "quest_card") {
+      this.game.pending_quest_card = true;
+      return "close";
+    }
+    if (k === "sail") {
+      this.sail = !this.sail;
       if (this.sail !== this.game.sailing) {
         this.game.sailing = this.sail;
         this.game.logEvent(this.sail
@@ -2234,9 +2295,20 @@ export class QuestConfigModal {
           : "Sailing disabled");
         if (this.sail) this.game.heading = 0;
       }
+      return null;
+    }
+    if (k === "close") {
+      // One summary line for the whole visit - a log entry per stepper tap
+      // would bury the round. Sailing logs as it happens, above, because it is
+      // a game-wide switch rather than a value edit.
+      const now = [this.q.stage_n, this.q.side, this.q.points, this.q.progress].join("/");
+      if (now !== this._was) {
+        this.game.logEvent(`Quest set to stage ${this.q.stage_n}${this.q.side}, `
+                           + `${this.q.progress}/${this.q.points} progress`);
+      }
+      this._apply();
       return "close";
     }
-    if (k === "cancel") return "cancel";
     return null;
   }
 }

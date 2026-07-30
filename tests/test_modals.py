@@ -121,17 +121,34 @@ def test_settings_led_tile_opens_modal():
     assert isinstance(result[1], modals.LedModal)
 
 
-def test_quest_config_save_persists_points():
+def test_quest_config_edits_land_without_a_save():
+    # The sheet has no Save and no Cancel - every tap has already landed on
+    # the game, the way PlayersDetailModal and the location sheet work.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
     m = modals.QuestConfigModal(game)
     m.draw(hw, game, pal)
+    assert not any(b.id[0] in ("save", "cancel") for b in m.buttons)
     for _ in range(8):
         m.on_button(_find(m, ("pts", 1)))
         m.draw(hw, game, pal)
-    m.on_button(_find(m, ("save",)))
-    assert game.quest["points"] == 8
+    assert game.quest["points"] == 8       # no commit tap in between
+
+
+def test_quest_config_logs_one_summary_line_on_the_way_out():
+    # A log entry per stepper tap would bury the round.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    m = modals.QuestConfigModal(game)
+    m.draw(hw, game, pal)
+    for _ in range(3):
+        m.on_button(_find(m, ("pts", 1)))
+        m.draw(hw, game, pal)
+    before = len(game.log)
+    assert m.on_button(_find(m, ("close",))) == "close"
+    assert len(game.log) == before + 1
 
 
 def test_reminders_modal_toggles_and_persists():

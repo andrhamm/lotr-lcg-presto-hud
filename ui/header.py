@@ -136,5 +136,9 @@ def modal_header(d, pal, game, title, buttons, cta="DONE", cta_ready=False,
     text_center(d, pal, title, 240, 8, DISPLAY, pal.gold)
     d.set_pen(pal.border)
     d.rectangle(0, HEADER_H, 480, 1)
-    x, y, w, h = _done_button(d, pal, cta, cta_ready)
-    buttons.append(Button(("close",), x, y, w, h))
+    # cta=None suppresses the DONE button entirely. A sheet with nothing to
+    # commit and a "< Progress" already in the left slot had two controls
+    # doing one job, and both pushed the same ("close",) id.
+    if cta is not None:
+        x, y, w, h = _done_button(d, pal, cta, cta_ready)
+        buttons.append(Button(("close",), x, y, w, h))

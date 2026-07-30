@@ -314,6 +314,11 @@ class GameState:
         # Progress row ">" on the quest: opens QuestConfigModal (the editor),
         # which links on to the read-only card.
         self.pending_quest_config = False
+        # Progress row ">" on a SIDE QUEST: opens SideQuestsModal, where Done
+        # and Remove live. Distinct from pending_side_quest_pick, which opens
+        # the ADD picker - the row's chevron used to raise that one, so a row
+        # could never reach its own done/remove.
+        self.pending_side_quest_detail = False
                                            # tap wants SideQuestPickModal
                                            # opened once the Progress-detail
                                            # modal has closed (same
@@ -1340,6 +1345,7 @@ class GameState:
             "pending_location_detail": self.pending_location_detail,
             "pending_progress_history": self.pending_progress_history,
             "pending_quest_config": self.pending_quest_config,
+            "pending_side_quest_detail": self.pending_side_quest_detail,
             "pending_location_pick": self.pending_location_pick,
             "reminders": dict(self.reminders),
             "refresh_applied": self.refresh_applied,
@@ -1405,6 +1411,7 @@ class GameState:
         g.pending_location_detail = d.get("pending_location_detail", False)
         g.pending_progress_history = d.get("pending_progress_history", False)
         g.pending_quest_config = d.get("pending_quest_config", False)
+        g.pending_side_quest_detail = d.get("pending_side_quest_detail", False)
         g.pending_location_pick = d.get("pending_location_pick", None)
         g.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         saved_rem = d.get("reminders", {})

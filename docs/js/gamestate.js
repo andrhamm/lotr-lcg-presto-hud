@@ -253,6 +253,17 @@ export class GameState {
     // modal, so the router (main.js) opens LocationConfigModal on the next
     // tick, exactly like pending_location_pick.
     this.pending_location_detail = false;
+    // Progress screen's "History" button: the log is a screen, not a modal, so
+    // the router does the nav once the modal has closed.
+    this.pending_progress_history = false;
+    // Progress row ">" on the quest: opens QuestConfigModal (the editor),
+    // which links on to the read-only card.
+    this.pending_quest_config = false;
+    // Progress row ">" on a SIDE QUEST: opens SideQuestsModal, where Done and
+    // Remove live. Distinct from pending_side_quest_pick, which opens the ADD
+    // picker - the row's chevron used to raise that one, so a row could never
+    // reach its own done/remove.
+    this.pending_side_quest_detail = false;
                                         // tap wants SideQuestPickModal opened
                                         // once the Progress-detail modal has
                                         // closed (same pending-flag pattern
@@ -1100,6 +1111,9 @@ export class GameState {
       pending_side_quest_pick: this.pending_side_quest_pick,
       pending_progress_detail: this.pending_progress_detail,
       pending_location_detail: this.pending_location_detail,
+      pending_progress_history: this.pending_progress_history,
+      pending_quest_config: this.pending_quest_config,
+      pending_side_quest_detail: this.pending_side_quest_detail,
       pending_location_pick: this.pending_location_pick,
       reminders: { ...this.reminders },
       elimination_threat: this.elimination_threat,
@@ -1159,6 +1173,9 @@ export class GameState {
     g.pending_side_quest_pick = d.pending_side_quest_pick ?? false;
     g.pending_progress_detail = d.pending_progress_detail ?? false;
     g.pending_location_detail = d.pending_location_detail ?? false;
+    g.pending_progress_history = d.pending_progress_history ?? false;
+    g.pending_quest_config = d.pending_quest_config ?? false;
+    g.pending_side_quest_detail = d.pending_side_quest_detail ?? false;
     g.pending_location_pick = d.pending_location_pick ?? null;
     g.reminders = Object.fromEntries(REMINDER_DEFS.map(dd => [dd[0], false]));
     for (const k of Object.keys(g.reminders)) {

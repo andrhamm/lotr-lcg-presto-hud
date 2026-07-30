@@ -392,6 +392,16 @@ def main():
             dirty = True
             continue
 
+        # A side-quest ROW's ">" - the sheet with Done and Remove on it,
+        # which is a different modal from the add picker below. Neither twin
+        # constructed SideQuestsModal at all before this.
+        if modal is None and active == "play" and game.pending_side_quest_detail:
+            game.pending_side_quest_detail = False
+            from ui.modals import SideQuestsModal
+            modal = SideQuestsModal(game)
+            dirty = True
+            continue
+
         # Progress-detail "+ Side quest" tap (SideQuestPickModal entry
         # point): same pending-flag pattern as pending_quest_card above -
         # the picker needs a catalog read (flash I/O) that
