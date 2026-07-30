@@ -996,9 +996,15 @@ class GameState:
             result = {"outcome": outcome}
         self.quest_outcome = outcome
         self.quest_outcome_n = n
+        # `stage` is what the History chart rules a gold vertical on: without
+        # it the chart can show the rounds but not where the quest advanced,
+        # which is the one thing that explains a sudden jump in the staging
+        # line. Entries written before this exist without the key, so every
+        # reader uses .get("stage").
         self.quest_history.append({
             "round": self.round, "willpower": willpower, "staging": staging,
-            "outcome": outcome, "n": n, "heading": self.heading})
+            "outcome": outcome, "n": n, "heading": self.heading,
+            "stage": self.quest.get("stage_n", 1)})
         if len(self.quest_history) > 20:
             self.quest_history = self.quest_history[-20:]
         return result

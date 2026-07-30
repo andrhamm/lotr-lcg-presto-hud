@@ -817,8 +817,14 @@ export class GameState {
     }
     this.quest_outcome = outcome;
     this.quest_outcome_n = n;
+    // `stage` is what the History chart rules a gold vertical on: without it
+    // the chart can show the rounds but not where the quest advanced, which is
+    // the one thing that explains a sudden jump in the staging line. Entries
+    // written before this exist without the key, so every reader uses
+    // `?? `/optional access rather than assuming it.
     this.quest_history.push({
-      round: this.round, willpower, staging, outcome, n, heading: this.heading });
+      round: this.round, willpower, staging, outcome, n, heading: this.heading,
+      stage: this.quest.stage_n ?? 1 });
     if (this.quest_history.length > 20) {
       this.quest_history = this.quest_history.slice(-20);
     }

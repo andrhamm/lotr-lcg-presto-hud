@@ -253,6 +253,28 @@ def test_quest_history_records_each_resolution():
     assert h[0]["heading"] == 1
 
 
+def test_quest_history_records_the_stage_it_happened_on():
+    # The History chart rules a gold vertical wherever the stage changes, so
+    # the entry has to carry it. Without this the chart can show a sudden jump
+    # in the staging line but not the advance that explains it.
+    from gamestate import GameState
+    g = GameState()
+    g.resolve_quest(5, 3)
+    g.quest["stage_n"] = 2
+    g.resolve_quest(5, 3)
+    assert [e["stage"] for e in g.quest_history] == [1, 2]
+
+
+def test_quest_history_readers_tolerate_an_entry_without_a_stage():
+    # Saves written before the key existed still load, so nothing may index it
+    # directly.
+    from gamestate import GameState
+    g = GameState()
+    g.resolve_quest(5, 3)
+    del g.quest_history[0]["stage"]
+    assert g.quest_history[0].get("stage") is None
+
+
 def test_quest_history_caps_at_20():
     from gamestate import GameState
     g = GameState()
