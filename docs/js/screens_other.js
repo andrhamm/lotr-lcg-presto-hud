@@ -742,16 +742,28 @@ export class ChooseScenarioScreen {
     const chunk = this.scenarios.slice(this.page * PER_PAGE, (this.page + 1) * PER_PAGE);
 
     let y = LIST_Y0;
-    for (const scn of chunk) {
+    chunk.forEach((scn, i) => {
       const on = scn.slug === this.selected;
       if (on) rect(ctx, 8, y, 456, 44, pal.card_hi);
       radioGlyph(ctx, 30, y + 22, on);
-      const name = truncateText(scn.name, BODY, 400);
-      textLeft(ctx, name, 52, y + 13, BODY, on ? pal.tan : pal.muted);
+      // "1. Passage Through Mirkwood". The number is the scenario's position
+      // in its CYCLE, not on the page, so it keeps meaning across a page turn
+      // - these cycles are play sequences, and the list is sorted into that
+      // order rather than alphabetically.
+      const n = this.page * PER_PAGE + i + 1;
+      const label = `${n}. ${scn.name}`;
+      // The release date rides on the right as dense tabular metadata, so the
+      // name gets the width up to it rather than a fixed 400.
+      const date = scn.releaseDate || "";
+      const dw = date ? measureText(date, LABEL) : 0;
+      if (date) textLeft(ctx, date, 464 - 12 - dw, y + 16, LABEL, pal.dim);
+      const avail = 400 - (date ? dw + 12 : 0);
+      textLeft(ctx, truncateText(label, BODY, avail), 52, y + 13, BODY,
+               on ? pal.tan : pal.muted);
       rect(ctx, 8, y + 44, 456, 1, pal.border);
       this.buttons.push(new Button(["scn", scn.slug], 8, y, 456, 44));
       y += ROW_STRIDE;
-    }
+    });
 
     if (pages > 1) {
       const up = new Button(["older"], 12, 352, 150, 46);

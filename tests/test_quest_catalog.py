@@ -13,14 +13,14 @@ import quest_catalog as qc
 # stageCount > 0; encounter/campaign entries (if present) have stageCount <= 0.
 SCENARIOS = [
     {"slug": "passage-through-mirkwood", "name": "Passage Through Mirkwood",
-     "cycle": "Core Set", "source": "official", "kind": "quest", "stageCount": 3, "releaseDate": None},
+     "cycle": "Core Set (Mirkwood Paths)", "source": "official", "kind": "quest", "stageCount": 3, "releaseDate": None},
     {"slug": "conflict-at-the-carrock", "name": "Conflict at the Carrock",
-     "cycle": "Core Set", "source": "official", "kind": "quest", "stageCount": 3, "releaseDate": None},
+     "cycle": "Core Set (Mirkwood Paths)", "source": "official", "kind": "quest", "stageCount": 3, "releaseDate": None},
     {"slug": "a-journey-to-rhosgobel", "name": "A Journey to Rhosgobel",
      "cycle": "Shadows of Mirkwood", "source": "official", "kind": "quest", "stageCount": 2,
      "releaseDate": "2012-01"},
     {"slug": "passage-through-mirkwood-nightmare", "name": "Passage Through Mirkwood",
-     "cycle": "Core Set", "source": "official", "kind": "nightmare", "stageCount": 3, "releaseDate": None},
+     "cycle": "Core Set (Mirkwood Paths)", "source": "official", "kind": "nightmare", "stageCount": 3, "releaseDate": None},
     {"slug": "some-alep-quest", "name": "Some ALeP Quest",
      "cycle": "Oaths of the Rohirrim", "source": "alep", "kind": "quest", "stageCount": 4,
      "releaseDate": None},
@@ -35,7 +35,8 @@ def test_cycle_order_constant():
     # tools/alep.py). They never interleave with the official cycles because
     # group_by_cycle filters on `source` before it ever sorts.
     assert qc.CYCLE_ORDER == [
-        "Core Set", "Shadows of Mirkwood", "The Dwarrowdelf", "Against the Shadow",
+        "Core Set (Mirkwood Paths)", "Shadows of Mirkwood", "The Dwarrowdelf",
+        "Against the Shadow",
         "The Ring-maker", "The Angmar Awakened", "The Dream-chaser", "The Haradrim",
         "Ered Mithrin", "The Vengeance of Mordor", "Hobbit Saga", "LotR Saga",
         "Standalone/PoD",
@@ -69,12 +70,12 @@ def test_group_by_cycle_order_follows_cycle_order():
     groups = qc.group_by_cycle(SCENARIOS, "official")
     # Core Set precedes Shadows of Mirkwood in CYCLE_ORDER, regardless of
     # input list order (input above lists Mirkwood's quest first).
-    assert [g["cycle"] for g in groups] == ["Core Set", "Shadows of Mirkwood"]
+    assert [g["cycle"] for g in groups] == ["Core Set (Mirkwood Paths)", "Shadows of Mirkwood"]
 
 
 def test_group_by_cycle_sorts_scenarios_by_name_within_group():
     groups = qc.group_by_cycle(SCENARIOS, "official")
-    core = next(g for g in groups if g["cycle"] == "Core Set")
+    core = next(g for g in groups if g["cycle"] == "Core Set (Mirkwood Paths)")
     assert [s["name"] for s in core["scenarios"]] == [
         "Conflict at the Carrock", "Passage Through Mirkwood",
     ]
@@ -82,7 +83,7 @@ def test_group_by_cycle_sorts_scenarios_by_name_within_group():
 
 def test_group_by_cycle_date_is_earliest_non_null_release_date():
     groups = qc.group_by_cycle(SCENARIOS, "official")
-    core = next(g for g in groups if g["cycle"] == "Core Set")
+    core = next(g for g in groups if g["cycle"] == "Core Set (Mirkwood Paths)")
     assert core["date"] is None  # both Core Set entries have a null releaseDate
     mirkwood = next(g for g in groups if g["cycle"] == "Shadows of Mirkwood")
     assert mirkwood["date"] == "2012-01"
@@ -104,7 +105,7 @@ def test_group_by_cycle_unrecognized_cycle_sorts_before_other():
 def test_cycles_for_counts_and_shape():
     index = {"scenarios": SCENARIOS}
     assert qc.cycles_for(index, "official") == [
-        {"cycle": "Core Set", "date": None, "count": 2},
+        {"cycle": "Core Set (Mirkwood Paths)", "date": None, "count": 2},
         {"cycle": "Shadows of Mirkwood", "date": "2012-01", "count": 1},
     ]
 
@@ -119,11 +120,11 @@ def test_cycles_for_alep():
 def test_non_quest_sets_excluded():
     """Encounter and campaign sets with stageCount <= 0 must be excluded."""
     scns = [
-        {"slug": "real", "name": "Real Quest", "cycle": "Core Set",
+        {"slug": "real", "name": "Real Quest", "cycle": "Core Set (Mirkwood Paths)",
          "source": "official", "kind": "quest", "stageCount": 3, "releaseDate": None},
-        {"slug": "enc", "name": "Shared Encounter Set", "cycle": "Core Set",
+        {"slug": "enc", "name": "Shared Encounter Set", "cycle": "Core Set (Mirkwood Paths)",
          "source": "official", "kind": "encounter", "stageCount": 0, "releaseDate": None},
-        {"slug": "camp", "name": "Campaign Set", "cycle": "Core Set",
+        {"slug": "camp", "name": "Campaign Set", "cycle": "Core Set (Mirkwood Paths)",
          "source": "official", "kind": "campaign", "stageCount": 0, "releaseDate": None},
     ]
     groups = qc.group_by_cycle(scns, "official")
@@ -132,7 +133,7 @@ def test_non_quest_sets_excluded():
     # Verify cycles_for also reflects the correct count (only 1, not 3)
     index = {"scenarios": scns}
     cycles = qc.cycles_for(index, "official")
-    assert cycles == [{"cycle": "Core Set", "date": None, "count": 1}]
+    assert cycles == [{"cycle": "Core Set (Mirkwood Paths)", "date": None, "count": 1}]
 
 
 def test_nightmare_named_variants_excluded():
@@ -451,12 +452,12 @@ def test_resume_picker_state_resolves_a_saved_scenario():
     st = qc.resume_picker_state(
         {"scenarios": SCENARIOS},
         {"slug": "conflict-at-the-carrock", "source": "official",
-         "cycle": "Core Set", "mode": "Nightmare"})
+         "cycle": "Core Set (Mirkwood Paths)", "mode": "Nightmare"})
     assert st["entry"]["name"] == "Conflict at the Carrock"
-    assert st["source"] == "official" and st["cycle"] == "Core Set"
+    assert st["source"] == "official" and st["cycle"] == "Core Set (Mirkwood Paths)"
     assert st["difficulty"] == "Nightmare"
     # the two list screens behind it get real contents, not empty lists
-    assert [c["cycle"] for c in st["cycles"]] == ["Core Set", "Shadows of Mirkwood"]
+    assert [c["cycle"] for c in st["cycles"]] == ["Core Set (Mirkwood Paths)", "Shadows of Mirkwood"]
     assert "conflict-at-the-carrock" in [s["slug"] for s in st["siblings"]]
 
 
@@ -465,7 +466,7 @@ def test_resume_picker_state_defaults_a_missing_mode_to_standard():
     st = qc.resume_picker_state(
         {"scenarios": SCENARIOS},
         {"slug": "passage-through-mirkwood", "source": "official",
-         "cycle": "Core Set"})
+         "cycle": "Core Set (Mirkwood Paths)"})
     assert st["difficulty"] == "Standard"
 
 
@@ -510,7 +511,7 @@ def test_screens_rebuilt_from_resume_state_actually_render_populated():
     # what to_dict() stores for a game part-way through Passage
     st = qc.resume_picker_state(index, {
         "slug": "passage-through-mirkwood", "name": "Passage Through Mirkwood",
-        "pack": "Core Set", "cycle": "Core Set", "source": "official",
+        "pack": "Core Set", "cycle": "Core Set (Mirkwood Paths)", "source": "official",
         "kind": "quest", "nightmare": False, "mode": "Easy"})
 
     def texts(screen):
@@ -519,7 +520,7 @@ def test_screens_rebuilt_from_resume_state_actually_render_populated():
         return " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
 
     cycles = texts(PickCycleScreen(st["source"], st["cycles"]))
-    assert "Core Set" in cycles and "Shadows of Mirkwood" in cycles
+    assert "Core Set (Mirkwood Paths)" in cycles and "Shadows of Mirkwood" in cycles
 
     chooser = ChooseScenarioScreen(st["source"], st["cycle"], st["siblings"])
     chooser.selected = st["entry"]["slug"]
@@ -588,3 +589,85 @@ def test_both_routers_keep_the_picked_scenario_selected_when_relisting():
         window = src[i:i + 1800]
         assert "selected" in window, \
             "%s: relisting drops the player's current pick" % rel
+
+
+# -- play order -------------------------------------------------------------
+
+def test_group_by_cycle_sorts_by_play_order_not_alphabetically():
+    # Alphabetical put the Core Set in the exact REVERSE of its own sequence:
+    # Escape, Journey, Passage. `order` comes from the committed Hall of Beorn
+    # table (tools/build_scenario_order.py).
+    scns = [
+        {"slug": "escape", "name": "Escape from Dol Guldur", "pack": "Core Set",
+         "cycle": "Core Set (Mirkwood Paths)", "source": "official",
+         "kind": "quest", "stageCount": 3, "releaseDate": "2011-04", "order": 2},
+        {"slug": "journey", "name": "Journey Down the Anduin", "pack": "Core Set",
+         "cycle": "Core Set (Mirkwood Paths)", "source": "official",
+         "kind": "quest", "stageCount": 3, "releaseDate": "2011-04", "order": 1},
+        {"slug": "passage", "name": "Passage Through Mirkwood", "pack": "Core Set",
+         "cycle": "Core Set (Mirkwood Paths)", "source": "official",
+         "kind": "quest", "stageCount": 3, "releaseDate": "2011-04", "order": 0},
+    ]
+    got = qc.group_by_cycle(scns, "official")[0]["scenarios"]
+    assert [s["slug"] for s in got] == ["passage", "journey", "escape"]
+
+
+def test_scenarios_without_an_order_sort_last_by_date_then_name():
+    # 9 of 145 have no Hall of Beorn position - 5 ALeP quests it does not
+    # index, plus 2 bonus quests it folds into their box. Inventing a position
+    # would be a guess, so they go to the end in a stable order.
+    base = {"pack": "P", "cycle": "C", "source": "official", "kind": "quest",
+            "stageCount": 3}
+    scns = [
+        dict(base, slug="zz", name="Zulu", releaseDate="2011-01"),
+        dict(base, slug="ordered", name="Ordered", releaseDate="2020-01", order=5),
+        dict(base, slug="aa", name="Alpha", releaseDate="2011-01"),
+    ]
+    got = qc.group_by_cycle(scns, "official")[0]["scenarios"]
+    assert [s["slug"] for s in got] == ["ordered", "aa", "zz"]
+
+
+def test_the_mirkwood_paths_cycle_is_first_and_holds_five_quests():
+    # FFG calls The Dark of Mirkwood's two quests "an extension of the core
+    # set's Mirkwood Paths campaign", and its fiction opens right after Escape
+    # from Dol Guldur - so the campaign is five quests, not three.
+    # https://www.fantasyflightgames.com/en/news/2021/11/4/the-dark-of-mirkwood/
+    import json, os
+    idx = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "docs", "data", "index.json")
+    if not os.path.exists(idx):
+        return                                  # generated; skip on a bare tree
+    with open(idx, encoding="utf-8") as f:
+        scns = json.load(f)["scenarios"]
+    groups = qc.group_by_cycle(scns, "official")
+    assert groups[0]["cycle"] == "Core Set (Mirkwood Paths)"
+    assert [s["name"] for s in groups[0]["scenarios"]] == [
+        "Passage Through Mirkwood", "Journey Down the Anduin",
+        "Escape from Dol Guldur", "The Oath", "The Caves of Nibin-Dum"]
+
+
+def test_every_sequenced_cycle_is_date_monotonic_under_the_play_order():
+    # The cross-check that made the Hall of Beorn table trustworthy: applying
+    # its order leaves every real cycle non-decreasing by releaseDate, a field
+    # the table never looks at. The grab-bag cycles are exempt - see
+    # build_scenario_order.UNSEQUENCED_CYCLES.
+    import json, os
+    idx = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "docs", "data", "index.json")
+    if not os.path.exists(idx):
+        return
+    with open(idx, encoding="utf-8") as f:
+        scns = json.load(f)["scenarios"]
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "tools"))
+    import build_scenario_order
+    for g in qc.group_by_cycle(scns, "official"):
+        if g["cycle"] in build_scenario_order.UNSEQUENCED_CYCLES:
+            continue
+        dates = [s.get("releaseDate") for s in g["scenarios"]]
+        if any(d is None for d in dates):
+            continue
+        if any(s.get("order") is None for s in g["scenarios"]):
+            continue
+        assert dates == sorted(dates), (g["cycle"], dates)
+

@@ -12,6 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import alep
 import quest_catalog
+# For match_key(): the scenario-order table joins on a folded name, and that
+# rule must have exactly one definition - the tool that writes the table.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import build_scenario_order
 
 HEADER = ["databaseId","name","imageUrl","cardBack","type","packName",
           "deckbuilderQuantity","setUuid","numberInPack","encounterSet","unique",
@@ -180,8 +184,21 @@ def _official(cycle, packs):
     return {p: {"cycle": cycle, "source": "official", "date": RELEASE_DATES.get(p)} for p in packs}
 
 PACK_META = {}
-PACK_META.update(_official("Core Set", [
+# "Core Set (Mirkwood Paths)", not plain "Core Set": FFG's own announcement for
+# The Dark of Mirkwood (MEC102) calls its two quests "an extension of the core
+# set's Mirkwood Paths campaign", and the fiction opens straight after Escape
+# from Dol Guldur - "narrowly escaped from their ordeal in Dol Guldur. After a
+# brief stay in Lorien..." So the campaign is five quests, not three, and the
+# two Dark of Mirkwood ones belong in this cycle rather than off in the
+# Standalone/PoD grab-bag where their printing history had filed them.
+# https://www.fantasyflightgames.com/en/news/2021/11/4/the-dark-of-mirkwood/
+#
+# Hall of Beorn groups them the same way, under a "Mirkwood Paths" product.
+# The pack keeps its own name ("Two-Player Limited Edition Starter" - the
+# quests' original, pre-2022 printing); only the CYCLE moves.
+PACK_META.update(_official("Core Set (Mirkwood Paths)", [
     "Core Set", "Core Set - Nightmare", "Revised Core Set",
+    "Two-Player Limited Edition Starter", "Dark of Mirkwood",
 ]))
 PACK_META.update(_official("Shadows of Mirkwood", [
     "Shadows of Mirkwood - Nightmare",
@@ -254,7 +271,8 @@ PACK_META.update(_official("Standalone/PoD", [
     "Murder at the Prancing Pony", "The Siege of Annuminas",
     "Attack on Dol Guldur", "The Wizard's Quest", "The Woodland Realm",
     "The Mines of Moria", "Escape from Khazad-dum", "The Hunt for the Dreadnaught",
-    "Two-Player Limited Edition Starter", "Dark of Mirkwood",
+    # ("Two-Player Limited Edition Starter" and "Dark of Mirkwood" used to sit
+    # here. They moved up to Core Set (Mirkwood Paths) - see the note there.)
 ]))
 
 def parse_int(s):
@@ -593,6 +611,11 @@ def build_outputs(stream, meta=None, enrichment=None, extra_rows=None):
     if adv_hits or locx_hits:
         print("build_card_data: merged %d stage conditions and %d location X "
               "formulas" % (adv_hits, locx_hits))
+    ord_hits, ord_miss = merge_scenario_order(index_scn,
+                                              _load_distilled(SCENARIO_ORDER_FILE))
+    if ord_hits:
+        print("build_card_data: merged play order for %d scenarios (%d "
+              "unordered)" % (ord_hits, ord_miss))
 
     # Provenance (Task 3, Step 2): only claim Hall of Beorn as a source when
     # enrichment was actually merged above - an absent/corrupt enrichment
@@ -636,6 +659,48 @@ ADVANCEMENT_FILE = os.path.join(os.path.dirname(__file__), "data",
                                 "advancement_distilled.json")
 LOCATION_X_FILE = os.path.join(os.path.dirname(__file__), "data",
                                "location_dynamic_distilled.json")
+SCENARIO_ORDER_FILE = os.path.join(os.path.dirname(__file__), "data",
+                                   "scenario_order.json")
+
+def merge_scenario_order(index_scn, order_table):
+    """Stamp `order` onto each index entry from the committed Hall of Beorn
+    table (tools/build_scenario_order.py).
+
+    A GLOBAL rank, not a per-cycle one: Hall of Beorn lists products
+    chronologically, so one flat sequence sorts correctly even where one of our
+    cycles spans several of its products (The Ring-maker holds both "The Voice
+    of Isengard" and "The Ring-maker"). The per-cycle 1..n numbering the picker
+    shows is a display concern and is computed at render time from this.
+
+    Scenarios the table does not cover keep no `order` at all and sort last -
+    9 of 145 at the time of writing: 5 ALeP quests Hall of Beorn does not
+    index, plus 2 bonus quests it folds into their box ("Coast of Umbar" in the
+    City of Corsairs pack, "The Great Goblin" in Over Hill and Under Hill).
+    Inventing a position for those would be a guess.
+
+    Absent or corrupt table: every entry keeps no order and the picker falls
+    back to date-then-name, never a build failure - same posture as the
+    enrichment merge.
+    """
+    products = (order_table or {}).get("products") or []
+    if not products:
+        return 0, 0
+    rank, i = {}, 0
+    for prod in products:
+        for name in prod.get("scenarios") or []:
+            k = build_scenario_order.match_key(name.replace(" (Campaign)", ""))
+            rank.setdefault(k, i)
+            i += 1
+    hits = miss = 0
+    for entry in index_scn:
+        pos = rank.get(build_scenario_order.match_key(entry.get("name")))
+        if pos is None:
+            miss += 1
+            continue
+        entry["order"] = pos
+        hits += 1
+    return hits, miss
+
 
 def _load_distilled(path):
     """Best-effort load of one of the committed distillations. Same posture as

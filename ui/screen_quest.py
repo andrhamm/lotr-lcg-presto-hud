@@ -233,14 +233,27 @@ class ChooseScenarioScreen:
         chunk = self.scenarios[self.page * self.PER_PAGE:(self.page + 1) * self.PER_PAGE]
 
         y = self.LIST_Y0
-        for scn in chunk:
+        for i, scn in enumerate(chunk):
             on = scn["slug"] == self.selected
             if on:
                 d.set_pen(pal.card_hi)
                 d.rectangle(8, y, 456, 44)
             _radio(d, pal, 30, y + 22, on)
-            name = truncate_text(scn["name"], BODY, 400, d.measure_text)
-            text_left(d, pal, name, 52, y + 13, BODY, pal.tan if on else pal.muted)
+            # "1. Passage Through Mirkwood". The number is the scenario's
+            # position in its CYCLE, not on the page, so it keeps meaning
+            # across a page turn - these cycles are play sequences, and the
+            # list is sorted into that order rather than alphabetically.
+            n = self.page * self.PER_PAGE + i + 1
+            label = "%d. %s" % (n, scn["name"])
+            # The release date rides on the right as dense tabular metadata,
+            # so the name gets the width up to it rather than a fixed 400.
+            date = scn.get("releaseDate") or ""
+            dw = d.measure_text(date, LABEL) if date else 0
+            if date:
+                text_left(d, pal, date, 464 - 12 - dw, y + 16, LABEL, pal.dim)
+            avail = 400 - (dw + 12 if date else 0)
+            text_left(d, pal, truncate_text(label, BODY, avail, d.measure_text),
+                      52, y + 13, BODY, pal.tan if on else pal.muted)
             d.set_pen(pal.border)
             d.rectangle(8, y + 44, 456, 1)
             self.buttons.append(Button(("scn", scn["slug"]), 8, y, 456, 44))

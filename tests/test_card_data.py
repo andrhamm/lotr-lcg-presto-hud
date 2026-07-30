@@ -102,7 +102,7 @@ def test_scenario_assembly_and_index():
 def test_index_has_cycle_source_date():
     out = build()
     passage = next(s for s in out["index"]["scenarios"] if s["slug"] == "passage-through-mirkwood")
-    assert passage["cycle"] == "Core Set" and passage["source"] == "official"
+    assert passage["cycle"] == "Core Set (Mirkwood Paths)" and passage["source"] == "official"
     assert "releaseDate" in passage
 
 def test_index_release_dates_known_and_unknown():

@@ -16,7 +16,7 @@ import re
 # Mithrin" cycle the original brief omitted). Cycle names not in this list
 # sort immediately before "Other" (see _cycle_rank) rather than raising.
 CYCLE_ORDER = [
-    "Core Set", "Shadows of Mirkwood", "The Dwarrowdelf", "Against the Shadow",
+    "Core Set (Mirkwood Paths)", "Shadows of Mirkwood", "The Dwarrowdelf", "Against the Shadow",
     "The Ring-maker", "The Angmar Awakened", "The Dream-chaser", "The Haradrim",
     "Ered Mithrin", "The Vengeance of Mordor", "Hobbit Saga", "LotR Saga",
     "Standalone/PoD",
@@ -104,7 +104,16 @@ def group_by_cycle(scenarios, source):
 
     out = []
     for cycle in sorted(groups, key=_cycle_rank):
-        scns = sorted(groups[cycle], key=lambda s: s.get("name", ""))
+        # PLAY order, not alphabetical. `order` is the global rank
+        # tools/build_scenario_order.py aggregates from Hall of Beorn;
+        # alphabetical put the Core Set in the exact reverse of its own
+        # sequence (Escape, Journey, Passage). Scenarios the table does not
+        # cover have no `order` and fall to the end, by date then name.
+        scns = sorted(groups[cycle],
+                      key=lambda s: (s.get("order") is None,
+                                     s.get("order") or 0,
+                                     s.get("releaseDate") or "",
+                                     s.get("name", "")))
         out.append({"cycle": cycle, "date": _earliest_date(scns), "scenarios": scns})
     return out
 

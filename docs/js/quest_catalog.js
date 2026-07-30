@@ -11,7 +11,7 @@
 // Mithrin" cycle the original brief omitted). Cycle names not in this list
 // sort immediately before "Other" (see cycleRank) rather than being dropped.
 export const CYCLE_ORDER = [
-  "Core Set", "Shadows of Mirkwood", "The Dwarrowdelf", "Against the Shadow",
+  "Core Set (Mirkwood Paths)", "Shadows of Mirkwood", "The Dwarrowdelf", "Against the Shadow",
   "The Ring-maker", "The Angmar Awakened", "The Dream-chaser", "The Haradrim",
   "Ered Mithrin", "The Vengeance of Mordor", "Hobbit Saga", "LotR Saga",
   "Standalone/PoD",
@@ -74,7 +74,16 @@ export function groupByCycle(scenarios, source) {
   return [...groups.keys()]
     .sort((a, b) => cycleRank(a) - cycleRank(b))
     .map(cycle => {
-      const scns = [...groups.get(cycle)].sort(byName);
+      // PLAY order, not alphabetical. `order` is the global rank
+      // tools/build_scenario_order.py aggregates from Hall of Beorn;
+      // alphabetical put the Core Set in the exact reverse of its own
+      // sequence (Escape, Journey, Passage). Scenarios the table does not
+      // cover have no `order` and fall to the end, by date then name.
+      const scns = [...groups.get(cycle)].sort((a, b) =>
+        (a.order == null) - (b.order == null)
+        || (a.order ?? 0) - (b.order ?? 0)
+        || (a.releaseDate || "").localeCompare(b.releaseDate || "")
+        || byName(a, b));
       return { cycle, date: earliestDate(scns), scenarios: scns };
     });
 }
