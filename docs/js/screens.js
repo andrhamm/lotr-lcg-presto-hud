@@ -1146,15 +1146,37 @@ export class QuestingProgressModal {
     footer(ctx, this.buttons, "Confirm");
   }
 
-  _clampAdj(cur, d) { return Math.max(0, Math.min(99, cur + d)); }
+  // Step a value, clamped. `cap` is the row's own target: progress cannot
+  // exceed the quest points it is filling.
+  //
+  // RR p.22: excess progress beyond a stage's quest points is DISCARDED on
+  // advance, not carried, and a location explores the moment it is full - so a
+  // bar reading 12/3 describes a state the game cannot be in. Location overflow
+  // does flow on to the quest card (p.15), but that is the guided resolution
+  // flow's job, not something the stepper should let you type in.
+  //
+  // cap null/0 leaves the old 0..99 behaviour, which is what a target-less row
+  // wants: a condition stage has no quest points to clamp against.
+  _clampAdj(cur, d, cap = null) {
+    const hi = !cap || cap <= 0 ? 99 : cap;
+    return Math.max(0, Math.min(hi, cur + d));
+  }
 
   onButton(btn) {
     const g = this.game;
     if (this.locPrompt) return this._onLocPromptButton(btn);
     const [k, a] = btn.id;
-    if (k === "qP-" || k === "qP+") { g.quest.progress = this._clampAdj(g.quest.progress, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "qP-" || k === "qP+") {
+      // A condition stage has no target to clamp against (mode set by flipToB).
+      const cap = g.quest.mode === "condition" ? null : g.quest.points;
+      g.quest.progress = this._clampAdj(g.quest.progress, k.endsWith("+") ? 1 : -1, cap);
+      return null;
+    }
     if (k === "qT-" || k === "qT+") { g.quest.points = this._clampAdj(g.quest.points, k.endsWith("+") ? 1 : -1); return null; }
     if (k === "lP-" || k === "lP+") {
+      // The location can have explored itself out from under this button (the
+      // auto-explore below clears it), and a stale tap then threw on null.
+      if (!g.active_location) return null;
       g.active_location.progress = this._clampAdj(g.active_location.progress, k.endsWith("+") ? 1 : -1);
       // Catalog games defer this to the guided resolution flow (close-time
       // needsResolution() check + ResolutionModal's "location" step,
@@ -1165,7 +1187,11 @@ export class QuestingProgressModal {
       if (!g.stages.length) g.exploreLocationIfDone();
       return null;
     }
-    if (k === "lT-" || k === "lT+") { g.active_location.points = this._clampAdj(g.active_location.points, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "lT-" || k === "lT+") {
+      if (!g.active_location) return null;
+      g.active_location.points = this._clampAdj(g.active_location.points, k.endsWith("+") ? 1 : -1);
+      return null;
+    }
     if (k === "ldone") {
       g.logEvent("Active location Explored");
       g.active_location = null;
@@ -1173,7 +1199,7 @@ export class QuestingProgressModal {
       return null;
     }
     if (k === "lX") { this.locPrompt = { stage: "choose" }; return null; }
-    if (k === "sP-" || k === "sP+") { const s = g.side_quests[a]; s.progress = this._clampAdj(s.progress, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "sP-" || k === "sP+") { const s = g.side_quests[a]; s.progress = this._clampAdj(s.progress, k.endsWith("+") ? 1 : -1, s.points); return null; }
     if (k === "sT-" || k === "sT+") { const s = g.side_quests[a]; s.points = this._clampAdj(s.points, k.endsWith("+") ? 1 : -1); return null; }
     if (k === "sdone") {
       g.logEvent(`Side quest ${a + 1} completed`);
@@ -1816,6 +1842,13 @@ export class LocationConfigModal {
     }
     // Clamped: the threat block is variable-height, and unclamped it walked
     // into the footer's Cancel/Save at y=404.
+    // RR: progress is NOT lost when a location returns to the staging area -
+    // Impassable Chasm has to SAY "remove all progress tokens", which it would
+    // not need to if returning did it.
+    if (this.has && y < 300) {
+      textLeft(ctx, "Back to staging keeps its progress.", 30, y, BODY, pal.dim);
+      y += 22;
+    }
     const nb = new Button(["none"], 30, Math.min(Math.max(y + 8, 296), 340), 420, 52);
     panel(ctx, nb.x, nb.y, nb.w, nb.h, pal.btn_no, pal.no_fg);
     textCenter(ctx, "Set none (no active location)", nb.x + nb.w / 2, nb.y + 16,
@@ -1900,6 +1933,14 @@ export class QuestConfigModal {
       for (const ln of wrapText(this.q.advance, BODY, 420, measureText).slice(0, 2)) {
         textLeft(ctx, ln, 30, ty, BODY, pal.dim);
         ty += 22;
+      }
+      // 11 stages state BOTH: Return to Rhosgobel is won if Wilyador is healed
+      // and lost otherwise. Showing only the win is showing half the rule.
+      if (this.q.lose) {
+        for (const ln of wrapText(this.q.lose, BODY, 420, measureText).slice(0, 1)) {
+          textLeft(ctx, ln, 30, ty, BODY, pal.no_fg);
+          ty += 22;
+        }
       }
     } else {
       textLeft(ctx, this.q.x ? "Quest points = X" : "Quest points",

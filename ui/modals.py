@@ -125,6 +125,14 @@ class QuestConfigModal:
             for ln in wrap_text(self.q["advance"], BODY, 420, d.measure_text)[:2]:
                 text_left(d, pal, ln, 30, ty, BODY, pal.dim)
                 ty += 22
+            # 11 stages state BOTH: Return to Rhosgobel is won if Wilyador is
+            # healed and lost otherwise. Showing only the win is showing half
+            # the rule, so the loss gets the red pen it deserves.
+            if self.q.get("lose"):
+                for ln in wrap_text(self.q["lose"], BODY, 420,
+                                    d.measure_text)[:1]:
+                    text_left(d, pal, ln, 30, ty, BODY, pal.no_fg)
+                    ty += 22
         else:
             label = "Quest points"
             if self.q.get("x"):
@@ -325,6 +333,14 @@ class LocationConfigModal:
         # Clamped: the threat block is variable-height (a computed value, up to
         # two formula lines and a count stepper), and unclamped it walked into
         # the footer's Cancel/Save at y=404.
+        # RR: progress is NOT lost when a location returns to the staging area -
+        # Impassable Chasm has to SAY "remove all progress tokens", which it
+        # would not need to if returning did it. The note was in the approved
+        # mock and got dropped when this sheet was rewritten.
+        if self.has and y < 300:
+            text_left(d, pal, "Back to staging keeps its progress.",
+                      30, y, BODY, pal.dim)
+            y += 22
         none_b = Button(("none",), 30, min(max(y + 8, 296), 340), 420, 52)
         panel(d, pal, none_b.x, none_b.y, none_b.w, none_b.h, fill=pal.btn_no, border=pal.no_fg)
         text_center(d, pal, "Set none (no active location)", none_b.x + none_b.w / 2,
@@ -1582,8 +1598,22 @@ class QuestingProgressModal:
         text_left(d, pal, "added to the staging area", 60, 270, BODY, pal.dim)
         _footer(d, pal, self.buttons, save_label="Confirm")
 
-    def _clamp_adj(self, cur, delta):
-        return max(0, min(99, cur + delta))
+    def _clamp_adj(self, cur, delta, cap=None):
+        """Step a value, clamped. `cap` is the row's own target: progress
+        cannot exceed the quest points it is filling.
+
+        RR p.22: excess progress beyond a stage's quest points is DISCARDED on
+        advance, not carried, and a location explores the moment it is full -
+        so a bar reading 12/3 describes a state the game cannot be in. Location
+        overflow does flow on to the quest card (p.15), but that is the guided
+        resolution flow's job, not something the stepper should let you type in.
+
+        cap=None leaves the old 0..99 behaviour, which is what a target-less
+        row wants: a condition stage has no quest points, so there is nothing
+        to clamp against and the player may be counting anything.
+        """
+        hi = 99 if not cap or cap <= 0 else cap
+        return max(0, min(hi, cur + delta))
 
     def on_button(self, btn):
         g = self.game
@@ -1593,13 +1623,24 @@ class QuestingProgressModal:
         a = btn.id[1] if len(btn.id) > 1 else None
         up = k.endswith("+")
         if k in ("qP-", "qP+"):
-            g.quest["progress"] = self._clamp_adj(g.quest["progress"], 1 if up else -1)
+            # A condition stage has no target to clamp against (mode set by
+            # flip_to_b) - leave it free.
+            cap = None if g.quest.get("mode") == "condition" else g.quest["points"]
+            g.quest["progress"] = self._clamp_adj(g.quest["progress"],
+                                                  1 if up else -1, cap)
             return None
         if k in ("qT-", "qT+"):
             g.quest["points"] = self._clamp_adj(g.quest["points"], 1 if up else -1)
             return None
         if k in ("lP-", "lP+"):
-            g.active_location["progress"] = self._clamp_adj(g.active_location["progress"], 1 if up else -1)
+            # The location can have explored itself out from under this button
+            # (the auto-explore below clears it), and a stale tap on the old
+            # hit-box then crashed on a None record.
+            if g.active_location is None:
+                return None
+            g.active_location["progress"] = self._clamp_adj(
+                g.active_location["progress"], 1 if up else -1,
+                g.active_location["points"])
             if not g.stages:
                 # Catalog games defer this to the guided resolution flow
                 # (close-time needs_resolution() check + ResolutionModal's
@@ -1611,6 +1652,8 @@ class QuestingProgressModal:
                 g.explore_location_if_done()
             return None
         if k in ("lT-", "lT+"):
+            if g.active_location is None:
+                return None
             g.active_location["points"] = self._clamp_adj(g.active_location["points"], 1 if up else -1)
             return None
         if k == "ldone":
@@ -1623,7 +1666,8 @@ class QuestingProgressModal:
             return None
         if k in ("sP-", "sP+"):
             s = g.side_quests[a]
-            s["progress"] = self._clamp_adj(s["progress"], 1 if up else -1)
+            s["progress"] = self._clamp_adj(s["progress"], 1 if up else -1,
+                                            s["points"])
             return None
         if k in ("sT-", "sT+"):
             s = g.side_quests[a]

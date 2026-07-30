@@ -980,6 +980,80 @@ def test_location_config_save_keeps_the_card_metadata():
     assert loc["threatX"]["target"] == "locations_in_staging"
 
 
+def test_progress_cannot_exceed_the_target():
+    # RR p.22: excess progress beyond a stage's quest points is DISCARDED on
+    # advance, not carried, and a location explores the moment it is full - so a
+    # bar reading 12/3 describes a state the game cannot be in. This used to run
+    # to 99 on every row.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.quest["points"] = 3
+    game.active_location = {"points": 2, "progress": 0}
+    game.side_quests = [{"points": 4, "progress": 0}]
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    for _ in range(8):
+        m.on_button(_find(m, ("qP+", None)))
+        m.on_button(_find(m, ("sP+", 0)))
+    assert game.quest["progress"] == 3
+    assert game.side_quests[0]["progress"] == 4
+    # The location caps the same way, but a custom game auto-explores at the cap
+    # so the row clears rather than pinning at 2/2 - redraw between taps, as the
+    # real loop does, or the button outlives its record.
+    for _ in range(8):
+        m.draw(hw, game, pal)
+        btn = [b for b in m.buttons if b.id == ("lP+", None)]
+        if not btn:
+            break
+        m.on_button(btn[0])
+    assert game.active_location is None
+
+
+def test_a_condition_stage_has_no_cap_to_hit():
+    # No quest points means no target to clamp against, and the player may be
+    # counting resource tokens or defeated enemies - leave it free.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.quest["points"] = 0
+    game.quest["mode"] = "condition"
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    for _ in range(8):
+        m.on_button(_find(m, ("qP+", None)))
+    assert game.quest["progress"] == 8
+
+
+def test_quest_sheet_shows_the_loss_condition_too():
+    # 11 stages state BOTH. Return to Rhosgobel is won if Wilyador is healed and
+    # lost otherwise; showing only the win is showing half the rule.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.quest["mode"] = "condition"
+    game.quest["advance"] = "The players win if Wilyador is fully healed."
+    game.quest["lose"] = "Otherwise the players lose the game."
+    m = modals.QuestConfigModal(game)
+    m.draw(hw, game, pal)
+    texts = " ".join(_texts(hw))
+    assert "Wilyador" in texts
+    assert "Otherwise" in texts
+
+
+def test_location_sheet_says_staging_keeps_progress():
+    # RR: progress is NOT lost when a location returns to staging - Impassable
+    # Chasm has to SAY "remove all progress tokens", which it would not need to
+    # if returning did it. The note was in the approved mock and got dropped.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_location = {"points": 3, "progress": 1, "name": "Old Forest Road"}
+    m = modals.LocationConfigModal(game)
+    m.draw(hw, game, pal)
+    assert "Back to staging keeps its progress." in " ".join(_texts(hw))
+
+
 def _loc_x(threat_x, count=None, **extra):
     game = GameState()
     loc = {"points": 3, "progress": 0, "name": "A Location",
