@@ -290,9 +290,13 @@ def to_markdown(fragment):
     return out.stdout
 
 
-def tidy(md, title, slug, url):
+def tidy(md, title, slug, url, tag="votp"):
     """Trim pandoc's noise: runs of blank lines, empty link shells, and the
-    stray non-breaking spaces WordPress sprinkles through post bodies."""
+    stray non-breaking spaces WordPress sprinkles through post bodies.
+
+    `tag` names the corpus in the frontmatter. build_wotw_corpus reuses this
+    whole path for the other blog, and a file that says it came from VotP when
+    it did not is the kind of small lie that later gets cited."""
     md = md.replace(" ", " ")
     md = re.sub(r"\[\]\([^)]*\)", "", md)         # image-only anchors
     # Bare layout wrappers pandoc passes through as raw HTML blocks, once the
@@ -306,7 +310,7 @@ def tidy(md, title, slug, url):
             "title: %s" % (title or slug),
             "source: %s" % url,
             "tags:",
-            "  - votp",
+            "  - %s" % tag,
             "  - research",
             "note: verbatim third-party article text - research corpus only,",
             "  never committed and never reproduced in shipped tips.",
@@ -324,14 +328,24 @@ def article_url(page_html, slug):
     return "https://visionofthepalantir.com/?p=%s" % slug
 
 
-def convert(path, out_dir, write=True):
+def convert(path, out_dir, write=True, tag="votp", title_re=None):
+    """`title_re` overrides the <h1> lookup. WordPress themes differ on which
+    element carries the POST title versus the SITE title - this blog's <h1> is
+    the site name, so build_wotw_corpus passes the entry-title pattern rather
+    than filing 45 files all called "Warriors of the West"."""
     slug = os.path.splitext(os.path.basename(path))[0]
     page = open(path, encoding="utf-8", errors="replace").read()
     fragment = extract_content(page)
     if not fragment.strip():
         return slug, 0, "no div.entry-content"
-    md = tidy(to_markdown(fragment), page_title(page), slug,
-              article_url(page, slug))
+    title = ""
+    if title_re:
+        m = re.search(title_re, page, re.S | re.I)
+        if m:
+            import html as _html
+            title = _html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip()
+    md = tidy(to_markdown(fragment), title or page_title(page), slug,
+              article_url(page, slug), tag=tag)
     if write:
         os.makedirs(out_dir, exist_ok=True)
         with open(os.path.join(out_dir, slug + ".md"), "w",

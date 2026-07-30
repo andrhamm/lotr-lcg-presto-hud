@@ -311,11 +311,13 @@ precedes it in the same tip ("Caradhras cannot be travelled to, so pre-load
 **it**"), dangling when nothing does ("**It** goes Underwater every quest
 phase").
 
-The article corpus the distillation was written from lives in
-`research/votp/` (vault-side, **gitignored**, built by
-`tools/build_votp_corpus.py` — see below); the fetched HTML in
-`tools/data/tips_cache/` is verbatim third-party content and also stays
-gitignored. Only our own words are committed.
+The article corpus the distillation is written from lives in **two**
+vault-side, **gitignored** directories — `research/votp/` (Vision of the
+Palantir, built by `tools/build_votp_corpus.py`) and `research/wotw/`
+(Warriors of the West, `tools/build_wotw_corpus.py`) — see below. The fetched
+HTML in `tools/data/tips_cache/` and `tools/data/wotw_cache/` is verbatim
+third-party content and also stays gitignored. Only our own words are
+committed.
 
 **Nothing fetches this in CI, and a plain run fetches nothing.** With
 `tips.json` present, `python3 tools/build_tips.py` prints a one-line no-op and
@@ -344,6 +346,32 @@ prefixes a definite article the catalog omits; the Core Set's scenario 2 is
 titled after its *encounter set*), and background reading. Every entry is an
 observed URL, not a guess — and check what you match: `the-crossings-of-poros-2`
 is a Quest-of-the-Week *results* post, not a spotlight.
+
+`tools/build_wotw_corpus.py` does the same for the **Warriors of the West**
+blog into `research/wotw/` — the second distillation source, and complementary
+rather than redundant: VotP's spotlights describe a scenario in **standard**
+mode, while ~15 of Warriors of the West's 45 posts are Nightmare reviews, plus
+turn-by-turn reports and a running mega-campaign, so it covers the mode the
+other corpus barely touches and covers it as *played* rather than as
+previewed. Both blogs are WordPress, so the extraction and pandoc conversion
+are shared outright with `build_votp_corpus` (`convert(..., tag=, title_re=)`)
+rather than reimplemented — note this theme's `<h1>` is the SITE name, which
+is what `title_re` exists to override.
+
+The post list comes from the blog's **own sitemap**, so no URL is guessed.
+Slugs are matched to catalog scenarios on a separator-stripped form and also
+without a leading "the-", because the blog differs from the catalog two ways —
+possessives (`helms-deep` vs our `helm-s-deep`) and dropped articles
+(`review-siege-of-annuminas` vs `the-siege-of-annuminas`). 33 of 45 posts name
+a scenario, covering 29; the rest are deck tech, spoiler round-ups and
+campaign framing, and are kept as readable context rather than dropped. What
+the matcher deliberately will **not** bridge is the author simply spelling a
+name differently (`deadmans-dike` for *Deadmen's Dike*) — guessing there
+would be guessing.
+
+Same data policy as everything else here: `--refresh` fetches, nothing runs in
+CI, and **only text we write ourselves** from reading either corpus reaches
+`tools/data/tips_distilled.json` and from there `docs/data/tips.json`.
 
 ## The TODO board (TODO.md)
 

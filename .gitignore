@@ -35,6 +35,14 @@ tools/data/tips_cache/
 # a local research corpus only: never committed, never shipped. Only text we
 # write ourselves from reading it reaches docs/data/tips.json.
 research/votp/
+# Warriors of the West blog posts, the SECOND tip-distillation source
+# (tools/build_wotw_corpus.py) - mostly Nightmare reviews and turn-by-turn
+# reports, so it covers the mode Vision of the Palantir barely touches. Same
+# posture and same reason as the two above: verbatim third-party prose, a
+# local research corpus only, never committed and never shipped. Only text we
+# write ourselves from reading it reaches tools/data/tips_distilled.json.
+tools/data/wotw_cache/
+research/wotw/
 # Official FFG rulebooks parsed to markdown by tools/build_rules_corpus.py,
 # and indexed by qmd for semantic search (collection `lotr-lcg-rules`). Same
 # posture and the same reason as research/votp/ above: this is verbatim FFG
