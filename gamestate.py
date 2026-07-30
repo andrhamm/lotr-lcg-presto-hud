@@ -631,10 +631,13 @@ class GameState:
     def _seat_location(self, points, name, meta=None):
         """The new active location. `name` is the catalog card name when the
         player picked one (LocationPickModal's list step); manual entry
-        passes None and the dict keeps exactly the two keys it always had, so
-        old saves and hand-entered locations stay indistinguishable from
-        today's - every label site reads .get("name") with a generic
-        fallback."""
+        passes None and gains none of the CATALOG keys, so every label site
+        reads .get("name") with a generic fallback.
+
+        A manual entry does carry `threat`, though: the player typed that
+        number into the contribution stepper and travelling took it straight
+        out of the staging area, so the record has to hold it or
+        "Back to staging" puts 0 back and the staging total stays short."""
         loc = {"points": points, "progress": 0}
         for k in self.LOC_META:
             v = (meta or {}).get(k)

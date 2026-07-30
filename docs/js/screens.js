@@ -392,11 +392,14 @@ export class LocationPickModal {
   static FOOTER_Y = 404;
   static FOOTER_H = 64;
 
-  constructor(game, mode = "new", entries = null, back = "play") {
+  constructor(game, mode = "new", entries = null, back = "play", idx = 0) {
     this.game = game;
     this.mode = mode;
     this.entries = entries ?? [];
     this.back = back;
+    // Which seat "change" replaces. Only meaningful in change mode; "new"
+    // appends and ignores it.
+    this.idx = idx;
     this.step = this.entries.length ? "list" : "manual";
     this.selected = null;
     this.page = 0;
@@ -417,6 +420,20 @@ export class LocationPickModal {
     rect(ctx, 0, 0, 480, 480, pal.bg);
     if (this.step === "list") this._drawList(ctx, game);
     else this._drawManual(ctx);
+  }
+
+  // The seat a "change" would overwrite, or null. In "new" mode nothing is
+  // being replaced even when a location IS active - that is the whole point of
+  // a second seat - so the caption must not claim a discard.
+  //
+  // This existed only in the firmware after the active_locations migration:
+  // the calls were mirrored here, the method was not, so drawing this modal
+  // threw. There is no host test for the web picker, which is why the browser
+  // walkthrough is the step that caught it.
+  _replacing() {
+    if (this.mode !== "change") return null;
+    return this.idx < this.game.active_locations.length
+      ? this.game.active_locations[this.idx] : null;
   }
 
   _drawList(ctx, game) {
@@ -551,6 +568,13 @@ export class LocationPickModal {
   // own definition of X rather than a 0.
   _commit(points, contribution, name = null, entry = null) {
     entry = { ...(entry ?? {}), arrival: this.arrival };
+    // A MANUAL entry has no catalog row, so nothing filled in `threat` - but
+    // `contribution` is that number: the manual stepper's own caption is "its
+    // threat leaves the staging area while it is active". Without this,
+    // travelling took N out of staging and "Back to staging" put 0 back, which
+    // is the asymmetry that action exists to avoid. The catalog path already
+    // sets it to the same value, so this is a no-op there.
+    if ((entry.threat ?? null) === null && contribution) entry.threat = contribution;
     // "new" APPENDS - that is how a second seat arrives, and the five cards
     // that allow one all phrase it as travelling with one active. "change"
     // replaces the seat it was opened on.

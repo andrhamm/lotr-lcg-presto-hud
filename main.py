@@ -443,9 +443,13 @@ def main():
                 catalog_locations = quest_catalog.load_locations(
                     (game.scenario or {}).get("slug"))
             from ui.modals import LocationPickModal
+            # `idx` says WHICH seat a "change" replaces - the location
+            # sheet's "Replaced" passes its own. Dropping it here sent every
+            # replacement to seat 0.
             modal = LocationPickModal(game, mode=req.get("mode", "new"),
                                       entries=catalog_locations,
-                                      back=req.get("back", "play"))
+                                      back=req.get("back", "play"),
+                                      idx=req.get("idx", 0))
             dirty = True
             continue
 

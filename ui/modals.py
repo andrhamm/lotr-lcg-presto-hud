@@ -1396,6 +1396,15 @@ class LocationPickModal:
         show the card's own definition of X rather than a 0."""
         entry = dict(entry or {})
         entry["arrival"] = self.arrival
+        # A MANUAL entry has no catalog row, so nothing filled in `threat` -
+        # but `contribution` is that number: the manual stepper's own caption
+        # is "its threat leaves the staging area while it is active". Without
+        # this, travelling took N out of staging and "Back to staging" put 0
+        # back, which is the asymmetry that action exists to avoid. The
+        # catalog path already sets it to the same value, so this is a no-op
+        # there.
+        if entry.get("threat") is None and contribution:
+            entry["threat"] = contribution
         # "new" APPENDS - that is how a second seat arrives, and the five
         # cards that allow one all phrase it as travelling with one active.
         # "change" replaces the seat it was opened on.

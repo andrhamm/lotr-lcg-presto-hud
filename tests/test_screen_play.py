@@ -298,7 +298,8 @@ def test_travel_new_logs_precisely():
     m.draw(hw, g, pal)
     save = [b for b in m.buttons if b.id == ("save",)][0]
     m.on_button(save)
-    assert g.active_locations[0] == {"points": 3, "progress": 0}
+    assert g.active_locations[0]["points"] == 3
+    assert g.active_locations[0]["progress"] == 0
     assert "Traveled to new location" in g.log[-1]["text"]
 
 

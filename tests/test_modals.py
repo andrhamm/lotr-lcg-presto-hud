@@ -467,6 +467,51 @@ def test_location_sheet_explored_logs_and_clears():
     assert game.log[-1]["text"] == "Active location Explored"
 
 
+def test_change_mode_replaces_the_seat_it_was_opened_on():
+    # The location sheet's "Replaced" passes its own index through
+    # pending_location_pick; the picker has to honour it, or replacing the
+    # SECOND active location silently discards the first.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.travel_to(3, 0, "First")
+    game.travel_to(4, 0, "Second")
+    m = modals.LocationPickModal(game, mode="change", back="progress", idx=1)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("save",)))
+    assert [l.get("name") for l in game.active_locations] == ["First", None]
+    assert len(game.active_locations) == 2
+
+
+def test_change_mode_caption_only_warns_about_a_seat_it_will_discard():
+    # In "new" mode nothing is being replaced even when a location IS active -
+    # that is the whole point of a second seat - so the caption must not claim
+    # a discard.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.travel_to(3, 0, "First")
+    m = modals.LocationPickModal(game, mode="new", back="progress")
+    m.draw(hw, game, pal)
+    assert "discarded" not in " ".join(_texts(hw))
+
+
+def test_a_manual_location_stores_the_threat_it_took_out_of_staging():
+    # The manual stepper's caption is "its threat leaves the staging area while
+    # it is active", and travelling subtracts it - so the record has to carry
+    # it, or "Back to staging" puts 0 back and the staging total is
+    # permanently short. The catalog path always set this; the manual one
+    # never did.
+    hw, pal, game, m = _pick(entries=[])       # opens straight on manual
+    game.staging = 9
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("save",)))
+    loc = game.active_locations[0]
+    took = 9 - game.staging
+    assert took > 0
+    assert loc["threat"] == took
+
+
 def test_location_sheet_back_to_staging_returns_the_cards_own_threat():
     # RR "Active Location": the active location does not contribute its threat
     # while active, so putting it BACK has to add the same number again - which
@@ -1282,13 +1327,17 @@ def test_location_pick_carries_the_x_metadata_onto_the_location():
     assert "pointsKind" not in loc and "pointsX" not in loc
 
 
-def test_location_pick_manual_entry_stays_a_two_key_record():
-    # The manual stepper has no card behind it, so it must not gain any of the
-    # optional keys - old saves and hand-entered locations stay identical.
+def test_location_pick_manual_entry_carries_only_points_progress_and_threat():
+    # The manual stepper has no card behind it, so it gains none of the
+    # CATALOG keys - no name, no *Kind, no *X. It does carry `threat`, because
+    # the player typed that number themselves and travelling just took it out
+    # of the staging area; see the asymmetry test above.
     hw, pal, game, m = _pick(entries=[])
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("save",)))
-    assert game.active_locations[0] == {"points": m.pts, "progress": 0}
+    assert set(game.active_locations[0]) == {"points", "progress", "threat"}
+    assert game.active_locations[0]["points"] == m.pts
+    assert game.active_locations[0]["progress"] == 0
 
 
 def test_location_pick_hides_travel_until_a_row_is_picked():
@@ -1321,7 +1370,8 @@ def test_location_pick_without_catalog_opens_straight_on_the_stepper():
     assert m.step == "manual"
     assert not [b for b in m.buttons if b.id == ("back",)]
     m.on_button(_find(m, ("save",)))
-    assert game.active_locations[0] == {"points": 3, "progress": 0}
+    assert game.active_locations[0]["points"] == 3
+    assert game.active_locations[0]["progress"] == 0
     assert "Traveled to new location" in game.log[-1]["text"]
 
 

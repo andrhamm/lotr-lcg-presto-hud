@@ -572,8 +572,11 @@ function main() {
         ? Promise.resolve(locationsCache)
         : loadLocations(game.scenario?.slug)).then(entries => {
         locationsCache = entries;
+        // `idx` says WHICH seat a "change" replaces - the location sheet's
+        // "Replaced" passes its own. Dropping it here sent every replacement
+        // to seat 0.
         modal = new LocationPickModal(game, req.mode ?? "new", entries,
-                                      req.back ?? "play");
+                                      req.back ?? "play", req.idx ?? 0);
         modalPending -= 1;
         dirty = true;
       });
