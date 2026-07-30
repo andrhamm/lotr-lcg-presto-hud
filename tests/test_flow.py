@@ -100,15 +100,15 @@ def test_per_player_elimination_governs():
 def test_travel_to_new_location_sets_and_logs_precisely():
     g = GameState()
     g.travel_to(points=3)
-    assert g.active_location == {"points": 3, "progress": 0}
+    assert g.active_locations[0] == {"points": 3, "progress": 0}
     assert "Traveled to new location (3 quest points)" in g.log[-1]["text"]
 
 
 def test_change_location_replaces_and_logs_precisely():
     g = GameState()
-    g.active_location = {"points": 3, "progress": 2}
+    g.active_locations = [{"points": 3, "progress": 2}]
     g.change_location(points=4)
-    assert g.active_location == {"points": 4, "progress": 0}
+    assert g.active_locations[0] == {"points": 4, "progress": 0}
     assert "Changed active location" in g.log[-1]["text"]
     assert "discarded" in g.log[-1]["text"]
 

@@ -48,7 +48,7 @@ def test_common_round_hits_tap_budget():
         game.set_commit(i, c)
     for p in game.players:
         p.commit_touched = False                  # fresh round: nobody reviewed yet
-    game.active_location = {"points": 6, "progress": 2}
+    game.active_locations = [{"points": 6, "progress": 2}]
     game.view = "resource"
     game.step = "1.R"
     screen = ScreenPlay()

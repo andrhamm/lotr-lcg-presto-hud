@@ -30,7 +30,7 @@ def test_needs_resolution_false_initially():
 
 def test_needs_resolution_true_on_location_overflow():
     g = _catalog_game()
-    g.active_location = {"points": 3, "progress": 3}
+    g.active_locations = [{"points": 3, "progress": 3}]
     assert g.needs_resolution() is True
 
 def test_needs_resolution_true_on_quest_overflow():
@@ -45,23 +45,23 @@ def test_needs_resolution_true_on_side_quest_overflow():
 
 def test_resolve_location_overflow_noop_when_under_target():
     g = _catalog_game()
-    g.active_location = {"points": 3, "progress": 2}
+    g.active_locations = [{"points": 3, "progress": 2}]
     assert g.resolve_location_overflow() == 0
-    assert g.active_location is not None
+    assert g.active_locations
 
 def test_resolve_location_overflow_explores_and_credits_excess():
     g = _catalog_game()
-    g.active_location = {"points": 2, "progress": 3}
+    g.active_locations = [{"points": 2, "progress": 3}]
     excess = g.resolve_location_overflow()
     assert excess == 1
-    assert g.active_location is None
+    assert not g.active_locations
     assert g.quest["progress"] == 1     # was 0, +1 excess
 
 def test_resolve_location_overflow_exact_match_no_excess():
     g = _catalog_game()
-    g.active_location = {"points": 2, "progress": 2}
+    g.active_locations = [{"points": 2, "progress": 2}]
     assert g.resolve_location_overflow() == 0
-    assert g.active_location is None
+    assert not g.active_locations
     assert g.quest["progress"] == 0
 
 def test_clear_and_advance_moves_to_next_stage_side_a_progress_discarded():

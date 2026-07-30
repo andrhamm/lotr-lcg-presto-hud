@@ -18,7 +18,7 @@ def _game():
     for i, t in enumerate((14, 28, 41, 19)):
         g.adjust_threat(i, t)
     g.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 6}
-    g.active_location = {"points": 3, "progress": 2}
+    g.active_locations = [{"points": 3, "progress": 2}]
     g.side_quests = [{"points": 5, "progress": 3}]
     g.willpower = 11
     g.staging = 7
@@ -465,7 +465,7 @@ def _questing_progress_modal_no_location():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = None
+    g.active_locations = []
     g.side_quests = []
     g.sailing = False
     m = QuestingProgressModal(g)
@@ -603,10 +603,10 @@ def _location_config_modal_formula():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = {
+    g.active_locations = [{
         "points": 3, "progress": 1, "name": "Tangled Grove", "threat": 4,
         "threatKind": "x",
-        "threatFormula": "the number of locations in the staging area"}
+        "threatFormula": "the number of locations in the staging area"}]
     m = LocationConfigModal(g)
     m.draw(hw, g, pal)
     return hw, m
@@ -618,7 +618,7 @@ def _location_config_modal_unknown_x():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = {"points": 5, "progress": 0, "name": "Amon Hen",
+    g.active_locations[0] = {"points": 5, "progress": 0, "name": "Amon Hen",
                          "threatKind": "x"}
     m = LocationConfigModal(g)
     m.draw(hw, g, pal)
@@ -633,11 +633,11 @@ def _location_config_modal_count_control():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = {
+    g.active_locations = [{
         "points": 3, "progress": 0, "name": "Gate of Annuminas",
         "threatKind": "x", "threatCount": 3,
         "threatX": {"text": "1 more than the number of enemies in play",
-                    "target": "enemies_in_play", "add": 1}}
+                    "target": "enemies_in_play", "add": 1}}]
     m = LocationConfigModal(g)
     m.draw(hw, g, pal)
     return hw, m
@@ -916,7 +916,7 @@ def _location_pick():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = None
+    g.active_locations = []
     m = LocationPickModal(g, mode="new", entries=list(_LOCATION_SAMPLE))
     m.draw(hw, g, pal)
     return hw, m
@@ -931,7 +931,7 @@ def _location_pick_selected():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = None
+    g.active_locations = []
     m = LocationPickModal(g, mode="new", entries=list(_LOCATION_SAMPLE))
     m.selected = "l4"      # the longest name in the sample
     m.draw(hw, g, pal)
@@ -945,7 +945,7 @@ def _location_pick_change():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = {"points": 5, "progress": 2}
+    g.active_locations = [{"points": 5, "progress": 2}]
     m = LocationPickModal(g, mode="change", entries=list(_LOCATION_SAMPLE))
     m.draw(hw, g, pal)
     return hw, m
@@ -958,7 +958,7 @@ def _location_pick_paged():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = None
+    g.active_locations = []
     entries = [{"id": "p%d" % i, "name": "Location Number %d" % i,
                 "points": 2 + i % 4, "threat": 1 + i % 3, "set": "S"}
                for i in range(14)]
@@ -975,7 +975,7 @@ def _location_pick_manual():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = None
+    g.active_locations = []
     m = LocationPickModal(g, mode="new", entries=list(_LOCATION_SAMPLE))
     m.step = "manual"
     m.draw(hw, g, pal)
@@ -990,7 +990,7 @@ def _location_pick_no_catalog():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
-    g.active_location = None
+    g.active_locations = []
     m = LocationPickModal(g, mode="new", entries=[])
     m.draw(hw, g, pal)
     return hw, m
@@ -1110,7 +1110,7 @@ def _resolution_location():
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _resolution_game()
-    g.active_location = {"points": 2, "progress": 3}
+    g.active_locations = [{"points": 2, "progress": 3}]
     m = ResolutionModal(g)
     m.draw(hw, g, pal)
     return hw, m

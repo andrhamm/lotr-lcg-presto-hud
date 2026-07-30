@@ -97,9 +97,11 @@ export class ScreenPlay {
     });
 
     const prog = [["Q", game.quest.progress, game.quest.points]];
-    if (game.active_location) {
-      prog.push(["L", game.active_location.progress, game.active_location.points]);
-    }
+    // L, then L2 - a bare "L" twice would be two identical pills for two
+    // different cards.
+    game.active_locations.forEach((loc, i) => {
+      prog.push([i === 0 ? "L" : `L${i + 1}`, loc.progress, loc.points]);
+    });
     game.side_quests.forEach((sq, i) => prog.push([`S${i + 1}`, sq.progress, sq.points]));
     for (const [label, done, total] of prog) {
       pills.push([["progress_detail"],
@@ -682,7 +684,12 @@ export class ScreenPlay {
   }
 
   _drawTravel(ctx, game) {
-    const loc = game.active_location;
+    // "Blocked" is about whether a location is active AT ALL. Rules Reference,
+    // "Active Location": "There can only be one active location at a time" and
+    // "The players cannot travel if another location card is active." The five
+    // cards that seat a second one say so in their own text, and card text
+    // beats the rulebook - but the default stays "any", not "exactly one".
+    const loc = game.active_locations[0] ?? null;
     const fw = loc
       ? TRAVEL.blocked
       : TRAVEL.open;
@@ -747,24 +754,31 @@ export class ScreenPlay {
     }
     if (this.alloc === null) {
       const a = game.autoSplit(game.pending_budget);
-      this.alloc = { location: a.location, quest: a.quest,
+      this.alloc = { locations: game.active_locations.map((_, i) => a.locations[i] ?? 0),
+                     quest: a.quest,
                      side_quests: game.side_quests.map((_, i) => a.side_quests[i] ?? 0) };
     }
     const alloc = this.alloc;
-    // Rules: progress fills the active location first; only the overflow past
-    // its quest points reaches a quest. The quest/side '+' steppers cascade
-    // that way (they fill the location first), so location need not be locked.
-    if (!game.active_location) alloc.location = 0;
-    const used = alloc.location + alloc.quest + alloc.side_quests.reduce((a, b) => a + b, 0);
+    // Rules: progress fills the active location(s) first; only the overflow
+    // past their quest points reaches a quest. The quest/side '+' steppers
+    // cascade that way, so the location rows need not be locked.
+    // Re-fit if the row count changed under us - a location can be explored
+    // between opening this screen and re-drawing it, and a stale list would
+    // credit progress to a seat that is gone.
+    if (alloc.locations.length !== game.active_locations.length) {
+      alloc.locations = game.active_locations.map((_, i) => alloc.locations[i] ?? 0);
+    }
+    const used = alloc.locations.reduce((a, b) => a + b, 0) + alloc.quest
+      + alloc.side_quests.reduce((a, b) => a + b, 0);
     const discard = game.pending_budget - used;
 
     textCenter(ctx, `Place ${game.pending_budget} progress`, 240, HEADER_H + 6, DISPLAY, pal.gold);
 
     const rows = [];
-    if (game.active_location) {
-      rows.push(["location", null, "Location",
-                 game.active_location.progress, game.active_location.points]);
-    }
+    game.active_locations.forEach((loc, i) => {
+      rows.push(["location", i, i === 0 ? "Location" : `Location ${i + 1}`,
+                 loc.progress, loc.points]);
+    });
     rows.push(["quest", null, `Quest ${game.questLabel()}`,
                game.quest.progress, game.quest.points]);
     game.side_quests.forEach((sq, i) => {
@@ -777,7 +791,7 @@ export class ScreenPlay {
     const mnX = 212, plX = 340, btnW = 44, btnH = 40;
 
     let hy = HEADER_H + 40;
-    if (game.active_location) {
+    if (game.active_locations.length) {
       // rules caption -> BODY (334px of the 464 available). hy moves from +50
       // to +56 to clear the taller line; the table below shifts 6px and still
       // ends 38px clear of the CTA.
@@ -793,7 +807,8 @@ export class ScreenPlay {
 
     let y = hy + 12;
     for (const [key, idx, label, cur, pts] of rows) {
-      const add = key === "side" ? alloc.side_quests[idx] : alloc[key];
+      const add = key === "side" ? alloc.side_quests[idx]
+        : key === "location" ? alloc.locations[idx] : alloc[key];
       const result = cur + add;                                  // was + place
       const done = pts > 0 && result >= pts;
       const locked = key === "location";                         // forced: fills first
@@ -907,24 +922,33 @@ export class ScreenPlay {
     if (k === "am" || k === "ap") {
       const [, key, idx] = btn.id;                 // key: "quest" | "side"
       const a = this.alloc;
-      const used = a.location + a.quest + a.side_quests.reduce((x, y) => x + y, 0);
-      const locRoom = game.active_location
-        ? Math.max(0, game.active_location.points - game.active_location.progress) : 0;
+      const used = a.locations.reduce((x, y) => x + y, 0) + a.quest
+        + a.side_quests.reduce((x, y) => x + y, 0);
+      // Room left in each seat, in list order - the '+' cascade fills them in
+      // that order before anything reaches the quest.
+      const locRoom = game.active_locations.map(l => Math.max(0, l.points - l.progress));
       const qCur = key === "side" ? game.side_quests[idx].progress : game.quest.progress;
       const qPts = key === "side" ? game.side_quests[idx].points : game.quest.points;
       const qRoom = Math.max(0, qPts - qCur);
       const nowQ = key === "side" ? a.side_quests[idx] : a.quest;
       const bumpQ = d => key === "side" ? (a.side_quests[idx] += d) : (a.quest += d);
-      if (k === "ap") {                            // + : active location fills first
+      if (k === "ap") {                       // + : active locations fill first
         if (used >= game.pending_budget) return true;   // budget spent
-        if (a.location < locRoom) { a.location += 1; return true; }
-        if (nowQ < qRoom) bumpQ(1);               // location full -> the quest itself
+        for (let i = 0; i < locRoom.length; i++) {
+          if (a.locations[i] < locRoom[i]) { a.locations[i] += 1; return true; }
+        }
+        if (nowQ < qRoom) bumpQ(1);            // locations full -> the quest itself
         return true;
       }
-      // - : pull back the quest first, then unwind the location fill
+      // - : pull back the quest first, then unwind the location fill - last
+      // seat first, the reverse of the order '+' filled them in.
       if (nowQ > 0) { bumpQ(-1); return true; }
       const overflow = a.quest + a.side_quests.reduce((x, y) => x + y, 0);
-      if (overflow === 0 && a.location > 0) a.location -= 1;
+      if (overflow === 0) {
+        for (let i = a.locations.length - 1; i >= 0; i--) {
+          if (a.locations[i] > 0) { a.locations[i] -= 1; break; }
+        }
+      }
       return true;
     }
     if (k === "areset") {
@@ -932,14 +956,14 @@ export class ScreenPlay {
       // base, and the budget is re-placed via the '+' cascade
       const a = this.alloc;
       if (a) {
-        a.location = 0;
+        a.locations = a.locations.map(() => 0);
         a.quest = 0;
         a.side_quests = a.side_quests.map(() => 0);
       }
       return true;
     }
     if (k === "apply_alloc") {
-      const used = this.alloc.location + this.alloc.quest
+      const used = this.alloc.locations.reduce((x, y) => x + y, 0) + this.alloc.quest
         + this.alloc.side_quests.reduce((x, y) => x + y, 0);
       const discard = game.pending_budget - used;
       const completed = game.placeProgress(this.alloc);

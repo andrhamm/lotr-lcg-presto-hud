@@ -113,9 +113,11 @@ class ScreenPlay:
                           p.eliminated))
 
         prog = [("Q", game.quest["progress"], game.quest["points"])]
-        if game.active_location is not None:
-            prog.append(("L", game.active_location["progress"],
-                         game.active_location["points"]))
+        # L, then L2 - a bare "L" twice would be two identical pills for two
+        # different cards.
+        for i, loc in enumerate(game.active_locations):
+            prog.append(("L" if i == 0 else "L%d" % (i + 1),
+                         loc["progress"], loc["points"]))
         for i, sq in enumerate(game.side_quests):
             prog.append(("S%d" % (i + 1), sq["progress"], sq["points"]))
         for label, done, total in prog:
@@ -772,7 +774,13 @@ class ScreenPlay:
         self._cta(d, pal, game, QUEST_SETUP["begin"], ("flip_to_b",))
 
     def _draw_travel(self, d, pal, game):
-        loc = game.active_location
+        # "Blocked" is about whether a location is active AT ALL. Rules
+        # Reference, "Active Location": "There can only be one active location
+        # at a time" and "The players cannot travel if another location card is
+        # active." The five cards that seat a second one say so in their own
+        # text (see gamestate.active_locations), and card text beats the
+        # rulebook - but the default stays "any", not "exactly one".
+        loc = game.active_locations[0] if game.active_locations else None
         fw = (TRAVEL["blocked"] if loc else
               TRAVEL["open"])
         bh = phase_block(d, pal, MARGIN, self.content_y, 480 - 2 * MARGIN,
@@ -835,25 +843,33 @@ class ScreenPlay:
 
         if self.alloc is None:
             a = game.auto_split(game.pending_budget)
-            self.alloc = {"location": a["location"], "quest": a["quest"],
+            self.alloc = {"locations": [a["locations"][i] if i < len(a["locations"]) else 0
+                                        for i in range(len(game.active_locations))],
+                          "quest": a["quest"],
                           "side_quests": [a["side_quests"][i] if i < len(a["side_quests"]) else 0
                                           for i in range(len(game.side_quests))]}
         alloc = self.alloc
-        # Rules: progress fills the active location first; only the overflow past
-        # its quest points reaches a quest. The quest/side '+' steppers cascade
-        # that way (they fill the location first), so location need not be locked.
-        if game.active_location is None:
-            alloc["location"] = 0
-        used = alloc["location"] + alloc["quest"] + sum(alloc["side_quests"])
+        # Rules: progress fills the active location(s) first; only the overflow
+        # past their quest points reaches a quest. The quest/side '+' steppers
+        # cascade that way (they fill the locations first), so the location rows
+        # need not be locked.
+        # Re-fit if the row count changed under us - a location can be explored
+        # between opening this screen and re-drawing it, and a stale list would
+        # credit progress to a seat that is gone.
+        if len(alloc["locations"]) != len(game.active_locations):
+            alloc["locations"] = [alloc["locations"][i] if i < len(alloc["locations"]) else 0
+                                  for i in range(len(game.active_locations))]
+        used = sum(alloc["locations"]) + alloc["quest"] + sum(alloc["side_quests"])
         discard = game.pending_budget - used
 
         text_center(d, pal, "Place %d progress" % game.pending_budget, 240, HEADER_H + 6,
                     DISPLAY, pal.gold)
 
         rows = []
-        if game.active_location is not None:
-            rows.append(("location", None, "Location",
-                         game.active_location["progress"], game.active_location["points"]))
+        for i, loc in enumerate(game.active_locations):
+            rows.append(("location", i,
+                         "Location" if i == 0 else "Location %d" % (i + 1),
+                         loc["progress"], loc["points"]))
         rows.append(("quest", None, "Quest %s" % game.quest_label(),
                      game.quest["progress"], game.quest["points"]))
         for i, sq in enumerate(game.side_quests):
@@ -864,7 +880,7 @@ class ScreenPlay:
         mn_x, pl_x, btn_w, btn_h = 212, 340, 44, 40
 
         hy = HEADER_H + 40
-        if game.active_location is not None:
+        if game.active_locations:
             # rules caption -> BODY (334px of the 464 available). hy moves from
             # +50 to +56 to clear the taller line; the table below shifts 6px
             # and still ends 38px clear of the CTA.
@@ -879,7 +895,9 @@ class ScreenPlay:
 
         y = hy + 12
         for key, idx, label, cur, pts in rows:
-            add = alloc["side_quests"][idx] if key == "side" else alloc[key]
+            add = (alloc["side_quests"][idx] if key == "side"
+                   else alloc["locations"][idx] if key == "location"
+                   else alloc[key])
             result = cur + add
             done = pts > 0 and result >= pts
             locked = key == "location"
@@ -1008,9 +1026,11 @@ class ScreenPlay:
         if k in ("am", "ap"):
             key, idx = btn.id[1], btn.id[2]
             a = self.alloc
-            used = a["location"] + a["quest"] + sum(a["side_quests"])
-            loc_room = (max(0, game.active_location["points"] - game.active_location["progress"])
-                        if game.active_location else 0)
+            used = sum(a["locations"]) + a["quest"] + sum(a["side_quests"])
+            # Room left in each seat, in list order - the '+' cascade fills
+            # them in that order before anything reaches the quest.
+            loc_room = [max(0, l["points"] - l["progress"])
+                        for l in game.active_locations]
             if key == "side":
                 q_cur = game.side_quests[idx]["progress"]
                 q_pts = game.side_quests[idx]["points"]
@@ -1025,32 +1045,38 @@ class ScreenPlay:
                 else:
                     a["quest"] += delta
 
-            if k == "ap":                              # + : active location fills first
+            if k == "ap":                        # + : active locations fill first
                 if used >= game.pending_budget:
                     return True
-                if a["location"] < loc_room:
-                    a["location"] += 1
-                    return True
+                for i, room in enumerate(loc_room):
+                    if a["locations"][i] < room:
+                        a["locations"][i] += 1
+                        return True
                 if now_q < q_room:
                     bump_q(1)
                 return True
-            # - : pull back the quest first, then unwind the location fill
+            # - : pull back the quest first, then unwind the location fill -
+            # last seat first, the reverse of the order '+' filled them in.
             if now_q > 0:
                 bump_q(-1)
                 return True
             overflow = a["quest"] + sum(a["side_quests"])
-            if overflow == 0 and a["location"] > 0:
-                a["location"] -= 1
+            if overflow == 0:
+                for i in range(len(a["locations"]) - 1, -1, -1):
+                    if a["locations"][i] > 0:
+                        a["locations"][i] -= 1
+                        break
             return True
         if k == "areset":
             a = self.alloc
             if a:
-                a["location"] = 0
+                a["locations"] = [0] * len(a["locations"])
                 a["quest"] = 0
                 a["side_quests"] = [0] * len(a["side_quests"])
             return True
         if k == "apply_alloc":
-            used = self.alloc["location"] + self.alloc["quest"] + sum(self.alloc["side_quests"])
+            used = (sum(self.alloc["locations"]) + self.alloc["quest"]
+                    + sum(self.alloc["side_quests"]))
             discard = game.pending_budget - used
             completed = game.place_progress(self.alloc)
             msg = "Placed %d progress" % used

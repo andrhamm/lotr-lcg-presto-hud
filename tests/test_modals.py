@@ -25,7 +25,7 @@ def test_all_modals_draw_without_error():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 3, "progress": 1}
+    game.active_locations = [{"points": 3, "progress": 1}]
     game.side_quests = [{"points": 5, "progress": 2}]
     for modal in (
         modals.PlayerSettingsModal(game, 0),
@@ -408,11 +408,11 @@ def test_questing_progress_modal_location_current_bump_explores_when_done():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 3, "progress": 2}
+    game.active_locations = [{"points": 3, "progress": 2}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("lP+", None))) is None
-    assert game.active_location is None
+    assert m.on_button(_find(m, ("lP+", 0))) is None
+    assert not game.active_locations
     assert any("Explored" in e["text"] for e in game.log)
 
 
@@ -420,11 +420,11 @@ def test_questing_progress_modal_complete_location_logs_and_clears():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 5, "progress": 1}
+    game.active_locations = [{"points": 5, "progress": 1}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("ldone", None))) is None
-    assert game.active_location is None
+    assert not game.active_locations
     assert game.log[-1]["text"] == "Active location Explored"
 
 
@@ -456,12 +456,12 @@ def test_questing_progress_modal_remove_location_opens_prompt_without_clearing()
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 4, "progress": 2}
+    game.active_locations = [{"points": 4, "progress": 2}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("lX", None))) is None
     assert m.loc_prompt == {"stage": "choose"}
-    assert game.active_location == {"points": 4, "progress": 2}   # untouched
+    assert game.active_locations[0] == {"points": 4, "progress": 2}   # untouched
     m.draw(hw, game, pal)                                         # re-render the prompt
     assert not any(b.id == ("close",) for b in m.buttons)         # header suppressed
 
@@ -470,27 +470,27 @@ def test_questing_progress_modal_loc_prompt_cancel_leaves_location_untouched():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 4, "progress": 2}
+    game.active_locations = [{"points": 4, "progress": 2}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("lX", None)))
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("lp_cancel",))) is None
     assert m.loc_prompt is None
-    assert game.active_location == {"points": 4, "progress": 2}
+    assert game.active_locations[0] == {"points": 4, "progress": 2}
 
 
 def test_questing_progress_modal_loc_prompt_discard_clears_and_logs():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 4, "progress": 2}
+    game.active_locations = [{"points": 4, "progress": 2}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("lX", None)))
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("lp_discard",))) is None
-    assert game.active_location is None
+    assert not game.active_locations
     assert m.loc_prompt is None
     assert game.log[-1]["text"] == "Active location removed"
 
@@ -499,7 +499,7 @@ def test_questing_progress_modal_loc_prompt_replaced_sets_new_location():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 4, "progress": 2}
+    game.active_locations = [{"points": 4, "progress": 2}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("lX", None)))
@@ -511,7 +511,7 @@ def test_questing_progress_modal_loc_prompt_replaced_sets_new_location():
         m.on_button(_find(m, ("lp_pts", 1)))
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("save",))) is None
-    assert game.active_location == {"points": 6, "progress": 0}
+    assert game.active_locations[0] == {"points": 6, "progress": 0}
     assert m.loc_prompt is None
     assert any("Changed active location" in e["text"] for e in game.log)
 
@@ -520,7 +520,7 @@ def test_questing_progress_modal_loc_prompt_pts_cancel_returns_to_choose():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 4, "progress": 1}
+    game.active_locations = [{"points": 4, "progress": 1}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("lX", None)))
@@ -529,14 +529,14 @@ def test_questing_progress_modal_loc_prompt_pts_cancel_returns_to_choose():
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("cancel",))) is None
     assert m.loc_prompt == {"stage": "choose"}
-    assert game.active_location == {"points": 4, "progress": 1}   # untouched
+    assert game.active_locations[0] == {"points": 4, "progress": 1}   # untouched
 
 
 def test_questing_progress_modal_loc_prompt_to_staging_adds_threat_and_clears():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 4, "progress": 2}
+    game.active_locations = [{"points": 4, "progress": 2}]
     game.staging = 5
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
@@ -549,7 +549,7 @@ def test_questing_progress_modal_loc_prompt_to_staging_adds_threat_and_clears():
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("save",))) is None
     assert game.staging == 8      # 5 + (default 2 + 1 tap)
-    assert game.active_location is None
+    assert not game.active_locations
     assert m.loc_prompt is None
     assert any("Active location to staging (+3 threat)" in e["text"] for e in game.log)
 
@@ -561,12 +561,12 @@ def test_questing_progress_modal_add_location_opens_the_picker():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = None
+    game.active_locations = []
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("add_loc",))) == "close"
     assert game.pending_location_pick == {"mode": "new", "back": "progress"}
-    assert game.active_location is None      # nothing seated until you pick
+    assert not game.active_locations      # nothing seated until you pick
     assert not [e for e in game.log if "location" in e["text"]]
 
 
@@ -935,7 +935,7 @@ def test_location_pick_travel_commits_the_card_numbers_and_name():
     # The record now KEEPS the card's threat, not just spends it on the staging
     # total: putting the location back into staging has to add the same number
     # again, and by then the caller no longer has it.
-    assert game.active_location == {"points": 3, "progress": 0,
+    assert game.active_locations[0] == {"points": 3, "progress": 0,
                                     "name": "Old Forest Road", "threat": 1}
     assert game.staging == 5
     assert "Traveled to Old Forest Road" in game.log[-2]["text"]
@@ -948,10 +948,10 @@ def test_progress_location_row_opens_the_detail_sheet():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 3, "progress": 1, "name": "Tangled Grove"}
+    game.active_locations = [{"points": 3, "progress": 1, "name": "Tangled Grove"}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("detail", "l", None))) == "close"
+    assert m.on_button(_find(m, ("detail", "l", 0))) == "close"
     assert game.pending_location_detail is True
 
 
@@ -963,16 +963,16 @@ def test_location_config_edit_keeps_the_card_metadata():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {
+    game.active_locations = [{
         "points": 3, "progress": 1, "name": "Tangled Grove", "threat": 4,
         "threatKind": "x",
         "threatX": {"text": "the number of locations in the staging area",
-                    "target": "locations_in_staging"}}
+                    "target": "locations_in_staging"}}]
     m = modals.LocationConfigModal(game)
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("prog", 1)))
     assert not any(b.id[0] in ("save", "cancel") for b in m.buttons)
-    loc = game.active_location
+    loc = game.active_locations[0]
     assert loc["progress"] == 2
     assert loc["name"] == "Tangled Grove"
     assert loc["threat"] == 4
@@ -1044,7 +1044,7 @@ def test_progress_cannot_exceed_the_target():
     pal = Palette(hw.display)
     game = GameState()
     game.quest["points"] = 3
-    game.active_location = {"points": 2, "progress": 0}
+    game.active_locations = [{"points": 2, "progress": 0}]
     game.side_quests = [{"points": 4, "progress": 0}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
@@ -1058,11 +1058,11 @@ def test_progress_cannot_exceed_the_target():
     # real loop does, or the button outlives its record.
     for _ in range(8):
         m.draw(hw, game, pal)
-        btn = [b for b in m.buttons if b.id == ("lP+", None)]
+        btn = [b for b in m.buttons if b.id == ("lP+", 0)]
         if not btn:
             break
         m.on_button(btn[0])
-    assert game.active_location is None
+    assert not game.active_locations
 
 
 def test_a_condition_stage_has_no_cap_to_hit():
@@ -1103,20 +1103,22 @@ def test_location_sheet_says_staging_keeps_progress():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 3, "progress": 1, "name": "Old Forest Road"}
+    game.active_locations = [{"points": 3, "progress": 1, "name": "Old Forest Road"}]
     m = modals.LocationConfigModal(game)
     m.draw(hw, game, pal)
     assert "Back to staging keeps its progress." in " ".join(_texts(hw))
 
 
 def _loc_x(threat_x, count=None, **extra):
+    # Seats it the way the picker does rather than assigning the list: an auto
+    # target resolves in _seat_location, so a direct assignment would test a
+    # record the app can never actually produce.
     game = GameState()
-    loc = {"points": 3, "progress": 0, "name": "A Location",
-           "threatKind": "x", "threatX": threat_x}
+    meta = {"threatKind": "x", "threatX": threat_x}
     if count is not None:
-        loc["threatCount"] = count
-    loc.update(extra)
-    game.active_location = loc
+        meta["threatCount"] = count
+    meta.update(extra)
+    game.travel_to(3, 0, "A Location", meta)
     return game
 
 
@@ -1140,8 +1142,8 @@ def test_threat_count_control_does_the_arithmetic():
     # No save tap: the sheet has no Save, so the tap itself is the commit.
     # Stores the COUNT, not just the result: storing only the result would go
     # stale the moment the board changes.
-    assert game.active_location["threatCount"] == 4
-    assert game.active_location["threat"] == 5
+    assert game.active_locations[0]["threatCount"] == 4
+    assert game.active_locations[0]["threat"] == 5
 
 
 def test_threat_auto_target_needs_no_control_at_all():
@@ -1158,7 +1160,7 @@ def test_threat_auto_target_needs_no_control_at_all():
     assert not any(b.id[0] == "count" for b in m.buttons)
     # Nothing to tap and no Save to press, so the number cannot come from this
     # sheet at all - _seat_location resolves it when the card is placed.
-    assert game.active_location["threat"] == len(game.players)
+    assert game.active_locations[0]["threat"] == len(game.players)
 
 
 def test_threat_bare_count_keeps_one_stepper_and_no_second_number():
@@ -1194,8 +1196,8 @@ def test_location_config_threat_starts_blank_when_x_is_undefined():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 5, "progress": 0, "name": "Amon Hen",
-                            "threatKind": "x"}
+    game.active_locations = [{"points": 5, "progress": 0, "name": "Amon Hen",
+                              "threatKind": "x"}]
     m = modals.LocationConfigModal(game)
     m.draw(hw, game, pal)
     assert m.threat_blank is True
@@ -1204,7 +1206,7 @@ def test_location_config_threat_starts_blank_when_x_is_undefined():
     # Save on this sheet.
     m.on_button(_find(m, ("threat", 1)))
     assert m.threat_blank is False
-    assert game.active_location["threat"] == 1
+    assert game.active_locations[0]["threat"] == 1
 
 
 def test_location_pick_carries_the_x_metadata_onto_the_location():
@@ -1219,7 +1221,7 @@ def test_location_pick_carries_the_x_metadata_onto_the_location():
     m.on_button(_find(m, ("row", "x")))
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("travel",)))
-    loc = game.active_location
+    loc = game.active_locations[0]
     assert loc["threatKind"] == "x"
     assert loc["threatX"]["target"] == "locations_in_staging"
     # points printed a real 3, so it carries no marker at all
@@ -1232,7 +1234,7 @@ def test_location_pick_manual_entry_stays_a_two_key_record():
     hw, pal, game, m = _pick(entries=[])
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("save",)))
-    assert game.active_location == {"points": m.pts, "progress": 0}
+    assert game.active_locations[0] == {"points": m.pts, "progress": 0}
 
 
 def test_location_pick_hides_travel_until_a_row_is_picked():
@@ -1265,7 +1267,7 @@ def test_location_pick_without_catalog_opens_straight_on_the_stepper():
     assert m.step == "manual"
     assert not [b for b in m.buttons if b.id == ("back",)]
     m.on_button(_find(m, ("save",)))
-    assert game.active_location == {"points": 3, "progress": 0}
+    assert game.active_locations[0] == {"points": 3, "progress": 0}
     assert "Traveled to new location" in game.log[-1]["text"]
 
 
@@ -1274,18 +1276,18 @@ def test_location_pick_manual_save_carries_no_name():
     m.on_button(_find(m, ("manual",)))
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("save",)))
-    assert "name" not in game.active_location
+    assert "name" not in game.active_locations[0]
 
 
 def test_location_pick_change_mode_replaces_and_warns():
     game = GameState()
-    game.active_location = {"points": 5, "progress": 2}
+    game.active_locations = [{"points": 5, "progress": 2}]
     hw, pal, game, m = _pick(mode="change", game=game)
     assert "Replaces the current location (2/5 discarded)." in " ".join(_texts(hw))
     m.on_button(_find(m, ("row", "b")))
     m.draw(hw, game, pal)
     m.on_button(_find(m, ("travel",)))
-    assert game.active_location == {"points": 4, "progress": 0,
+    assert game.active_locations[0] == {"points": 4, "progress": 0,
                                     "name": "Forest Gate", "threat": 2}
 
 
@@ -1344,7 +1346,7 @@ def test_progress_modal_row_shows_the_picked_location_name():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 3, "progress": 0, "name": "Old Forest Road"}
+    game.active_locations = [{"points": 3, "progress": 0, "name": "Old Forest Road"}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     texts = _texts(hw)
@@ -1356,7 +1358,7 @@ def test_progress_modal_row_falls_back_to_location_without_a_name():
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
-    game.active_location = {"points": 3, "progress": 0}
+    game.active_locations = [{"points": 3, "progress": 0}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     assert "Location" in _texts(hw)

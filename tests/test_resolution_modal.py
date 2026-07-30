@@ -40,20 +40,20 @@ def test_no_overflow_step_is_none():
 
 def test_location_overflow_step_first():
     g = _game()
-    g.active_location = {"points": 2, "progress": 3}
+    g.active_locations = [{"points": 2, "progress": 3}]
     g.quest["progress"] = 2   # ALSO over - location must still come first
     m = ResolutionModal(g)
     assert m.step["kind"] == "location"
 
 def test_resolving_location_feeds_quest_and_advances_to_branch_step():
     g = _game()
-    g.active_location = {"points": 2, "progress": 3}   # 1 excess -> quest
+    g.active_locations = [{"points": 2, "progress": 3}]   # 1 excess -> quest
     g.quest["progress"] = 1                             # +1 excess = 2 = clears stage 1
     m = ResolutionModal(g)
     _draw(m, g)
     loc_btn = next(b for b in m.buttons if b.id[0] == "resolve_location")
     assert m.on_button(loc_btn) == "redraw"
-    assert g.active_location is None and g.quest["progress"] == 2
+    assert not g.active_locations and g.quest["progress"] == 2
     assert m.step["kind"] == "branch"        # stage 2 has 2 cards
 
 def test_branch_pick_then_advance_then_reveal_then_flip():
@@ -133,6 +133,6 @@ def test_interrupted_reveal_resumes_first():
     g = _game()
     g.stage_idx = 1
     g.quest.update({"side": "A", "points": 0, "progress": 0, "stage_n": 2})
-    g.active_location = {"points": 2, "progress": 2}   # a fresh overflow too
+    g.active_locations = [{"points": 2, "progress": 2}]   # a fresh overflow too
     m = ResolutionModal(g)
     assert m.step["kind"] == "reveal"     # finishes the interrupted flip before the location

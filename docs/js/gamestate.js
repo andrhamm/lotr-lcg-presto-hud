@@ -217,7 +217,14 @@ export class GameState {
     this.stages = [];            // preloaded quest stage/card data
     this.stage_idx = 0;          // index into this.stages
     this.card_idx = 0;           // index into stages[stage_idx].cards
-    this.active_location = null;
+    // A LIST, and the default is still one. Rules Reference, "Active
+    // Location": "There can only be one active location at a time", and "The
+    // players cannot travel if another location card is active." FIVE printed
+    // cards override that in their own text (Fisherman's Dock, The Gates of
+    // Moria, Ruined Tower, Dark Passages, ALeP's Widfast), which is why the
+    // state has to hold two. Order is load-bearing: progress fills them in
+    // list order before it reaches the quest card.
+    this.active_locations = [];
     this.side_quests = [];       // {points, progress, name?} - name is optional
                                   // (absent/null on old saves)
     this.willpower = 0;          // questing total; normally the sum of the
@@ -384,7 +391,7 @@ export class GameState {
 
   _totalProgress() {
     let n = this.quest.progress;
-    if (this.active_location) n += this.active_location.progress;
+    for (const l of this.active_locations) n += l.progress;
     for (const s of this.side_quests) n += s.progress;
     return n;
   }
@@ -536,7 +543,9 @@ export class GameState {
   }
 
   travelTo(points, contribution = 0, name = null, meta = null) {
-    this.active_location = this._seatLocation(points, name, meta);
+    // Appends. Travelling with one already active is how the second one
+    // arrives; changeLocation is what replaces a seat.
+    this.active_locations.push(this._seatLocation(points, name, meta));
     // Only claim a travel when the players actually paid the cost. A card effect
     // can make a location active without one, and the log is the game's record.
     // The mechanics are identical either way (RR: "the active location acts as a
@@ -547,9 +556,14 @@ export class GameState {
     this._applyTravelStaging(contribution);
   }
 
-  changeLocation(points, contribution = 0, name = null, meta = null) {
-    const old = this.active_location;
-    this.active_location = this._seatLocation(points, name, meta);
+  changeLocation(points, contribution = 0, name = null, idx = 0, meta = null) {
+    // Replaces ONE seat, not the whole row: with two actives, "a card effect
+    // replaces the active location" names one of them, and discarding the
+    // other alongside it would silently drop its progress.
+    const old = idx < this.active_locations.length ? this.active_locations[idx] : null;
+    const seat = this._seatLocation(points, name, meta);
+    if (old) this.active_locations[idx] = seat;
+    else this.active_locations.push(seat);
     const newLabel = name || "new";
     if (old) {
       this.logEvent(`Changed active location (${old.name || "old"} at ${old.progress}/${old.points} discarded) -> ${newLabel} (${points} quest points)`);
@@ -559,15 +573,20 @@ export class GameState {
     this._applyTravelStaging(contribution);
   }
 
-  // A location at its quest points is Explored - remove it from the row.
+  // Any location at its quest points is Explored - removed from the row.
+  // Back to front, so removing one does not shift the index of a later one
+  // still being checked.
   exploreLocationIfDone() {
-    const loc = this.active_location;
-    if (loc && loc.points > 0 && loc.progress >= loc.points) {
-      this.logEvent(`Active location Explored (${loc.progress}/${loc.points}) - removed`);
-      this.active_location = null;
-      return true;
+    let done = false;
+    for (let i = this.active_locations.length - 1; i >= 0; i--) {
+      const loc = this.active_locations[i];
+      if (loc.points > 0 && loc.progress >= loc.points) {
+        this.logEvent(`Active location Explored (${loc.progress}/${loc.points}) - removed`);
+        this.active_locations.splice(i, 1);
+        done = true;
+      }
     }
-    return false;
+    return done;
   }
 
   actionWindowOpen() { return phaseStep(this.step).action_window; }
@@ -669,14 +688,16 @@ export class GameState {
     // Fill the active location, then the quest - each capped at its own
     // quest points. Side quests are left untouched; any overflow beyond
     // location + quest capacity is discarded.
-    const alloc = { location: 0, quest: 0,
+    const alloc = { locations: this.active_locations.map(() => 0), quest: 0,
                     side_quests: this.side_quests.map(() => 0) };
     let remaining = budget;
-    if (this.active_location) {
-      const room = Math.max(0, this.active_location.points - this.active_location.progress);
-      alloc.location = Math.min(remaining, room);
-      remaining -= alloc.location;
-    }
+    // In list order: RR p.15 fills the active location(s) before the quest
+    // card, and with two the first one seated soaks it up first.
+    this.active_locations.forEach((loc, i) => {
+      const room = Math.max(0, loc.points - loc.progress);
+      alloc.locations[i] = Math.min(remaining, room);
+      remaining -= alloc.locations[i];
+    });
     const qroom = Math.max(0, this.quest.points - this.quest.progress);
     alloc.quest = Math.min(remaining, qroom);
     return alloc;
@@ -686,24 +707,28 @@ export class GameState {
     // True if the active location, the quest, or any side quest is
     // currently at/over its own (positive) quest points - the trigger for
     // the guided resolution flow after a manual progress edit.
-    const loc = this.active_location;
-    if (loc && loc.points > 0 && loc.progress >= loc.points) return true;
+    if (this.active_locations.some(l => l.points > 0 && l.progress >= l.points)) return true;
     if (this.quest.points > 0 && this.quest.progress >= this.quest.points) return true;
     return this.side_quests.some(s => s.points > 0 && s.progress >= s.points);
   }
 
   resolveLocationOverflow() {
-    // Active location at/over its points: explore it (rulebook p.15),
-    // crediting any excess progress to the quest card. No-op (returns 0)
-    // if there's no active location or it hasn't reached its points.
-    const loc = this.active_location;
-    if (!loc || loc.points <= 0 || loc.progress < loc.points) return 0;
-    const excess = loc.progress - loc.points;
-    this.logEvent(`Active location Explored (${loc.progress}/${loc.points})` +
-                  (excess ? ` - ${excess} excess to quest` : ""));
-    this.active_location = null;
-    if (excess) this.quest.progress += excess;
-    return excess;
+    // Active location(s) at/over their points: explore them (rulebook p.15),
+    // crediting any excess progress to the quest card. Returns the total
+    // excess credited, 0 if nothing was ready. Back to front, so removing one
+    // does not shift the index of a later one still being checked.
+    let total = 0;
+    for (let i = this.active_locations.length - 1; i >= 0; i--) {
+      const loc = this.active_locations[i];
+      if (loc.points <= 0 || loc.progress < loc.points) continue;
+      const excess = loc.progress - loc.points;
+      this.logEvent(`Active location Explored (${loc.progress}/${loc.points})` +
+                    (excess ? ` - ${excess} excess to quest` : ""));
+      this.active_locations.splice(i, 1);
+      total += excess;
+    }
+    if (total) this.quest.progress += total;
+    return total;
   }
 
   clearAndAdvance(cardIdx = 0) {
@@ -734,15 +759,20 @@ export class GameState {
 
   placeProgress(alloc) {
     const completed = [];
-    let n = alloc.location ?? 0;
-    if (n && this.active_location) {
-      this.active_location.progress += n;
-      if (this.active_location.progress >= this.active_location.points) {
+    // Back to front: an explored location is removed, and going forward would
+    // shift the index of every later one still to be credited.
+    const locs = alloc.locations ?? [];
+    for (let i = this.active_locations.length - 1; i >= 0; i--) {
+      const n0 = locs[i] ?? 0;
+      if (!n0) continue;
+      const loc = this.active_locations[i];
+      loc.progress += n0;
+      if (loc.progress >= loc.points) {
         completed.push("Active Location explored");
-        this.active_location = null;
+        this.active_locations.splice(i, 1);
       }
     }
-    n = alloc.quest ?? 0;
+    let n = alloc.quest ?? 0;
     if (n) {
       this.quest.progress += n;
       if (this.quest.points > 0 && this.quest.progress >= this.quest.points) {
@@ -791,8 +821,8 @@ export class GameState {
     const diff = this.willpower - this.staging;
     const outcome = diff > 0 ? "success" : (diff < 0 ? "fail" : "tie");
     let room = Math.max(0, this.quest.points - this.quest.progress);
-    if (this.active_location) {
-      room += Math.max(0, this.active_location.points - this.active_location.progress);
+    for (const loc of this.active_locations) {
+      room += Math.max(0, loc.points - loc.progress);
     }
     return [outcome, Math.abs(diff), room];
   }
@@ -847,7 +877,7 @@ export class GameState {
         threat: p.threat, eliminated: p.eliminated,
         commit: p.commit }])),
       quest: { ...this.quest },
-      active_location: this.active_location ? { ...this.active_location } : null,
+      active_locations: keyed(this.active_locations),
       side_quests: keyed(this.side_quests),
       quest_history: keyed(this.quest_history),
       willpower: this.willpower,
@@ -883,7 +913,7 @@ export class GameState {
     });
     this.willpower_detached = m.willpower_detached ?? false;
     this.quest = { ...m.quest };
-    this.active_location = m.active_location ? { ...m.active_location } : null;
+    this.active_locations = unkeyed(m.active_locations);
     this.side_quests = unkeyed(m.side_quests);
     this.quest_history = unkeyed(m.quest_history);
     this.willpower = m.willpower;
@@ -1061,7 +1091,7 @@ export class GameState {
       step: this.step, quest: { ...this.quest },
       scenario: this.scenario, stages: this.stages,
       stage_idx: this.stage_idx, card_idx: this.card_idx,
-      active_location: this.active_location ? { ...this.active_location } : null,
+      active_locations: this.active_locations.map(l => ({ ...l })),
       side_quests: this.side_quests.map(s => ({ ...s })),
       willpower: this.willpower, willpower_detached: this.willpower_detached,
       staging: this.staging,
@@ -1110,7 +1140,15 @@ export class GameState {
     g.stages = d.stages ?? [];
     g.stage_idx = d.stage_idx ?? 0;
     g.card_idx = d.card_idx ?? 0;
-    g.active_location = d.active_location ? { ...d.active_location } : null;
+    // Saves written before the list existed hold a single "active_location"
+    // dict (or null). Migrate rather than drop it: a player mid-campaign
+    // should not lose the location they travelled to because the HUD learned
+    // to hold two.
+    if (d.active_locations !== undefined) {
+      g.active_locations = d.active_locations.map(l => ({ ...l }));
+    } else {
+      g.active_locations = d.active_location ? [{ ...d.active_location }] : [];
+    }
     g.side_quests = (d.side_quests ?? []).map(s => ({ ...s }));
     g.willpower = d.willpower ?? 0;
     g.willpower_detached = d.willpower_detached ?? false;

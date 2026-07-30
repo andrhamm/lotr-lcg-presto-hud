@@ -67,18 +67,18 @@ def test_location_manual_edit_over_target_defers_to_resolution_flow_for_catalog_
     # must stay put (still overflowing) until close, so the ResolutionModal
     # location step is the one that actually explores it.
     g = _catalog_game()
-    g.active_location = {"points": 3, "progress": 2}
+    g.active_locations = [{"points": 3, "progress": 2}]
     m = QuestingProgressModal(g)
     _draw(m, g)
-    plus = next(b for b in m.buttons if b.id == ("lP+", None))
+    plus = next(b for b in m.buttons if b.id == ("lP+", 0))
     assert m.on_button(plus) is None
-    assert g.active_location is not None          # NOT auto-explored
-    assert g.active_location["progress"] == 3
+    assert g.active_locations          # NOT auto-explored
+    assert g.active_locations[0]["progress"] == 3
     assert g.needs_resolution() is True
     close = next(b for b in m.buttons if b.id[0] == "close")
     assert m.on_button(close) == "close"
     assert g.pending_resolution == "auto"
-    assert g.active_location is not None           # still deferred to ResolutionModal
+    assert g.active_locations           # still deferred to ResolutionModal
 
 def test_location_manual_edit_over_target_still_auto_explores_for_custom_games():
     # Custom (uncatalogued) games are out of scope for the guided flow
@@ -88,12 +88,12 @@ def test_location_manual_edit_over_target_still_auto_explores_for_custom_games()
     # test_questing_progress_modal_location_current_bump_explores_when_done,
     # transcribed here for direct contrast with the catalog case above.
     g = gamestate.GameState(2, 25)
-    g.active_location = {"points": 3, "progress": 2}
+    g.active_locations = [{"points": 3, "progress": 2}]
     m = QuestingProgressModal(g)
     _draw(m, g)
-    plus = next(b for b in m.buttons if b.id == ("lP+", None))
+    plus = next(b for b in m.buttons if b.id == ("lP+", 0))
     assert m.on_button(plus) is None
-    assert g.active_location is None                # auto-explored immediately, as before
+    assert not g.active_locations                # auto-explored immediately, as before
 
 def test_custom_game_quest_overflow_close_sets_pending_resolution():
     # Regression (found in the Task 4 browser walkthrough): the brief's

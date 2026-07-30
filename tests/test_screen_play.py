@@ -284,7 +284,7 @@ def test_travel_buttons_flag_the_location_picker():
     screen.on_button(_find(screen, ("travel_new",)), game)
     assert game.pending_location_pick == {"mode": "new", "back": "play"}
 
-    game.active_location = {"points": 3, "progress": 1}
+    game.active_locations = [{"points": 3, "progress": 1}]
     screen.draw(hw, game, pal)
     screen.on_button(_find(screen, ("travel_change",)), game)
     assert game.pending_location_pick == {"mode": "change", "back": "play"}
@@ -298,7 +298,7 @@ def test_travel_new_logs_precisely():
     m.draw(hw, g, pal)
     save = [b for b in m.buttons if b.id == ("save",)][0]
     m.on_button(save)
-    assert g.active_location == {"points": 3, "progress": 0}
+    assert g.active_locations[0] == {"points": 3, "progress": 0}
     assert "Traveled to new location" in g.log[-1]["text"]
 
 
@@ -309,7 +309,7 @@ def _texts(hw):
 def test_progress_zone_shows_quest_loc_side_labels_and_remaining_values():
     hw, pal, game, screen = _setup("enc_optional")
     game.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 1}
-    game.active_location = {"points": 9, "progress": 4}
+    game.active_locations = [{"points": 9, "progress": 4}]
     game.side_quests = [{"points": 9, "progress": 3}]
     screen.draw(hw, game, pal)
     texts = _texts(hw)
@@ -362,7 +362,7 @@ def test_the_stat_zone_hands_its_unused_space_back_to_the_view():
     matrices always ended at 136 no matter how few players were in the game."""
     from ui.screen_play import ZONE_TOP, PILL_H, CONTENT_Y
     hw, pal, game, screen = _setup("refresh")
-    game.active_location = None
+    game.active_locations = []
     game.side_quests = []
     game.players = game.players[:2]
     screen.draw(hw, game, pal)
@@ -378,7 +378,7 @@ def test_stat_zone_caps_its_rows_keeping_oldest_side_quests_and_sailing():
     fixed-column zone had: Q, L, the oldest sides and sailing stay."""
     from ui.screen_play import ZONE_TOP, PILL_H, PILL_ROW_GAP
     hw, pal, game, screen = _setup("resource")
-    game.active_location = {"points": 5, "progress": 0}
+    game.active_locations = [{"points": 5, "progress": 0}]
     game.sailing = True
     game.side_quests = [{"points": 5, "progress": 0} for _ in range(10)]
     screen.draw(hw, game, pal)
@@ -538,7 +538,7 @@ def test_notification_pie_fraction_controls_fan_size():
 def test_resolution_apply_always_enabled_and_shows_discard():
     hw, pal, game, screen = _setup("quest_resolution")
     game.quest = {"stage_n": 1, "side": "B", "points": 8, "progress": 0}
-    game.active_location = None
+    game.active_locations = []
     game.quest_outcome = "success"
     game.pending_budget = 4
     screen.draw(hw, game, pal)          # auto-split places all 4
@@ -552,7 +552,7 @@ def test_resolution_apply_always_enabled_and_shows_discard():
 
 def test_travel_modal_passes_contribution():
     hw, pal, game, screen = _setup("travel")
-    game.active_location = None
+    game.active_locations = []
     game.staging = 6
     screen.draw(hw, game, pal)
     screen.on_button(_find(screen, ("travel_new",)), game)
@@ -590,7 +590,7 @@ def test_setup_view_tip_and_quest_points_then_begin():
 
 def test_progress_detail_edits_quest_and_logs_on_close():
     hw, pal, game, screen = _setup("travel")
-    game.active_location = {"points": 3, "progress": 1}
+    game.active_locations = [{"points": 3, "progress": 1}]
     game.side_quests = [{"points": 5, "progress": 2}]
     screen.draw(hw, game, pal)
     m = screen.on_button(_find(screen, ("progress_detail",)), game)[1]
@@ -703,7 +703,7 @@ def test_quest_setup_no_setup_text_shows_fallback():
 
 def test_travel_no_location_shows_framework_and_travel_button():
     hw, pal, game, screen = _setup("travel")
-    game.active_location = None
+    game.active_locations = []
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert _has_framework(hw, pal)
@@ -719,7 +719,7 @@ def test_travel_with_location_says_travel_is_blocked():
     sequence, so the old copy advised something the player generally cannot
     do at that moment."""
     hw, pal, game, screen = _setup("travel")
-    game.active_location = {"points": 3, "progress": 1}
+    game.active_locations = [{"points": 3, "progress": 1}]
     screen.draw(hw, game, pal)
     assert "travel_change" in _ids(screen)
     texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")

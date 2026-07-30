@@ -60,11 +60,11 @@ def test_load_snapshot_round_trips():
 
 def test_load_snapshot_restores_a_cleared_active_location():
     g = _round1(GameState(2, 25))
-    g.active_location = {"name": "Old Forest Road", "points": 3, "progress": 1}
+    g.active_locations = [{"name": "Old Forest Road", "points": 3, "progress": 1}]
     s = g.snapshot()
-    g.active_location = None
+    g.active_locations = []
     g.load_snapshot(s)
-    assert g.active_location == {"name": "Old Forest Road", "points": 3, "progress": 1}
+    assert g.active_locations[0] == {"name": "Old Forest Road", "points": 3, "progress": 1}
 
 
 def test_load_snapshot_shrinks_and_grows_side_quests():

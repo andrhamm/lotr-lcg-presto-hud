@@ -159,7 +159,7 @@ def _staging_window(**state):
     pal = Palette(hw.display)
     g = GameState(4, 25)
     g.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 0}
-    g.active_location = None
+    g.active_locations = []
     for k, v in state.items():
         setattr(g, k, v)
     g.view = "aw_quest_staging"
@@ -212,7 +212,7 @@ def test_room_counts_the_active_location_not_just_the_quest():
     from gamestate import GameState
     g = GameState(4, 25)
     g.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 8}
-    g.active_location = {"points": 3, "progress": 0}
+    g.active_locations = [{"points": 3, "progress": 0}]
     g.willpower, g.staging = 11, 7
     _, _, room = g.quest_preview()
     assert room == 3, "the unfilled location is still room"

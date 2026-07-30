@@ -263,7 +263,21 @@ class GameState:
         self.stages = []             # preloaded quest stage/card data
         self.stage_idx = 0           # index into self.stages
         self.card_idx = 0            # index into stages[stage_idx]["cards"]
-        self.active_location = None  # or {"points": int, "progress": int}
+        # A LIST, and the default is still one. Rules Reference, "Active
+        # Location": "There can only be one active location at a time", and
+        # "The players cannot travel if another location card is active."
+        # FIVE printed cards override that in their own text, which is why the
+        # state has to hold two (checked against docs/data/, 2026-07-30):
+        #   Fisherman's Dock  (The Battle of Lake-town)   "(There are now 2 active locations)"
+        #   The Gates of Moria (The Ring Goes South)      "There can be 2 active locations."
+        #   Ruined Tower      (Assault on Osgiliath)      "(There are now 2 active locations.)"
+        #   Dark Passages     (Over the Misty Mountains - Nightmare)
+        #   Widfast           (ALeP - The Aldburg Plot)
+        # Order is load-bearing: progress fills the actives in list order
+        # before it reaches the quest card (RR "Active Location": the active
+        # location "acts as a buffer for the current quest"), so [0] soaks it
+        # up first. Empty is the normal case.
+        self.active_locations = []   # of {"points": int, "progress": int, ...}
         self.side_quests = []        # list of {"points": int, "progress": int,
                                       #           "name": str|None (optional,
                                       #           absent/None on old saves)}
@@ -459,8 +473,7 @@ class GameState:
     # -- view flow ---------------------------------------------------------
     def _total_progress(self):
         n = self.quest["progress"]
-        if self.active_location:
-            n += self.active_location["progress"]
+        n += sum(l["progress"] for l in self.active_locations)
         n += sum(s["progress"] for s in self.side_quests)
         return n
 
@@ -638,7 +651,10 @@ class GameState:
         return loc
 
     def travel_to(self, points, contribution=0, name=None, meta=None):
-        self.active_location = self._seat_location(points, name, meta)
+        # Appends. Travelling with one already active is how the second one
+        # arrives, and the printed cards that allow it never say "replace" -
+        # that is what change_location is for.
+        self.active_locations.append(self._seat_location(points, name, meta))
         # Only claim a travel when the players actually paid the cost. A card
         # effect can make a location active without one, and the log is the
         # game's record - it should not invent a travel that never happened.
@@ -650,9 +666,17 @@ class GameState:
                        % (verb, name or "new location", points))
         self._apply_travel_staging(contribution)
 
-    def change_location(self, points, contribution=0, name=None, meta=None):
-        old = self.active_location
-        self.active_location = self._seat_location(points, name, meta)
+    def change_location(self, points, contribution=0, name=None, idx=0,
+                        meta=None):
+        # Replaces ONE seat, not the whole row: with two actives, "a card
+        # effect replaces the active location" names one of them, and
+        # discarding the other alongside it would silently drop its progress.
+        old = self.active_locations[idx] if idx < len(self.active_locations) else None
+        seat = self._seat_location(points, name, meta)
+        if old is not None:
+            self.active_locations[idx] = seat
+        else:
+            self.active_locations.append(seat)
         new_label = name or "new"
         if old:
             self.log_event(
@@ -665,14 +689,19 @@ class GameState:
         self._apply_travel_staging(contribution)
 
     def explore_location_if_done(self):
-        """A location at its quest points is Explored - remove it from the row."""
-        loc = self.active_location
-        if loc and loc["points"] > 0 and loc["progress"] >= loc["points"]:
-            self.log_event("Active location Explored (%d/%d) - removed"
-                           % (loc["progress"], loc["points"]))
-            self.active_location = None
-            return True
-        return False
+        """Any location at its quest points is Explored - removed from the row.
+
+        Iterates back to front so removing one does not shift the index of a
+        later one still being checked."""
+        done = False
+        for i in range(len(self.active_locations) - 1, -1, -1):
+            loc = self.active_locations[i]
+            if loc["points"] > 0 and loc["progress"] >= loc["points"]:
+                self.log_event("Active location Explored (%d/%d) - removed"
+                               % (loc["progress"], loc["points"]))
+                del self.active_locations[i]
+                done = True
+        return done
 
     # -- step navigation ---------------------------------------------------
     def action_window_open(self):
@@ -821,12 +850,15 @@ class GameState:
         """Fill the active location, then the quest - each capped at its own
         quest points. Side quests are left untouched; any overflow beyond
         location + quest capacity is discarded."""
-        alloc = {"location": 0, "quest": 0, "side_quests": [0] * len(self.side_quests)}
+        alloc = {"locations": [0] * len(self.active_locations), "quest": 0,
+                 "side_quests": [0] * len(self.side_quests)}
         remaining = budget
-        if self.active_location is not None:
-            room = max(0, self.active_location["points"] - self.active_location["progress"])
-            alloc["location"] = min(remaining, room)
-            remaining -= alloc["location"]
+        # In list order: RR p.15 fills the active location(s) before the quest
+        # card, and with two the first one seated soaks it up first.
+        for i, loc in enumerate(self.active_locations):
+            room = max(0, loc["points"] - loc["progress"])
+            alloc["locations"][i] = min(remaining, room)
+            remaining -= alloc["locations"][i]
         qroom = max(0, self.quest["points"] - self.quest["progress"])
         alloc["quest"] = min(remaining, qroom)
         return alloc
@@ -835,28 +867,34 @@ class GameState:
         """True if the active location, the quest, or any side quest is
         currently at/over its own (positive) quest points - the trigger for
         the guided resolution flow after a manual progress edit."""
-        loc = self.active_location
-        if loc and loc["points"] > 0 and loc["progress"] >= loc["points"]:
+        if any(l["points"] > 0 and l["progress"] >= l["points"]
+               for l in self.active_locations):
             return True
         if self.quest["points"] > 0 and self.quest["progress"] >= self.quest["points"]:
             return True
         return any(s["points"] > 0 and s["progress"] >= s["points"] for s in self.side_quests)
 
     def resolve_location_overflow(self):
-        """Active location at/over its points: explore it (rulebook p.15),
-        crediting any excess progress to the quest card. No-op (returns 0)
-        if there's no active location or it hasn't reached its points."""
-        loc = self.active_location
-        if not loc or loc["points"] <= 0 or loc["progress"] < loc["points"]:
-            return 0
-        excess = loc["progress"] - loc["points"]
-        self.log_event("Active location Explored (%d/%d)%s"
-                       % (loc["progress"], loc["points"],
-                          " - %d excess to quest" % excess if excess else ""))
-        self.active_location = None
-        if excess:
-            self.quest["progress"] += excess
-        return excess
+        """Active location(s) at/over their points: explore them (rulebook
+        p.15), crediting any excess progress to the quest card. Returns the
+        total excess credited, 0 if nothing was ready.
+
+        Back to front, so removing one does not shift the index of a later one
+        still being checked."""
+        total = 0
+        for i in range(len(self.active_locations) - 1, -1, -1):
+            loc = self.active_locations[i]
+            if loc["points"] <= 0 or loc["progress"] < loc["points"]:
+                continue
+            excess = loc["progress"] - loc["points"]
+            self.log_event("Active location Explored (%d/%d)%s"
+                           % (loc["progress"], loc["points"],
+                              " - %d excess to quest" % excess if excess else ""))
+            del self.active_locations[i]
+            total += excess
+        if total:
+            self.quest["progress"] += total
+        return total
 
     def clear_and_advance(self, card_idx=0):
         """Clear the current (side-B) stage and reveal the next stage's side
@@ -888,12 +926,18 @@ class GameState:
         """Apply an allocation. Returns a list of completion messages."""
         completed = []
 
-        n = alloc.get("location", 0)
-        if n and self.active_location is not None:
-            self.active_location["progress"] += n
-            if self.active_location["progress"] >= self.active_location["points"]:
+        # Back to front: an explored location is removed, and going forward
+        # would shift the index of every later one still to be credited.
+        locs = alloc.get("locations") or []
+        for i in range(len(self.active_locations) - 1, -1, -1):
+            n = locs[i] if i < len(locs) else 0
+            if not n:
+                continue
+            loc = self.active_locations[i]
+            loc["progress"] += n
+            if loc["progress"] >= loc["points"]:
                 completed.append("Active Location explored")
-                self.active_location = None
+                del self.active_locations[i]
 
         n = alloc.get("quest", 0)
         if n:
@@ -950,8 +994,7 @@ class GameState:
         diff = self.willpower - self.staging
         outcome = "success" if diff > 0 else ("fail" if diff < 0 else "tie")
         room = max(0, self.quest["points"] - self.quest["progress"])
-        loc = self.active_location
-        if loc:
+        for loc in self.active_locations:
             room += max(0, loc["points"] - loc["progress"])
         return outcome, abs(diff), room
 
@@ -1026,8 +1069,8 @@ class GameState:
                                  "commit": p.commit}
                         for i, p in enumerate(self.players)},
             "quest": dict(self.quest),
-            "active_location": (dict(self.active_location)
-                                if self.active_location else None),
+            "active_locations": {str(i): dict(l)
+                                 for i, l in enumerate(self.active_locations)},
             "side_quests": {str(i): dict(s)
                             for i, s in enumerate(self.side_quests)},
             "quest_history": {str(i): dict(e)
@@ -1066,8 +1109,8 @@ class GameState:
 
         self.willpower_detached = m.get("willpower_detached", False)
         self.quest = dict(m["quest"])
-        self.active_location = (dict(m["active_location"])
-                                if m["active_location"] else None)
+        self.active_locations = [dict(m["active_locations"][k])
+                                 for k in sorted(m["active_locations"], key=int)]
         # keyed maps back to lists, in key order - the keys are positions
         self.side_quests = [dict(m["side_quests"][k])
                             for k in sorted(m["side_quests"], key=int)]
@@ -1284,7 +1327,7 @@ class GameState:
             "stages": self.stages,
             "stage_idx": self.stage_idx,
             "card_idx": self.card_idx,
-            "active_location": dict(self.active_location) if self.active_location else None,
+            "active_locations": [dict(l) for l in self.active_locations],
             "side_quests": [dict(s) for s in self.side_quests],
             "willpower": self.willpower,
             "willpower_detached": self.willpower_detached,
@@ -1341,7 +1384,15 @@ class GameState:
         g.stages = d.get("stages", [])
         g.stage_idx = d.get("stage_idx", 0)
         g.card_idx = d.get("card_idx", 0)
-        g.active_location = dict(d["active_location"]) if d["active_location"] else None
+        # Saves written before the list existed hold a single "active_location"
+        # dict (or null). Migrate rather than drop it: a player mid-campaign
+        # should not lose the location they travelled to because the HUD
+        # learned to hold two.
+        if "active_locations" in d:
+            g.active_locations = [dict(l) for l in d["active_locations"]]
+        else:
+            old = d.get("active_location")
+            g.active_locations = [dict(old)] if old else []
         g.side_quests = [dict(s) for s in d["side_quests"]]
         g.willpower = d.get("willpower", 0)
         g.willpower_detached = d.get("willpower_detached", False)

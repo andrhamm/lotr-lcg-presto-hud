@@ -378,7 +378,7 @@ export class LocationPickModal {
     const S = LocationPickModal;
     modalHeader(ctx, game, this.mode === "new" ? "Travel" : "Change Location",
                 this.buttons);
-    const loc = this.game.active_location;
+    const loc = this._replacing();
     let sub, ink;
     if (this.mode === "change" && loc) {
       sub = `Replaces the current location (${loc.progress}/${loc.points} discarded).`;
@@ -445,7 +445,7 @@ export class LocationPickModal {
     else if (this.arrival === "travel") title = "Travel to new location";
     else title = "New active location";
     textCenter(ctx, title, 240, 16, DISPLAY, pal.gold);
-    const loc = this.game.active_location;
+    const loc = this._replacing();
     let y = 58;
     if (this.mode === "change" && loc) {
       textCenter(ctx, `current ${loc.progress}/${loc.points} will be discarded`,
@@ -506,10 +506,13 @@ export class LocationPickModal {
   // own definition of X rather than a 0.
   _commit(points, contribution, name = null, entry = null) {
     entry = { ...(entry ?? {}), arrival: this.arrival };
-    if (this.mode === "new" && !this.game.active_location) {
+    // "new" APPENDS - that is how a second seat arrives, and the five cards
+    // that allow one all phrase it as travelling with one active. "change"
+    // replaces the seat it was opened on.
+    if (this.mode === "new") {
       this.game.travelTo(points, contribution, name, entry);
     } else {
-      this.game.changeLocation(points, contribution, name, entry);
+      this.game.changeLocation(points, contribution, name, this.idx, entry);
     }
   }
 
@@ -917,7 +920,6 @@ export class QuestingProgressModal {
   constructor(game) {
     this.game = game;
     this.buttons = [];
-    this.locPrompt = null;   // { stage: "choose"|"pts"|"contrib", ... } or null
     this._snap = this._snapshot();
   }
 
@@ -925,7 +927,7 @@ export class QuestingProgressModal {
     const g = this.game;
     return {
       q: { p: g.quest.progress, t: g.quest.points },
-      loc: g.active_location ? { p: g.active_location.progress, t: g.active_location.points } : null,
+      locs: g.active_locations.map(l => ({ p: l.progress, t: l.points })),
       sqLen: g.side_quests.length,
       sq: g.side_quests.map(s => ({ p: s.progress, t: s.points })),
     };
@@ -938,9 +940,10 @@ export class QuestingProgressModal {
     // Prefer the catalog name (LocationPickModal's list step) when present;
     // manual entries and old saves have no "name" key at all, so this stays
     // "Location" for them - same rule as the side quests below.
-    items.push(g.active_location
-      ? { kind: "l", name: g.active_location.name || "Location", removable: true }
-      : { kind: "l_add" });
+    g.active_locations.forEach((loc, i) =>
+      items.push({ kind: "l", idx: i, removable: true,
+                   name: loc.name || (i === 0 ? "Location" : `Location ${i + 1}`) }));
+    if (!g.active_locations.length) items.push({ kind: "l_add" });
     // Prefer the catalog name (SideQuestPickModal, M4-B sidequest Task 2)
     // when present; old saves and manual entries have no "name" key at
     // all, so this stays "Side Quest N" for them.
@@ -1013,7 +1016,7 @@ export class QuestingProgressModal {
     }
     let prog, pts, pfx, idx;
     if (it.kind === "q") { prog = g.quest.progress; pts = g.quest.points; pfx = "q"; idx = null; }
-    else if (it.kind === "l") { prog = g.active_location.progress; pts = g.active_location.points; pfx = "l"; idx = null; }
+    else if (it.kind === "l") { const i = it.idx ?? 0; const l = g.active_locations[i]; prog = l.progress; pts = l.points; pfx = "l"; idx = i; }
     else { const s = g.side_quests[it.idx]; prog = s.progress; pts = s.points; pfx = "s"; idx = it.idx; }
     // The quest row's title doubles as a tap target opening the read-only
     // QuestCardModal (M4-B, second entry point) - gold ink hints it's
@@ -1065,7 +1068,6 @@ export class QuestingProgressModal {
   draw(ctx) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    if (this.locPrompt) { this._drawLocPrompt(ctx); return; }
     modalHeader(ctx, this.game, "Progress", this.buttons);
 
     textLeft(ctx, "QUEST POINTS", 12, 48, LABEL, pal.muted);
@@ -1143,51 +1145,6 @@ export class QuestingProgressModal {
     textCenter(ctx, caption, 240, ry + 4, LABEL, pal.dim);
   }
 
-  _drawLocPrompt(ctx) {
-    const lp = this.locPrompt;
-    if (lp.stage === "choose") { this._drawLocChoose(ctx); return; }
-    if (lp.stage === "pts") { this._drawLocPts(ctx); return; }
-    this._drawLocContrib(ctx);
-  }
-
-  _drawLocChoose(ctx) {
-    const loc = this.game.active_location;
-    textCenter(ctx, "Location removed", 240, 30, DISPLAY, pal.gold);
-    textCenter(ctx, "What happened to it?", 240, 70, BODY, pal.tan);
-    textCenter(ctx, `${loc.progress}/${loc.points} progress will be discarded`, 240, 94, BODY, pal.dim);
-    const opt = (y, id, label, sub) => {
-      const b = new Button([id], 24, y, 432, 64);
-      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn, false, 3);
-      textCenter(ctx, label, 240, y + 12, DISPLAY, pal.tan);
-      textCenter(ctx, sub, 240, y + 42, BODY, pal.dim);
-      this.buttons.push(b);
-    };
-    opt(120, "lp_replaced", "Replaced", "enter the new location's quest points");
-    opt(196, "lp_staging", "To staging", "its threat returns to the staging area");
-    opt(272, "lp_discard", "Discard", "no replacement");
-    const cancel = new Button(["lp_cancel"], 24, 356, 432, 56);
-    bevel(ctx, cancel.x, cancel.y, cancel.w, cancel.h, pal.btn_no, false, 3);
-    textCenter(ctx, "Cancel", 240, cancel.y + 18, BODY, pal.no_fg);
-    this.buttons.push(cancel);
-  }
-
-  _drawLocPts(ctx) {
-    textCenter(ctx, "Replace location", 240, 30, DISPLAY, pal.gold);
-    textLeft(ctx, "Quest points", 60, 216, BODY, pal.tan);
-    stepper(ctx, this.buttons, ["lp_pts", -1], ["lp_pts", 1], 250, 200, String(this.locPrompt.pts), 170, 60);
-    footer(ctx, this.buttons, "Confirm");
-  }
-
-  _drawLocContrib(ctx) {
-    textCenter(ctx, "Location to staging", 240, 30, DISPLAY, pal.gold);
-    icons.drawIcon(ctx, icons.THREAT, 60, 208, pal.red);
-    textLeft(ctx, "Contribution", 88, 216, BODY, pal.tan);
-    stepper(ctx, this.buttons, ["lp_ctr", -1], ["lp_ctr", 1], 250, 200,
-            String(this.locPrompt.state.preview), 170, 60);
-    textLeft(ctx, "added to the staging area", 60, 270, BODY, pal.dim);
-    footer(ctx, this.buttons, "Confirm");
-  }
-
   // Step a value, clamped. `cap` is the row's own target: progress cannot
   // exceed the quest points it is filling.
   //
@@ -1206,7 +1163,6 @@ export class QuestingProgressModal {
 
   onButton(btn) {
     const g = this.game;
-    if (this.locPrompt) return this._onLocPromptButton(btn);
     const [k, a] = btn.id;
     if (k === "qP-" || k === "qP+") {
       // A condition stage has no target to clamp against (mode set by flipToB).
@@ -1218,8 +1174,12 @@ export class QuestingProgressModal {
     if (k === "lP-" || k === "lP+") {
       // The location can have explored itself out from under this button (the
       // auto-explore below clears it), and a stale tap then threw on null.
-      if (!g.active_location) return null;
-      g.active_location.progress = this._clampAdj(g.active_location.progress, k.endsWith("+") ? 1 : -1);
+      const i = btn.id[1] ?? 0;
+      if (i >= g.active_locations.length) return null;
+      const l = g.active_locations[i];
+      // `cap` was missing here, so location progress ran to 99 past its own
+      // quest points. Python fixed this in 72d7e75.
+      l.progress = this._clampAdj(l.progress, k.endsWith("+") ? 1 : -1, l.points);
       // Catalog games defer this to the guided resolution flow (close-time
       // needsResolution() check + ResolutionModal's "location" step,
       // B-resolve Task 3) so overflow excess gets credited to the quest
@@ -1230,17 +1190,21 @@ export class QuestingProgressModal {
       return null;
     }
     if (k === "lT-" || k === "lT+") {
-      if (!g.active_location) return null;
-      g.active_location.points = this._clampAdj(g.active_location.points, k.endsWith("+") ? 1 : -1);
+      const i = btn.id[1] ?? 0;
+      if (i >= g.active_locations.length) return null;
+      const l = g.active_locations[i];
+      l.points = this._clampAdj(l.points, k.endsWith("+") ? 1 : -1);
       return null;
     }
     if (k === "ldone") {
-      g.logEvent("Active location Explored");
-      g.active_location = null;
+      const i = btn.id[1] ?? 0;
+      if (i < g.active_locations.length) {
+        g.logEvent("Active location Explored");
+        g.active_locations.splice(i, 1);
+      }
       this._snap = this._snapshot();
       return null;
     }
-    if (k === "lX") { this.locPrompt = { stage: "choose" }; return null; }
     if (k === "sP-" || k === "sP+") { const s = g.side_quests[a]; s.progress = this._clampAdj(s.progress, k.endsWith("+") ? 1 : -1, s.points); return null; }
     if (k === "sT-" || k === "sT+") { const s = g.side_quests[a]; s.points = this._clampAdj(s.points, k.endsWith("+") ? 1 : -1); return null; }
     if (k === "sdone") {
@@ -1327,51 +1291,21 @@ export class QuestingProgressModal {
     return null;
   }
 
-  _onLocPromptButton(btn) {
-    const g = this.game;
-    const k = btn.id[0];
-    const lp = this.locPrompt;
-    if (lp.stage === "choose") {
-      if (k === "lp_replaced") { this.locPrompt = { stage: "pts", pts: 3 }; return null; }
-      if (k === "lp_staging") { this.locPrompt = { stage: "contrib", state: new CounterState(2, 0, 9) }; return null; }
-      if (k === "lp_discard") {
-        g.logEvent("Active location removed");
-        g.active_location = null;
-        this._snap = this._snapshot();
-        this.locPrompt = null;
-        return null;
-      }
-      if (k === "lp_cancel") { this.locPrompt = null; return null; }
-      return null;
-    }
-    // pts / contrib sub-stages share the generic footer() ids
-    if (k === "cancel") { this.locPrompt = { stage: "choose" }; return null; }
-    if (k === "save") {
-      if (lp.stage === "pts") {
-        g.changeLocation(lp.pts, 0);
-      } else {
-        lp.state.confirm();
-        const v = lp.state.value;
-        g.staging += v;
-        g.active_location = null;
-        g.logEvent(`Active location to staging (+${v} threat)`);
-      }
-      this._snap = this._snapshot();
-      this.locPrompt = null;
-      return null;
-    }
-    if (k === "lp_pts") { lp.pts = Math.max(1, Math.min(30, lp.pts + btn.id[1])); return null; }
-    if (k === "lp_ctr") { lp.state.tap(btn.id[1]); return null; }
-    return null;
-  }
 
   _logChanges() {
     const s = this._snap, g = this.game;
     if (g.quest.progress !== s.q.p || g.quest.points !== s.q.t)
       g.logEvent(`Quest ${g.questLabel()} set ${g.quest.progress}/${g.quest.points} (progress view)`);
-    if (s.loc && g.active_location &&
-        (g.active_location.progress !== s.loc.p || g.active_location.points !== s.loc.t))
-      g.logEvent(`Active location set ${g.active_location.progress}/${g.active_location.points} (progress view)`);
+    // Only seats that were there when the modal opened AND are still there:
+    // one that left is already logged by whatever removed it, and one that
+    // arrived was logged by the travel.
+    s.locs.forEach((snap, i) => {
+      if (i >= g.active_locations.length) return;
+      const l = g.active_locations[i];
+      if (l.progress === snap.p && l.points === snap.t) return;
+      const label = s.locs.length === 1 ? "Active location" : `Active location ${i + 1}`;
+      g.logEvent(`${label} set ${l.progress}/${l.points} (progress view)`);
+    });
     if (g.side_quests.length === s.sqLen) {
       g.side_quests.forEach((sq, i) => {
         if (sq.progress !== s.sq[i].p || sq.points !== s.sq[i].t)
@@ -1564,10 +1498,13 @@ export class ResolutionModal {
     if (g.stages.length && g.quest.side === "A") {
       return this._questStep();      // finish an interrupted reveal/flip first
     }
-    const loc = g.active_location;
-    if (loc && loc.points > 0 && loc.progress >= loc.points) {
-      return { kind: "location", progress: loc.progress, points: loc.points,
-               name: loc.name || "Active location" };
+    // First seat that is at its points. The guided flow resolves them one at
+    // a time, so the next _derive() picks up the next one.
+    for (const loc of g.active_locations) {
+      if (loc.points > 0 && loc.progress >= loc.points) {
+        return { kind: "location", progress: loc.progress, points: loc.points,
+                 name: loc.name || "Active location" };
+      }
     }
     if ((g.quest.points > 0 && g.quest.progress >= g.quest.points) || this.forceAdvance) {
       return this._questStep();
@@ -1769,9 +1706,13 @@ export class ResolutionModal {
 // 34 of the catalog's X-printing location faces print X for threat rather
 // than quest points, so this is the row the X work actually shows up on.
 export class LocationConfigModal {
-  constructor(game) {
+  constructor(game, idx = 0) {
     this.game = game;
-    const loc = game.active_location;
+    // WHICH seat this sheet edits. The row's chevron passes its own index;
+    // everything else opens the first, which is the only one there is unless
+    // one of the five two-location cards is in play.
+    this.idx = idx;
+    const loc = idx < game.active_locations.length ? game.active_locations[idx] : null;
     this.has = loc !== null && loc !== undefined;
     this.pts = loc ? loc.points : 2;
     this.prog = loc ? loc.progress : 0;
@@ -1927,7 +1868,7 @@ export class LocationConfigModal {
   // wholesale replace dropped the card name, its threat and the *Kind/*X keys
   // the picker had just filled in.
   _apply() {
-    const loc = { ...(this.game.active_location ?? {}) };
+    const loc = { ...(this._seat() ?? {}) };
     loc.points = this.pts;
     loc.progress = this.prog;
     if (this.threatShape === "auto" || this.threatShape === "count") {
@@ -1938,7 +1879,25 @@ export class LocationConfigModal {
     } else if (this.threat || !this.threatBlank) {
       loc.threat = this.threat;
     }
-    this.game.active_location = loc;
+    if (this.idx < this.game.active_locations.length) {
+      this.game.active_locations[this.idx] = loc;
+    } else {
+      this.game.active_locations.push(loc);
+      this.idx = this.game.active_locations.length - 1;
+    }
+  }
+
+  // The record this sheet edits, or null if the seat is empty.
+  _seat() {
+    return this.idx < this.game.active_locations.length
+      ? this.game.active_locations[this.idx] : null;
+  }
+
+  // Take this location out of the row. Returns the record it removed.
+  _leave() {
+    const loc = this._seat();
+    if (loc) this.game.active_locations.splice(this.idx, 1);
+    return loc ?? null;
   }
 
   onButton(btn) {
@@ -1961,24 +1920,21 @@ export class LocationConfigModal {
       this.has = true; this._apply(); return null;
     }
     if (k === "none") {
-      if (this.game.active_location) this.game.logEvent("Active location removed");
-      this.game.active_location = null;
+      if (this._leave()) this.game.logEvent("Active location removed");
       return "close";
     }
     if (k === "explored") {
-      if (this.game.active_location) this.game.logEvent("Active location Explored");
-      this.game.active_location = null;
+      if (this._leave()) this.game.logEvent("Active location Explored");
       return "close";
     }
     if (k === "tostaging") {
       // The record carries the card's threat, so staging gets the right number
       // back rather than a guess. RR: progress is NOT lost, so nothing is
       // zeroed here.
-      const loc = this.game.active_location ?? {};
+      const loc = this._leave() ?? {};
       const back = loc.threat ?? 0;
       this.game.staging += back;
       this.game.logEvent(`Active location to staging (+${back} threat, ${loc.progress ?? 0} progress kept)`);
-      this.game.active_location = null;
       return "close";
     }
     if (k === "replaced") {

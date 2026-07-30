@@ -209,9 +209,14 @@ class QuestConfigModal:
 
 
 class LocationConfigModal:
-    def __init__(self, game):
+    def __init__(self, game, idx=0):
         self.game = game
-        loc = game.active_location
+        # WHICH seat this sheet edits. The row's chevron passes its own index;
+        # everything else opens the first, which is the only one there is
+        # unless one of the five two-location cards is in play.
+        self.idx = idx
+        loc = (game.active_locations[idx]
+               if idx < len(game.active_locations) else None)
         self.has = loc is not None
         self.pts = loc["points"] if loc else 2
         self.prog = loc["progress"] if loc else 0
@@ -391,7 +396,7 @@ class LocationConfigModal:
         just filled in.
         """
         g = self.game
-        loc = dict(g.active_location or {})
+        loc = dict(self._seat() or {})
         loc["points"] = self.pts
         loc["progress"] = self.prog
         if self.threat_shape in ("auto", "count"):
@@ -403,7 +408,23 @@ class LocationConfigModal:
             loc["threat"] = self._resolved() or 0
         elif self.threat or not self.threat_blank:
             loc["threat"] = self.threat
-        g.active_location = loc
+        if self.idx < len(g.active_locations):
+            g.active_locations[self.idx] = loc
+        else:
+            g.active_locations.append(loc)
+            self.idx = len(g.active_locations) - 1
+
+    def _seat(self):
+        """The record this sheet edits, or None if the seat is empty."""
+        return (self.game.active_locations[self.idx]
+                if self.idx < len(self.game.active_locations) else None)
+
+    def _leave(self):
+        """Take this location out of the row. Returns the record it removed."""
+        loc = self._seat()
+        if loc is not None:
+            del self.game.active_locations[self.idx]
+        return loc
 
     def _resolved(self):
         g = self.game
@@ -437,32 +458,30 @@ class LocationConfigModal:
             self._apply()
             return None
         if k == "none":
-            if self.game.active_location is not None:
+            if self._leave() is not None:
                 self.game.log_event("Active location removed")
-            self.game.active_location = None
             return "close"
         if k == "explored":
-            if self.game.active_location is not None:
+            if self._leave() is not None:
                 self.game.log_event("Active location Explored")
-            self.game.active_location = None
             return "close"
         if k == "tostaging":
             # The record carries the card's threat, so the staging total gets
             # the right number back rather than a guess. RR: progress is NOT
             # lost, so nothing is zeroed here.
-            loc = self.game.active_location or {}
+            loc = self._leave() or {}
             back = loc.get("threat") or 0
             self.game.staging += back
             self.game.log_event("Active location to staging (+%d threat, "
                                 "%d progress kept)"
                                 % (back, loc.get("progress") or 0))
-            self.game.active_location = None
             return "close"
         if k == "replaced":
             # A card swapped it: reopen the picker in change mode rather than
             # making the player clear this one and add another.
             self.game.pending_location_pick = {"mode": "change",
-                                               "back": "progress"}
+                                               "back": "progress",
+                                               "idx": self.idx}
             return "close"
         if k == "close":
             # One summary line for the whole visit, the way the Progress modal
@@ -1130,11 +1149,14 @@ class LocationPickModal:
     FOOTER_Y = 404
     FOOTER_H = 64
 
-    def __init__(self, game, mode="new", entries=None, back="play"):
+    def __init__(self, game, mode="new", entries=None, back="play", idx=0):
         self.game = game
         self.mode = mode
         self.entries = entries or []
         self.back = back
+        # Which seat "change" replaces. Only meaningful in change mode; "new"
+        # appends and ignores it.
+        self.idx = idx
         self.step = "list" if self.entries else "manual"
         self.selected = None
         self.page = 0
@@ -1144,6 +1166,15 @@ class LocationPickModal:
         # it active). Only the log and the CTA differ - see the draw comment.
         self.arrival = "travel"
         self.buttons = []
+
+    def _replacing(self):
+        """The seat a "change" would overwrite, or None. In "new" mode nothing
+        is being replaced even when a location IS active - that is the whole
+        point of a second seat - so the caption must not claim a discard."""
+        if self.mode != "change":
+            return None
+        return (self.game.active_locations[self.idx]
+                if self.idx < len(self.game.active_locations) else None)
 
     def _pages(self):
         return max(1, -(-len(self.entries) // self.PER_PAGE))
@@ -1170,7 +1201,7 @@ class LocationPickModal:
         else:
             head = "Travel"
         modal_header(d, pal, self.game, head, self.buttons)
-        loc = self.game.active_location
+        loc = self._replacing()
         if self.mode == "change" and loc:
             sub = "Replaces the current location (%d/%d discarded)." % (
                 loc["progress"], loc["points"])
@@ -1246,7 +1277,7 @@ class LocationPickModal:
         else:
             title = "New active location"
         text_center(d, pal, title, 240, 16, DISPLAY, pal.gold)
-        loc = self.game.active_location
+        loc = self._replacing()
         y = 58
         if self.mode == "change" and loc:
             text_center(d, pal, "current %d/%d will be discarded"
@@ -1315,10 +1346,14 @@ class LocationPickModal:
         show the card's own definition of X rather than a 0."""
         entry = dict(entry or {})
         entry["arrival"] = self.arrival
-        if self.mode == "new" and self.game.active_location is None:
+        # "new" APPENDS - that is how a second seat arrives, and the five
+        # cards that allow one all phrase it as travelling with one active.
+        # "change" replaces the seat it was opened on.
+        if self.mode == "new":
             self.game.travel_to(points, contribution, name, entry)
         else:
-            self.game.change_location(points, contribution, name, entry)
+            self.game.change_location(points, contribution, name,
+                                      idx=self.idx, meta=entry)
 
     def on_button(self, btn):
         k = btn.id[0]
@@ -1377,11 +1412,12 @@ class AllocationModal:
 
     def _auto(self):
         a = self.game.auto_split(self.budget)
-        self.alloc = {"location": a["location"], "quest": a["quest"],
+        self.alloc = {"locations": list(a["locations"]), "quest": a["quest"],
                       "side_quests": [0] * len(self.game.side_quests)}
 
     def _used(self):
-        return self.alloc["location"] + self.alloc["quest"] + sum(self.alloc["side_quests"])
+        return (sum(self.alloc["locations"]) + self.alloc["quest"]
+                + sum(self.alloc["side_quests"]))
 
     def _remaining(self):
         return self.budget - self._used()
@@ -1405,16 +1441,20 @@ class AllocationModal:
 
         y = 142
         self._rows = []
-        if self.game.active_location is not None:
-            self._rows.append(("location", None, "Active Location",
-                               self.game.active_location["progress"], self.game.active_location["points"]))
+        for i, loc in enumerate(self.game.active_locations):
+            self._rows.append(("location", i,
+                               "Active Location" if i == 0
+                               else "Active Location %d" % (i + 1),
+                               loc["progress"], loc["points"]))
         self._rows.append(("quest", None, "Quest %s" % self.game.quest_label(),
                            self.game.quest["progress"], self.game.quest["points"]))
         for i, sq in enumerate(self.game.side_quests):
             self._rows.append(("side", i, "Side quest %d" % (i + 1), sq["progress"], sq["points"]))
 
         for key, idx, label, cur, pts in self._rows:
-            add = self.alloc["side_quests"][idx] if key == "side" else self.alloc[key]
+            add = (self.alloc["side_quests"][idx] if key == "side"
+                   else self.alloc["locations"][idx] if key == "location"
+                   else self.alloc[key])
             panel(d, pal, 16, y, 448, 50, fill=pal.card)
             text_left(d, pal, label, 26, y + 6, BODY, pal.tan)
             text_left(d, pal, "%d + %d / %d" % (cur, add, pts), 26, y + 28, LABEL, pal.muted)
@@ -1441,6 +1481,8 @@ class AllocationModal:
             return
         if key == "side":
             self.alloc["side_quests"][idx] = max(0, self.alloc["side_quests"][idx] + delta)
+        elif key == "location":
+            self.alloc["locations"][idx] = max(0, self.alloc["locations"][idx] + delta)
         else:
             self.alloc[key] = max(0, self.alloc[key] + delta)
 
@@ -1456,7 +1498,9 @@ class AllocationModal:
             self._auto()
             return None
         if k == "reset":
-            self.alloc = {"location": 0, "quest": 0, "side_quests": [0] * len(self.game.side_quests)}
+            self.alloc = {"locations": [0] * len(self.game.active_locations),
+                          "quest": 0,
+                          "side_quests": [0] * len(self.game.side_quests)}
             return None
         if k == "save":
             completed = self.game.place_progress(self.alloc)
@@ -1496,8 +1540,8 @@ class QuestingProgressModal:
         g = self.game
         return {
             "q": {"p": g.quest["progress"], "t": g.quest["points"]},
-            "loc": ({"p": g.active_location["progress"], "t": g.active_location["points"]}
-                    if g.active_location else None),
+            "locs": [{"p": l["progress"], "t": l["points"]}
+                     for l in g.active_locations],
             "sqLen": len(g.side_quests),
             "sq": [{"p": s["progress"], "t": s["points"]} for s in g.side_quests],
         }
@@ -1509,9 +1553,13 @@ class QuestingProgressModal:
         # Prefer the catalog name (LocationPickModal's list step) when
         # present; manual entries and old saves have no "name" key at all, so
         # this stays "Location" for them - same rule as the side quests below.
-        items.append({"kind": "l", "removable": True,
-                      "name": (g.active_location.get("name") or "Location")}
-                     if g.active_location else {"kind": "l_add"})
+        for i, loc in enumerate(g.active_locations):
+            items.append({"kind": "l", "idx": i, "removable": True,
+                          "name": (loc.get("name")
+                                   or ("Location" if i == 0
+                                       else "Location %d" % (i + 1)))})
+        if not g.active_locations:
+            items.append({"kind": "l_add"})
         for i, s in enumerate(g.side_quests):
             # Prefer the catalog name (SideQuestPickModal, M4-B sidequest
             # Task 2) when present; old saves and manual entries have no
@@ -1643,8 +1691,9 @@ class QuestingProgressModal:
             prog, pts, pfx, idx = g.quest["progress"], g.quest["points"], "q", None
             accent, meta = pal.gold, "STAGE %s" % g.quest_label()
         elif kind == "l":
-            loc = g.active_location
-            prog, pts, pfx, idx = loc["progress"], loc["points"], "l", None
+            idx = it.get("idx", 0)
+            loc = g.active_locations[idx]
+            prog, pts, pfx = loc["progress"], loc["points"], "l"
             accent = pal.green
             meta = "%d QP" % pts if pts else None
         else:
@@ -1807,7 +1856,7 @@ class QuestingProgressModal:
                 y = self._section(d, pal, y, SECTION[it["kind"]], count)
                 last_kind = it["kind"]
             y = self._row(d, pal, it, y, compact)
-        if not game.active_location and self.page == 0:
+        if not game.active_locations and self.page == 0:
             text_left(d, pal, "No active location.", MARGIN + 4, y, BODY, pal.dim)
             y += 24
         self._bottom_bar(d, pal, self.page, pages)
@@ -1946,11 +1995,12 @@ class QuestingProgressModal:
             # The location can have explored itself out from under this button
             # (the auto-explore below clears it), and a stale tap on the old
             # hit-box then crashed on a None record.
-            if g.active_location is None:
+            i = btn.id[1] if len(btn.id) > 1 else 0
+            if i >= len(g.active_locations):
                 return None
-            g.active_location["progress"] = self._clamp_adj(
-                g.active_location["progress"], 1 if up else -1,
-                g.active_location["points"])
+            loc = g.active_locations[i]
+            loc["progress"] = self._clamp_adj(
+                loc["progress"], 1 if up else -1, loc["points"])
             if not g.stages:
                 # Catalog games defer this to the guided resolution flow
                 # (close-time needs_resolution() check + ResolutionModal's
@@ -1962,13 +2012,17 @@ class QuestingProgressModal:
                 g.explore_location_if_done()
             return None
         if k in ("lT-", "lT+"):
-            if g.active_location is None:
+            i = btn.id[1] if len(btn.id) > 1 else 0
+            if i >= len(g.active_locations):
                 return None
-            g.active_location["points"] = self._clamp_adj(g.active_location["points"], 1 if up else -1)
+            loc = g.active_locations[i]
+            loc["points"] = self._clamp_adj(loc["points"], 1 if up else -1)
             return None
         if k == "ldone":
-            g.log_event("Active location Explored")
-            g.active_location = None
+            i = btn.id[1] if len(btn.id) > 1 else 0
+            if i < len(g.active_locations):
+                g.log_event("Active location Explored")
+                del g.active_locations[i]
             self._snap = self._snapshot()
             return None
         if k in ("sP-", "sP+"):
@@ -2104,11 +2158,18 @@ class QuestingProgressModal:
         if g.quest["progress"] != s["q"]["p"] or g.quest["points"] != s["q"]["t"]:
             g.log_event("Quest %s set %d/%d (progress view)"
                         % (g.quest_label(), g.quest["progress"], g.quest["points"]))
-        if s["loc"] and g.active_location and (
-                g.active_location["progress"] != s["loc"]["p"]
-                or g.active_location["points"] != s["loc"]["t"]):
-            g.log_event("Active location set %d/%d (progress view)"
-                        % (g.active_location["progress"], g.active_location["points"]))
+        # Only seats that were there when the modal opened AND are still
+        # there: one that left is already logged by whatever removed it, and
+        # one that arrived was logged by the travel.
+        for i, snap in enumerate(s["locs"]):
+            if i >= len(g.active_locations):
+                continue
+            loc = g.active_locations[i]
+            if loc["progress"] != snap["p"] or loc["points"] != snap["t"]:
+                label = "Active location" if len(s["locs"]) == 1 \
+                    else "Active location %d" % (i + 1)
+                g.log_event("%s set %d/%d (progress view)"
+                            % (label, loc["progress"], loc["points"]))
         if len(g.side_quests) == s["sqLen"]:
             for i, sq in enumerate(g.side_quests):
                 if sq["progress"] != s["sq"][i]["p"] or sq["points"] != s["sq"][i]["t"]:
@@ -2326,11 +2387,13 @@ class ResolutionModal:
         g = self.game
         if g.stages and g.quest["side"] == "A":
             return self._quest_step()      # finish an interrupted reveal/flip first
-        loc = g.active_location
-        if loc and loc["points"] > 0 and loc["progress"] >= loc["points"]:
-            return {"kind": "location", "progress": loc["progress"],
-                    "points": loc["points"],
-                    "name": loc.get("name") or "Active location"}
+        # First seat that is at its points. The guided flow resolves them one
+        # at a time, so the next _derive() picks up the next one.
+        for loc in g.active_locations:
+            if loc["points"] > 0 and loc["progress"] >= loc["points"]:
+                return {"kind": "location", "progress": loc["progress"],
+                        "points": loc["points"],
+                        "name": loc.get("name") or "Active location"}
         if (g.quest["points"] > 0 and g.quest["progress"] >= g.quest["points"]) or self.force_advance:
             return self._quest_step()
         for i, s in enumerate(g.side_quests):

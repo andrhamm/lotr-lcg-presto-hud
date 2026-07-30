@@ -49,13 +49,42 @@ def test_to_dict_from_dict_round_trip():
     g.players[1].threat_per_round = 2
     g.step = "6.P"
     g.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 5}
-    g.active_location = {"points": 3, "progress": 1}
+    g.active_locations = [{"points": 3, "progress": 1}]
     g.side_quests = [{"points": 5, "progress": 2}]
     g.first_player = 2
     g.round = 4
     g.log_event("hello")
 
     restored = GameState.from_dict(g.to_dict())
+    assert restored.to_dict() == g.to_dict()
+
+
+def test_from_dict_migrates_a_pre_list_save():
+    # Saves written before active_locations existed hold a single
+    # "active_location" dict (or null). They must still load - a player mid-
+    # campaign should not lose the location they travelled to because the HUD
+    # learned to hold two.
+    d = GameState().to_dict()
+    del d["active_locations"]                 # as an old save actually looks
+    d["active_location"] = {"points": 3, "progress": 1}
+    assert GameState.from_dict(d).active_locations == [{"points": 3, "progress": 1}]
+
+
+def test_from_dict_migrates_a_pre_list_save_with_no_location():
+    d = GameState().to_dict()
+    del d["active_locations"]
+    d["active_location"] = None
+    assert GameState.from_dict(d).active_locations == []
+
+
+def test_two_active_locations_survive_a_round_trip():
+    # Five printed cards allow a second active location, which is the whole
+    # reason for the list - see gamestate.active_locations for the list.
+    g = GameState()
+    g.active_locations = [{"points": 3, "progress": 1, "name": "A"},
+                          {"points": 2, "progress": 0, "name": "B"}]
+    restored = GameState.from_dict(g.to_dict())
+    assert restored.active_locations == g.active_locations
     assert restored.to_dict() == g.to_dict()
 
 
@@ -77,11 +106,11 @@ def test_questing_inputs_survive_round_trip():
 def test_from_dict_restores_player_and_progress_state():
     g = GameState()
     g.adjust_threat(3, 41)
-    g.active_location = {"points": 4, "progress": 2}
+    g.active_locations = [{"points": 4, "progress": 2}]
     restored = GameState.from_dict(g.to_dict())
     assert restored.players[3].threat == 41
     assert restored.players[3].eliminated is False
-    assert restored.active_location == {"points": 4, "progress": 2}
+    assert restored.active_locations[0] == {"points": 4, "progress": 2}
 
 
 # --------------------------------------------------------------------------
@@ -93,7 +122,7 @@ def _game_fingerprint(g):
     return (tuple((p.threat, p.commit, p.elimination, p.threat_per_round,
                    p.starting_threat, p.eliminated) for p in g.players),
             dict(g.quest),
-            dict(g.active_location) if g.active_location else None,
+            tuple(dict(l) for l in g.active_locations),
             [dict(s) for s in g.side_quests],
             g.willpower, g.staging, g.sailing, g.heading, g.round,
             g.first_player, dict(g.reminders))
@@ -102,7 +131,7 @@ def _game_fingerprint(g):
 def _fresh_game():
     from gamestate import GameState
     g = GameState(4, 25)
-    g.active_location = {"points": 3, "progress": 1}
+    g.active_locations = [{"points": 3, "progress": 1}]
     g.side_quests = [{"points": 5, "progress": 2}]
     g.sailing = True
     return g
