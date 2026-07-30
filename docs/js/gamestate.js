@@ -525,7 +525,13 @@ export class GameState {
 
   travelTo(points, contribution = 0, name = null, meta = null) {
     this.active_location = this._seatLocation(points, name, meta);
-    this.logEvent(`Traveled to ${name || "new location"} (${points} quest points)`);
+    // Only claim a travel when the players actually paid the cost. A card effect
+    // can make a location active without one, and the log is the game's record.
+    // The mechanics are identical either way (RR: "the active location acts as a
+    // buffer", so its threat leaves the staging total regardless).
+    const verb = (meta ?? {}).arrival === "effect"
+      ? "Placed as active location:" : "Traveled to";
+    this.logEvent(`${verb} ${name || "new location"} (${points} quest points)`);
     this._applyTravelStaging(contribution);
   }
 

@@ -4,7 +4,7 @@
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          stepper, wrapText, truncateText, ribbon, ribbonH, notePanel, drawWeather,
          disc, arcRuns, ring, token, wxSmall, BAND_PAD, bandLineH,
-         DISPLAY, BODY, LABEL } from "./ui.js";
+         DISPLAY, BODY, LABEL , threatStat } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as xtargets from "./xtargets.js";
 import * as icons from "./icons.js";
@@ -357,7 +357,10 @@ export class LocationPickModal {
     this.selected = null;
     this.page = 0;
     this.pts = 3;
-    this.contrib = 2;   // its threat leaves the staging area on travel
+    this.contrib = 2;   // its threat leaves the staging area while active
+    // "travel" (the players paid the travel cost) vs "effect" (a card made it
+    // active). Only the log and the CTA differ - see _drawManual.
+    this.arrival = "travel";
     this.buttons = [];
   }
 
@@ -399,9 +402,8 @@ export class LocationPickModal {
                on ? pal.tan : pal.muted);
       // Threat, then quest points - quest points take the right edge because
       // they are the number the player acts on.
-      icons.drawIcon(ctx, icons.THREAT, S.THREAT_X, y + 10, pal.red);
-      textLeft(ctx, String(e.threat ?? 0), S.THREAT_X + 26, y + 13, BODY,
-               on ? pal.tan : pal.muted);
+      // Black, not red: staging threat is never red (design/stat-system.md).
+      threatStat(ctx, S.THREAT_X, y + 10, e.threat ?? 0);
       const qp = `${e.points ?? 0} qp`;
       textLeft(ctx, qp, 456 - measureText(qp, BODY), y + 13, BODY, on ? pal.gold : pal.tan);
       rect(ctx, 8, y + S.ROW_H, 456, 1, pal.border);
@@ -417,7 +419,8 @@ export class LocationPickModal {
     if (this.selected !== null) {
       const go = new Button(["travel"], 256, S.FOOTER_Y, 200, S.FOOTER_H);
       bevel(ctx, go.x, go.y, go.w, go.h, pal.btn_ok, false, 3);
-      textCenter(ctx, "Travel", go.x + go.w / 2, go.y + 20, BODY, pal.ok_fg);
+      textCenter(ctx, this.back !== "progress" ? "Travel" : "Add",
+                 go.x + go.w / 2, go.y + 20, BODY, pal.ok_fg);
       this.buttons.push(go);
     }
   }
@@ -435,25 +438,58 @@ export class LocationPickModal {
   }
 
   _drawManual(ctx) {
-    const title = this.mode === "new" ? "Travel to new location" : "Change active location";
-    textCenter(ctx, title, 240, 30, DISPLAY, pal.gold);
+    // The title follows the arrival choice rather than always claiming a
+    // travel: "Manual" used to land on "Travel to new location" even when the
+    // player was recording a card effect.
+    let title;
+    if (this.mode !== "new") title = "Change active location";
+    else if (this.arrival === "travel") title = "Travel to new location";
+    else title = "New active location";
+    textCenter(ctx, title, 240, 16, DISPLAY, pal.gold);
     const loc = this.game.active_location;
+    let y = 58;
     if (this.mode === "change" && loc) {
-      textCenter(ctx, `current ${loc.progress}/${loc.points} will be discarded`, 240, 80, BODY, pal.no_fg);
+      textCenter(ctx, `current ${loc.progress}/${loc.points} will be discarded`,
+                 240, y, BODY, pal.no_fg);
+      y += 26;
     }
-    textLeft(ctx, "Quest points", 60, 190, BODY, pal.tan);
-    stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 250, 174, String(this.pts), 170, 60);
-    icons.drawIcon(ctx, icons.THREAT, 60, 262, pal.red);
-    textLeft(ctx, "Contribution", 88, 266, BODY, pal.tan);
-    stepper(ctx, this.buttons, ["ctr", -1], ["ctr", 1], 250, 250, String(this.contrib), 170, 60);
-    textLeft(ctx, "subtracted from the staging area on travel", 60, 318, BODY, pal.dim);
+    // How it arrived. Travelling is only travelling when the players pay the
+    // travel cost; a card effect can make a location active without one, and the
+    // once-per-round travel limit does not apply to that. The MECHANICS are the
+    // same either way - RR: "the active location acts as a buffer", so its
+    // threat leaves the staging total however it got there - but the log is the
+    // game's record and it should not claim a travel that never happened.
+    textLeft(ctx, "HOW IT ARRIVED", 60, y, LABEL, pal.muted);
+    y += 20;
+    for (const [key, label] of [["travel", "Travelled here"],
+                                ["effect", "A card put it into play"]]) {
+      const on = this.arrival === key;
+      const b = new Button(["arr", key], 60, y, 360, 40);
+      bevel(ctx, b.x, b.y, b.w, b.h, on ? pal.card_hi : pal.btn, 3);
+      disc(ctx, b.x + 20, b.y + 20, 9, pal.well);
+      if (on) disc(ctx, b.x + 20, b.y + 20, 5, pal.gold);
+      arcRuns(ctx, b.x + 20, b.y + 20, 9, 7, 0, 360, on ? pal.gold : pal.dim);
+      textLeft(ctx, label, b.x + 40, b.y + 10, BODY, on ? pal.gold : pal.tan);
+      this.buttons.push(b);
+      y += 44;
+    }
+    y += 8;
+    textLeft(ctx, "Quest points", 60, y + 14, BODY, pal.tan);
+    stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 250, y, String(this.pts), 170, 48);
+    y += 54;
+    const tw = threatStat(ctx, 60, y + 12, null);
+    textLeft(ctx, "Contribution", 60 + tw + 8, y + 14, BODY, pal.tan);
+    stepper(ctx, this.buttons, ["ctr", -1], ["ctr", 1], 250, y, String(this.contrib), 170, 48);
+    y += 54;
+    textLeft(ctx, "leaves the staging area while it is active", 60, y, BODY, pal.dim);
+    y += 26;
     if (this.entries.length) {
-      const back = new Button(["back"], 12, 348, 200, 44);
+      const back = new Button(["back"], 12, y, 200, 40);
       bevel(ctx, back.x, back.y, back.w, back.h, pal.btn);
-      textCenter(ctx, "< Locations", back.x + back.w / 2, back.y + 14, BODY, pal.tan);
+      textCenter(ctx, "< Locations", back.x + back.w / 2, back.y + 11, BODY, pal.tan);
       this.buttons.push(back);
     }
-    footer(ctx, this.buttons, "Travel");
+    footer(ctx, this.buttons, this.arrival === "travel" ? "Travel" : "Place");
   }
 
   // Every exit returns you where you came from: the Progress modal reopens
@@ -468,6 +504,7 @@ export class LocationPickModal {
   // screen can put a real threat back into staging, and can show the card's
   // own definition of X rather than a 0.
   _commit(points, contribution, name = null, entry = null) {
+    entry = { ...(entry ?? {}), arrival: this.arrival };
     if (this.mode === "new" && !this.game.active_location) {
       this.game.travelTo(points, contribution, name, entry);
     } else {
@@ -479,6 +516,7 @@ export class LocationPickModal {
     const k = btn.id[0];
     if (k === "pts") { this.pts = Math.max(1, Math.min(30, this.pts + btn.id[1])); return null; }
     if (k === "ctr") { this.contrib = Math.max(0, Math.min(9, this.contrib + btn.id[1])); return null; }
+    if (k === "arr") { this.arrival = btn.id[1]; return "redraw"; }
     if (k === "row") { this.selected = btn.id[1]; return "redraw"; }
     if (k === "older") { this.page = Math.max(0, this.page - 1); return "redraw"; }
     if (k === "newer") { this.page = Math.min(this._pages() - 1, this.page + 1); return "redraw"; }
@@ -486,6 +524,9 @@ export class LocationPickModal {
     if (k === "back") { this.step = "list"; return "redraw"; }
     if (k === "travel") {
       const e = this.entries.find(x => x.id === this.selected);
+      // From the Travel view this IS a travel; from Progress's "+ Add" it is
+      // not, and the log should not say otherwise.
+      this.arrival = this.back !== "progress" ? "travel" : "effect";
       if (e) this._commit(e.points ?? 0, e.threat ?? 0, e.name, e);
       return this._leave();
     }

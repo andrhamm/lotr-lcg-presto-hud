@@ -296,6 +296,30 @@ export function phaseBlock(ctx, x, y, w, sections, reserveRight = 0) {
 // "willpower vs staging, live" stat from design/design-review.md's
 // Quest-Staging row. Reuses the existing outcome-sentence wording
 // verbatim. Fixed height: 64.
+// A staging-threat icon and its number, in BLACK.
+//
+// design/stat-system.md: staging and enemy threat is never red - red is the
+// player's own threat track. willpowerStagingMeter already draws it in
+// pal.outline; this is the same treatment for the places that were using
+// pal.red by mistake (the location picker's rows and its manual step).
+//
+// Black ink on a dark ground needs help, so unless `shadow` is off both the
+// icon and the number get a 1px light offset underneath - the same emboss trick
+// the picker's header used, inverted: a light shadow under dark ink.
+export function threatStat(ctx, x, y, value, { scale = 1, pen = null,
+                                               shadow = true } = {}) {
+  const ink = pen ?? pal.outline;
+  if (shadow) icons.drawIcon(ctx, icons.THREAT, x + 1, y + 1, pal.bevel_l, scale);
+  icons.drawIcon(ctx, icons.THREAT, x, y, ink, scale);
+  const w = icons.THREAT.length * scale;
+  if (value === null || value === undefined) return w;
+  const s = String(value);
+  const tx = x + w + 6, ty = y + 3;
+  if (shadow) textLeft(ctx, s, tx + 1, ty + 1, BODY, pal.bevel_l, false);
+  textLeft(ctx, s, tx, ty, BODY, ink, false);
+  return w + 6 + measureText(s, BODY);
+}
+
 export function willpowerStagingMeter(ctx, x, y, w, willpower, staging) {
   icons.drawIcon(ctx, icons.WILLPOWER, x, y, pal.gold);
   icons.drawIcon(ctx, icons.THREAT, x + w - icons.THREAT[0], y, pal.outline);

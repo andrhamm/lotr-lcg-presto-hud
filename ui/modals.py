@@ -10,7 +10,7 @@ import random
 from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         stepper, draw_weather, token, circ_btn, disc, arc_runs,
                         ring, wx_small, wrap_text, truncate_text, ribbon, ribbon_h,
-                        BAND_PAD, band_line_h)
+                        threat_stat, BAND_PAD, band_line_h)
 from ui.counter import CounterState
 import xtargets
 from ui import icons
@@ -1051,7 +1051,10 @@ class LocationPickModal:
         self.selected = None
         self.page = 0
         self.pts = 3
-        self.contrib = 2   # its threat leaves the staging area on travel
+        self.contrib = 2   # its threat leaves the staging area while active
+        # "travel" (the players paid the travel cost) vs "effect" (a card made
+        # it active). Only the log and the CTA differ - see the draw comment.
+        self.arrival = "travel"
         self.buttons = []
 
     def _pages(self):
@@ -1070,9 +1073,15 @@ class LocationPickModal:
 
     def _draw_list(self, d, pal):
         from ui.header import modal_header
-        modal_header(d, pal, self.game,
-                     "Travel" if self.mode == "new" else "Change Location",
-                     self.buttons)
+        # "+ Add location" (back == "progress") is not the Travel phase, so the
+        # header must not claim one. Reaching this from the Travel view is.
+        if self.mode != "new":
+            head = "Change Location"
+        elif self.back == "progress":
+            head = "Add Location"
+        else:
+            head = "Travel"
+        modal_header(d, pal, self.game, head, self.buttons)
         loc = self.game.active_location
         if self.mode == "change" and loc:
             sub = "Replaces the current location (%d/%d discarded)." % (
@@ -1100,9 +1109,9 @@ class LocationPickModal:
             # quest points are the number the player acts on, so they take
             # the right edge where every other list in the app puts its
             # headline figure.
-            icons.draw(d, icons.THREAT, self.THREAT_X, y + 10, pal.red)
-            text_left(d, pal, str(e.get("threat") or 0), self.THREAT_X + 26, y + 13,
-                      BODY, pal.tan if on else pal.muted)
+            # Black, not red: staging threat is never red (design/stat-system.md,
+            # and willpower_staging_meter has always drawn it this way).
+            threat_stat(d, pal, self.THREAT_X, y + 10, e.get("threat") or 0)
             qp_s = "%d qp" % (e.get("points") or 0)
             qw = d.measure_text(qp_s, BODY)
             text_left(d, pal, qp_s, 456 - qw, y + 13, BODY, pal.gold if on else pal.tan)
@@ -1119,7 +1128,8 @@ class LocationPickModal:
         if self.selected is not None:
             go = Button(("travel",), 256, self.FOOTER_Y, 200, self.FOOTER_H)
             bevel(d, pal, go.x, go.y, go.w, go.h, pal.btn_ok, t=3)
-            text_center(d, pal, "Travel", go.x + go.w / 2, go.y + 20, BODY, pal.ok_fg)
+            text_center(d, pal, "Travel" if self.back != "progress" else "Add",
+                        go.x + go.w / 2, go.y + 20, BODY, pal.ok_fg)
             self.buttons.append(go)
 
     def _pager(self, d, pal, pages):
@@ -1136,27 +1146,67 @@ class LocationPickModal:
         self.buttons.append(dn)
 
     def _draw_manual(self, d, pal):
-        title = "Travel to new location" if self.mode == "new" else "Change active location"
-        text_center(d, pal, title, 240, 30, DISPLAY, pal.gold)
+        # The title follows the arrival choice rather than always claiming a
+        # travel: "Manual" used to land on "Travel to new location" even when the
+        # player was recording a card effect.
+        if self.mode != "new":
+            title = "Change active location"
+        elif self.arrival == "travel":
+            title = "Travel to new location"
+        else:
+            title = "New active location"
+        text_center(d, pal, title, 240, 16, DISPLAY, pal.gold)
         loc = self.game.active_location
+        y = 58
         if self.mode == "change" and loc:
             text_center(d, pal, "current %d/%d will be discarded"
-                        % (loc["progress"], loc["points"]), 240, 80, BODY, pal.no_fg)
+                        % (loc["progress"], loc["points"]), 240, y, BODY, pal.no_fg)
+            y += 26
 
-        text_left(d, pal, "Quest points", 60, 190, BODY, pal.tan)
-        stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 250, 174,
-                str(self.pts), 170, 60)
-        icons.draw(d, icons.THREAT, 60, 262, pal.red)
-        text_left(d, pal, "Contribution", 88, 266, BODY, pal.tan)
-        stepper(d, pal, self.buttons, ("ctr", -1), ("ctr", 1), 250, 250,
-                str(self.contrib), 170, 60)
-        text_left(d, pal, "subtracted from the staging area on travel", 60, 318, BODY, pal.dim)
+        # How it arrived. Travelling is only travelling when the players pay the
+        # travel cost; a card effect can make a location active without one, and
+        # the once-per-round travel limit does not apply to that. The MECHANICS
+        # are the same either way - RR: "the active location acts as a buffer",
+        # so its threat leaves the staging total however it got there - but the
+        # log is the game's record and it should not claim a travel that never
+        # happened.
+        text_left(d, pal, "HOW IT ARRIVED", 60, y, LABEL, pal.muted)
+        y += 20
+        for key, label in (("travel", "Travelled here"),
+                           ("effect", "A card put it into play")):
+            on = self.arrival == key
+            b = Button(("arr", key), 60, y, 360, 40)
+            bevel(d, pal, b.x, b.y, b.w, b.h, pal.card_hi if on else pal.btn, t=3)
+            disc(d, b.x + 20, b.y + 20, 9, pal.well)
+            if on:
+                disc(d, b.x + 20, b.y + 20, 5, pal.gold)
+            arc_runs(d, b.x + 20, b.y + 20, 9, 7, 0, 360,
+                     pal.gold if on else pal.dim)
+            text_left(d, pal, label, b.x + 40, b.y + 10, BODY,
+                      pal.gold if on else pal.tan)
+            self.buttons.append(b)
+            y += 44
+        y += 8
+        text_left(d, pal, "Quest points", 60, y + 14, BODY, pal.tan)
+        stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 250, y,
+                str(self.pts), 170, 48)
+        y += 54
+        tw = threat_stat(d, pal, 60, y + 12, None)
+        text_left(d, pal, "Contribution", 60 + tw + 8, y + 14, BODY, pal.tan)
+        stepper(d, pal, self.buttons, ("ctr", -1), ("ctr", 1), 250, y,
+                str(self.contrib), 170, 48)
+        y += 54
+        text_left(d, pal, "leaves the staging area while it is active", 60, y,
+                  BODY, pal.dim)
+        y += 26
         if self.entries:
-            back = Button(("back",), 12, 348, 200, 44)
+            back = Button(("back",), 12, y, 200, 40)
             bevel(d, pal, back.x, back.y, back.w, back.h, pal.btn)
-            text_center(d, pal, "< Locations", back.x + back.w / 2, back.y + 14, BODY, pal.tan)
+            text_center(d, pal, "< Locations", back.x + back.w / 2, back.y + 11,
+                        BODY, pal.tan)
             self.buttons.append(back)
-        _footer(d, pal, self.buttons, save_label="Travel")
+        _footer(d, pal, self.buttons,
+                save_label="Travel" if self.arrival == "travel" else "Place")
 
     # -- input -----------------------------------------------------------
     def _leave(self, result="close"):
@@ -1171,6 +1221,8 @@ class LocationPickModal:
         threat / *Kind / *Formula keys ride along onto the location record so
         the Progress screen can put a real threat back into staging, and can
         show the card's own definition of X rather than a 0."""
+        entry = dict(entry or {})
+        entry["arrival"] = self.arrival
         if self.mode == "new" and self.game.active_location is None:
             self.game.travel_to(points, contribution, name, entry)
         else:
@@ -1184,6 +1236,9 @@ class LocationPickModal:
         if k == "ctr":
             self.contrib = max(0, min(9, self.contrib + btn.id[1]))
             return None
+        if k == "arr":
+            self.arrival = btn.id[1]
+            return "redraw"
         if k == "row":
             self.selected = btn.id[1]
             return "redraw"
@@ -1200,6 +1255,9 @@ class LocationPickModal:
             self.step = "list"
             return "redraw"
         if k == "travel":
+            # From the Travel view this IS a travel; from Progress's "+ Add" it
+            # is not, and the log should not say otherwise.
+            self.arrival = "travel" if self.back != "progress" else "effect"
             e = next((x for x in self.entries if x["id"] == self.selected), None)
             if e:
                 self._commit(e.get("points") or 0, e.get("threat") or 0,

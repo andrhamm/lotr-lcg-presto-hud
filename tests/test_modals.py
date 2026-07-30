@@ -980,6 +980,61 @@ def test_location_config_save_keeps_the_card_metadata():
     assert loc["threatX"]["target"] == "locations_in_staging"
 
 
+def test_travel_from_the_travel_view_logs_a_travel():
+    hw, pal, game, m = _pick()          # back defaults to the play screen
+    m.on_button(_find(m, ("row", "f")))
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("travel",)))
+    assert any("Traveled to Old Forest Road" in e["text"] for e in game.log)
+
+
+def test_adding_a_location_from_progress_is_not_a_travel():
+    # Travelling is only travelling when the players pay the travel cost. "+ Add
+    # location" is not the Travel phase, and the log is the game's record - it
+    # must not invent a travel. The MECHANICS are the same either way (RR: "the
+    # active location acts as a buffer", so the threat leaves staging regardless).
+    hw, pal, game, m = _pick(back="progress")
+    m.on_button(_find(m, ("row", "f")))
+    hw.display.calls.clear()                   # _pick already drew the header
+    m.draw(hw, game, pal)
+    texts = " ".join(_texts(hw))
+    assert "Add Location" in texts and "Travel" not in texts
+    m.on_button(_find(m, ("travel",)))
+    assert any("Placed as active location" in e["text"] for e in game.log)
+    assert not any("Traveled to" in e["text"] for e in game.log)
+
+
+def test_manual_card_effect_choice_retitles_and_relogs():
+    hw, pal, game, m = _pick(entries=[])       # opens straight on manual
+    m.on_button(_find(m, ("arr", "effect")))
+    hw.display.calls.clear()                   # _pick already drew the default
+    m.draw(hw, game, pal)
+    texts = " ".join(_texts(hw))
+    assert "New active location" in texts
+    assert "Travel to new location" not in texts
+    m.on_button(_find(m, ("save",)))
+    assert any("Placed as active location" in e["text"] for e in game.log)
+
+
+def test_manual_defaults_to_travel():
+    hw, pal, game, m = _pick(entries=[])
+    m.draw(hw, game, pal)
+    assert m.arrival == "travel"
+    assert "Travel to new location" in " ".join(_texts(hw))
+
+
+def test_staging_threat_is_drawn_black_not_red():
+    # design/stat-system.md: staging and enemy threat is never red - red is the
+    # player's own threat track. The picker's rows and its manual step were both
+    # using pal.red.
+    hw, pal, game, m = _pick()
+    m.draw(hw, game, pal)
+    # Icon masks are drawn as rects, so the pen is the call's last element.
+    pens = {c[-1] for c in hw.display.calls if c[0] == "rect"}
+    assert pal.red not in pens, "picker rows still draw threat in red"
+    assert pal.outline in pens
+
+
 def test_progress_cannot_exceed_the_target():
     # RR p.22: excess progress beyond a stage's quest points is DISCARDED on
     # advance, not carried, and a location explores the moment it is full - so a

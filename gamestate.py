@@ -621,8 +621,15 @@ class GameState:
 
     def travel_to(self, points, contribution=0, name=None, meta=None):
         self.active_location = self._seat_location(points, name, meta)
-        self.log_event("Traveled to %s (%d quest points)"
-                       % (name or "new location", points))
+        # Only claim a travel when the players actually paid the cost. A card
+        # effect can make a location active without one, and the log is the
+        # game's record - it should not invent a travel that never happened.
+        # The mechanics are identical either way (RR: "the active location acts
+        # as a buffer", so its threat leaves the staging total regardless).
+        verb = ("Traveled to" if (meta or {}).get("arrival", "travel") == "travel"
+                else "Placed as active location:")
+        self.log_event("%s %s (%d quest points)"
+                       % (verb, name or "new location", points))
         self._apply_travel_staging(contribution)
 
     def change_location(self, points, contribution=0, name=None, meta=None):

@@ -280,6 +280,36 @@ def phase_block(d, pal, x, y, w, sections, reserve_right=0):
     return h
 
 
+def threat_stat(d, pal, x, y, value, scale=1, pen=None, shadow=True):
+    """A staging-threat icon and its number, in BLACK.
+
+    design/stat-system.md: staging and enemy threat is never red - red is the
+    player's own threat track. willpower_staging_meter already draws it in
+    pal.outline; this is the same treatment for the places that were using
+    pal.red by mistake (the location picker's rows and its manual step).
+
+    Black ink on a dark ground needs help, so unless `shadow` is off both the
+    icon and the number get a 1px light offset underneath. That is the same
+    emboss trick the picker's own header already used, just the other way round:
+    there a dark shadow sat under light ink, here a light one sits under dark.
+    """
+    from ui import icons as _icons
+    mask = _icons.THREAT if scale == 1 else _icons.THREAT
+    ink = pen or pal.outline
+    if shadow:
+        _icons.draw(d, mask, x + 1, y + 1, pal.bevel_l, scale=scale)
+    _icons.draw(d, mask, x, y, ink, scale=scale)
+    w = len(mask) * scale
+    if value is None:
+        return w
+    s = str(value)
+    tx, ty = x + w + 6, y + 3
+    if shadow:
+        text_left(d, pal, s, tx + 1, ty + 1, BODY, pal.bevel_l, shadow=False)
+    text_left(d, pal, s, tx, ty, BODY, ink, shadow=False)
+    return w + 6 + d.measure_text(s, BODY)
+
+
 def willpower_staging_meter(d, pal, x, y, w, willpower, staging):
     """Live head-to-head bar: willpower (gold, left) vs staging threat
     (dark pal.outline, right - staging threat is never red, per

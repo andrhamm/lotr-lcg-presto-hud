@@ -643,6 +643,20 @@ def _location_config_modal_count_control():
     return hw, m
 
 
+def _location_pick_manual_card_effect():
+    # The manual step with the card-effect arrival picked: retitled, CTA becomes
+    # "Place", and the reflowed block must clear the footer at y=404 (the first
+    # version put "< Locations" straight through the staging note).
+    from ui.modals import LocationPickModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    m = LocationPickModal(g, mode="new", entries=[], back="play")
+    m.arrival = "effect"
+    m.draw(hw, g, pal)
+    return hw, m
+
+
 def _quest_card_modal():
     # A normal (non-branch) stage with real text on both faces (Foundations
     # of Stone stage 1) - exercises wrapped text in both SIDE A and SIDE B
@@ -1341,6 +1355,7 @@ SCENES = {
     "location_pick_change": _location_pick_change,
     "location_pick_paged": _location_pick_paged,
     "location_pick_manual": _location_pick_manual,
+    "location_pick_manual_card_effect": _location_pick_manual_card_effect,
     "location_pick_no_catalog": _location_pick_no_catalog,
     "sailing_modal": _sailing_modal,
     "stage_complete_modal": _stage_complete_modal,
