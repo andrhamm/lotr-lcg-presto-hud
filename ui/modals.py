@@ -1605,8 +1605,6 @@ class QuestingProgressModal:
                           "name": (loc.get("name")
                                    or ("Location" if i == 0
                                        else "Location %d" % (i + 1)))})
-        if not g.active_locations:
-            items.append({"kind": "l_add"})
         for i, s in enumerate(g.side_quests):
             # Prefer the catalog name (SideQuestPickModal, M4-B sidequest
             # Task 2) when present; old saves and manual entries have no
@@ -1614,40 +1612,6 @@ class QuestingProgressModal:
             label = s.get("name") or "Side Quest %d" % (i + 1)
             items.append({"kind": "s", "idx": i, "name": label, "removable": True})
         return items
-
-    def _val_editor2(self, d, pal, cx, cy, value, frac, progress_ring, id_minus, id_plus):
-        """Circular -/+ flanking a value token: Current shows a live progress
-        ring (token()); Target is dim-only (well + full dim ring, no fill)."""
-        circ_btn(d, pal, cx - 30, cy, 10, "-")
-        if progress_ring:
-            token(d, pal, cx, cy, 13, 2, value, pal.gold, frac, pal.gold, pal.dim)
-        else:
-            disc(d, cx, cy, 13, pal.well)
-            arc_runs(d, cx, cy, 13, 11, 0, 360, pal.dim)
-            text_center(d, pal, str(value), cx, int(cy - 8), BODY, pal.gold)
-        circ_btn(d, pal, cx + 30, cy, 10, "+")
-        self.buttons.append(Button(id_minus, cx - 30 - 12, cy - 12, 24, 24))
-        self.buttons.append(Button(id_plus, cx + 30 - 12, cy - 12, 24, 24))
-
-    def _icon_btn(self, d, pal, cx, cy, r, kind, id):
-        """Small circular action: 'x' = remove (red X, reuses circ_btn),
-        'done' = mark complete (green pennant flag), 'adv' = manually trigger
-        the guided resolution flow (gold chevron - conditional/0-point
-        stages have no numeric gate to cross, so this is the only way in)."""
-        if kind == "x":
-            circ_btn(d, pal, cx, cy, r, "X", pal.red)
-        elif kind == "adv":
-            disc(d, cx, cy, r, pal.btn)
-            arc_runs(d, cx, cy, r, r - 2, 0, 360, pal.bevel_l)
-            d.set_pen(pal.gold)
-            d.triangle(cx - 3, cy - 5, cx - 3, cy + 5, cx + 5, cy)
-        else:
-            disc(d, cx, cy, r, pal.btn)
-            arc_runs(d, cx, cy, r, r - 2, 0, 360, pal.bevel_l)
-            d.set_pen(pal.green)
-            d.rectangle(cx - 4, cy - 5, 1, 10)
-            d.triangle(cx - 3, cy - 5, cx + 4, cy - 3, cx - 3, cy - 1)
-        self.buttons.append(Button(id, cx - 12, cy - 12, 24, 24))
 
     # -- the mock's row vocabulary -------------------------------------------
     # A row is a card with a coloured accent down its left edge (green =
@@ -1660,6 +1624,7 @@ class QuestingProgressModal:
     # very different from the Players screen controls". The target stepper is
     # gone from the row entirely: editing a target is a detail-sheet job, which
     # is also what labels the actions the icons never named.
+    #
     # From ui.widgets, so the web twin reads the same two numbers.
     ROW_H = W_ROW_H
     ROW_H_COMPACT = W_ROW_H_COMPACT
@@ -1843,9 +1808,8 @@ class QuestingProgressModal:
         # Location BEFORE quest: progress fills the location first, and the
         # band directly above says so. Reading order should match the rule.
         items = self._items()
-        order = {"l": 0, "l_add": 0, "q": 1, "s": 2}
-        rows = sorted((it for it in items if it["kind"] != "l_add"),
-                      key=lambda it: order[it["kind"]])
+        order = {"l": 0, "q": 1, "s": 2}
+        rows = sorted(items, key=lambda it: order[it["kind"]])
         avail = 420 - y - 8
 
         def fits(compact):
@@ -2062,9 +2026,6 @@ class QuestingProgressModal:
             g.quest["progress"] = self._clamp_adj(g.quest["progress"],
                                                   1 if up else -1, cap)
             return None
-        if k in ("qT-", "qT+"):
-            g.quest["points"] = self._clamp_adj(g.quest["points"], 1 if up else -1)
-            return None
         if k in ("lP-", "lP+"):
             # The location can have explored itself out from under this button
             # (the auto-explore below clears it), and a stale tap on the old
@@ -2085,60 +2046,15 @@ class QuestingProgressModal:
                 # the immediate auto-explore they've always had.
                 g.explore_location_if_done()
             return None
-        if k in ("lT-", "lT+"):
-            i = btn.id[1] if len(btn.id) > 1 else 0
-            if i >= len(g.active_locations):
-                return None
-            loc = g.active_locations[i]
-            loc["points"] = self._clamp_adj(loc["points"], 1 if up else -1)
-            return None
-        if k == "ldone":
-            i = btn.id[1] if len(btn.id) > 1 else 0
-            if i < len(g.active_locations):
-                g.log_event("Active location Explored")
-                del g.active_locations[i]
-            self._snap = self._snapshot()
-            return None
         if k in ("sP-", "sP+"):
             s = g.side_quests[a]
             s["progress"] = self._clamp_adj(s["progress"], 1 if up else -1,
                                             s["points"])
             return None
-        if k in ("sT-", "sT+"):
-            s = g.side_quests[a]
-            s["points"] = self._clamp_adj(s["points"], 1 if up else -1)
-            return None
-        if k == "sdone":
-            g.log_event("Side quest %d completed" % (a + 1))
-            g.side_quests.pop(a)
-            self._snap = self._snapshot()
-            return None
-        if k == "sX":
-            g.log_event("Side quest %d removed" % (a + 1))
-            g.side_quests.pop(a)
-            self._snap = self._snapshot()
-            return None
-        if k == "addloc":
-            # Was a blind append of a guessed 3 quest points. Now the same
-            # picker Travel uses, opened via the pending flag (the router
-            # holds one modal at a time) with back="progress" so every exit
-            # reopens this modal instead of dropping you on the play screen.
-            g.pending_location_pick = {"mode": "new", "back": "progress"}
-            self._log_changes()
-            return "close"
         if k == "hd_set":
             if a != g.heading:
                 g.shift_heading(a - g.heading, "progress view")
             return None
-        if k == "quest_card":
-            # The router holds one modal at a time (no stacking) - close this
-            # one (flushing any pending edits, same as a normal "close") and
-            # flag that QuestCardModal should open on the next loop pass. See
-            # main.py's loop, which checks pending_quest_card once modal is
-            # None.
-            g.pending_quest_card = True
-            self._log_changes()
-            return "close"
         if k == "detail":
             # The row's ">" opens that entity's own sheet, which is where the
             # target lives now and where the icon-button actions finally get
@@ -2185,12 +2101,6 @@ class QuestingProgressModal:
         if k in ("older", "newer"):
             self.page = max(0, self.page + (-1 if k == "older" else 1))
             return "redraw"
-        if k == "loc_detail":
-            # Same one-modal-at-a-time dance as "quest_card" above: close, flag,
-            # and let the router open LocationConfigModal on the next pass.
-            g.pending_location_detail = True
-            self._log_changes()
-            return "close"
         if k == "close":
             self._log_changes()
             # Catalog games: any overflow (location/quest/side-quest) is

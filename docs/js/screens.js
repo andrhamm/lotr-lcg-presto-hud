@@ -996,7 +996,6 @@ export class QuestingProgressModal {
     g.active_locations.forEach((loc, i) =>
       items.push({ kind: "l", idx: i, removable: true,
                    name: loc.name || (i === 0 ? "Location" : `Location ${i + 1}`) }));
-    if (!g.active_locations.length) items.push({ kind: "l_add" });
     g.side_quests.forEach((s, i) =>
       items.push({ kind: "s", idx: i, name: s.name || `Side Quest ${i + 1}`,
                    removable: true }));
@@ -1180,9 +1179,8 @@ export class QuestingProgressModal {
 
     // Location BEFORE quest: progress fills the location first, and the band
     // directly above says so. Reading order should match the rule.
-    const order = { l: 0, l_add: 0, q: 1, s: 2 };
-    const rows = this._items().filter(it => it.kind !== "l_add")
-      .sort((a, b) => order[a.kind] - order[b.kind]);
+    const order = { l: 0, q: 1, s: 2 };
+    const rows = this._items().sort((a, b) => order[a.kind] - order[b.kind]);
     const avail = 420 - y - 8;
 
     const fits = (c) => {
@@ -1398,10 +1396,6 @@ export class QuestingProgressModal {
       g.quest.progress = this._clampAdj(g.quest.progress, up ? 1 : -1, cap);
       return null;
     }
-    if (k === "qT-" || k === "qT+") {
-      g.quest.points = this._clampAdj(g.quest.points, up ? 1 : -1);
-      return null;
-    }
     if (k === "lP-" || k === "lP+") {
       // The location can have explored itself out from under this button (the
       // auto-explore below clears it), and a stale tap then threw on null.
@@ -1420,64 +1414,14 @@ export class QuestingProgressModal {
       }
       return null;
     }
-    if (k === "lT-" || k === "lT+") {
-      const i = a ?? 0;
-      if (i >= g.active_locations.length) return null;
-      const loc = g.active_locations[i];
-      loc.points = this._clampAdj(loc.points, up ? 1 : -1);
-      return null;
-    }
-    if (k === "ldone") {
-      const i = a ?? 0;
-      if (i < g.active_locations.length) {
-        g.logEvent("Active location Explored");
-        g.active_locations.splice(i, 1);
-      }
-      this._snap = this._snapshot();
-      return null;
-    }
     if (k === "sP-" || k === "sP+") {
       const s = g.side_quests[a];
       s.progress = this._clampAdj(s.progress, up ? 1 : -1, s.points);
       return null;
     }
-    if (k === "sT-" || k === "sT+") {
-      const s = g.side_quests[a];
-      s.points = this._clampAdj(s.points, up ? 1 : -1);
-      return null;
-    }
-    if (k === "sdone") {
-      g.logEvent(`Side quest ${a + 1} completed`);
-      g.side_quests.splice(a, 1);
-      this._snap = this._snapshot();
-      return null;
-    }
-    if (k === "sX") {
-      g.logEvent(`Side quest ${a + 1} removed`);
-      g.side_quests.splice(a, 1);
-      this._snap = this._snapshot();
-      return null;
-    }
-    if (k === "addloc") {
-      // Was a blind append of a guessed 3 quest points. Now the same picker
-      // Travel uses, opened via the pending flag (the router holds one modal at
-      // a time) with back="progress" so every exit reopens this modal instead
-      // of dropping you on the play screen.
-      g.pending_location_pick = { mode: "new", back: "progress" };
-      this._logChanges();
-      return "close";
-    }
     if (k === "hd_set") {
       if (a !== g.heading) g.shiftHeading(a - g.heading, "progress view");
       return null;
-    }
-    if (k === "quest_card") {
-      // The router holds one modal at a time (no stacking) - close this one
-      // (flushing any pending edits, same as a normal "close") and flag that
-      // QuestCardModal should open on the next tick.
-      g.pending_quest_card = true;
-      this._logChanges();
-      return "close";
     }
     if (k === "detail") {
       // The row's ">" opens that entity's own sheet, which is where the target
@@ -1524,12 +1468,6 @@ export class QuestingProgressModal {
     if (k === "older" || k === "newer") {
       this.page = Math.max(0, this.page + (k === "older" ? -1 : 1));
       return "redraw";
-    }
-    if (k === "loc_detail") {
-      // Same one-modal-at-a-time dance as "quest_card" above.
-      g.pending_location_detail = true;
-      this._logChanges();
-      return "close";
     }
     if (k === "close") {
       this._logChanges();
