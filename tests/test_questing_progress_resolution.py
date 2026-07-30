@@ -39,21 +39,33 @@ def test_no_overflow_close_does_not_set_pending_resolution():
     m.on_button(close)
     assert g.pending_resolution is False
 
-def test_advance_icon_shown_only_for_catalog_games():
+def test_advance_anyway_is_labelled_and_only_for_catalog_games():
+    # Was a bare icon on the Progress row with no label. It lives on the quest
+    # row's own sheet now, spelled out - and a custom game keeps its manual
+    # stage edit instead, because it has no ResolutionModal to open. Two
+    # buttons named "advance" doing different things was the thing to avoid.
+    from ui.modals import QuestConfigModal
     g = _catalog_game()
-    m = QuestingProgressModal(g)
+    m = QuestConfigModal(g)
     hw = _draw(m, g)
-    assert any(b.id == ("qAdv",) for b in m.buttons)
+    assert any(b.id == ("force_adv",) for b in m.buttons)
+    assert "Advance anyway" in " ".join(
+        c[1] for c in hw.display.calls if c[0] == "text")
     g2 = gamestate.GameState(2, 25)          # custom game: no stages
-    m2 = QuestingProgressModal(g2)
+    m2 = QuestConfigModal(g2)
     _draw(m2, g2)
-    assert not any(b.id == ("qAdv",) for b in m2.buttons)
+    assert not any(b.id == ("force_adv",) for b in m2.buttons)
+    assert any(b.id == ("adv",) for b in m2.buttons)
 
-def test_advance_icon_sets_forced_resolution():
+def test_advance_anyway_sets_forced_resolution():
+    # The only way into the guided flow for a stage with no quest points:
+    # ~137 of ~400 stage cards advance on a condition, so nothing crosses a
+    # target to trigger it.
+    from ui.modals import QuestConfigModal
     g = _catalog_game()
-    m = QuestingProgressModal(g)
+    m = QuestConfigModal(g)
     _draw(m, g)
-    adv = next(b for b in m.buttons if b.id == ("qAdv",))
+    adv = next(b for b in m.buttons if b.id == ("force_adv",))
     assert m.on_button(adv) == "close"
     assert g.pending_resolution == "forced"
 

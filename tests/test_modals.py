@@ -564,6 +564,9 @@ def test_questing_progress_modal_add_location_opens_the_picker():
     game.active_locations = []
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
+    # "+ Add" asks which first - it used to silently mean "side quest".
+    assert m.on_button(_find(m, ("add",))) == "redraw"
+    m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("add_loc",))) == "close"
     assert game.pending_location_pick == {"mode": "new", "back": "progress"}
     assert not game.active_locations      # nothing seated until you pick
@@ -628,7 +631,10 @@ def test_questing_progress_modal_add_side_quest_flags_pending_and_closes():
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     assert game.pending_side_quest_pick is False
-    assert m.on_button(_find(m, ("add",))) == "close"
+    # "+ Add" asks which first; the side-quest branch is what flags the picker.
+    assert m.on_button(_find(m, ("add",))) == "redraw"
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("add_sq",))) == "close"
     assert game.pending_side_quest_pick is True
     assert game.side_quests == []          # nothing appended yet - picker does that
 

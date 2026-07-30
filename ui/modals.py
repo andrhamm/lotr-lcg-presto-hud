@@ -155,10 +155,30 @@ class QuestConfigModal:
                     pal.bg if self.sail else pal.tan, shadow=False)
         self.buttons.append(sb)
 
-        adv = Button(("adv",), 30, 344, 420, 48)
-        bevel(d, pal, adv.x, adv.y, adv.w, adv.h, pal.btn)
-        text_center(d, pal, "Advance stage (progress -> 0)", adv.x + adv.w / 2, adv.y + 14, BODY, pal.tan)
-        self.buttons.append(adv)
+        # A catalog game advances through the GUIDED flow, which knows about
+        # branch alternatives, victory and the location credit. A custom game
+        # has no ResolutionModal to open, so it keeps the manual edit it has
+        # always had. Showing both would be two buttons named "advance" that
+        # do different things.
+        if game.stages:
+            # The only way in for a stage with no quest points: ~137 of ~400
+            # stage cards advance on a condition, so there is no target to
+            # cross and nothing to trigger the flow on its own.
+            fa = Button(("force_adv",), 30, 344, 205, 48)
+            bevel(d, pal, fa.x, fa.y, fa.w, fa.h, pal.btn)
+            text_center(d, pal, "Advance anyway", fa.x + fa.w / 2, fa.y + 14,
+                        BODY, pal.tan)
+            self.buttons.append(fa)
+            vc = Button(("quest_card",), 245, 344, 205, 48)
+            bevel(d, pal, vc.x, vc.y, vc.w, vc.h, pal.btn)
+            text_center(d, pal, "View quest card", vc.x + vc.w / 2, vc.y + 14,
+                        BODY, pal.tan)
+            self.buttons.append(vc)
+        else:
+            adv = Button(("adv",), 30, 344, 420, 48)
+            bevel(d, pal, adv.x, adv.y, adv.w, adv.h, pal.btn)
+            text_center(d, pal, "Advance stage (progress -> 0)", adv.x + adv.w / 2, adv.y + 14, BODY, pal.tan)
+            self.buttons.append(adv)
 
         _footer(d, pal, self.buttons)
 
@@ -182,6 +202,14 @@ class QuestConfigModal:
                 self.q["stage_n"] += 1
             self.q["progress"] = 0
             return None
+        if k == "force_adv":
+            # One modal at a time, so flag and close - main.py opens
+            # ResolutionModal on the next pass, same pattern as quest_card.
+            self.game.pending_resolution = "forced"
+            return "close"
+        if k == "quest_card":
+            self.game.pending_quest_card = True
+            return "close"
         if k == "sail":
             self.sail = not self.sail
             return None
@@ -1789,18 +1817,39 @@ class QuestingProgressModal:
             per_c, pages_c = fits(True)
             if pages_c < pages:
                 compact, per_page, pages = True, per_c, pages_c
-        self.page = min(self.page, pages - 1)
-        shown = rows[self.page * per_page:(self.page + 1) * per_page]
 
-        SECTION = {"l": "ACTIVE LOCATION", "q": "CURRENT QUEST",
-                   "s": "SIDE QUESTS"}
+        # The break follows the CHAIN, not the row count. Progress fills the
+        # locations and then the quest, and the band at the top of the screen
+        # describes exactly that motion - so those rows are one thing and are
+        # not split across a page turn. Side quests take what is left, and page
+        # 2 onward if they have to.
+        chain = [it for it in rows if it["kind"] in ("l", "q")]
+        tail = [it for it in rows if it["kind"] == "s"]
+        if chain and len(chain) <= per_page:
+            pages_list = [chain + tail[:per_page - len(chain)]]
+            rest = tail[per_page - len(chain):]
+            while rest:
+                pages_list.append(rest[:per_page])
+                rest = rest[per_page:]
+        else:
+            # The chain alone overflows the page - nothing to protect, so fall
+            # back to plain slicing rather than inventing a worse rule.
+            pages_list = [rows[i:i + per_page]
+                          for i in range(0, len(rows), per_page)] or [[]]
+        pages = len(pages_list)
+        self.page = min(self.page, pages - 1)
+        shown = pages_list[self.page]
+
+        n_loc = sum(1 for r in rows if r["kind"] == "l")
+        SECTION = {"l": "ACTIVE LOCATIONS" if n_loc > 1 else "ACTIVE LOCATION",
+                   "q": "CURRENT QUEST", "s": "SIDE QUESTS"}
         last_kind = None
         for it in shown:
             if it["kind"] != last_kind:
-                count = None
-                if it["kind"] == "s":
-                    n = sum(1 for r in rows if r["kind"] == "s")
-                    count = str(n) if n > 1 else None
+                # The count rides beside the header when a section holds more
+                # than one, so a paged-off row is still accounted for.
+                n = sum(1 for r in rows if r["kind"] == it["kind"])
+                count = str(n) if n > 1 else None
                 y = self._section(d, pal, y, SECTION[it["kind"]], count)
                 last_kind = it["kind"]
             y = self._row(d, pal, it, y, compact)
@@ -1841,7 +1890,11 @@ class QuestingProgressModal:
         one tap away now instead, behind the bottom bar's History button.
         """
         from ui.header import modal_header
-        modal_header(d, pal, self.game, "History", self.buttons)
+        # The way back takes the round-stamp slot: a button at the bottom
+        # landed on the chart's last row and its caption, and one drawn over
+        # the stamp printed the two on top of each other.
+        modal_header(d, pal, self.game, "History", self.buttons,
+                     back=("< Progress", ("hist_back",)))
         if self.game.sailing:
             heading_y = 60
             text_left(d, pal, "Heading", 12, heading_y, BODY, pal.tan)
@@ -1855,16 +1908,15 @@ class QuestingProgressModal:
                 wx_small(d, pal, i, cx, cy, 7, None if active else pal.dim)
                 self.buttons.append(Button(("hd_set", i), cx - 14, cy - 14, 28, 28))
 
-        self._draw_chart(d, pal)
-        b = Button(("hist_back",), 12, 420, 140, 46)
-        bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-        text_center(d, pal, "< Progress", b.x + b.w // 2, b.y + 14, BODY, pal.tan)
-        self.buttons.append(b)
+        # Nothing sits above the chart here, so it starts under the heading
+        # row instead of holding its play-screen anchor and leaving 250px of
+        # empty screen between the two.
+        self._draw_chart(d, pal, 116 if self.game.sailing else 76)
 
-    def _draw_chart(self, d, pal):
-        """Absolutely positioned near the bottom regardless of how many rows
-        are above (quest/location/side-quest count varies) - never moves."""
-        cy0 = 344
+    def _draw_chart(self, d, pal, cy0=344):
+        """`cy0` is the block's top. It defaults to the play-screen anchor it
+        has always had; the History sub-view passes its own, since nothing sits
+        above it there."""
         d.set_pen(pal.border)
         d.rectangle(8, cy0 - 12, 464, 1)
         text_left(d, pal, "THIS GAME - BY ROUND", 12, cy0 - 9, LABEL, pal.muted)
@@ -1891,7 +1943,18 @@ class QuestingProgressModal:
         if self.game.sailing:
             rows.append((icons.WHEEL, pal.gold, False,
                          lambda r: (str(r["heading"]), hdg_pen[r["heading"]])))
+        # A gold vertical wherever the stage changed between two columns. It
+        # is the one thing that explains a sudden jump in the staging line, and
+        # without it the chart shows the rounds but not the shape of the game.
+        # Entries written before `stage` existed return None and rule nothing.
         ry = cy0 + 14
+        rule_h = 26 * len(rows)
+        for i in range(1, len(cols)):
+            a_st, b_st = cols[i - 1].get("stage"), cols[i].get("stage")
+            if a_st is None or b_st is None or a_st == b_st:
+                continue
+            d.set_pen(pal.gold)
+            d.rectangle(x0 + i * stride - 1, ry - 6, 1, rule_h)
         for mask, ipen, stripe, cell in rows:
             if stripe:
                 d.set_pen(pal.row_stripe)
@@ -1992,16 +2055,6 @@ class QuestingProgressModal:
             g.side_quests.pop(a)
             self._snap = self._snapshot()
             return None
-        if k == "add":
-            # The router holds one modal at a time (no stacking) - close this
-            # one (flushing any pending edits, same as a normal "close") and
-            # flag that SideQuestPickModal should open on the next loop pass,
-            # same pending-flag pattern as "quest_card" below. The picker
-            # needs a catalog read (flash I/O) that a modal's on_button
-            # can't do mid-tap without breaking that invariant.
-            g.pending_side_quest_pick = True
-            self._log_changes()
-            return "close"
         if k == "addloc":
             # Was a blind append of a guessed 3 quest points. Now the same
             # picker Travel uses, opened via the pending flag (the router
@@ -2069,15 +2122,6 @@ class QuestingProgressModal:
             # Same one-modal-at-a-time dance as "quest_card" above: close, flag,
             # and let the router open LocationConfigModal on the next pass.
             g.pending_location_detail = True
-            self._log_changes()
-            return "close"
-        if k == "qAdv":
-            # Manually trigger the guided resolution flow even though the
-            # numeric target hasn't been reached - the only way in for
-            # conditional/0-point stages, which have no gate to cross. See
-            # main.py's loop, which checks pending_resolution once modal is
-            # None (same pending-flag pattern as pending_quest_card above).
-            g.pending_resolution = "forced"
             self._log_changes()
             return "close"
         if k == "close":

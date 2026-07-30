@@ -108,13 +108,26 @@ def draw_header(d, pal, game, buttons, highlight=None, title=None,
         buttons.append(Button(("nav", "settings"), 330, 0, 150, h))
 
 
-def modal_header(d, pal, game, title, buttons, cta="DONE", cta_ready=False):
+def modal_header(d, pal, game, title, buttons, cta="DONE", cta_ready=False,
+                 back=None):
     """Shared header for full-screen modals: round id upper-left, centred
     title, and a DONE button upper-right that pushes id ("close",) (each
     modal's on_button maps "close" to its own commit-and-dismiss / dismiss
-    semantics)."""
-    round_lbl = "R%d %s" % (game.round, game.step)
-    text_left(d, pal, round_lbl, 10, 12, BODY, pal.muted)
+    semantics).
+
+    back: (label, button_id) puts a way back in the round-stamp slot instead
+    of the stamp. A sub-view that drew its own back button somewhere else
+    landed on its own content (the History chart is bottom-anchored), and
+    drawing one OVER the stamp printed the two on top of each other. Same
+    affordance draw_header's round_id gives the pre-game screens, and for the
+    same reason: the slot and its tap target are one thing."""
+    if back:
+        label, bid = back
+        text_left(d, pal, label, 10, 12, BODY, pal.tan)
+        buttons.append(Button(bid, 0, 0, 150, HEADER_H))
+    else:
+        round_lbl = "R%d %s" % (game.round, game.step)
+        text_left(d, pal, round_lbl, 10, 12, BODY, pal.muted)
     # DISPLAY, like every screen title. This was BODY, so opening a modal from
     # Settings stepped its title DOWN a tier - the spec's "screen and modal
     # titles" is one row of the table, not two. The span here is narrower (the
