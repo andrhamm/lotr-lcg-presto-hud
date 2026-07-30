@@ -60,6 +60,19 @@ across columns, and surface blockers here.
 
 ## Done
 
+- [x] Scenario play order + Core Set (Mirkwood Paths) + a second tips corpus
+  - notes: chooser was alphabetical (Core Set came out Escape/Journey/Passage,
+    the exact reverse). Order now comes from a committed Hall of Beorn table
+    (`tools/build_scenario_order.py`), cross-checked by every sequenced cycle
+    landing date-monotonic. Dark of Mirkwood's two quests move into the
+    renamed "Core Set (Mirkwood Paths)" cycle per FFG's own announcement, and
+    rows show "N. Name" plus the release date.
+  - also: `tools/build_wotw_corpus.py` adds the Warriors of the West blog as a
+    second (Nightmare-heavy) distillation corpus - gitignored, never in CI.
+  - NOT done: the distillation itself. The corpus is fetched and readable;
+    turning it into tips in our own words is the next pass.
+  - done: 7f5c164, c8d1161, d4228a2
+
 - [x] Progress view — realize the proposed flow (T0–T9)
   - notes: plan at `~/.claude/plans/silly-swimming-map.md`. Both twins:
     `active_location` becomes a LIST of seats (RR allows one; five printed
