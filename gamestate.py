@@ -1300,6 +1300,34 @@ class GameState:
     def replay_to_dict(self):
         return {"deltas": self.deltas, "replay_step": self.replay_step}
 
+    @staticmethod
+    def _migrate_delta(delta):
+        """Rewrite a pre-list delta's `active_location` onto `active_locations`.
+
+        A delta mirrors the shape of the state it describes, so renaming the
+        field renamed every recorded delta out from under undo: applying one
+        would set a stray `active_location` key and leave the real seat list
+        untouched - a silent wrong-undo rather than a crash, which is worse.
+
+        The old side was a bare record or None; the new one is the keyed map
+        snapshot() emits, so seat 0 carries the whole change:
+
+            [None, rec] -> {"0": [REMOVED, rec]}      a location arrived
+            [rec, None] -> {"0": [rec, REMOVED]}      it left
+            {"progress": [0, 1]} -> {"0": {"progress": [0, 1]}}   it changed
+        """
+        if "active_location" not in delta:
+            return delta
+        out = dict(delta)
+        old = out.pop("active_location")
+        if isinstance(old, list) and len(old) == 2:
+            a, b = old
+            out["active_locations"] = {"0": [REMOVED if a is None else a,
+                                             REMOVED if b is None else b]}
+        else:
+            out["active_locations"] = {"0": old}
+        return out
+
     def replay_from_dict(self, d):
         """Load a replay blob. Anything malformed degrades to no history."""
         self.deltas = []
@@ -1309,7 +1337,7 @@ class GameState:
         ds = d.get("deltas")
         if not isinstance(ds, list) or not all(isinstance(x, dict) for x in ds):
             return
-        self.deltas = ds
+        self.deltas = [self._migrate_delta(x) for x in ds]
         rs = d.get("replay_step")
         if not isinstance(rs, int) or isinstance(rs, bool):
             self.replay_step = len(ds) - 1

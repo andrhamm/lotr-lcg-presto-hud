@@ -1077,13 +1077,40 @@ export class GameState {
     return { deltas: this.deltas, replay_step: this.replay_step };
   }
 
+  // Rewrite a pre-list delta's `active_location` onto `active_locations`.
+  //
+  // A delta mirrors the shape of the state it describes, so renaming the field
+  // renamed every recorded delta out from under undo: applying one would set a
+  // stray `active_location` key and leave the real seat list untouched - a
+  // silent wrong-undo rather than a crash, which is worse.
+  //
+  // The old side was a bare record or null; the new one is the keyed map
+  // snapshot() emits, so seat 0 carries the whole change:
+  //
+  //   [null, rec] -> {"0": [REMOVED, rec]}     a location arrived
+  //   [rec, null] -> {"0": [rec, REMOVED]}     it left
+  //   {progress: [0, 1]} -> {"0": {progress: [0, 1]}}   it changed
+  static _migrateDelta(delta) {
+    if (!("active_location" in delta)) return delta;
+    const out = { ...delta };
+    const old = out.active_location;
+    delete out.active_location;
+    if (Array.isArray(old) && old.length === 2) {
+      out.active_locations = { 0: [old[0] === null ? REMOVED : old[0],
+                                   old[1] === null ? REMOVED : old[1]] };
+    } else {
+      out.active_locations = { 0: old };
+    }
+    return out;
+  }
+
   replayFromDict(d) {
     this.deltas = [];
     this.replay_step = -1;
     if (!d || typeof d !== "object" || Array.isArray(d)) return;
     const ds = d.deltas;
     if (!Array.isArray(ds) || !ds.every(x => x && typeof x === "object" && !Array.isArray(x))) return;
-    this.deltas = ds;
+    this.deltas = ds.map(x => GameState._migrateDelta(x));
     const rs = d.replay_step;
     if (typeof rs !== "number" || !Number.isInteger(rs)) {
       this.replay_step = ds.length - 1;

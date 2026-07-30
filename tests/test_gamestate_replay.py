@@ -499,3 +499,42 @@ def test_window_views_are_not_logged_as_phase_starts():
     starts = [e for e in g.log if e["text"].startswith("Phase:")]
     assert not any("aw_" in e["text"] for e in starts)
     assert g.log[-1]["text"] == "Action window: Travel"
+
+
+# -- pre-list replay logs ---------------------------------------------------
+
+def test_a_pre_list_delta_still_undoes_the_location_it_recorded():
+    # A delta mirrors the shape of the state it describes, so renaming
+    # active_location -> active_locations renamed every RECORDED delta out
+    # from under undo. Applying one used to set a stray "active_location" key
+    # and leave the real seat list untouched - a silent wrong-undo.
+    g = GameState()
+    g.replay_from_dict({"deltas": [
+        {"active_location": [None, {"points": 2, "progress": 0,
+                                    "name": "Enchanted Stream"}]}],
+        "replay_step": 0})
+    g.active_locations = [{"points": 2, "progress": 0,
+                           "name": "Enchanted Stream"}]
+    assert g.undo() is True
+    assert g.active_locations == []
+    assert not hasattr(g, "active_location")
+    assert g.redo() is True
+    assert g.active_locations == [{"points": 2, "progress": 0,
+                                   "name": "Enchanted Stream"}]
+
+
+def test_a_pre_list_delta_that_only_changed_progress_migrates_too():
+    g = GameState()
+    g.replay_from_dict({"deltas": [{"active_location": {"progress": [0, 1]}}],
+                        "replay_step": 0})
+    g.active_locations = [{"points": 3, "progress": 1}]
+    assert g.undo() is True
+    assert g.active_locations == [{"points": 3, "progress": 0}]
+
+
+def test_a_delta_without_a_location_is_untouched():
+    g = GameState()
+    before = {"staging": [0, 3]}
+    g.replay_from_dict({"deltas": [dict(before)], "replay_step": 0})
+    assert g.deltas == [before]
+
