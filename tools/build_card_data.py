@@ -394,9 +394,52 @@ def group_cards(rows):
             "image": _s(first, "imageUrl"),
             "tags": tags,
             "tagsRaw": tags_raw,
-            "faces": [normalize_face(r) for r in grp],
+            "faces": _unsmear_quest_faces(_s(first, "type"),
+                                          [normalize_face(r) for r in grp]),
         })
     return cards
+
+
+def _unsmear_quest_faces(card_type, faces):
+    """Undo an upstream defect where a Quest card's B-side text is A's text
+    with B's own appended.
+
+    A quest card is two-sided: side A carries the story and the Setup, side B
+    the quest points and the stage's own effects. In 15 of the TSV's 505 quest
+    pairs the B row's text is the A text CONCATENATED with B's, so the Quest
+    Cards screen showed side B repeating side A - and for The Oath's stage 1,
+    where B has no text of its own, the two faces read identically.
+
+    The evidence this is a defect and not authored repetition, checked across
+    all 15 at the pinned sha:
+
+      - 490 of 505 pairs are unaffected, so it is not how the data models a
+        two-sided card.
+      - 12 of the 15 have NO SEPARATOR at the join - "...to the staging
+        area.This stage cannot be defeated..." - which is a concatenation
+        seam, not prose.
+      - Every remainder is a well-formed B-side effect on its own ("Forced:",
+        "When Revealed:", "This stage gets +10 quest points per player"),
+        while the A part is always Setup/story.
+
+    So where B starts with A, B's own text is the remainder; an empty
+    remainder means side B prints no effect, which is a normal card. Anything
+    else is left exactly as upstream has it - this never edits text, it only
+    removes a duplicated prefix.
+    """
+    if (card_type or "").strip().lower() != "quest":
+        return faces
+    a_text = next((f.get("text") or "" for f in faces
+                   if (f.get("side") or "").upper() == "A"), "")
+    if not a_text:
+        return faces
+    for f in faces:
+        if (f.get("side") or "").upper() != "B":
+            continue
+        b_text = f.get("text") or ""
+        if b_text.startswith(a_text):
+            f["text"] = b_text[len(a_text):].strip() or None
+    return faces
 
 def slugify(s):
     s = (s or "").strip().lower()

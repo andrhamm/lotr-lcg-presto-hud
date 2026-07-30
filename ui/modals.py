@@ -14,7 +14,7 @@ from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         prog_row_card, fill_bar, glyph, stepper_cluster,
                         ROW_H as W_ROW_H, ROW_H_COMPACT as W_ROW_H_COMPACT)
 from ui.counter import CounterState
-from viewcopy import PROGRESS_PLACEMENT
+from viewcopy import PROGRESS_PLACEMENT, NO_CARD_TEXT
 
 # Card gutter, matching the play screen's own band inset.
 MARGIN = 8
@@ -2694,7 +2694,8 @@ class QuestCardModal:
                     lines.append(("ATTRIB", truncate_text(extra, LABEL, usable, d.measure_text)))
             return lines
         _, _, face = self._at(self._pages()[self.page])
-        return wrap_text(self._body_text(face) or "no text", BODY, usable, d.measure_text)
+        return wrap_text(self._body_text(face) or NO_CARD_TEXT, BODY, usable,
+                         d.measure_text)
 
     def _detail_capacity(self):
         """Lines of BODY text one detail page holds."""
@@ -2815,7 +2816,7 @@ class QuestCardModal:
         by = self.BODY_Y0
         usable = W - 20
         text = self._body_text(face)
-        lines = wrap_text(text or "no text", BODY, usable, d.measure_text)
+        lines = wrap_text(text or NO_CARD_TEXT, BODY, usable, d.measure_text)
         lines, cut = self._fit(d, lines, max(1, (body_bottom - by) // self.LH), usable, False)
         panel(d, pal, M, by - 8, W, body_bottom - by + 8, fill=pal.card)
         ty = by

@@ -412,6 +412,18 @@ COMBAT_LAST_CHANCE = "Lower threat now or refresh may eliminate."
 # to the quest card. Each resolves the moment it is full, which is why
 # exploring a location can advance the quest in the same motion (and why p.22's
 # "excess is discarded" applies to the quest, not to the location).
+# A card face that prints no game text. Two-sided quest cards routinely have
+# one: side A carries the story and the Setup while side B carries only the
+# quest points, or the reverse. Said as what the CARD is, not as what the app
+# is missing - the old "no text" read like a failed lookup.
+#
+# 15 of 505 quest pairs used to hide this behind an upstream defect that
+# copied side A's text onto side B (see _unsmear_quest_faces): The Oath's
+# stage 1 showed the same paragraph twice rather than admitting 1B is just
+# nine quest points.
+NO_CARD_TEXT = ("This side prints no game text. It carries the stage's "
+                "quest points.")
+
 PROGRESS_PLACEMENT = ("Progress fills the active location first, then the "
                       "current quest. Each resolves the moment it is full, so "
                       "exploring a location can advance the quest in the same "

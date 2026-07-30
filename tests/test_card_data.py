@@ -291,3 +291,60 @@ def test_emitted_side_quests_are_a_tiny_fraction_of_the_pack_bytes(tmp_path):
     packs = sum(f.stat().st_size for f in (tmp_path / "players").glob("*.json")
                 if f.name not in ("side_quests.json", "index.json"))
     assert sq * 20 < packs, "side_quests.json is not buying enough (%d vs %d)" % (sq, packs)
+
+
+# -- upstream defect: side B carrying side A's text -------------------------
+
+def test_unsmear_strips_a_duplicated_a_side_prefix_from_b():
+    # 15 of the TSV's 505 quest pairs have B = A's text + B's own, so the
+    # Quest Cards screen showed side B repeating side A. The seam is usually
+    # visible as a missing space ("...staging area.This stage cannot...").
+    faces = [{"side": "A", "text": "Setup: Do a thing."},
+             {"side": "B", "text": "Setup: Do a thing.This stage cannot be "
+                                   "defeated while Goblin Troop is in play."}]
+    out = b._unsmear_quest_faces("Quest", faces)
+    assert out[0]["text"] == "Setup: Do a thing."
+    assert out[1]["text"] == ("This stage cannot be defeated while Goblin "
+                              "Troop is in play.")
+
+
+def test_unsmear_leaves_b_empty_when_it_only_repeated_a():
+    # The Oath's stage 1: side B prints no effect at all, it is just the nine
+    # quest points, so the two faces read identically before this.
+    faces = [{"side": "A", "text": "Setup: Search the encounter deck."},
+             {"side": "B", "text": "Setup: Search the encounter deck."}]
+    out = b._unsmear_quest_faces("Quest", faces)
+    assert out[1]["text"] is None
+
+
+def test_unsmear_leaves_a_normal_two_sided_card_alone():
+    faces = [{"side": "A", "text": "Story on the front."},
+             {"side": "B", "text": "When Revealed: something else entirely."}]
+    out = b._unsmear_quest_faces("Quest", faces)
+    assert out[1]["text"] == "When Revealed: something else entirely."
+
+
+def test_unsmear_only_touches_quest_cards():
+    # A location or enemy has one face; nothing else in the data shows this
+    # defect, so the rule is scoped rather than global.
+    faces = [{"side": "A", "text": "Same."}, {"side": "B", "text": "Same."}]
+    out = b._unsmear_quest_faces("Location", faces)
+    assert out[1]["text"] == "Same."
+
+
+def test_the_oath_stage_one_faces_are_no_longer_identical():
+    # The bug as reported: the Quest Cards screen showed the same paragraph
+    # for Stage 1A and Stage 1B.
+    import json, os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "docs", "data", "scenarios", "the-oath.json")
+    if not os.path.exists(path):
+        return                                  # generated; skip on a bare tree
+    with open(path, encoding="utf-8") as f:
+        stages = (json.load(f).get("quest") or {}).get("stages") or []
+    faces = stages[0]["cards"][0]["faces"]
+    a = next(f["text"] for f in faces if f["side"] == "A")
+    b = next(f["text"] for f in faces if f["side"] == "B")
+    assert a and "Setup:" in a
+    assert b is None, "side B should print no text, got %r" % (b,)
+

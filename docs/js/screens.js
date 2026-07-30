@@ -7,7 +7,7 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          DISPLAY, BODY, LABEL , statPill,
          progRowCard, fillBar, glyph, stepperCluster, phaseBlock,
          ROW_H, ROW_H_COMPACT } from "./ui.js";
-import { PROGRESS_PLACEMENT } from "./viewcopy.js";
+import { PROGRESS_PLACEMENT, NO_CARD_TEXT } from "./viewcopy.js";
 import { measureText } from "./metrics.js";
 import * as xtargets from "./xtargets.js";
 import * as icons from "./icons.js";
@@ -2461,7 +2461,7 @@ export class QuestCardModal {
       return lines;
     }
     const [, , face] = this._at(this._pages()[this.page]);
-    return wrapText(face.text || "no text", BODY, usable);
+    return wrapText(face.text || NO_CARD_TEXT, BODY, usable);
   }
 
   // Lines of BODY text one detail page holds.
@@ -2587,7 +2587,7 @@ export class QuestCardModal {
     const bodyBottom = hasTips ? tipsY - 8 : S.NAV_Y - 12;
     const by = S.BODY_Y0, usable = W - 20;
     const text = face.text || "";
-    let [lines, cut] = this._fit(wrapText(text || "no text", BODY, usable),
+    let [lines, cut] = this._fit(wrapText(text || NO_CARD_TEXT, BODY, usable),
                                  Math.max(1, Math.floor((bodyBottom - by) / S.LH)),
                                  usable, false);
     panel(ctx, M, by - 8, W, bodyBottom - by + 8, pal.card);
