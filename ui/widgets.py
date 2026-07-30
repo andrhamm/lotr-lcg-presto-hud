@@ -636,3 +636,101 @@ def _pill_seg(d, pal, seg, cx, sw, y, pen):
         tw = d.measure_text(seg[1], BODY)
         text_left(d, pal, seg[1], cx + (sw - tw) // 2,
                   y + (PILL_H - 8 * BODY) // 2, BODY, pen, shadow=False)
+
+
+# -- progress rows ---------------------------------------------------------
+# Shared by the Progress screen's rows and their detail sheets. These lived as
+# private methods on QuestingProgressModal, where the web twin could not reach
+# them - which is exactly how the two drew different rows for a month. Anything
+# a row needs is here, in both twins, or it is not a row widget.
+
+# The stepper geometry is PlayersDetailModal's, and deliberately so: a 40px
+# disc inside a 52px tap target is the size the rest of the app already uses
+# for a value the player nudges repeatedly.
+STEP_R = 20           # drawn radius
+STEP_HIT = 52         # tap target, both axes
+
+# Row heights. The compact one is for a page carrying more than one location.
+ROW_H = 76
+ROW_H_COMPACT = 54
+
+
+def prog_row_card(d, pal, x, y, w, h, accent):
+    """The row's card: a panel with a 4px accent stripe down its left edge.
+    Green for a location, gold for the quest and side quests - the stripe is
+    what makes the sections scannable without reading their headers."""
+    panel(d, pal, x, y, w, h, fill=pal.card, border=pal.border)
+    d.set_pen(accent)
+    d.rectangle(x, y, 4, h)
+
+
+def fill_bar(d, pal, x, y, w, h, prog, pts, accent, at_target):
+    """Well plus fill. AMBER at target, not the row's accent: at-target is the
+    one state the player has to notice, and it is the same amber the value
+    token uses for it."""
+    if w <= 0:
+        return
+    d.set_pen(pal.well)
+    d.rectangle(x, y, w, h)
+    fw = int(w * min(1.0, (prog / pts) if pts else 0))
+    if fw > 0:
+        d.set_pen(pal.amber if at_target else accent)
+        d.rectangle(x, y, fw, h)
+
+
+def glyph(d, pal, kind, x, y, pen):
+    """Entity mark: "l" a signpost, "q" a quest card, anything else a side
+    quest card. 16-18px, drawn rather than an icon mask so it inherits the
+    row's accent pen."""
+    d.set_pen(pen)
+    if kind == "l":
+        d.rectangle(x + 7, y + 2, 2, 16)
+        d.rectangle(x, y + 4, 11, 6)
+        d.triangle(x + 11, y + 4, x + 11, y + 10, x + 16, y + 7)
+        d.rectangle(x + 4, y + 17, 8, 2)
+    elif kind == "q":
+        d.rectangle(x + 1, y + 1, 14, 18)
+        d.set_pen(pal.card)
+        d.rectangle(x + 3, y + 3, 10, 14)
+        d.set_pen(pen)
+        for dy in (6, 9):
+            d.rectangle(x + 5, y + dy, 6, 1)
+        d.rectangle(x + 5, y + 12, 4, 1)
+    else:
+        d.rectangle(x, y + 3, 18, 14)
+        d.set_pen(pal.card)
+        d.rectangle(x + 2, y + 5, 14, 10)
+        d.set_pen(pen)
+        d.rectangle(x + 4, y + 8, 8, 1)
+        d.rectangle(x + 4, y + 11, 5, 1)
+
+
+def stepper_cluster(d, pal, buttons, cx_plus, cy, prog, pts, at_target,
+                    id_minus, id_plus, r=STEP_R, hit=STEP_HIT):
+    """"progress / target" between one big - and one big +.
+
+    The value carries its own denominator, so the row needs no second editor
+    for the target. Both discs go dead at their limit and stop registering a
+    button: - at 0, and + at the target, because RR p.22 discards excess on
+    advance, so there is nothing past it to record.
+
+    Returns the cluster's left edge, so the caller can size the bar and the
+    row's tap band against whatever this took.
+    """
+    val = "%d / %d" % (prog, pts)
+    vw = d.measure_text(val, DISPLAY)
+    cx_minus = cx_plus - (vw + 2 * r + 26)
+    vx = cx_minus + r + 13
+    h = hit // 2
+    for cx, mark, on, bid in ((cx_minus, "-", prog > 0, id_minus),
+                              (cx_plus, "+", not at_target, id_plus)):
+        disc(d, cx, cy, r, pal.btn if on else pal.card_hi)
+        arc_runs(d, cx, cy, r, r - 2, 0, 360,
+                 pal.bevel_l if on else pal.border)
+        text_center(d, pal, mark, cx, cy - 8, DISPLAY,
+                    pal.tan if on else pal.dim)
+        if on:
+            buttons.append(Button(bid, cx - h, cy - h, hit, hit))
+    text_left(d, pal, val, vx, cy - 12, DISPLAY,
+              pal.amber if at_target else pal.gold)
+    return cx_minus - r

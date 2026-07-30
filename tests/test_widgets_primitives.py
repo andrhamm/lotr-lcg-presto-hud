@@ -105,3 +105,107 @@ def test_willpower_staging_meter_losing_shows_threat_gain_sentence():
     W.willpower_staging_meter(d, pal, 8, 100, 300, 4, 9)
     texts = [str(c[1]) for c in d.calls if c[0] == "text"]
     assert any("Each player will gain 5" in t for t in texts)
+
+
+# -- progress-row widgets ---------------------------------------------------
+# These were private methods on QuestingProgressModal, which is how the web
+# twin came to draw a different row. Pinned here so the shared versions carry
+# the contract both twins are written against.
+
+def test_stepper_geometry_is_the_players_screen_geometry():
+    # 40px disc inside a 52px tap target - the size the rest of the app uses
+    # for a value the player nudges repeatedly.
+    assert (W.STEP_R, W.STEP_HIT) == (20, 52)
+
+
+def test_stepper_plus_goes_dead_at_the_target():
+    # RR p.22: excess progress beyond a stage's quest points is DISCARDED on
+    # advance, so there is nothing past the target to record. Dead means no
+    # button at all, not a button that does nothing.
+    d, pal = _d()
+    bs = []
+    W.stepper_cluster(d, pal, bs, 400, 40, 3, 3, True, ("m",), ("p",))
+    assert [b.id for b in bs] == [("m",)]
+
+
+def test_stepper_minus_goes_dead_at_zero():
+    d, pal = _d()
+    bs = []
+    W.stepper_cluster(d, pal, bs, 400, 40, 0, 3, False, ("m",), ("p",))
+    assert [b.id for b in bs] == [("p",)]
+
+
+def test_stepper_keeps_both_when_the_row_has_no_target():
+    # A condition stage has no quest points, so there is no target to be "at".
+    d, pal = _d()
+    bs = []
+    W.stepper_cluster(d, pal, bs, 400, 40, 2, 0, False, ("m",), ("p",))
+    assert [b.id for b in bs] == [("m",), ("p",)]
+
+
+def test_stepper_tap_targets_are_the_full_hit_size():
+    d, pal = _d()
+    bs = []
+    W.stepper_cluster(d, pal, bs, 400, 40, 1, 3, False, ("m",), ("p",))
+    for b in bs:
+        assert (b.w, b.h) == (W.STEP_HIT, W.STEP_HIT), b.id
+
+
+def test_stepper_returns_its_own_left_edge():
+    # The caller sizes the bar and the row's tap band against this, so it has
+    # to be the real edge - a wrong number overlaps the name.
+    d, pal = _d()
+    bs = []
+    left = W.stepper_cluster(d, pal, bs, 400, 40, 1, 3, False, ("m",), ("p",))
+    assert left == min(b.x for b in bs) + (W.STEP_HIT // 2) - W.STEP_R
+
+
+def test_fill_bar_is_amber_at_target_not_the_row_accent():
+    d, pal = _d()
+    W.fill_bar(d, pal, 10, 10, 100, 6, 3, 3, pal.green, True)
+    assert any(c[-1] == pal.amber for c in d.calls)
+    assert not any(c[-1] == pal.green for c in d.calls)
+
+
+def test_fill_bar_uses_the_accent_below_target():
+    d, pal = _d()
+    W.fill_bar(d, pal, 10, 10, 100, 6, 1, 3, pal.green, False)
+    assert any(c[-1] == pal.green for c in d.calls)
+
+
+def test_fill_bar_never_overflows_its_width():
+    # A location can sit over its points until the guided flow resolves it.
+    d, pal = _d()
+    W.fill_bar(d, pal, 10, 10, 100, 6, 9, 3, pal.green, True)
+    for c in d.calls:
+        _, x, _y, w, _h, _pen = c
+        assert x + w <= 110
+
+
+def test_fill_bar_with_no_target_draws_only_the_well():
+    d, pal = _d()
+    W.fill_bar(d, pal, 10, 10, 100, 6, 5, 0, pal.green, False)
+    assert [c[-1] for c in d.calls] == [pal.well]
+
+
+def test_prog_row_card_stripes_the_left_edge_in_the_accent():
+    d, pal = _d()
+    W.prog_row_card(d, pal, 8, 20, 464, W.ROW_H, pal.green)
+    stripe = [c for c in d.calls if c[-1] == pal.green]
+    assert stripe, "no accent stripe"
+    _, x, y, w, h, _ = stripe[0]
+    assert (x, y, w, h) == (8, 20, 4, W.ROW_H)
+
+
+def test_every_glyph_kind_draws_inside_its_box():
+    d, pal = _d()
+    for kind in ("l", "q", "s"):
+        d.calls.clear()
+        W.glyph(d, pal, kind, 100, 100, pal.gold)
+        assert d.calls, kind
+        for c in d.calls:
+            if c[0] != "rect":
+                continue
+            _, x, y, w, h, _pen = c
+            assert 100 <= x and x + w <= 100 + 20, (kind, c)
+            assert 100 <= y and y + h <= 100 + 20, (kind, c)

@@ -4,7 +4,9 @@
 import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          stepper, wrapText, truncateText, ribbon, ribbonH, notePanel, drawWeather,
          disc, arcRuns, ring, token, wxSmall, BAND_PAD, bandLineH,
-         DISPLAY, BODY, LABEL , statPill } from "./ui.js";
+         DISPLAY, BODY, LABEL , statPill,
+         progRowCard, fillBar, glyph, stepperCluster,
+         ROW_H, ROW_H_COMPACT } from "./ui.js";
 import { measureText } from "./metrics.js";
 import * as xtargets from "./xtargets.js";
 import * as icons from "./icons.js";

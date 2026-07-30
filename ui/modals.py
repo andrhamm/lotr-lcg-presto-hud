@@ -10,7 +10,9 @@ import random
 from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         stepper, draw_weather, token, circ_btn, disc, arc_runs,
                         ring, wx_small, wrap_text, truncate_text, ribbon, ribbon_h,
-                        stat_pill, phase_block, BAND_PAD, band_line_h)
+                        stat_pill, phase_block, BAND_PAD, band_line_h,
+                        prog_row_card, fill_bar, glyph, stepper_cluster,
+                        ROW_H as W_ROW_H, ROW_H_COMPACT as W_ROW_H_COMPACT)
 from ui.counter import CounterState
 from viewcopy import PROGRESS_PLACEMENT
 
@@ -1525,9 +1527,6 @@ class QuestingProgressModal:
     quest_history by round. Silent progress/points edits are batched into
     one summary log line per field on close."""
 
-    ROWS_Y0 = 62
-    ROW_H = 38
-
     def __init__(self, game):
         self.game = game
         self.buttons = []
@@ -1613,65 +1612,10 @@ class QuestingProgressModal:
     # very different from the Players screen controls". The target stepper is
     # gone from the row entirely: editing a target is a detail-sheet job, which
     # is also what labels the actions the icons never named.
-    ROW_H = 76
-    ROW_H_COMPACT = 54
+    # From ui.widgets, so the web twin reads the same two numbers.
+    ROW_H = W_ROW_H
+    ROW_H_COMPACT = W_ROW_H_COMPACT
     ROW_GAP = 5
-
-    def _glyph(self, d, pal, kind, x, y, pen):
-        d.set_pen(pen)
-        if kind == "l":
-            d.rectangle(x + 7, y + 2, 2, 16)
-            d.rectangle(x, y + 4, 11, 6)
-            d.triangle(x + 11, y + 4, x + 11, y + 10, x + 16, y + 7)
-            d.rectangle(x + 4, y + 17, 8, 2)
-        elif kind == "q":
-            d.rectangle(x + 1, y + 1, 14, 18)
-            d.set_pen(pal.card)
-            d.rectangle(x + 3, y + 3, 10, 14)
-            d.set_pen(pen)
-            for dy in (6, 9):
-                d.rectangle(x + 5, y + dy, 6, 1)
-            d.rectangle(x + 5, y + 12, 4, 1)
-        else:
-            d.rectangle(x, y + 3, 18, 14)
-            d.set_pen(pal.card)
-            d.rectangle(x + 2, y + 5, 14, 10)
-            d.set_pen(pen)
-            d.rectangle(x + 4, y + 8, 8, 1)
-            d.rectangle(x + 4, y + 11, 5, 1)
-
-    def _fill_bar(self, d, pal, x, y, w, h, prog, pts, accent, at_target):
-        if w <= 0:
-            return
-        d.set_pen(pal.well)
-        d.rectangle(x, y, w, h)
-        fw = int(w * min(1.0, (prog / pts) if pts else 0))
-        if fw > 0:
-            d.set_pen(pal.amber if at_target else accent)
-            d.rectangle(x, y, fw, h)
-
-    def _stepper_cluster(self, d, pal, cx_plus, cy, r, prog, pts, at_target,
-                         id_minus, id_plus):
-        """"progress / target" between one big - and one big +. The pair is
-        r=22 rather than the old 10, and the value carries its own denominator
-        so the row needs no second editor. + goes dead at the target: RR p.22
-        excess is discarded, so there is nothing past it to record."""
-        val = "%d / %d" % (prog, pts)
-        vw = d.measure_text(val, DISPLAY)
-        cx_minus = cx_plus - (vw + 2 * r + 26)
-        vx = cx_minus + r + 13
-        for cx, glyph, on, bid in ((cx_minus, "-", prog > 0, id_minus),
-                                   (cx_plus, "+", not at_target, id_plus)):
-            disc(d, cx, cy, r, pal.btn if on else pal.card_hi)
-            arc_runs(d, cx, cy, r, r - 2, 0, 360,
-                     pal.bevel_l if on else pal.border)
-            text_center(d, pal, glyph, cx, cy - 8, DISPLAY,
-                        pal.tan if on else pal.dim)
-            if on:
-                self.buttons.append(Button(bid, cx - r, cy - r, 2 * r, 2 * r))
-        text_left(d, pal, val, vx, cy - 12, DISPLAY,
-                  pal.amber if at_target else pal.gold)
-        return cx_minus - r
 
     def _section(self, d, pal, y, label, count=None):
         text_left(d, pal, label, MARGIN + 2, y, LABEL, pal.muted)
@@ -1709,7 +1653,7 @@ class QuestingProgressModal:
         # A stage that advances on a condition has no bar to fill and no target
         # to count toward, so the card's own sentence takes the space instead.
         if cond:
-            self._glyph(d, pal, kind, MARGIN + 14, y + 5, accent)
+            glyph(d, pal, kind, MARGIN + 14, y + 5, accent)
             text_left(d, pal, truncate_text(it["name"], BODY, 236,
                                             d.measure_text),
                       MARGIN + 40, y + 8, BODY, pal.tan)
@@ -1732,12 +1676,12 @@ class QuestingProgressModal:
             # has no target to fill. Dropping the control entirely would have
             # left the player nowhere to count.
             cy = y + h - 26
-            for cx, glyph, on, bid in ((404, "-", prog > 0, ("qP-", None)),
+            for cx, mark, on, bid in ((404, "-", prog > 0, ("qP-", None)),
                                        (452, "+", True, ("qP+", None))):
                 disc(d, cx, cy, 18, pal.btn if on else pal.card_hi)
                 arc_runs(d, cx, cy, 18, 16, 0, 360,
                          pal.bevel_l if on else pal.border)
-                text_center(d, pal, glyph, cx, cy - 8, DISPLAY,
+                text_center(d, pal, mark, cx, cy - 8, DISPLAY,
                             pal.tan if on else pal.dim)
                 if on:
                     self.buttons.append(Button(bid, cx - 18, cy - 18, 36, 36))
@@ -1747,20 +1691,24 @@ class QuestingProgressModal:
             return y + h + self.ROW_GAP
         if compact:
             cy = y + h // 2 - 3
-            left = self._stepper_cluster(d, pal, 480 - MARGIN - 30, cy, 18,
-                                         prog, pts, at_target,
-                                         (pfx + "P-", idx), (pfx + "P+", idx))
-            self._glyph(d, pal, kind, MARGIN + 14, cy - 10, accent)
+            # Compact rows pack two locations plus the quest onto one page,
+            # so the disc shrinks - but the TAP target does not go below the
+            # row it sits in.
+            left = stepper_cluster(d, pal, self.buttons, 480 - MARGIN - 30, cy,
+                                   prog, pts, at_target,
+                                   (pfx + "P-", idx), (pfx + "P+", idx),
+                                   r=18, hit=self.ROW_H_COMPACT)
+            glyph(d, pal, kind, MARGIN + 14, cy - 10, accent)
             text_left(d, pal, truncate_text(it["name"], BODY,
                                             left - (MARGIN + 40) - 10,
                                             d.measure_text),
                       MARGIN + 40, cy - 8, BODY, pal.tan)
-            self._fill_bar(d, pal, MARGIN + 14, y + h - 9,
+            fill_bar(d, pal, MARGIN + 14, y + h - 9,
                            left - (MARGIN + 28), 4, prog, pts, accent, at_target)
             self.buttons.append(Button(("detail", kind, idx), MARGIN, y,
                                        left - MARGIN - 10, h))
             return y + h + self.ROW_GAP
-        self._glyph(d, pal, kind, MARGIN + 14, y + 5, accent)
+        glyph(d, pal, kind, MARGIN + 14, y + 5, accent)
         text_left(d, pal, truncate_text(it["name"], BODY, 236, d.measure_text),
                   MARGIN + 40, y + 8, BODY, pal.tan)
         if meta:
@@ -1768,10 +1716,10 @@ class QuestingProgressModal:
             text_left(d, pal, meta, 480 - MARGIN - 28 - mw, y + 10, LABEL, pal.dim)
         text_left(d, pal, ">", 480 - MARGIN - 18, y + 6, BODY, pal.gold)
         cy = y + 48
-        left = self._stepper_cluster(d, pal, 480 - MARGIN - 36, cy, 22,
-                                     prog, pts, at_target,
-                                     (pfx + "P-", idx), (pfx + "P+", idx))
-        self._fill_bar(d, pal, MARGIN + 14, cy - 3, left - (MARGIN + 28), 6,
+        left = stepper_cluster(d, pal, self.buttons, 480 - MARGIN - 36, cy,
+                               prog, pts, at_target,
+                               (pfx + "P-", idx), (pfx + "P+", idx))
+        fill_bar(d, pal, MARGIN + 14, cy - 3, left - (MARGIN + 28), 6,
                        prog, pts, accent, at_target)
         # The whole title band opens the detail sheet - the ">" is the hint, not
         # the hit-box. Pushed last so the stepper hit-boxes win any overlap.

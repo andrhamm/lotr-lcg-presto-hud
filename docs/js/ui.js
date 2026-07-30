@@ -651,3 +651,101 @@ export function pill(ctx, x, y, segs, border, ribbon, dead, icons) {
   if (dead) pillSlash(ctx, x + 5, y + 6, w - 10, PILL_H - 12, pal.red);
   return w;
 }
+
+
+// -- progress rows ---------------------------------------------------------
+// Mirrors ui/widgets.py's row widgets. These lived as private methods on the
+// Python QuestingProgressModal, where this twin could not reach them - which
+// is exactly how the two drew different rows. Anything a row needs is here, in
+// both twins, or it is not a row widget.
+
+// PlayersDetailModal's geometry, deliberately: a 40px disc inside a 52px tap
+// target is the size the rest of the app already uses for a value the player
+// nudges repeatedly.
+export const STEP_R = 20;      // drawn radius
+export const STEP_HIT = 52;    // tap target, both axes
+
+// Row heights. The compact one is for a page carrying more than one location.
+export const ROW_H = 76;
+export const ROW_H_COMPACT = 54;
+
+// The row's card: a panel with a 4px accent stripe down its left edge. Green
+// for a location, gold for the quest and side quests - the stripe is what
+// makes the sections scannable without reading their headers.
+export function progRowCard(ctx, x, y, w, h, accent) {
+  panel(ctx, x, y, w, h, pal.card, pal.border);
+  ctx.fillStyle = accent;
+  ctx.fillRect(x, y, 4, h);
+}
+
+// Well plus fill. AMBER at target, not the row's accent: at-target is the one
+// state the player has to notice, and it is the same amber the value token
+// uses for it.
+export function fillBar(ctx, x, y, w, h, prog, pts, accent, atTarget) {
+  if (w <= 0) return;
+  ctx.fillStyle = pal.well;
+  ctx.fillRect(x, y, w, h);
+  const fw = Math.floor(w * Math.min(1, pts ? prog / pts : 0));
+  if (fw > 0) {
+    ctx.fillStyle = atTarget ? pal.amber : accent;
+    ctx.fillRect(x, y, fw, h);
+  }
+}
+
+// Entity mark: "l" a signpost, "q" a quest card, anything else a side quest
+// card. Drawn rather than an icon mask so it inherits the row's accent pen.
+export function glyph(ctx, kind, x, y, pen) {
+  ctx.fillStyle = pen;
+  if (kind === "l") {
+    ctx.fillRect(x + 7, y + 2, 2, 16);
+    ctx.fillRect(x, y + 4, 11, 6);
+    ctx.beginPath();
+    ctx.moveTo(x + 11, y + 4);
+    ctx.lineTo(x + 11, y + 10);
+    ctx.lineTo(x + 16, y + 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(x + 4, y + 17, 8, 2);
+  } else if (kind === "q") {
+    ctx.fillRect(x + 1, y + 1, 14, 18);
+    ctx.fillStyle = pal.card;
+    ctx.fillRect(x + 3, y + 3, 10, 14);
+    ctx.fillStyle = pen;
+    for (const dy of [6, 9]) ctx.fillRect(x + 5, y + dy, 6, 1);
+    ctx.fillRect(x + 5, y + 12, 4, 1);
+  } else {
+    ctx.fillRect(x, y + 3, 18, 14);
+    ctx.fillStyle = pal.card;
+    ctx.fillRect(x + 2, y + 5, 14, 10);
+    ctx.fillStyle = pen;
+    ctx.fillRect(x + 4, y + 8, 8, 1);
+    ctx.fillRect(x + 4, y + 11, 5, 1);
+  }
+}
+
+// "progress / target" between one big - and one big +.
+//
+// The value carries its own denominator, so the row needs no second editor for
+// the target. Both discs go dead at their limit and stop registering a button:
+// - at 0, and + at the target, because RR p.22 discards excess on advance, so
+// there is nothing past it to record.
+//
+// Returns the cluster's left edge, so the caller can size the bar and the
+// row's tap band against whatever this took.
+export function stepperCluster(ctx, buttons, cxPlus, cy, prog, pts, atTarget,
+                               idMinus, idPlus, r = STEP_R, hit = STEP_HIT) {
+  const val = `${prog} / ${pts}`;
+  const vw = measureText(val, DISPLAY);
+  const cxMinus = cxPlus - (vw + 2 * r + 26);
+  const vx = cxMinus + r + 13;
+  const h = Math.floor(hit / 2);
+  for (const [cx, mark, on, bid] of [[cxMinus, "-", prog > 0, idMinus],
+                                     [cxPlus, "+", !atTarget, idPlus]]) {
+    disc(ctx, cx, cy, r, on ? pal.btn : pal.card_hi);
+    arcRuns(ctx, cx, cy, r, r - 2, 0, 360, on ? pal.bevel_l : pal.border);
+    textCenter(ctx, mark, cx, cy - 8, DISPLAY, on ? pal.tan : pal.dim);
+    if (on) buttons.push(new Button(bid, cx - h, cy - h, hit, hit));
+  }
+  textLeft(ctx, val, vx, cy - 12, DISPLAY, atTarget ? pal.amber : pal.gold);
+  return cxMinus - r;
+}
