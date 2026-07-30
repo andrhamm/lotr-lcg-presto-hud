@@ -1682,6 +1682,17 @@ class QuestingProgressModal:
         if kind == "q":
             prog, pts, pfx, idx = g.quest["progress"], g.quest["points"], "q", None
             accent, meta = pal.gold, "STAGE %s" % g.quest_label()
+            # A computed target is NOT a third row treatment. "X is 1 plus the
+            # number of players" resolves to a number the moment the count is
+            # known, and from there the row is an ordinary pointed stage. What
+            # differs is only WHERE the number comes from, which is the sheet's
+            # job. Unresolved (a count nobody has supplied yet) leaves the
+            # printed 0 rather than inventing one.
+            if g.quest.get("mode") == "formula":
+                resolved = self._quest_target()
+                if resolved is not None:
+                    pts = resolved
+                meta = "X = %d" % pts if resolved is not None else "X"
         elif kind == "l":
             idx = it.get("idx", 0)
             loc = g.active_locations[idx]
@@ -1709,33 +1720,34 @@ class QuestingProgressModal:
             text_left(d, pal, "NO QUEST POINTS", 480 - MARGIN - 28 - mw,
                       y + 10, LABEL, pal.dim)
             text_left(d, pal, ">", 480 - MARGIN - 18, y + 6, BODY, pal.gold)
+            # No bar and NO STEPPERS: the card's own sentence takes the whole
+            # width the controls would have used. A stepper here invited the
+            # player to count toward a target the card never printed, which is
+            # the thing this whole mode exists to stop.
             ty = y + 36
+            body_w = 480 - 2 * MARGIN - 28
             lines = wrap_text(g.quest.get("advance") or
                               "This stage advances on a condition, not on "
-                              "progress.", BODY, 480 - 2 * MARGIN - 56,
-                              d.measure_text)
+                              "progress.", BODY, body_w, d.measure_text)
             for ln in lines[:2]:
-                text_left(d, pal, ln, MARGIN + 40, ty, BODY, pal.dim)
+                text_left(d, pal, ln, MARGIN + 14, ty, BODY, pal.dim)
                 ty += 22
-            if len(lines) > 2:
-                text_left(d, pal, "[...] more", MARGIN + 40, ty, BODY, pal.gold)
-            # Still a stepper, just no denominator: a condition stage can carry
-            # progress (some place it and discard it, some ignore it), it simply
-            # has no target to fill. Dropping the control entirely would have
-            # left the player nowhere to count.
-            cy = y + h - 26
-            for cx, mark, on, bid in ((404, "-", prog > 0, ("qP-", None)),
-                                       (452, "+", True, ("qP+", None))):
-                disc(d, cx, cy, 18, pal.btn if on else pal.card_hi)
-                arc_runs(d, cx, cy, 18, 16, 0, 360,
-                         pal.bevel_l if on else pal.border)
-                text_center(d, pal, mark, cx, cy - 8, DISPLAY,
-                            pal.tan if on else pal.dim)
-                if on:
-                    self.buttons.append(Button(bid, cx - 18, cy - 18, 36, 36))
-            text_left(d, pal, str(prog), 372, cy - 12, DISPLAY, pal.gold)
+            more = len(lines) > 2
+            # 11 stages state BOTH how they are won and how they are lost -
+            # Return to Rhosgobel is won if Wilyador is healed and lost
+            # otherwise. Showing only the win is showing half the rule.
+            lose = g.quest.get("lose")
+            if lose and not more:
+                for ln in wrap_text(lose, BODY, body_w, d.measure_text)[:1]:
+                    text_left(d, pal, ln, MARGIN + 14, ty, BODY, pal.no_fg)
+                    ty += 22
+                more = len(wrap_text(lose, BODY, body_w, d.measure_text)) > 1
+            if more:
+                # The affordance the Quest Cards modal already uses - the sheet
+                # behind the chevron carries the full text.
+                text_left(d, pal, "[...] more", MARGIN + 14, ty, BODY, pal.gold)
             self.buttons.append(Button(("detail", kind, idx), MARGIN, y,
-                                       340, 34))
+                                       480 - 2 * MARGIN, h))
             return y + h + self.ROW_GAP
         if compact:
             cy = y + h // 2 - 3
@@ -1767,8 +1779,22 @@ class QuestingProgressModal:
         left = stepper_cluster(d, pal, self.buttons, 480 - MARGIN - 36, cy,
                                prog, pts, at_target,
                                (pfx + "P-", idx), (pfx + "P+", idx))
-        fill_bar(d, pal, MARGIN + 14, cy - 3, left - (MARGIN + 28), 6,
-                       prog, pts, accent, at_target)
+        # Side A carries the story and the setup; the quest points are on side
+        # B. A bare 0 / 0 reads as a stage you have failed to fill rather than
+        # one you have not turned over yet - and 1A->1B happens before round 1
+        # (rulebook setup step 7). The line takes the bar's row, since a bar
+        # with no target has nothing to draw, and is sized against the
+        # cluster's real left edge rather than guessed at.
+        side_a = kind == "q" and g.quest.get("side") == "A" and not pts
+        if side_a:
+            # Said short rather than truncated: the full sentence is 380px
+            # against the 248 this row leaves, and the type scale is not
+            # negotiable. This is 218.
+            text_left(d, pal, "Flip to side B to start.", MARGIN + 14, cy - 9,
+                      BODY, pal.dim)
+        else:
+            fill_bar(d, pal, MARGIN + 14, cy - 3, left - (MARGIN + 28), 6,
+                     prog, pts, accent, at_target)
         # The whole title band opens the detail sheet - the ">" is the hint, not
         # the hit-box. Pushed last so the stepper hit-boxes win any overlap.
         self.buttons.append(Button(("detail", kind, idx), MARGIN, y,
@@ -1990,6 +2016,23 @@ class QuestingProgressModal:
         caption = "WILLPOWER / STAGING / RESULT" + (" / HEADING" if self.game.sailing else "")
         text_center(d, pal, caption, 240, ry + 4, LABEL, pal.dim)
 
+    def _quest_target(self):
+        """The stage's real target, resolving a formula X. None when the
+        formula needs a count nobody has supplied yet.
+
+        The ROW and the STEPPER have to agree on this: the row drew the
+        resolved 4 while the handler clamped against the printed 0, so the bar
+        read 4/4 at target and a tap still pushed it to 5.
+        """
+        g = self.game
+        if g.quest.get("mode") != "formula":
+            return g.quest["points"]
+        return xtargets.resolve(
+            g.quest.get("x"), count=g.quest.get("xCount"),
+            players=len(g.players),
+            stage=g.quest.get("stage_n", 1),
+            highest_threat=max([p.threat for p in g.players] or [0]))
+
     def _clamp_adj(self, cur, delta, cap=None):
         """Step a value, clamped. `cap` is the row's own target: progress
         cannot exceed the quest points it is filling.
@@ -2015,7 +2058,7 @@ class QuestingProgressModal:
         if k in ("qP-", "qP+"):
             # A condition stage has no target to clamp against (mode set by
             # flip_to_b) - leave it free.
-            cap = None if g.quest.get("mode") == "condition" else g.quest["points"]
+            cap = None if g.quest.get("mode") == "condition" else self._quest_target()
             g.quest["progress"] = self._clamp_adj(g.quest["progress"],
                                                   1 if up else -1, cap)
             return None

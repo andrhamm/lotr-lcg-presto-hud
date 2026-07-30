@@ -1024,6 +1024,16 @@ export class QuestingProgressModal {
     if (kind === "q") {
       prog = g.quest.progress; pts = g.quest.points; pfx = "q"; idx = null;
       accent = pal.gold; meta = `STAGE ${g.questLabel()}`;
+      // A computed target is NOT a third row treatment. "X is 1 plus the
+      // number of players" resolves to a number the moment the count is known,
+      // and from there the row is an ordinary pointed stage. What differs is
+      // only WHERE the number comes from, which is the sheet's job. Unresolved
+      // (a count nobody has supplied yet) leaves the printed 0.
+      if (g.quest.mode === "formula") {
+        const resolved = this._questTarget();
+        if (resolved !== null) pts = resolved;
+        meta = resolved !== null ? `X = ${pts}` : "X";
+      }
     } else if (kind === "l") {
       idx = it.idx ?? 0;
       const loc = g.active_locations[idx];
@@ -1047,30 +1057,35 @@ export class QuestingProgressModal {
       const mw = measureText("NO QUEST POINTS", LABEL);
       textLeft(ctx, "NO QUEST POINTS", 480 - MARGIN - 28 - mw, y + 10, LABEL, pal.dim);
       textLeft(ctx, ">", 480 - MARGIN - 18, y + 6, BODY, pal.gold);
+      // No bar and NO STEPPERS: the card's own sentence takes the whole width
+      // the controls would have used. A stepper here invited the player to
+      // count toward a target the card never printed, which is the thing this
+      // whole mode exists to stop.
       let ty = y + 36;
+      const bodyW = 480 - 2 * MARGIN - 28;
       const lines = wrapText(g.quest.advance
-        || "This stage advances on a condition, not on progress.",
-        BODY, 480 - 2 * MARGIN - 56);
+        || "This stage advances on a condition, not on progress.", BODY, bodyW);
       for (const ln of lines.slice(0, 2)) {
-        textLeft(ctx, ln, MARGIN + 40, ty, BODY, pal.dim);
+        textLeft(ctx, ln, MARGIN + 14, ty, BODY, pal.dim);
         ty += 22;
       }
-      if (lines.length > 2) {
-        textLeft(ctx, "[...] more", MARGIN + 40, ty, BODY, pal.gold);
+      let more = lines.length > 2;
+      // 11 stages state BOTH how they are won and how they are lost - Return
+      // to Rhosgobel is won if Wilyador is healed and lost otherwise. Showing
+      // only the win is showing half the rule.
+      if (g.quest.lose && !more) {
+        const ll = wrapText(g.quest.lose, BODY, bodyW);
+        textLeft(ctx, ll[0], MARGIN + 14, ty, BODY, pal.no_fg);
+        ty += 22;
+        more = ll.length > 1;
       }
-      // Still a stepper, just no denominator: a condition stage can carry
-      // progress (some place it and discard it, some ignore it), it simply has
-      // no target to fill. Dropping the control would leave nowhere to count.
-      const ccy = y + h - 26;
-      for (const [cx, mark, on, bid] of [[404, "-", prog > 0, ["qP-", null]],
-                                         [452, "+", true, ["qP+", null]]]) {
-        disc(ctx, cx, ccy, 18, on ? pal.btn : pal.card_hi);
-        arcRuns(ctx, cx, ccy, 18, 16, 0, 360, on ? pal.bevel_l : pal.border);
-        textCenter(ctx, mark, cx, ccy - 8, DISPLAY, on ? pal.tan : pal.dim);
-        if (on) this.buttons.push(new Button(bid, cx - 18, ccy - 18, 36, 36));
+      if (more) {
+        // The affordance the Quest Cards modal already uses - the sheet behind
+        // the chevron carries the full text.
+        textLeft(ctx, "[...] more", MARGIN + 14, ty, BODY, pal.gold);
       }
-      textLeft(ctx, String(prog), 372, ccy - 12, DISPLAY, pal.gold);
-      this.buttons.push(new Button(["detail", kind, idx], MARGIN, y, 340, 34));
+      this.buttons.push(new Button(["detail", kind, idx], MARGIN, y,
+                                   480 - 2 * MARGIN, h));
       return y + h + QuestingProgressModal.ROW_GAP;
     }
 
@@ -1103,8 +1118,20 @@ export class QuestingProgressModal {
     const left = stepperCluster(ctx, this.buttons, 480 - MARGIN - 36, cy,
                                 prog, pts, atTarget,
                                 [pfx + "P-", idx], [pfx + "P+", idx]);
-    fillBar(ctx, MARGIN + 14, cy - 3, left - (MARGIN + 28), 6,
-            prog, pts, accent, atTarget);
+    // Side A carries the story and the setup; the quest points are on side B.
+    // A bare 0 / 0 reads as a stage you have failed to fill rather than one you
+    // have not turned over yet - and 1A->1B happens before round 1 (rulebook
+    // setup step 7). The line takes the bar's row, since a bar with no target
+    // has nothing to draw. Said short rather than truncated: the full sentence
+    // is 380px against the 248 this row leaves, and the type scale is not
+    // negotiable. This is 218.
+    const sideA = kind === "q" && g.quest.side === "A" && !pts;
+    if (sideA) {
+      textLeft(ctx, "Flip to side B to start.", MARGIN + 14, cy - 9, BODY, pal.dim);
+    } else {
+      fillBar(ctx, MARGIN + 14, cy - 3, left - (MARGIN + 28), 6,
+              prog, pts, accent, atTarget);
+    }
     // The whole title band opens the detail sheet - the ">" is the hint, not
     // the hit-box. Pushed last so the stepper hit-boxes win any overlap.
     this.buttons.push(new Button(["detail", kind, idx], MARGIN, y,
@@ -1339,6 +1366,23 @@ export class QuestingProgressModal {
   //
   // cap null/0 leaves the 0..99 behaviour, which is what a target-less row
   // wants: a condition stage has no quest points to clamp against.
+  // The stage's real target, resolving a formula X. null when the formula
+  // needs a count nobody has supplied yet.
+  //
+  // The ROW and the STEPPER have to agree on this: the row drew the resolved 4
+  // while the handler clamped against the printed 0, so the bar read 4/4 at
+  // target and a tap still pushed it to 5.
+  _questTarget() {
+    const g = this.game;
+    if (g.quest.mode !== "formula") return g.quest.points;
+    return xtargets.resolve(g.quest.x, {
+      count: g.quest.xCount ?? null,
+      players: g.players.length,
+      stage: g.quest.stage_n ?? 1,
+      highestThreat: Math.max(0, ...g.players.map(p => p.threat)),
+    });
+  }
+
   _clampAdj(cur, d, cap = null) {
     const hi = !cap || cap <= 0 ? 99 : cap;
     return Math.max(0, Math.min(hi, cur + d));
@@ -1350,7 +1394,7 @@ export class QuestingProgressModal {
     const up = k.endsWith("+");
     if (k === "qP-" || k === "qP+") {
       // A condition stage has no target to clamp against (mode set by flipToB).
-      const cap = g.quest.mode === "condition" ? null : g.quest.points;
+      const cap = g.quest.mode === "condition" ? null : this._questTarget();
       g.quest.progress = this._clampAdj(g.quest.progress, up ? 1 : -1, cap);
       return null;
     }

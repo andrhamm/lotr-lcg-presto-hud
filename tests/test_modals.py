@@ -1088,19 +1088,55 @@ def test_progress_cannot_exceed_the_target():
     assert not game.active_locations
 
 
-def test_a_condition_stage_has_no_cap_to_hit():
-    # No quest points means no target to clamp against, and the player may be
-    # counting resource tokens or defeated enemies - leave it free.
+def test_a_formula_stage_clamps_against_the_target_it_drew():
+    # The row resolved X to 4 and drew "3 / 4", but the stepper clamped against
+    # the PRINTED points (0), so the bar could read 4/4 at target and a tap
+    # still pushed it to 5. Row and handler read the same target now.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()                       # 4 players by default
+    game.quest.update({"points": 0, "progress": 3, "side": "B",
+                       "mode": "formula",
+                       "x": {"text": "the number of players in the game",
+                             "target": "players"}})
+    m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    assert "X = 4" in " ".join(_texts(hw))
+    m.on_button(_find(m, ("qP+", None)))
+    assert game.quest["progress"] == 4
+    # At the target the + is gone entirely, so there is nothing left to tap.
+    m.draw(hw, game, pal)
+    assert not any(b.id == ("qP+", None) for b in m.buttons)
+
+
+def test_a_condition_stage_row_has_no_bar_and_no_steppers():
+    # ~137 of ~400 stage cards advance on a condition - an enemy defeated, an
+    # objective claimed - not by filling a bar. A stepper here invited the
+    # player to count toward a target the card never printed, which is the
+    # thing this mode exists to stop. The card's own sentence takes the space.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
     game.quest["points"] = 0
     game.quest["mode"] = "condition"
+    game.quest["advance"] = "Advance when Ugluk is defeated."
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    for _ in range(8):
-        m.on_button(_find(m, ("qP+", None)))
-    assert game.quest["progress"] == 8
+    assert not any(b.id[0] in ("qP-", "qP+") for b in m.buttons)
+    assert "Advance when Ugluk is defeated." in " ".join(_texts(hw))
+    # The chevron still reaches the sheet, which carries the full text.
+    assert any(b.id == ("detail", "q", None) for b in m.buttons)
+
+
+def test_a_condition_stage_has_no_cap_to_hit():
+    # Kept as a unit on the clamp itself: no quest points means no target to
+    # clamp against. The row no longer offers the control, but the rule is what
+    # every other surface reads.
+    game = GameState()
+    game.quest["mode"] = "condition"
+    m = modals.QuestingProgressModal(game)
+    assert m._clamp_adj(90, 1, None) == 91
+    assert m._clamp_adj(2, 1, 3) == 3          # a real target still clamps
 
 
 def test_quest_sheet_shows_the_loss_condition_too():
