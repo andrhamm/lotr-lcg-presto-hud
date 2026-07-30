@@ -48,7 +48,8 @@ across columns, and surface blockers here.
 
 ## In Progress
 * Notes for in progress overhaul of location/quest "progress":
-	* [note: claude was down, revisit these notes when back up]
+	* [these four are UNADDRESSED — the plan below shipped first. They are
+	  feedback on exactly that screen, so they are the obvious next round.]
 	* the "chevron" on the Progress screen items:
 		* "2 QP >" is not useful on a row that already has the quest points displayed... the value's denominator should be labeled as "qp" (or "quest points" below the numbers, between the controls
 		* location icon is dumb, find something better
@@ -58,6 +59,19 @@ across columns, and surface blockers here.
 ## Blocked
 
 ## Done
+
+- [x] Progress view — realize the proposed flow (T0–T9)
+  - notes: plan at `~/.claude/plans/silly-swimming-map.md`. Both twins:
+    `active_location` becomes a LIST of seats (RR allows one; five printed
+    cards override it), shared row widgets, the redesigned Progress screen
+    (sections, chain-aware pagination, compact rows, RESOLVE header, History
+    with stage rules), row detail sheets with named actions and live edits,
+    and the stage row driven by points / condition / formula.
+  - also fixed on the way: a manual location never stored the threat it took
+    out of staging, the web location picker threw on every draw, "Replaced"
+    always replaced seat 0, and pre-list replay deltas silently no-op'd undo.
+  - done: 8cd2727..2d4e401 (12 commits). 1986 tests green, both twins verified
+    byte-identical, and a pre-migration save resumed in the real app.
 
 - [x] The count control for a dynamic X
   - notes: the original plan was a 5-rule regex grammar over the distilled sentence, parsed at build time. User called it: put an **enum** in the card data and code one formula per distinct target instead. The 43 distinct sentences collapse to **26 targets** — most of the difference is phrasing ("characters controlled by the first player" vs "characters the first player controls"; "1 more than" vs "1 plus"). Arithmetic is two integers, `value = mul * count + add`, which covers every observed shape.
