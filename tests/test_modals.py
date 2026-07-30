@@ -356,11 +356,13 @@ def test_questing_progress_modal_quest_editors_adjust_and_log_on_close():
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("qP+", None))) is None
     assert game.quest["progress"] == 4
-    assert m.on_button(_find(m, ("qT-", None))) is None
-    assert game.quest["points"] == 9
+    # The TARGET stepper is gone from the row entirely - editing a target is a
+    # detail-sheet job, which is also what labels the actions the row's icons
+    # never named.
+    assert not any(b.id[0] in ("qT-", "qT+") for b in m.buttons)
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("close",))) == "close"
-    assert any("Quest 1A set 4/9 (progress view)" in e["text"] for e in game.log)
+    assert any("Quest 1A set 4/10 (progress view)" in e["text"] for e in game.log)
 
 
 _QPM_STAGES = [{"stage": 1, "cards": [{"questPoints": 8, "victory": None, "sailing": False,
@@ -368,12 +370,16 @@ _QPM_STAGES = [{"stage": 1, "cards": [{"questPoints": 8, "victory": None, "saili
 
 
 def test_questing_progress_modal_quest_row_always_has_a_detail_chevron():
+    # ALWAYS: the sheet behind it is where quest points are edited, and a
+    # custom game needs that at least as much as a catalog one. This assertion
+    # was inverted - the test was renamed when the chevron became universal but
+    # kept its old "not any" polarity, so it pinned the opposite of its name.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()   # no preload_scenario: game.stages == [] (custom game)
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    assert not any(b.id == ("detail", "q", None) for b in m.buttons)
+    assert any(b.id == ("detail", "q", None) for b in m.buttons)
 
     game.preload_scenario({"slug": "p", "name": "P", "pack": "Core Set", "cycle": "Core Set",
                            "source": "official", "kind": "quest", "nightmare": False,
@@ -397,29 +403,43 @@ def test_questing_progress_modal_quest_row_opens_the_editor():
     assert game.pending_quest_config is True
 
 
-def test_questing_progress_modal_quest_card_button_does_not_overlap_current_editor():
-    # Hit-test order: buttons are matched in array order, so the Current/
-    # Target editors (pushed first) must win on any overlap. The quest_card
-    # button is sized to sit left of the Current editor's leftmost hit-box
-    # by construction - assert that geometrically, not just by push order.
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    game.preload_scenario({"slug": "p", "name": "P", "pack": "Core Set", "cycle": "Core Set",
-                           "source": "official", "kind": "quest", "nightmare": False,
-                           "mode": "Standard"}, _QPM_STAGES)
-    m = modals.QuestingProgressModal(game)
-    m.draw(hw, game, pal)
-    qc = _find(m, ("detail", "q", None))
-    cur_minus = _find(m, ("qP-", None))
-    assert qc.x + qc.w <= cur_minus.x
-    # and editors were pushed first, so they'd win on overlap regardless
-    ids = [b.id for b in m.buttons]
-    assert ids.index(("qP-", None)) < ids.index(("detail", "q", None))
-    assert ids.index(("qP+", None)) < ids.index(("detail", "q", None))
-    assert ids.index(("qT-", None)) < ids.index(("detail", "q", None))
-    assert ids.index(("qT+", None)) < ids.index(("detail", "q", None))
-
+def test_progress_row_steppers_win_over_the_detail_band():
+    # The full row's detail band is the whole title strip, and the stepper
+    # cluster is centred 48px down with a 52px tap box - so they DO overlap by
+    # ~18px, deliberately. main.py's dispatcher takes the first hit, and the
+    # cluster is pushed first, so a tap on the disc steps the value rather than
+    # opening the sheet. That ordering IS the contract; pin it.
+    #
+    # The compact row does not rely on it - it sizes its band against the
+    # cluster's real left edge - so that one is asserted geometrically.
+    for n_loc, compact in ((1, False), (2, True)):
+        hw = FakeHardware()
+        pal = Palette(hw.display)
+        game = GameState()
+        game.travel_to(3, 0, "First")
+        if n_loc == 2:
+            game.travel_to(4, 0, "Second")
+        game.quest.update({"points": 8, "progress": 3})
+        for loc in game.active_locations:
+            loc["progress"] = 1                # so both discs are live
+        m = modals.QuestingProgressModal(game)
+        m.draw(hw, game, pal)
+        bands = [b for b in m.buttons if b.id[0] == "detail"]
+        steps = [b for b in m.buttons if str(b.id[0]).endswith(("P-", "P+"))]
+        assert bands and steps, n_loc
+        ids = [b.id for b in m.buttons]
+        hit = lambda a, b: (a.x < b.x + b.w and b.x < a.x + a.w
+                            and a.y < b.y + b.h and b.y < a.y + a.h)
+        for st in steps:
+            for band in bands:
+                # Only the band it actually overlaps has to lose to it - an
+                # earlier row's band is nowhere near this one.
+                if hit(st, band):
+                    assert ids.index(st.id) < ids.index(band.id), (st.id, band.id)
+        if compact:
+            for band in bands:
+                for st in steps:
+                    assert not hit(st, band), (band.id, st.id)
 
 def test_questing_progress_modal_location_current_bump_explores_when_done():
     hw = FakeHardware()
@@ -433,142 +453,105 @@ def test_questing_progress_modal_location_current_bump_explores_when_done():
     assert any("Explored" in e["text"] for e in game.log)
 
 
-def test_questing_progress_modal_complete_location_logs_and_clears():
+def test_location_sheet_explored_logs_and_clears():
+    # Was an unlabelled green pennant on the Progress row. It is a named
+    # action on the location's own sheet now.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
     game.active_locations = [{"points": 5, "progress": 1}]
-    m = modals.QuestingProgressModal(game)
+    m = modals.LocationConfigModal(game)
     m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("ldone", None))) is None
+    assert m.on_button(_find(m, ("explored",))) == "close"
     assert not game.active_locations
     assert game.log[-1]["text"] == "Active location Explored"
 
 
-def test_questing_progress_modal_complete_side_quest_logs_and_pops():
+def test_location_sheet_back_to_staging_returns_the_cards_own_threat():
+    # RR "Active Location": the active location does not contribute its threat
+    # while active, so putting it BACK has to add the same number again - which
+    # is why the record carries it rather than the caller guessing.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.travel_to(4, 0, "Old Forest Road", {"threat": 3})
+    game.active_locations[0]["progress"] = 2
+    game.staging = 5
+    m = modals.LocationConfigModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("tostaging",))) == "close"
+    assert game.staging == 8
+    assert not game.active_locations
+    # RR: progress is NOT lost when a location returns to staging.
+    assert any("3 threat, 2 progress kept" in e["text"] for e in game.log)
+
+
+def test_location_sheet_replaced_reopens_the_picker_on_that_seat():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.travel_to(4, 0, "First")
+    game.travel_to(3, 0, "Second")
+    m = modals.LocationConfigModal(game, idx=1)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("replaced",))) == "close"
+    assert game.pending_location_pick == {"mode": "change", "back": "progress",
+                                          "idx": 1}
+    assert len(game.active_locations) == 2      # nothing dropped yet
+
+
+def test_location_sheet_remove_is_a_different_outcome_from_explored():
+    # Explored means the players filled it; removed means it never happened.
+    # Two log lines, because they are two different things.
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.active_locations = [{"points": 5, "progress": 1}]
+    m = modals.LocationConfigModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("none",))) == "close"
+    assert not game.active_locations
+    assert game.log[-1]["text"] == "Active location removed"
+
+
+def test_side_quest_sheet_done_logs_and_pops():
+    # Was an unlabelled pennant on the Progress row; it lives on the side
+    # quest's own sheet now, named.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
     game.side_quests = [{"points": 5, "progress": 5}]
-    m = modals.QuestingProgressModal(game)
+    m = modals.SideQuestsModal(game)
     m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("sdone", 0))) is None
+    assert m.on_button(_find(m, ("done", 0))) is None
     assert game.side_quests == []
     assert game.log[-1]["text"] == "Side quest 1 completed"
 
 
-def test_questing_progress_modal_remove_side_quest_logs_and_pops():
+def test_side_quest_sheet_remove_logs_and_pops():
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.side_quests = [{"points": 5, "progress": 1}]
+    m = modals.SideQuestsModal(game)
+    m.draw(hw, game, pal)
+    assert m.on_button(_find(m, ("rm", 0))) is None
+    assert game.side_quests == []
+    assert game.log[-1]["text"] == "Side quest 1 removed"
+
+
+def test_a_side_quest_rows_chevron_reaches_its_own_sheet():
+    # It used to raise pending_side_quest_pick - the ADD picker - so a row
+    # could never reach its own Done or Remove at all.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
     game.side_quests = [{"points": 5, "progress": 1}]
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("sX", 0))) is None
-    assert game.side_quests == []
-    assert game.log[-1]["text"] == "Side quest 1 removed"
-
-
-def test_questing_progress_modal_remove_location_opens_prompt_without_clearing():
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    game.active_locations = [{"points": 4, "progress": 2}]
-    m = modals.QuestingProgressModal(game)
-    m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("lX", None))) is None
-    assert m.loc_prompt == {"stage": "choose"}
-    assert game.active_locations[0] == {"points": 4, "progress": 2}   # untouched
-    m.draw(hw, game, pal)                                         # re-render the prompt
-    assert not any(b.id == ("close",) for b in m.buttons)         # header suppressed
-
-
-def test_questing_progress_modal_loc_prompt_cancel_leaves_location_untouched():
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    game.active_locations = [{"points": 4, "progress": 2}]
-    m = modals.QuestingProgressModal(game)
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("lX", None)))
-    m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("lp_cancel",))) is None
-    assert m.loc_prompt is None
-    assert game.active_locations[0] == {"points": 4, "progress": 2}
-
-
-def test_questing_progress_modal_loc_prompt_discard_clears_and_logs():
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    game.active_locations = [{"points": 4, "progress": 2}]
-    m = modals.QuestingProgressModal(game)
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("lX", None)))
-    m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("lp_discard",))) is None
-    assert not game.active_locations
-    assert m.loc_prompt is None
-    assert game.log[-1]["text"] == "Active location removed"
-
-
-def test_questing_progress_modal_loc_prompt_replaced_sets_new_location():
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    game.active_locations = [{"points": 4, "progress": 2}]
-    m = modals.QuestingProgressModal(game)
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("lX", None)))
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("lp_replaced",)))
-    assert m.loc_prompt["stage"] == "pts"
-    m.draw(hw, game, pal)
-    for _ in range(3):
-        m.on_button(_find(m, ("lp_pts", 1)))
-    m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("save",))) is None
-    assert game.active_locations[0] == {"points": 6, "progress": 0}
-    assert m.loc_prompt is None
-    assert any("Changed active location" in e["text"] for e in game.log)
-
-
-def test_questing_progress_modal_loc_prompt_pts_cancel_returns_to_choose():
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    game.active_locations = [{"points": 4, "progress": 1}]
-    m = modals.QuestingProgressModal(game)
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("lX", None)))
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("lp_replaced",)))
-    m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("cancel",))) is None
-    assert m.loc_prompt == {"stage": "choose"}
-    assert game.active_locations[0] == {"points": 4, "progress": 1}   # untouched
-
-
-def test_questing_progress_modal_loc_prompt_to_staging_adds_threat_and_clears():
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    game = GameState()
-    game.active_locations = [{"points": 4, "progress": 2}]
-    game.staging = 5
-    m = modals.QuestingProgressModal(game)
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("lX", None)))
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("lp_staging",)))
-    assert m.loc_prompt["stage"] == "contrib"
-    m.draw(hw, game, pal)
-    m.on_button(_find(m, ("lp_ctr", 1)))
-    m.draw(hw, game, pal)
-    assert m.on_button(_find(m, ("save",))) is None
-    assert game.staging == 8      # 5 + (default 2 + 1 tap)
-    assert not game.active_locations
-    assert m.loc_prompt is None
-    assert any("Active location to staging (+3 threat)" in e["text"] for e in game.log)
+    assert m.on_button(_find(m, ("detail", "s", 0))) == "close"
+    assert game.pending_side_quest_detail is True
+    assert game.pending_side_quest_pick is False
 
 
 def test_questing_progress_modal_add_location_opens_the_picker():
@@ -597,6 +580,10 @@ def test_questing_progress_history_heading_radio_sets_heading_and_logs():
     game.sailing = True
     game.heading = 0
     m = modals.QuestingProgressModal(game)
+    # The heading radios and the chart live behind History now - an empty
+    # chart used to hold 130px hostage every round before the first resolve.
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("history",)))
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("hd_set", 2))) is None
     assert game.heading == 2
@@ -616,6 +603,9 @@ def test_questing_progress_modal_chart_shows_heading_row_when_sailing():
     game.resolve_quest(14, 10)
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
+    m.on_button(_find(m, ("history",)))       # the chart is a sub-view now
+    hw.display.calls.clear()
+    m.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert "WILLPOWER / STAGING / RESULT / HEADING" in texts
 
@@ -627,6 +617,9 @@ def test_questing_progress_modal_chart_hides_heading_row_when_not_sailing():
     game.sailing = False
     game.resolve_quest(14, 10)
     m = modals.QuestingProgressModal(game)
+    m.draw(hw, game, pal)
+    m.on_button(_find(m, ("history",)))       # the chart is a sub-view now
+    hw.display.calls.clear()
     m.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert "WILLPOWER / STAGING / RESULT" in texts
@@ -942,8 +935,10 @@ def test_location_pick_lists_the_catalog_with_both_numbers():
     assert m.step == "list"
     joined = " ".join(_texts(hw))
     assert "Old Forest Road" in joined
-    assert "3 qp" in joined      # its printed quest points
-    assert "1" in joined         # its printed threat
+    # The two-segment pill draws the numbers and the "QP" label as separate
+    # runs - the old "3 qp" was one string from the pre-pill row.
+    assert "3" in joined and "QP" in joined     # its printed quest points
+    assert "1" in joined                        # its printed threat
 
 
 def test_location_pick_travel_commits_the_card_numbers_and_name():
@@ -1463,8 +1458,8 @@ def test_every_modal_state_can_be_dismissed():
             except Exception:
                 continue
             if b.id[0] not in ("close", "cancel", "back", "no", "not_yet",
-                               "lp_cancel", "done", "ok", "save", "go", "win",
-                               "avert", "elim"):
+                               "hist_back", "add_cancel", "done", "ok", "save",
+                               "go", "win", "avert", "elim"):
                 continue
             if r in ("close", "cancel", "redraw"):
                 ways += 1

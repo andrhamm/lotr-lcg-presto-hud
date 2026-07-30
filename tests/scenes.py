@@ -473,53 +473,134 @@ def _questing_progress_modal_no_location():
     return hw, m
 
 
-def _questing_progress_modal_loc_choose():
-    # In-modal location-remove prompt: the 3-way "choose" stage. Set the
-    # state before the (single) draw - FakeDisplay.calls accumulates across
-    # draw() calls, so drawing the normal view first would leave stale text
-    # in hw.display.calls and produce false-positive collisions.
+def _questing_progress_modal_two_locations():
+    # Two active locations - the compact row treatment, and the chain
+    # (locations + quest) held on one page with the side quests broken to
+    # page 2. Five printed cards allow a second seat; see
+    # gamestate.active_locations.
     from ui.modals import QuestingProgressModal
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
+    g.travel_to(3, 1, "Old Forest Road")
+    g.travel_to(4, 2, "Great Forest Web")
+    g.quest.update({"points": 8, "progress": 3})
+    g.side_quests = [{"points": 5, "progress": 2, "name": "Gather Information"},
+                     {"points": 4, "progress": 0, "name": "Prepare for Battle"}]
     m = QuestingProgressModal(g)
-    m.loc_prompt = {"stage": "choose"}
     m.draw(hw, g, pal)
     return hw, m
 
 
-def _questing_progress_modal_loc_pts():
-    # Location-remove prompt: "Replaced" -> new quest-points sub-stage.
+def _questing_progress_modal_side_quest_page():
+    # Page 2: the side quests the chain pushed off page 1.
     from ui.modals import QuestingProgressModal
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
+    g.travel_to(3, 1, "Old Forest Road")
+    g.travel_to(4, 2, "Great Forest Web")
+    g.quest.update({"points": 8, "progress": 3})
+    g.side_quests = [{"points": 5, "progress": 2, "name": "Gather Information"},
+                     {"points": 4, "progress": 0, "name": "Prepare for Battle"}]
     m = QuestingProgressModal(g)
-    m.loc_prompt = {"stage": "pts", "pts": 3}
+    m.page = 1
     m.draw(hw, g, pal)
     return hw, m
 
 
-def _questing_progress_modal_loc_contrib():
-    # Location-remove prompt: "To staging" -> threat-contribution sub-stage.
+def _questing_progress_modal_condition_row():
+    # A stage that advances on a condition: no bar, no steppers, the card's
+    # own sentence in their place, and the loss condition in red under it.
     from ui.modals import QuestingProgressModal
-    from ui.counter import CounterState
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.travel_to(3, 1, "Orc Camp")
+    g.quest.update({"points": 0, "progress": 0, "side": "B", "mode": "condition",
+                    "advance": "The players win when Ugluk is defeated and the "
+                               "Ring-bearer has escaped the orc camp.",
+                    "lose": "If the Ring-bearer is captured, the players lose."})
+    m = QuestingProgressModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _questing_progress_modal_formula_row():
+    # A computed target: an ordinary bar and stepper, with X resolved from the
+    # player count and shown as the row's metadata.
+    from ui.modals import QuestingProgressModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.quest.update({"points": 0, "progress": 3, "side": "B", "mode": "formula",
+                    "x": {"text": "the number of players in the game",
+                          "target": "players"}})
+    m = QuestingProgressModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _questing_progress_modal_side_a():
+    # Side A: quest points live on side B, so the row says so where the bar
+    # would be rather than drawing a bare 0 / 0.
+    from ui.modals import QuestingProgressModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.quest.update({"points": 0, "progress": 0, "side": "A"})
+    m = QuestingProgressModal(g)
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _questing_progress_modal_history():
+    # The History sub-view: the by-round chart with its gold stage rules, plus
+    # the heading radios a sailing game gets.
+    from ui.modals import QuestingProgressModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.sailing = True
+    for r in range(1, 8):
+        if r in (3, 6):
+            g.quest["stage_n"] += 1
+        g.round = r
+        g.resolve_quest(6 if r % 3 else 2, 4)
+    m = QuestingProgressModal(g)
+    m.history = True
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _questing_progress_modal_add_prompt():
+    # "+ Add" asks Location or Side quest rather than silently meaning one.
+    from ui.modals import QuestingProgressModal
     hw = FakeHardware()
     pal = Palette(hw.display)
     g = _game()
     m = QuestingProgressModal(g)
-    m.loc_prompt = {"stage": "contrib", "state": CounterState(2, 0, 9)}
+    m.add_prompt = True
+    m.draw(hw, g, pal)
+    return hw, m
+
+
+def _quest_config_modal_catalog():
+    # The quest row's sheet for a catalog game: named actions, no Save/Cancel.
+    from ui.modals import QuestConfigModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _resolution_game()
+    m = QuestConfigModal(g)
     m.draw(hw, g, pal)
     return hw, m
 
 
 def _questing_progress_modal_catalog():
-    # Catalog game (has stages): the quest row gains the "adv" (Advance)
-    # icon at x=400, the same slot "done" occupies on removable rows - the
-    # quest row is never removable, so there's no collision by construction,
-    # but this scene renders it for real (plus a location + named side
-    # quest row, to confirm no overlap with the quest_card tap target or
-    # the Current/Target editors either) - B-resolve Task 3.
+    # Catalog game (has stages): a quest row plus a named side-quest row. The
+    # "adv" icon this used to describe is gone - forcing resolution is a named
+    # action on the quest's own sheet now (see _quest_config_modal_catalog),
+    # and the docstring outlived it.
     from ui.modals import QuestingProgressModal
     hw = FakeHardware()
     pal = Palette(hw.display)
@@ -1343,9 +1424,14 @@ SCENES = {
     "location_config_modal_unknown_x": _location_config_modal_unknown_x,
     "location_config_modal_count_control": _location_config_modal_count_control,
     "questing_progress_modal_no_location": _questing_progress_modal_no_location,
-    "questing_progress_modal_loc_choose": _questing_progress_modal_loc_choose,
-    "questing_progress_modal_loc_pts": _questing_progress_modal_loc_pts,
-    "questing_progress_modal_loc_contrib": _questing_progress_modal_loc_contrib,
+    "questing_progress_modal_two_locations": _questing_progress_modal_two_locations,
+    "questing_progress_modal_side_quest_page": _questing_progress_modal_side_quest_page,
+    "questing_progress_modal_condition_row": _questing_progress_modal_condition_row,
+    "questing_progress_modal_formula_row": _questing_progress_modal_formula_row,
+    "questing_progress_modal_side_a": _questing_progress_modal_side_a,
+    "questing_progress_modal_history": _questing_progress_modal_history,
+    "questing_progress_modal_add_prompt": _questing_progress_modal_add_prompt,
+    "quest_config_modal_catalog": _quest_config_modal_catalog,
     "questing_progress_modal_catalog": _questing_progress_modal_catalog,
     "side_quest_pick": _side_quest_pick,
     "side_quest_pick_quests": _side_quest_pick_quests,
