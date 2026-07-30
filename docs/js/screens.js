@@ -5,8 +5,9 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          stepper, wrapText, truncateText, ribbon, ribbonH, notePanel, drawWeather,
          disc, arcRuns, ring, token, wxSmall, BAND_PAD, bandLineH,
          DISPLAY, BODY, LABEL , statPill,
-         progRowCard, fillBar, glyph, stepperCluster,
+         progRowCard, fillBar, glyph, stepperCluster, phaseBlock,
          ROW_H, ROW_H_COMPACT } from "./ui.js";
+import { PROGRESS_PLACEMENT } from "./viewcopy.js";
 import { measureText } from "./metrics.js";
 import * as xtargets from "./xtargets.js";
 import * as icons from "./icons.js";
@@ -30,9 +31,21 @@ const GUTTER = MARGIN + 40;
 
 // Upper-right DONE bevel button: the universal "commit and dismiss" affordance
 // shared by drawHeader's close case and modalHeader (same geometry, same pens).
-function doneButton(ctx) {
-  bevel(ctx, 408, 4, 64, 32, pal.btn_ok);
-  textCenter(ctx, "DONE", 440, 12, BODY, pal.ok_fg);
+// Widens for a longer label the same way drawHeader's round stamp does -
+// "RESOLVE" does not fit DONE's 64px. Returns [x, y, w, h] so the caller
+// registers a hit-box matching what was drawn; a fixed 64 would have left the
+// wider button's left third dead.
+//
+// `ready` swaps the ink to amber: the Progress screen relabels this RESOLVE
+// when something is sitting at its target, and the colour is the same
+// at-target signal its value tokens already use.
+function doneButton(ctx, label = "DONE", ready = false) {
+  const w = Math.max(64, measureText(label, BODY) + 20);
+  const x = 472 - w;
+  bevel(ctx, x, 4, w, 32, pal.btn_ok);
+  textCenter(ctx, label, x + Math.floor(w / 2), 12, BODY,
+             ready ? pal.amber : pal.ok_fg);
+  return [x, 4, w, 32];
 }
 
 export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
@@ -81,16 +94,28 @@ export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
 // Shared header for full-screen modals: round id upper-left, centred title,
 // and a DONE button upper-right that pushes id ["close"] (each modal's
 // onButton maps "close" to its own commit-and-dismiss / dismiss semantics).
-export function modalHeader(ctx, game, title, buttons) {
-  const roundLbl = `R${game.round} ${game.step}`;
-  textLeft(ctx, roundLbl, 10, 12, BODY, pal.muted);
+// `back: [label, id]` puts a way back in the round-stamp slot instead of the
+// stamp. A sub-view that drew its own back button elsewhere landed on its own
+// content (the History chart is bottom-anchored), and one drawn OVER the stamp
+// printed the two on top of each other. Same affordance drawHeader's roundId
+// gives the pre-game screens, and for the same reason: the slot and its tap
+// target are one thing.
+export function modalHeader(ctx, game, title, buttons,
+                            { cta = "DONE", ctaReady = false, back = null } = {}) {
+  if (back) {
+    const [label, bid] = back;
+    textLeft(ctx, label, 10, 12, BODY, pal.tan);
+    buttons.push(new Button(bid, 0, 0, 150, HEADER_H));
+  } else {
+    textLeft(ctx, `R${game.round} ${game.step}`, 10, 12, BODY, pal.muted);
+  }
   // DISPLAY, like every screen title. This was BODY, so opening a modal from
   // Settings stepped its title DOWN a tier - the spec's "screen and modal
   // titles" is one row of the table, not two.
   textCenter(ctx, title, 240, 8, DISPLAY, pal.gold);
   rect(ctx, 0, HEADER_H, 480, 1, pal.border);
-  doneButton(ctx);
-  buttons.push(new Button(["close"], 408, 4, 64, 32));
+  const [x, y, w, h] = doneButton(ctx, cta, ctaReady);
+  buttons.push(new Button(["close"], x, y, w, h));
 }
 
 // Circular -/+ (or similar single-glyph) button: btn disc + light affordance
@@ -907,21 +932,29 @@ export class EliminationModal {
 }
 
 export class QuestingProgressModal {
-  // All questing progress in one place: main quest, active location (or a
-  // slot to add one) and each side quest, each as Current (live progress
-  // ring) | Target (dim, no fill) circular editors. Non-main rows add
-  // complete/remove icon buttons; removing the Location opens an in-modal
-  // prompt (Replaced / To staging / Discard - a modal cannot open another,
-  // so this is state on `this`, not a nested modal). Weather radios replace
-  // the old heading stepper when sailing. A bottom-anchored chart summarizes
-  // quest_history by round. Silent progress/points edits are batched into
-  // one summary log line per field on close.
-  static ROWS_Y0 = 62;
-  static ROW_H = 38;
+  // All questing progress in one place: the active location(s), the main
+  // quest, and each side quest, each as one row carrying a "progress / target"
+  // stepper over a fill bar and a ">" into its own detail sheet. Port of
+  // ui/modals.py's QuestingProgressModal - keep the two in lockstep.
+  //
+  // A row is a card with a coloured accent down its left edge (green =
+  // location, gold = quest/side quest), the entity's glyph and name, its
+  // printed quest points as dense metadata, and ONE big stepper cluster. The
+  // old row was 38px with two small circular editors and four 24px icon
+  // buttons crowded to the right - tiny tap targets, and nothing like the
+  // Players screen. The target stepper is gone from the row entirely: editing
+  // a target is a detail-sheet job, which is also what labels the actions the
+  // icons never named.
+  static ROW_H = ROW_H;
+  static ROW_H_COMPACT = ROW_H_COMPACT;
+  static ROW_GAP = 5;
 
   constructor(game) {
     this.game = game;
     this.buttons = [];
+    this.addPrompt = false;   // "+ Add" asks Location or Side quest
+    this.history = false;     // the by-round chart + heading sub-view
+    this.page = 0;
     this._snap = this._snapshot();
   }
 
@@ -938,7 +971,7 @@ export class QuestingProgressModal {
   _items() {
     const g = this.game;
     const items = [{ kind: "q", name: `Quest ${g.questLabel()}`, removable: false,
-      advanceable: g.stages.length > 0 }];
+                     advanceable: g.stages.length > 0 }];
     // Prefer the catalog name (LocationPickModal's list step) when present;
     // manual entries and old saves have no "name" key at all, so this stays
     // "Location" for them - same rule as the side quests below.
@@ -946,148 +979,263 @@ export class QuestingProgressModal {
       items.push({ kind: "l", idx: i, removable: true,
                    name: loc.name || (i === 0 ? "Location" : `Location ${i + 1}`) }));
     if (!g.active_locations.length) items.push({ kind: "l_add" });
-    // Prefer the catalog name (SideQuestPickModal, M4-B sidequest Task 2)
-    // when present; old saves and manual entries have no "name" key at
-    // all, so this stays "Side Quest N" for them.
     g.side_quests.forEach((s, i) =>
-      items.push({ kind: "s", idx: i, name: s.name || `Side Quest ${i + 1}`, removable: true }));
+      items.push({ kind: "s", idx: i, name: s.name || `Side Quest ${i + 1}`,
+                   removable: true }));
     return items;
   }
 
-  // Circular -/+ flanking a value token: Current shows a live progress ring
-  // (token()); Target is dim-only (well + full dim ring, no fill) so the two
-  // columns read at a glance without a progress bar implying a "target".
-  _valEditor2(ctx, cx, cy, value, frac, progressRing, idMinus, idPlus) {
-    circBtn(ctx, cx - 30, cy, 10, "-");
-    if (progressRing) {
-      token(ctx, cx, cy, 13, 2, value, pal.gold, frac, pal.gold, pal.dim);
-    } else {
-      disc(ctx, cx, cy, 13, pal.well);
-      arcRuns(ctx, cx, cy, 13, 11, 0, 360, pal.dim);
-      textCenter(ctx, String(value), cx, Math.round(cy - 8), BODY, pal.gold);
+  _section(ctx, y, label, count = null) {
+    textLeft(ctx, label, MARGIN + 2, y, LABEL, pal.muted);
+    if (count) {
+      const w = measureText(label, LABEL);
+      textLeft(ctx, count, MARGIN + 10 + w, y, LABEL, pal.dim);
     }
-    circBtn(ctx, cx + 30, cy, 10, "+");
-    this.buttons.push(
-      new Button(idMinus, cx - 30 - 12, cy - 12, 24, 24),
-      new Button(idPlus, cx + 30 - 12, cy - 12, 24, 24),
-    );
+    return y + 14;
   }
 
-  // Small circular action: "x" = remove (red X, reuses circBtn), "done" =
-  // mark complete (green pennant flag - a target reached its max), "adv" =
-  // manually trigger the guided resolution flow (gold chevron -
-  // conditional/0-point stages have no numeric gate to cross, so this is
-  // the only way in).
-  _iconBtn(ctx, cx, cy, r, kind, id) {
-    if (kind === "x") {
-      circBtn(ctx, cx, cy, r, "X", pal.red);
-    } else if (kind === "adv") {
-      disc(ctx, cx, cy, r, pal.btn);
-      arcRuns(ctx, cx, cy, r, r - 2, 0, 360, pal.bevel_l);
-      ctx.fillStyle = pal.gold;
-      ctx.beginPath();
-      ctx.moveTo(cx - 3, cy - 5);
-      ctx.lineTo(cx - 3, cy + 5);
-      ctx.lineTo(cx + 5, cy);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      disc(ctx, cx, cy, r, pal.btn);
-      arcRuns(ctx, cx, cy, r, r - 2, 0, 360, pal.bevel_l);
-      rect(ctx, cx - 4, cy - 5, 1, 10, pal.green);
-      ctx.fillStyle = pal.green;
-      ctx.beginPath();
-      ctx.moveTo(cx - 3, cy - 5);
-      ctx.lineTo(cx + 4, cy - 3);
-      ctx.lineTo(cx - 3, cy - 1);
-      ctx.closePath();
-      ctx.fill();
-    }
-    this.buttons.push(new Button(id, cx - 12, cy - 12, 24, 24));
-  }
-
-  _row(ctx, it, y) {
+  _row(ctx, it, y, compact = false) {
     const g = this.game;
-    const cy = y + 8;
-    if (it.kind === "l_add") {
-      const b = new Button(["addloc"], 12, y + 7, 140, 24);
-      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-      textCenter(ctx, "+ Add location", b.x + b.w / 2, b.y + 5, BODY, pal.tan);
-      this.buttons.push(b);
-      return;
-    }
-    let prog, pts, pfx, idx;
-    if (it.kind === "q") { prog = g.quest.progress; pts = g.quest.points; pfx = "q"; idx = null; }
-    else if (it.kind === "l") { const i = it.idx ?? 0; const l = g.active_locations[i]; prog = l.progress; pts = l.points; pfx = "l"; idx = i; }
-    else { const s = g.side_quests[it.idx]; prog = s.progress; pts = s.points; pfx = "s"; idx = it.idx; }
-    // The quest row's title doubles as a tap target opening the read-only
-    // QuestCardModal (M4-B, second entry point) - gold ink hints it's
-    // interactive, matching this row alone (Location/Side Quest titles stay
-    // plain). Pushed AFTER the Current/Target editors below so their hit
-    // regions win on any overlap; the button's own bounds (x 12-130) sit
-    // left of the Current editor's leftmost hit-box (x=136) by construction,
-    // so there should be no real overlap to arbitrate.
-    const questCardTappable = it.kind === "q" && g.stages.length > 0;
-    // The Location row's title does the same for its detail sheet - the only
-    // way to reach the location's threat, which "Back to staging" needs. Gold
-    // ink is this screen's existing hint for a tappable title.
-    const locTappable = it.kind === "l";
-    // 118px matches the quest_card tap target's fixed width below (and the
-    // room left before the Current editor's leftmost hit-box at x=136) - a
-    // real catalog side-quest name (up to ~20 chars) can otherwise run into
-    // the Current/Target editors, unlike the old always-short generic
-    // labels ("Quest 1A", "Location", "Side Quest 3").
-    const nameS = truncateText(it.name, BODY, 118);
-    textLeft(ctx, nameS, 12, y, BODY,
-             (questCardTappable || locTappable) ? pal.gold : pal.tan);
-    // A stage that advances on a condition has no target to edit, and a 0 in
-    // the Target column reads as "worth nothing" rather than "not scored this
-    // way". Draw the same blank rule the location sheet uses and drop the
-    // stepper entirely - the card's own sentence needs more than 38px, so it
-    // lives on the detail sheet (QuestConfigModal), not here.
-    const noTarget = it.kind === "q" && g.quest.mode === "condition";
-    this._valEditor2(ctx, 178, cy, prog, pts ? prog / pts : 0, true, [pfx + "P-", idx], [pfx + "P+", idx]);
-    if (noTarget) {
-      rect(ctx, 300 - 15, cy - 1, 30, 3, pal.dim);
+    const kind = it.kind;
+    const cond = kind === "q" && g.quest.mode === "condition";
+    // A condition row carries two lines of the card's own sentence AND a
+    // count-only stepper, so it needs more than a bar row does.
+    const h = cond ? 96
+      : (compact ? QuestingProgressModal.ROW_H_COMPACT : QuestingProgressModal.ROW_H);
+    let prog, pts, pfx, idx, accent, meta = null;
+    if (kind === "q") {
+      prog = g.quest.progress; pts = g.quest.points; pfx = "q"; idx = null;
+      accent = pal.gold; meta = `STAGE ${g.questLabel()}`;
+    } else if (kind === "l") {
+      idx = it.idx ?? 0;
+      const loc = g.active_locations[idx];
+      prog = loc.progress; pts = loc.points; pfx = "l";
+      accent = pal.green;
+      meta = pts ? `${pts} QP` : null;
     } else {
-      this._valEditor2(ctx, 300, cy, pts, 0, false, [pfx + "T-", idx], [pfx + "T+", idx]);
+      const sq = g.side_quests[it.idx];
+      prog = sq.progress; pts = sq.points; pfx = "s"; idx = it.idx;
+      accent = pal.gold;
+      meta = pts ? `${pts} QP` : null;
     }
-    if (it.removable) {
-      this._iconBtn(ctx, 400, cy, 11, "done", [pfx + "done", idx]);
-      this._iconBtn(ctx, 436, cy, 11, "x", [pfx + "X", idx]);
+    const atTarget = !!pts && prog >= pts;
+    progRowCard(ctx, MARGIN, y, 480 - 2 * MARGIN, h, accent);
+
+    // A stage that advances on a condition has no bar to fill and no target to
+    // count toward, so the card's own sentence takes the space instead.
+    if (cond) {
+      glyph(ctx, kind, MARGIN + 14, y + 5, accent);
+      textLeft(ctx, truncateText(it.name, BODY, 236), MARGIN + 40, y + 8, BODY, pal.tan);
+      const mw = measureText("NO QUEST POINTS", LABEL);
+      textLeft(ctx, "NO QUEST POINTS", 480 - MARGIN - 28 - mw, y + 10, LABEL, pal.dim);
+      textLeft(ctx, ">", 480 - MARGIN - 18, y + 6, BODY, pal.gold);
+      let ty = y + 36;
+      const lines = wrapText(g.quest.advance
+        || "This stage advances on a condition, not on progress.",
+        BODY, 480 - 2 * MARGIN - 56);
+      for (const ln of lines.slice(0, 2)) {
+        textLeft(ctx, ln, MARGIN + 40, ty, BODY, pal.dim);
+        ty += 22;
+      }
+      if (lines.length > 2) {
+        textLeft(ctx, "[...] more", MARGIN + 40, ty, BODY, pal.gold);
+      }
+      // Still a stepper, just no denominator: a condition stage can carry
+      // progress (some place it and discard it, some ignore it), it simply has
+      // no target to fill. Dropping the control would leave nowhere to count.
+      const ccy = y + h - 26;
+      for (const [cx, mark, on, bid] of [[404, "-", prog > 0, ["qP-", null]],
+                                         [452, "+", true, ["qP+", null]]]) {
+        disc(ctx, cx, ccy, 18, on ? pal.btn : pal.card_hi);
+        arcRuns(ctx, cx, ccy, 18, 16, 0, 360, on ? pal.bevel_l : pal.border);
+        textCenter(ctx, mark, cx, ccy - 8, DISPLAY, on ? pal.tan : pal.dim);
+        if (on) this.buttons.push(new Button(bid, cx - 18, ccy - 18, 36, 36));
+      }
+      textLeft(ctx, String(prog), 372, ccy - 12, DISPLAY, pal.gold);
+      this.buttons.push(new Button(["detail", kind, idx], MARGIN, y, 340, 34));
+      return y + h + QuestingProgressModal.ROW_GAP;
     }
-    if (it.advanceable) {
-      this._iconBtn(ctx, 400, cy, 11, "adv", ["qAdv"]);
+
+    if (compact) {
+      const cy = y + Math.floor(h / 2) - 3;
+      // Compact rows pack two locations plus the quest onto one page, so the
+      // disc shrinks - but the TAP target does not go below the row it sits in.
+      const left = stepperCluster(ctx, this.buttons, 480 - MARGIN - 30, cy,
+                                  prog, pts, atTarget,
+                                  [pfx + "P-", idx], [pfx + "P+", idx],
+                                  18, QuestingProgressModal.ROW_H_COMPACT);
+      glyph(ctx, kind, MARGIN + 14, cy - 10, accent);
+      textLeft(ctx, truncateText(it.name, BODY, left - (MARGIN + 40) - 10),
+               MARGIN + 40, cy - 8, BODY, pal.tan);
+      fillBar(ctx, MARGIN + 14, y + h - 9, left - (MARGIN + 28), 4,
+              prog, pts, accent, atTarget);
+      this.buttons.push(new Button(["detail", kind, idx], MARGIN, y,
+                                   left - MARGIN - 10, h));
+      return y + h + QuestingProgressModal.ROW_GAP;
     }
-    if (questCardTappable) {
-      this.buttons.push(new Button(["quest_card"], 12, y, 118, QuestingProgressModal.ROW_H));
+
+    glyph(ctx, kind, MARGIN + 14, y + 5, accent);
+    textLeft(ctx, truncateText(it.name, BODY, 236), MARGIN + 40, y + 8, BODY, pal.tan);
+    if (meta) {
+      const mw = measureText(meta, LABEL);
+      textLeft(ctx, meta, 480 - MARGIN - 28 - mw, y + 10, LABEL, pal.dim);
     }
-    if (locTappable) {
-      this.buttons.push(new Button(["loc_detail"], 12, y, 118, QuestingProgressModal.ROW_H));
+    textLeft(ctx, ">", 480 - MARGIN - 18, y + 6, BODY, pal.gold);
+    const cy = y + 48;
+    const left = stepperCluster(ctx, this.buttons, 480 - MARGIN - 36, cy,
+                                prog, pts, atTarget,
+                                [pfx + "P-", idx], [pfx + "P+", idx]);
+    fillBar(ctx, MARGIN + 14, cy - 3, left - (MARGIN + 28), 6,
+            prog, pts, accent, atTarget);
+    // The whole title band opens the detail sheet - the ">" is the hint, not
+    // the hit-box. Pushed last so the stepper hit-boxes win any overlap.
+    this.buttons.push(new Button(["detail", kind, idx], MARGIN, y,
+                                 480 - 2 * MARGIN, 40));
+    return y + h + QuestingProgressModal.ROW_GAP;
+  }
+
+  _bottomBar(ctx, page, pages) {
+    const y = 420;
+    for (const [label, x, w, bid] of [["History", 12, 118, ["history"]],
+                                      ["+ Add", 138, 96, ["add"]]]) {
+      const b = new Button(bid, x, y, w, 46);
+      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+      textCenter(ctx, label, x + Math.floor(w / 2), y + 14, BODY, pal.tan);
+      this.buttons.push(b);
+    }
+    if (pages > 1) {
+      for (const [label, x, bid] of [["Up", 288, ["older"]], ["Down", 382, ["newer"]]]) {
+        const b = new Button(bid, x, y, 86, 46);
+        bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+        textCenter(ctx, label, x + 43, y + 14, BODY, pal.tan);
+        this.buttons.push(b);
+      }
+      textCenter(ctx, `${page + 1}/${pages}`, 262, y + 14, BODY, pal.muted);
     }
   }
 
-  draw(ctx) {
+  draw(ctx, game) {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    modalHeader(ctx, this.game, "Progress", this.buttons);
+    if (this.addPrompt) { this._drawAddPrompt(ctx); return; }
+    if (this.history) { this._drawHistory(ctx); return; }
+    // DONE becomes RESOLVE when something is sitting at its target. Closing
+    // ALREADY runs the resolve flow (main.js checks needsResolution() on
+    // close), so a separate "Resolve now" button was a second control doing the
+    // first one's job - the label just has to admit what DONE will do.
+    const ready = typeof game.needsResolution === "function" && game.needsResolution();
+    modalHeader(ctx, game, "Progress", this.buttons,
+                { cta: ready ? "RESOLVE" : "DONE", ctaReady: ready });
+    // {kind, text} objects, not Python's tuples - this twin's phaseBlock
+    // destructures. Passing the tuple shape silently measured an empty band
+    // (36px instead of 122), which made this screen fit three rows where the
+    // firmware needed compact ones.
+    let y = 46 + phaseBlock(ctx, MARGIN, 46, 480 - 2 * MARGIN,
+                            [{ kind: "framework", text: PROGRESS_PLACEMENT }]) + 8;
 
-    textLeft(ctx, "QUEST POINTS", 12, 48, LABEL, pal.muted);
-    textCenter(ctx, "CURRENT", 178, 48, LABEL, pal.dim);
-    textCenter(ctx, "TARGET", 300, 48, LABEL, pal.dim);
+    // Location BEFORE quest: progress fills the location first, and the band
+    // directly above says so. Reading order should match the rule.
+    const order = { l: 0, l_add: 0, q: 1, s: 2 };
+    const rows = this._items().filter(it => it.kind !== "l_add")
+      .sort((a, b) => order[a.kind] - order[b.kind]);
+    const avail = 420 - y - 8;
 
-    const items = this._items();
-    items.forEach((it, i) => this._row(ctx, it, QuestingProgressModal.ROWS_Y0 + i * QuestingProgressModal.ROW_H));
-    const n = items.length;
+    const fits = (c) => {
+      const rh = (c ? QuestingProgressModal.ROW_H_COMPACT
+                    : QuestingProgressModal.ROW_H) + QuestingProgressModal.ROW_GAP;
+      // Sections are emitted once per GROUP, not per row, so the worst case is
+      // one header per distinct kind on the page.
+      const per = Math.max(1, Math.floor((avail - 3 * 14) / rh));
+      return [per, Math.max(1, Math.ceil(rows.length / per))];
+    };
 
-    const addY = QuestingProgressModal.ROWS_Y0 + n * QuestingProgressModal.ROW_H - 4;
-    const add = new Button(["add"], 12, addY, 120, 24);
-    bevel(ctx, add.x, add.y, add.w, add.h, pal.btn);
-    textCenter(ctx, "+ Side quest", add.x + add.w / 2, add.y + 5, BODY, pal.tan);
-    this.buttons.push(add);
+    // Prefer shrinking the rows over paging them: a lone side quest stranded on
+    // page 2 is worse than three compact rows on page 1.
+    let [perPage, pages] = fits(false);
+    let compact = false;
+    if (pages > 1) {
+      const [perC, pagesC] = fits(true);
+      if (pagesC < pages) { compact = true; perPage = perC; pages = pagesC; }
+    }
 
+    // The break follows the CHAIN, not the row count. Progress fills the
+    // locations and then the quest, and the band at the top of the screen
+    // describes exactly that motion - so those rows are one thing and are not
+    // split across a page turn. Side quests take what is left, and page 2
+    // onward if they have to.
+    const chain = rows.filter(it => it.kind === "l" || it.kind === "q");
+    const tail = rows.filter(it => it.kind === "s");
+    let pagesList;
+    if (chain.length && chain.length <= perPage) {
+      pagesList = [chain.concat(tail.slice(0, perPage - chain.length))];
+      let rest = tail.slice(perPage - chain.length);
+      while (rest.length) { pagesList.push(rest.slice(0, perPage)); rest = rest.slice(perPage); }
+    } else {
+      // The chain alone overflows the page - nothing to protect, so fall back
+      // to plain slicing rather than inventing a worse rule.
+      pagesList = [];
+      for (let i = 0; i < rows.length; i += perPage) pagesList.push(rows.slice(i, i + perPage));
+      if (!pagesList.length) pagesList = [[]];
+    }
+    pages = pagesList.length;
+    this.page = Math.min(this.page, pages - 1);
+    const shown = pagesList[this.page];
+
+    const nLoc = rows.filter(r => r.kind === "l").length;
+    const SECTION = { l: nLoc > 1 ? "ACTIVE LOCATIONS" : "ACTIVE LOCATION",
+                      q: "CURRENT QUEST", s: "SIDE QUESTS" };
+    let lastKind = null;
+    for (const it of shown) {
+      if (it.kind !== lastKind) {
+        // The count rides beside the header when a section holds more than one,
+        // so a paged-off row is still accounted for.
+        const n = rows.filter(r => r.kind === it.kind).length;
+        y = this._section(ctx, y, SECTION[it.kind], n > 1 ? String(n) : null);
+        lastKind = it.kind;
+      }
+      y = this._row(ctx, it, y, compact);
+    }
+    if (!game.active_locations.length && this.page === 0) {
+      textLeft(ctx, "No active location.", MARGIN + 4, y, BODY, pal.dim);
+      y += 24;
+    }
+    this._bottomBar(ctx, this.page, pages);
+  }
+
+  // "+ Location" and "+ Side quest" were two permanent buttons mid-screen for
+  // occasional actions. Merged into one "+ Add" that asks which - the same
+  // in-modal prompt pattern the removal prompt used to use, because a modal
+  // cannot open another.
+  _drawAddPrompt(ctx) {
+    modalHeader(ctx, this.game, "Add", this.buttons);
+    let y = 90;
+    for (const [label, bid, note] of [
+        ["Location", ["add_loc"], "the one you just travelled to"],
+        ["Side quest", ["add_sq"], "a player side quest in play"]]) {
+      const b = new Button(bid, 40, y, 400, 62);
+      bevel(ctx, b.x, b.y, b.w, b.h, pal.btn, false, 3);
+      textLeft(ctx, label, b.x + 20, b.y + 8, BODY, pal.tan);
+      textLeft(ctx, note, b.x + 20, b.y + 34, BODY, pal.dim);
+      this.buttons.push(b);
+      y += 74;
+    }
+    const c = new Button(["add_cancel"], 40, y + 10, 400, 48);
+    panel(ctx, c.x, c.y, c.w, c.h, pal.btn_no, pal.no_fg);
+    textCenter(ctx, "Cancel", 240, c.y + 14, BODY, pal.no_fg);
+    this.buttons.push(c);
+  }
+
+  // The by-round chart and, for a sailing game, the heading radios. Both used
+  // to sit permanently below the rows, so an empty chart held 130px hostage
+  // every round before the first resolve. They are one tap away now instead.
+  _drawHistory(ctx) {
+    // The way back takes the round-stamp slot: a button at the bottom landed on
+    // the chart's last row and its caption, and one drawn over the stamp
+    // printed the two on top of each other.
+    modalHeader(ctx, this.game, "History", this.buttons,
+                { back: ["< Progress", ["hist_back"]] });
     if (this.game.sailing) {
-      const headingY = QuestingProgressModal.ROWS_Y0 + n * QuestingProgressModal.ROW_H + 34;
+      const headingY = 60;
       textLeft(ctx, "Heading", 12, headingY, BODY, pal.tan);
       const cy = headingY + 4;
       for (let i = 0; i < 4; i++) {
@@ -1099,14 +1247,16 @@ export class QuestingProgressModal {
         this.buttons.push(new Button(["hd_set", i], cx - 14, cy - 14, 28, 28));
       }
     }
-
-    this._drawChart(ctx);
+    // Nothing sits above the chart here, so it starts under the heading row
+    // instead of holding its play-screen anchor and leaving 250px of empty
+    // screen between the two.
+    this._drawChart(ctx, this.game.sailing ? 116 : 76);
   }
 
-  // Absolutely positioned near the bottom regardless of how many rows are
-  // above (quest/location/side-quest count varies) - it never moves.
-  _drawChart(ctx) {
-    const cy0 = 344;
+  // `cy0` is the block's top. It defaults to the play-screen anchor it has
+  // always had; the History sub-view passes its own, since nothing sits above
+  // it there.
+  _drawChart(ctx, cy0 = 344) {
     rect(ctx, 8, cy0 - 12, 464, 1, pal.border);
     textLeft(ctx, "THIS GAME - BY ROUND", 12, cy0 - 9, LABEL, pal.muted);
     const cols = this.game.quest_history.slice(-8);
@@ -1117,20 +1267,33 @@ export class QuestingProgressModal {
     const x0 = 52;
     const stride = Math.floor((472 - x0) / cols.length);
     cols.forEach((r, i) =>
-      textCenter(ctx, `R${r.round}`, x0 + i * stride + Math.floor(stride / 2), cy0, LABEL, pal.dim));
-    const HDG_PEN = [pal.gold, pal.amber, pal.amber, pal.red];
+      textCenter(ctx, `R${r.round}`, x0 + i * stride + Math.floor(stride / 2),
+                 cy0, LABEL, pal.dim));
+    const hdgPen = [pal.gold, pal.amber, pal.amber, pal.red];
+    const resultCell = (r) => {
+      const signed = r.outcome === "fail" ? -r.n : r.n;
+      return [signed > 0 ? `+${signed}` : String(signed),
+              signed > 0 ? pal.green : pal.red];
+    };
     const rows = [
       [icons.WILLPOWER, pal.gold, false, r => [String(r.willpower), pal.gold]],
       [icons.THREAT, pal.outline, true, r => [String(r.staging), pal.outline]],
-      [icons.TRAIL, pal.green, false, r => {
-        const signed = r.outcome === "fail" ? -r.n : r.n;
-        return [signed > 0 ? `+${signed}` : String(signed), signed > 0 ? pal.green : pal.red];
-      }],
+      [icons.TRAIL, pal.green, false, resultCell],
     ];
     if (this.game.sailing) {
-      rows.push([icons.WHEEL, pal.gold, false, r => [String(r.heading), HDG_PEN[r.heading]]]);
+      rows.push([icons.WHEEL, pal.gold, false, r => [String(r.heading), hdgPen[r.heading]]]);
     }
+    // A gold vertical wherever the stage changed between two columns. It is the
+    // one thing that explains a sudden jump in the staging line, and without it
+    // the chart shows the rounds but not the shape of the game. Entries written
+    // before `stage` existed have none and rule nothing.
     let ry = cy0 + 14;
+    const ruleH = 26 * rows.length;
+    for (let i = 1; i < cols.length; i++) {
+      const a = cols[i - 1].stage, b = cols[i].stage;
+      if (a === undefined || b === undefined || a === null || b === null || a === b) continue;
+      rect(ctx, x0 + i * stride - 1, ry - 6, 1, ruleH, pal.gold);
+    }
     for (const [mask, ipen, stripe, cell] of rows) {
       if (stripe) rect(ctx, 8, ry - 4, 464, 24, pal.row_stripe);
       icons.drawIcon(ctx, mask, 12, ry - 2, ipen);
@@ -1156,7 +1319,7 @@ export class QuestingProgressModal {
   // does flow on to the quest card (p.15), but that is the guided resolution
   // flow's job, not something the stepper should let you type in.
   //
-  // cap null/0 leaves the old 0..99 behaviour, which is what a target-less row
+  // cap null/0 leaves the 0..99 behaviour, which is what a target-less row
   // wants: a condition stage has no quest points to clamp against.
   _clampAdj(cur, d, cap = null) {
     const hi = !cap || cap <= 0 ? 99 : cap;
@@ -1166,40 +1329,44 @@ export class QuestingProgressModal {
   onButton(btn) {
     const g = this.game;
     const [k, a] = btn.id;
+    const up = k.endsWith("+");
     if (k === "qP-" || k === "qP+") {
       // A condition stage has no target to clamp against (mode set by flipToB).
       const cap = g.quest.mode === "condition" ? null : g.quest.points;
-      g.quest.progress = this._clampAdj(g.quest.progress, k.endsWith("+") ? 1 : -1, cap);
+      g.quest.progress = this._clampAdj(g.quest.progress, up ? 1 : -1, cap);
       return null;
     }
-    if (k === "qT-" || k === "qT+") { g.quest.points = this._clampAdj(g.quest.points, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "qT-" || k === "qT+") {
+      g.quest.points = this._clampAdj(g.quest.points, up ? 1 : -1);
+      return null;
+    }
     if (k === "lP-" || k === "lP+") {
       // The location can have explored itself out from under this button (the
       // auto-explore below clears it), and a stale tap then threw on null.
-      const i = btn.id[1] ?? 0;
+      const i = a ?? 0;
       if (i >= g.active_locations.length) return null;
-      const l = g.active_locations[i];
-      // `cap` was missing here, so location progress ran to 99 past its own
-      // quest points. Python fixed this in 72d7e75.
-      l.progress = this._clampAdj(l.progress, k.endsWith("+") ? 1 : -1, l.points);
-      // Catalog games defer this to the guided resolution flow (close-time
-      // needsResolution() check + ResolutionModal's "location" step,
-      // B-resolve Task 3) so overflow excess gets credited to the quest
-      // card (rulebook p.15) via resolveLocationOverflow() instead of
-      // silently discarded. Custom games have no guided flow to defer to,
-      // so they keep the immediate auto-explore they've always had.
-      if (!g.stages.length) g.exploreLocationIfDone();
+      const loc = g.active_locations[i];
+      loc.progress = this._clampAdj(loc.progress, up ? 1 : -1, loc.points);
+      if (!g.stages.length) {
+        // Catalog games defer this to the guided resolution flow (close-time
+        // needsResolution() check + ResolutionModal's "location" step) so
+        // overflow excess gets credited to the quest card (rulebook p.15) via
+        // resolveLocationOverflow() instead of silently discarded. Custom games
+        // have no guided flow to defer to, so they keep the immediate
+        // auto-explore they have always had.
+        g.exploreLocationIfDone();
+      }
       return null;
     }
     if (k === "lT-" || k === "lT+") {
-      const i = btn.id[1] ?? 0;
+      const i = a ?? 0;
       if (i >= g.active_locations.length) return null;
-      const l = g.active_locations[i];
-      l.points = this._clampAdj(l.points, k.endsWith("+") ? 1 : -1);
+      const loc = g.active_locations[i];
+      loc.points = this._clampAdj(loc.points, up ? 1 : -1);
       return null;
     }
     if (k === "ldone") {
-      const i = btn.id[1] ?? 0;
+      const i = a ?? 0;
       if (i < g.active_locations.length) {
         g.logEvent("Active location Explored");
         g.active_locations.splice(i, 1);
@@ -1207,8 +1374,16 @@ export class QuestingProgressModal {
       this._snap = this._snapshot();
       return null;
     }
-    if (k === "sP-" || k === "sP+") { const s = g.side_quests[a]; s.progress = this._clampAdj(s.progress, k.endsWith("+") ? 1 : -1, s.points); return null; }
-    if (k === "sT-" || k === "sT+") { const s = g.side_quests[a]; s.points = this._clampAdj(s.points, k.endsWith("+") ? 1 : -1); return null; }
+    if (k === "sP-" || k === "sP+") {
+      const s = g.side_quests[a];
+      s.progress = this._clampAdj(s.progress, up ? 1 : -1, s.points);
+      return null;
+    }
+    if (k === "sT-" || k === "sT+") {
+      const s = g.side_quests[a];
+      s.points = this._clampAdj(s.points, up ? 1 : -1);
+      return null;
+    }
     if (k === "sdone") {
       g.logEvent(`Side quest ${a + 1} completed`);
       g.side_quests.splice(a, 1);
@@ -1221,22 +1396,11 @@ export class QuestingProgressModal {
       this._snap = this._snapshot();
       return null;
     }
-    if (k === "add") {
-      // The router holds one modal at a time (no stacking) - close this one
-      // (flushing any pending edits, same as a normal "close") and flag
-      // that SideQuestPickModal should open on the next tick, same
-      // pending-flag pattern as "quest_card" below. The picker needs a
-      // catalog fetch that onButton can't await mid-tap without breaking
-      // that invariant.
-      g.pending_side_quest_pick = true;
-      this._logChanges();
-      return "close";
-    }
     if (k === "addloc") {
       // Was a blind append of a guessed 3 quest points. Now the same picker
-      // Travel uses, opened via the pending flag (the router holds one modal
-      // at a time) with back="progress" so every exit reopens this modal
-      // instead of dropping you on the play screen.
+      // Travel uses, opened via the pending flag (the router holds one modal at
+      // a time) with back="progress" so every exit reopens this modal instead
+      // of dropping you on the play screen.
       g.pending_location_pick = { mode: "new", back: "progress" };
       this._logChanges();
       return "close";
@@ -1245,29 +1409,59 @@ export class QuestingProgressModal {
       if (a !== g.heading) g.shiftHeading(a - g.heading, "progress view");
       return null;
     }
-    if (k === "loc_detail") {
-      // Same one-modal-at-a-time dance as "quest_card" below: close, flag, and
-      // let the router open LocationConfigModal on the next pass.
-      g.pending_location_detail = true;
-      this._logChanges();
-      return "close";
-    }
     if (k === "quest_card") {
       // The router holds one modal at a time (no stacking) - close this one
       // (flushing any pending edits, same as a normal "close") and flag that
-      // QuestCardModal should open on the next tick. See main.js's
-      // setInterval, which checks pending_quest_card once modal is null.
+      // QuestCardModal should open on the next tick.
       g.pending_quest_card = true;
       this._logChanges();
       return "close";
     }
-    if (k === "qAdv") {
-      // Manually trigger the guided resolution flow even though the
-      // numeric target hasn't been reached - the only way in for
-      // conditional/0-point stages, which have no gate to cross. See
-      // main.js's setInterval, which checks pending_resolution once modal
-      // is null (same pending-flag pattern as pending_quest_card above).
-      g.pending_resolution = "forced";
+    if (k === "detail") {
+      // The row's ">" opens that entity's own sheet, which is where the target
+      // lives now and where the icon-button actions finally get labels. One
+      // modal at a time, so close-and-flag like "quest_card".
+      const kind = btn.id[1];
+      if (kind === "q") {
+        // The EDITOR, not the card: this is where quest points and the advance
+        // sentence live, and it links on to the card itself.
+        g.pending_quest_config = true;
+      } else if (kind === "l") {
+        g.pending_location_detail = true;
+      } else {
+        g.pending_side_quest_pick = true;
+      }
+      this._logChanges();
+      return "close";
+    }
+    if (k === "add") {
+      // "+ Location" and "+ Side quest" were two permanent buttons for
+      // occasional actions; one "+ Add" asks which.
+      this.addPrompt = true;
+      return "redraw";
+    }
+    if (k === "add_loc") {
+      this.addPrompt = false;
+      g.pending_location_pick = { mode: "new", back: "progress" };
+      this._logChanges();
+      return "close";
+    }
+    if (k === "add_sq") {
+      this.addPrompt = false;
+      g.pending_side_quest_pick = true;
+      this._logChanges();
+      return "close";
+    }
+    if (k === "add_cancel") { this.addPrompt = false; return "redraw"; }
+    if (k === "history") { this.history = true; return "redraw"; }
+    if (k === "hist_back") { this.history = false; return "redraw"; }
+    if (k === "older" || k === "newer") {
+      this.page = Math.max(0, this.page + (k === "older" ? -1 : 1));
+      return "redraw";
+    }
+    if (k === "loc_detail") {
+      // Same one-modal-at-a-time dance as "quest_card" above.
+      g.pending_location_detail = true;
       this._logChanges();
       return "close";
     }
@@ -1276,13 +1470,11 @@ export class QuestingProgressModal {
       // Catalog games: any overflow (location/quest/side-quest) is safe to
       // defer to ResolutionModal, since every one of its steps has a real
       // close/dismiss escape hatch. Custom games have no ResolutionModal -
-      // their only fallback is the legacy StageCompleteModal, which has no
-      // safe "cancel" (only "go", committing a stage/side/points change, or
-      // "win") - so their trigger must stay scoped to the quest itself
-      // overflowing (what StageCompleteModal has always been opened for),
-      // not needsResolution()'s broader check. A side-quest-only overflow
-      // must not force a custom-game player into that advance-or-victory
-      // dilemma.
+      // their only fallback is the legacy StageCompleteModal, which has no safe
+      // "cancel" (only "go", committing a stage/side/points change, or "win") -
+      // so their trigger must stay scoped to the quest itself overflowing, not
+      // needsResolution()'s broader check. A side-quest-only overflow must not
+      // force a custom-game player into that advance-or-victory dilemma.
       if (g.stages.length) {
         if (g.needsResolution()) g.pending_resolution = "auto";
       } else if (g.quest.points > 0 && g.quest.progress >= g.quest.points) {
@@ -1293,14 +1485,14 @@ export class QuestingProgressModal {
     return null;
   }
 
-
   _logChanges() {
     const s = this._snap, g = this.game;
-    if (g.quest.progress !== s.q.p || g.quest.points !== s.q.t)
+    if (g.quest.progress !== s.q.p || g.quest.points !== s.q.t) {
       g.logEvent(`Quest ${g.questLabel()} set ${g.quest.progress}/${g.quest.points} (progress view)`);
-    // Only seats that were there when the modal opened AND are still there:
-    // one that left is already logged by whatever removed it, and one that
-    // arrived was logged by the travel.
+    }
+    // Only seats that were there when the modal opened AND are still there: one
+    // that left is already logged by whatever removed it, and one that arrived
+    // was logged by the travel.
     s.locs.forEach((snap, i) => {
       if (i >= g.active_locations.length) return;
       const l = g.active_locations[i];
@@ -1310,13 +1502,13 @@ export class QuestingProgressModal {
     });
     if (g.side_quests.length === s.sqLen) {
       g.side_quests.forEach((sq, i) => {
-        if (sq.progress !== s.sq[i].p || sq.points !== s.sq[i].t)
+        if (sq.progress !== s.sq[i].p || sq.points !== s.sq[i].t) {
           g.logEvent(`Side quest ${i + 1} set ${sq.progress}/${sq.points} (progress view)`);
+        }
       });
     }
   }
 }
-
 export class SailingModal {
   // Log the result of a Sailing test: +v = wheels found (shift on-course),
   // -v = steps off-course (winds/card effects). Heading index 0 = on-course.
