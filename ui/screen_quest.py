@@ -14,6 +14,7 @@ from ui.widgets import (Button, panel, bevel, text_center, text_left,
                          truncate_text, wrap_text, disc, arc_runs, note_panel,
                          BAND_PAD, band_line_h)
 from ui import icons
+from viewcopy import CATALOG_UNAVAILABLE
 import quest_catalog
 
 
@@ -111,8 +112,6 @@ class PickCycleScreen:
     ROW_H = 44
     ROW_STRIDE = 45
     LIST_Y0 = 50
-    CUSTOM_Y = 370
-    CUSTOM_H = 38
 
     def __init__(self, source, cycles):
         self.source = source
@@ -160,11 +159,6 @@ class PickCycleScreen:
                 self.buttons.append(Button(("cycle", entry["cycle"]), 8, y, 456, self.ROW_H))
                 y += self.ROW_STRIDE
 
-        custom = Button(("custom",), 8, self.CUSTOM_Y, 464, self.CUSTOM_H)
-        bevel(d, pal, custom.x, custom.y, custom.w, custom.h, pal.btn)
-        text_center(d, pal, "Custom / uncatalogued quest", 240, self.CUSTOM_Y + 12, BODY, pal.tan)
-        self.buttons.append(custom)
-
         d.set_pen(pal.border)
         d.rectangle(0, 410, 480, 1)
         if pages > 1:
@@ -184,14 +178,61 @@ class PickCycleScreen:
             return ("goto", "scenario_source")
         if k == "cycle":
             return ("choose_scenario_list", self.source, btn.id[1])
-        if k == "custom":
-            return ("start_custom",)
         if k == "older":
             self.page = max(0, self.page - 1)
             return "redraw"
         if k == "newer":
             self.page = min(self._pages() - 1, self.page + 1)
             return "redraw"
+        return None
+
+
+class CatalogUnavailableScreen:
+    """Dead end when the card data cannot be read.
+
+    There is no manual/custom quest mode to fall back to - the game is out of
+    print, so the catalog can be complete, and a hand-entry escape hatch was a
+    second and worse source of truth. That makes an unreadable catalog a real
+    failure rather than a branch: on the device it means the deploy is
+    missing docs/data, and quietly downgrading the player into typing quest
+    points themselves would hide exactly the bug worth seeing.
+
+    So this says what is wrong and offers no way into a game. The only
+    controls are back and Settings.
+    """
+
+    def __init__(self, reason=None):
+        self.reason = reason
+        self.buttons = []
+
+    def draw(self, hw, game, pal):
+        d = hw.display
+        self.buttons = []
+        d.set_pen(pal.bg)
+        d.clear()
+        draw_header(d, pal, game, self.buttons, title="Card Data",
+                    round_label="< Source", round_id=("back",))
+        y = 74
+        icons.draw(d, icons.THREAT, 16, y, pal.no_fg)
+        text_left(d, pal, "Card data unavailable", 48, y - 2, DISPLAY,
+                  pal.no_fg)
+        y += 44
+        for ln in wrap_text(CATALOG_UNAVAILABLE, BODY, 448,
+                            d.measure_text):
+            text_left(d, pal, ln, 16, y, BODY, pal.tan)
+            y += 22
+        if self.reason:
+            y += 10
+            text_left(d, pal, "REASON", 16, y, LABEL, pal.muted)
+            y += 18
+            for ln in wrap_text(str(self.reason), BODY,
+                                448, d.measure_text)[:3]:
+                text_left(d, pal, ln, 16, y, BODY, pal.dim)
+                y += 22
+
+    def on_button(self, btn, game):
+        if btn.id[0] == "back":
+            return ("goto", "scenario_source")
         return None
 
 

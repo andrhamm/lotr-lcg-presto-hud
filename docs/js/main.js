@@ -7,9 +7,9 @@ import { ScreenPlay } from "./screen_play.js";
 import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
          LedModal, ScreenAbout, GameOverScreen, ScenarioSourceScreen,
          PickCycleScreen, ChooseScenarioScreen,
-         ScenarioOptionsScreen, FirstRunScreen, LegendScreen } from "./screens_other.js";
+         ScenarioOptionsScreen, FirstRunScreen, LegendScreen , CatalogUnavailableScreen } from "./screens_other.js";
 import { EliminationModal, QuestCardModal, SideQuestPickModal,
-         StageCompleteModal, ResolutionModal, LocationPickModal,
+         ResolutionModal, LocationPickModal,
          QuestingProgressModal, LocationConfigModal } from "./screens.js";
 import { loadIndex, loadScenario, cyclesFor, groupByCycle, loadPlayerSideQuests,
          loadIcons, loadTips, loadLocations,
@@ -38,6 +38,9 @@ function loadSaved() {
     const d = JSON.parse(localStorage.getItem(STATE_KEY));
     if (!d) return [null, null];
     const game = GameState.fromDict(d.state);
+    // A save with no scenario is from the removed manual/custom mode. There is
+    // no view to resume it into, so it is not offered.
+    if (!game.scenario?.slug) return [null, null];
     // Built by hand rather than via toLocaleString so it reads identically to
     // the firmware (main.py) regardless of the browser's locale: 12-hour with
     // AM/PM and a 2-digit year, sized for the 280px boot button.
@@ -364,12 +367,13 @@ function main() {
           screens.pick_cycle = new PickCycleScreen(source, cyclesFor(catalogIndex, source));
           active = "pick_cycle";
         } catch (e) {
-          console.error("quest catalog: loadIndex failed - falling back to custom quest", e);
-          game.logEvent("Quest catalog unavailable - continuing with custom/manual setup");
-          game.scenario = null;
-          game.view = "setup_game";
-          active = "play";
-          saveState(game);
+          // No silent downgrade: there is no manual mode to fall back to,
+          // and an unreadable catalog means docs/data is missing - a bug to
+          // see, not to paper over.
+          console.error("quest catalog: loadIndex failed", e);
+          game.logEvent("Quest catalog unavailable");
+          screens.catalog_error = new CatalogUnavailableScreen(e);
+          active = "catalog_error";
         }
       } else if (kind === "choose_scenario_list") {
         const [, source, cycle] = result;
@@ -417,11 +421,7 @@ function main() {
         game.view = "quest_setup";
         active = "play";
         saveState(game);
-      } else if (kind === "start_custom") {
-        game.scenario = null;
-        game.view = "setup_game";
-        active = "play";
-      } else if (kind === "save_quit") {
+            } else if (kind === "save_quit") {
         saveState(game);
         saveReplay(game);
         const [, meta] = loadSaved();
@@ -530,14 +530,7 @@ function main() {
     if (!modal && active === "play" && game.pending_resolution) {
       const forced = game.pending_resolution === "forced";
       game.pending_resolution = false;
-      if (game.stages.length) {
-        modal = new ResolutionModal(game, forced);
-      } else {
-        const excess = game.quest.points > 0
-          ? Math.max(0, game.quest.progress - game.quest.points) : 0;
-        game.pending_stage = { cleared: game.questLabel(), excess };
-        modal = new StageCompleteModal(game);
-      }
+      modal = new ResolutionModal(game, forced);
       dirty = true;
     }
     // A side-quest ROW's ">" - the sheet with Done and Remove on it, which is

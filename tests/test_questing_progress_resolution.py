@@ -39,11 +39,11 @@ def test_no_overflow_close_does_not_set_pending_resolution():
     m.on_button(close)
     assert g.pending_resolution is False
 
-def test_advance_anyway_is_labelled_and_only_for_catalog_games():
+def test_advance_anyway_is_labelled_on_the_quest_sheet():
     # Was a bare icon on the Progress row with no label. It lives on the quest
-    # row's own sheet now, spelled out - and a custom game keeps its manual
-    # stage edit instead, because it has no ResolutionModal to open. Two
-    # buttons named "advance" doing different things was the thing to avoid.
+    # row's own sheet now, spelled out. It used to be gated on game.stages
+    # because a custom quest had no ResolutionModal to open; there are no
+    # custom quests any more, so every game gets it.
     from ui.modals import QuestConfigModal
     g = _catalog_game()
     m = QuestConfigModal(g)
@@ -51,11 +51,8 @@ def test_advance_anyway_is_labelled_and_only_for_catalog_games():
     assert any(b.id == ("force_adv",) for b in m.buttons)
     assert "Advance anyway" in " ".join(
         c[1] for c in hw.display.calls if c[0] == "text")
-    g2 = gamestate.GameState(2, 25)          # custom game: no stages
-    m2 = QuestConfigModal(g2)
-    _draw(m2, g2)
-    assert not any(b.id == ("force_adv",) for b in m2.buttons)
-    assert any(b.id == ("adv",) for b in m2.buttons)
+    assert not any(b.id == ("adv",) for b in m.buttons)   # manual edit is gone
+
 
 def test_advance_anyway_sets_forced_resolution():
     # The only way into the guided flow for a stage with no quest points:
@@ -92,21 +89,6 @@ def test_location_manual_edit_over_target_defers_to_resolution_flow_for_catalog_
     assert g.pending_resolution == "auto"
     assert g.active_locations           # still deferred to ResolutionModal
 
-def test_location_manual_edit_over_target_still_auto_explores_for_custom_games():
-    # Custom (uncatalogued) games are out of scope for the guided flow
-    # (Global Constraint) and have no ResolutionModal to defer to, so they
-    # keep the pre-existing immediate auto-explore behavior unchanged -
-    # same case as tests/test_modals.py's
-    # test_questing_progress_modal_location_current_bump_explores_when_done,
-    # transcribed here for direct contrast with the catalog case above.
-    g = gamestate.GameState(2, 25)
-    g.active_locations = [{"points": 3, "progress": 2}]
-    m = QuestingProgressModal(g)
-    _draw(m, g)
-    plus = next(b for b in m.buttons if b.id == ("lP+", 0))
-    assert m.on_button(plus) is None
-    assert not g.active_locations                # auto-explored immediately, as before
-
 def test_custom_game_quest_overflow_close_sets_pending_resolution():
     # Regression (found in the Task 4 browser walkthrough): the brief's
     # given "close" handler code gates the pending_resolution trigger on
@@ -126,22 +108,3 @@ def test_custom_game_quest_overflow_close_sets_pending_resolution():
     assert m.on_button(close) == "close"
     assert g.pending_resolution == "auto"
 
-def test_custom_game_side_quest_only_overflow_close_does_not_set_pending_resolution():
-    # The precise flip side of the regression above: StageCompleteModal has
-    # no safe "cancel" (only "go", which commits a stage/side/points change,
-    # or "win") - so the custom-game trigger must stay scoped to the QUEST
-    # itself overflowing, not needs_resolution()'s broader location/
-    # side-quest check (which is safe for catalog games only because
-    # ResolutionModal's every step has a real close/dismiss escape hatch).
-    # A side-quest-only overflow must NOT force a custom-game player into
-    # StageCompleteModal's advance-or-victory dilemma.
-    g = gamestate.GameState(2, 25)
-    g.quest["points"] = 3
-    g.quest["progress"] = 0                # quest itself is fine
-    g.side_quests = [{"points": 2, "progress": 2, "name": "Gather Information"}]
-    m = QuestingProgressModal(g)
-    _draw(m, g)
-    assert g.needs_resolution() is True    # side quest alone trips the broad check
-    close = next(b for b in m.buttons if b.id[0] == "close")
-    assert m.on_button(close) == "close"
-    assert g.pending_resolution is False   # but custom games must not act on it

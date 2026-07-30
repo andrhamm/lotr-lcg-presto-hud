@@ -9,7 +9,8 @@ Rules:
   L6  ...and neither does content TEXT
   L7  every touch target is reachable by some tap
 
-L5 exists because L1-L4 all reason about TEXT. setup_game's sailing toggle
+L5 exists because L1-L4 all reason about TEXT. A bare control (the old
+manual setup view's sailing toggle)
 ran 2px past its CTA for as long as that view has existed and nothing caught
 it - it is a panel, not a label. The nav rule made it visible; this rule keeps
 it from coming back.

@@ -82,7 +82,7 @@ _ROUTED = {
                      "LocationPickModal", "PlayersDetailModal",
                      "RemindersModal", "EliminationModal",
                      "QuestingProgressModal", "SailingModal",
-                     "StageCompleteModal", "ResolutionModal",
+                     "ResolutionModal",
                      "QuestConfigModal", "QuestCardModal",
                      "SideQuestPickModal"],
     "./screens_other.js": ["ScreenPhases", "ScreenLog", "LedModal",
@@ -90,6 +90,7 @@ _ROUTED = {
                            "BootScreen", "SetupScreen",
                            "ScenarioSourceScreen", "PickCycleScreen",
                            "ChooseScenarioScreen", "ScenarioOptionsScreen",
+                           "CatalogUnavailableScreen",
                            "OptionListModal", "LegendScreen",
                            "FirstRunScreen"],
 }

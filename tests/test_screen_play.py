@@ -576,19 +576,6 @@ def test_header_shows_round_and_step_decimal():
     assert "R2 3.4" in _texts(hw)
 
 
-def test_setup_view_tip_and_quest_points_then_begin():
-    hw, pal, game, screen = _setup("setup_game")
-    screen.draw(hw, game, pal)
-    assert any("mulligan" in str(c[1]) for c in hw.display.calls if c[0] == "text")
-    for _ in range(8):
-        screen.on_button(_find(screen, ("qp", 1)), game)
-        screen.draw(hw, game, pal)
-    assert game.quest["points"] == 8
-    screen.on_button(_find(screen, ("advance",)), game)
-    assert game.view == "resource"
-    assert any("needs 8" in e["text"] for e in game.log)
-
-
 def test_progress_detail_edits_quest_and_logs_on_close():
     hw, pal, game, screen = _setup("travel")
     game.active_locations = [{"points": 3, "progress": 1}]
@@ -651,17 +638,6 @@ def test_quest_setup_card_modal_button_opens_quest_card_modal():
     assert isinstance(result[1], QuestCardModal)
 
 
-def test_quest_setup_card_modal_button_is_null_for_custom_game():
-    # No preload_scenario call: game.stages == [] (custom/manual quest). The
-    # quest_setup view itself assumes a loaded scenario elsewhere in its draw
-    # path (not reachable via normal nav without one), so exercise on_button
-    # directly with a synthetic button rather than via draw()+_find().
-    from ui.widgets import Button
-    hw, pal, game, screen = _setup("quest_setup")
-    result = screen.on_button(Button(("open_card_modal",), 0, 0, 1, 1), game)
-    assert result is None
-
-
 def test_quest_setup_shows_stage_and_setup_text():
     hw, pal, game, screen = _setup("quest_setup")
     game.preload_scenario(_QS_SCN, _QS_STAGES)
@@ -682,7 +658,7 @@ def test_quest_setup_shows_stage_and_setup_text():
     assert "View quest card" in joined
     # Quest setup happens once per game and hands straight to the resource
     # phase, so the button says what completing it does. Same label the
-    # custom-quest path uses on setup_game: both routes into round 1 end with
+    # generic advance_view path uses: both routes into round 1 end with
     # the same button. An ACTION cta - single line, no NEXT PHASE kicker.
     assert "Begin Round 1" in texts
     assert "NEXT PHASE" not in texts
@@ -968,7 +944,9 @@ def test_action_ctas_are_a_single_line_with_no_kicker():
     more: refresh is an ordinary phase now, and the round turns on round_end
     (0.1). That removed the last CTA doing two jobs at once - End Round both
     applied 7.3 and crossed the round boundary."""
-    hw, pal, game, screen = _setup("setup_game")
+    hw, pal, game, screen = _setup("quest_setup")
+    game.preload_scenario(_QS_SCN, _QS_STAGES)
+    game.view = "quest_setup"
     screen.draw(hw, game, pal)
     texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
     assert "Begin Round 1" in texts

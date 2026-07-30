@@ -522,34 +522,7 @@ class ScreenPlay:
             self._stat_zone(d, pal, game)
             self._draw_action_window(d, pal, game)
             return
-        if view == "setup_game":
-            th = note_panel(d, pal, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP)
-            # This view's two rows are the tallest stack on any play screen and
-            # used to run to y=412 - 2px PAST the old CTA at 410, an overlap the
-            # layout linter never caught because it compares text, not rects.
-            # The nav rule at NAV_RULE_Y makes it visible, so the rows were
-            # tightened by 20px total (gap 18->8, rows 48->42 and 38->34) and
-            # now end at 392, clearing the rule by 8px. Every target stays
-            # >=24px. tests/test_layout.py's rect check now guards it.
-            y = 56 + th + 8
-            text_left(d, pal, "Stage 1B quest points", MARGIN + 8, y + 13, BODY, pal.tan)
-            mn = Button(("qp", -1), 300, y, 52, 42)
-            pl = Button(("qp", 1), 412, y, 52, 42)
-            for b, s in ((mn, "-"), (pl, "+")):
-                bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-                text_center(d, pal, s, b.x + 26, b.y + 9, DISPLAY, pal.tan)
-                self.buttons.append(b)
-            text_center(d, pal, str(game.quest["points"]), 382, y + 9, DISPLAY, pal.gold)
-            sy = y + 44
-            text_left(d, pal, "Sailing quest", MARGIN + 8, sy + 9, BODY, pal.tan)
-            icons.draw(d, icons.WHEEL, 160, sy + 6, pal.gold if game.sailing else pal.dim)
-            sb = Button(("sail_toggle",), 300, sy, 164, 34)
-            panel(d, pal, sb.x, sb.y, sb.w, sb.h, fill=pal.gold if game.sailing else pal.btn)
-            text_center(d, pal, "On" if game.sailing else "Off", sb.x + 82, sb.y + 9, BODY,
-                        pal.bg if game.sailing else pal.tan, shadow=False)
-            self.buttons.append(sb)
-            self._cta(d, pal, game, "Begin Round 1", ("advance",))
-        elif view == "quest_setup":
+        if view == "quest_setup":
             self._stat_zone(d, pal, game)
             self._draw_quest_setup(d, pal, game)
         elif view == "resource":
@@ -764,9 +737,13 @@ class ScreenPlay:
                            QUEST_SETUP["then_flip"] % game.quest["stage_n"]]),
         ])
 
-        # Read-only card modal (M4-B) - see on_button; null for custom games
-        # (no scenario loaded, nothing to show).
-        card_btn = Button(("open_card_modal",), MARGIN, 358, 480 - 2 * MARGIN, 44)
+        # Read-only card modal (M4-B) - see on_button.
+        #
+        # y=352, not 358: at 358 the 44px button ended at 402 and crossed the
+        # nav rule at 400 by two pixels. Nothing caught it because this view
+        # had no layout scene - the only "setup" scene rendered the manual
+        # setup_game view, which is gone.
+        card_btn = Button(("open_card_modal",), MARGIN, 352, 480 - 2 * MARGIN, 44)
         bevel(d, pal, card_btn.x, card_btn.y, card_btn.w, card_btn.h, pal.btn)
         text_center(d, pal, QUEST_SETUP["view"], 240, card_btn.y + 14, BODY, pal.tan)
         self.buttons.append(card_btn)
@@ -952,17 +929,7 @@ class ScreenPlay:
         if k == "notif_dismiss":
             self.notif = None
             return True
-        if k == "qp":
-            was = game.quest["points"]
-            game.quest["points"] = max(0, min(30, was + btn.id[1]))
-            if game.quest["points"] != was:
-                game.log_event("Stage %d%s quest points %d -> %d"
-                               % (game.quest["stage_n"], game.quest["side"],
-                                  was, game.quest["points"]))
-            return True
         if k == "open_card_modal":
-            if not game.stages:
-                return None    # custom game: no scenario, nothing to show
             from ui.modals import QuestCardModal
             return ("modal", QuestCardModal(game))
         if k == "setup_back":
@@ -972,9 +939,8 @@ class ScreenPlay:
             # re-run on the way back in.
             return ("goto", "scenario_options")
         if k == "flip_to_b":
-            # Mirrors advance_view's setup_game -> round-1 branch (custom-quest
-            # path), but for a scenario game: flip 1A -> 1B first, then the
-            # same round-1 entry (log, enter view, snapshot).
+            # Flip 1A -> 1B, then enter round 1 (log, enter view, snapshot).
+            # The only setup path there is: manual/custom quests are gone.
             pts = game.flip_to_b()
             game.log_event("Setup complete - round 1 begins (quest %s needs %d)"
                            % (game.quest_label(), pts))
@@ -1090,9 +1056,6 @@ class ScreenPlay:
             # Through the resolution window, not past it: allocating progress
             # is the 3.4 step, and 3.4's window follows it like any other.
             game.enter_view("aw_quest_resolution")
-            if game.pending_stage:
-                from ui.modals import StageCompleteModal
-                return ("modal", StageCompleteModal(game))
             if game.pending_resolution:
                 # Catalog game: place_progress() (gamestate.py, B-resolve
                 # Task 1) deferred the actual advance mechanics here rather

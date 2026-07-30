@@ -18,7 +18,7 @@ import { VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS, PHASE_FRAMEWORK, PHASE_WIND
          REFRESH } from "./viewcopy.js";
 import { drawHeader, drawNotifPie, HEADER_H, CounterModal,
          PlayersDetailModal, RemindersModal, LocationPickModal, SideQuestsModal,
-         QuestConfigModal, StageCompleteModal, SailingModal,
+         QuestConfigModal, SailingModal,
          QuestingProgressModal, QuestCardModal, ResolutionModal } from "./screens.js";
 
 const MARGIN = 8;
@@ -448,35 +448,7 @@ export class ScreenPlay {
       return;
     }
 
-    if (view === "setup_game") {
-      const th = notePanel(ctx, MARGIN, 56, 480 - 2 * MARGIN, SETUP_TIP);
-      // This view's two rows are the tallest stack on any play screen and used
-      // to run to y=412 - 2px PAST the old CTA at 410, an overlap the layout
-      // linter never caught because it compares text, not rects. The nav rule
-      // at NAV_RULE_Y makes it visible, so the rows were tightened by 20px
-      // total (gap 18->8, rows 48->42 and 38->34) and now end at 392, clearing
-      // the rule by 8px. Every target stays >=24px.
-      const y = 56 + th + 8;
-      textLeft(ctx, "Stage 1B quest points", MARGIN + 8, y + 13, BODY, pal.tan);
-      const mn = new Button(["qp", -1], 300, y, 52, 42);
-      const pl = new Button(["qp", 1], 412, y, 52, 42);
-      for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
-        bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-        textCenter(ctx, s, b.x + 26, b.y + 9, DISPLAY, pal.tan);
-        this.buttons.push(b);
-      }
-      textCenter(ctx, String(game.quest.points), 382, y + 9, DISPLAY, pal.gold);
-      const sy = y + 44;
-      textLeft(ctx, "Sailing quest", MARGIN + 8, sy + 9, BODY, pal.tan);
-      icons.drawIcon(ctx, icons.WHEEL, 160, sy + 6,
-                     game.sailing ? pal.gold : pal.dim);
-      const sb = new Button(["sail_toggle"], 300, sy, 164, 34);
-      panel(ctx, sb.x, sb.y, sb.w, sb.h, game.sailing ? pal.gold : pal.btn);
-      textCenter(ctx, game.sailing ? "On" : "Off", sb.x + 82, sb.y + 9, BODY,
-                 game.sailing ? pal.bg : pal.tan, false);
-      this.buttons.push(sb);
-      this._cta(ctx, game, "Begin Round 1", ["advance"]);
-    } else if (view === "quest_setup") {
+    if (view === "quest_setup") {
       this._statZone(ctx, game);
       this._drawQuestSetup(ctx, game);
     } else if (view === "resource") {
@@ -673,9 +645,10 @@ export class ScreenPlay {
         text: [lead, QUEST_SETUP.then_flip.replace("%s", game.quest.stage_n)] },
     ]);
 
-    // Read-only card modal (M4-B) - see onButton; null for custom games
-    // (no scenario loaded, nothing to show).
-    const cardBtn = new Button(["open_card_modal"], MARGIN, 358, 480 - 2 * MARGIN, 44);
+    // Read-only card modal (M4-B) - see onButton.
+    // y=352, not 358: at 358 the 44px button ended at 402 and crossed the nav
+    // rule at 400 by two pixels.
+    const cardBtn = new Button(["open_card_modal"], MARGIN, 352, 480 - 2 * MARGIN, 44);
     bevel(ctx, cardBtn.x, cardBtn.y, cardBtn.w, cardBtn.h, pal.btn);
     textCenter(ctx, QUEST_SETUP.view, 240, cardBtn.y + 14, BODY, pal.tan);
     this.buttons.push(cardBtn);
@@ -873,8 +846,7 @@ export class ScreenPlay {
     }
     if (k === "setup" ) return null;
     if (k === "open_card_modal") {
-      // Custom games have no scenario/stages - nothing to show.
-      return game.stages.length ? ["modal", new QuestCardModal(game)] : null;
+      return ["modal", new QuestCardModal(game)];
     }
     if (k === "setup_back") {
       // Back to the difficulty picker for the chosen scenario. Nothing to
@@ -883,7 +855,8 @@ export class ScreenPlay {
       return ["goto", "scenario_options"];
     }
     if (k === "flip_to_b") {
-      // Mirrors advanceView's setup_game -> round-1 branch (custom-quest
+      // Flip 1A -> 1B, then enter round 1. The only setup path there is:
+      // manual/custom quests are gone. (was: mirrors advanceView's
       // path), but for a scenario game: flip 1A -> 1B first, then the same
       // round-1 entry (log, enter view, reset commits, snapshot round).
       const pts = game.flipToB();
@@ -976,7 +949,6 @@ export class ScreenPlay {
       // Through the resolution window, not past it: allocating progress is
       // the 3.4 step, and 3.4's window follows it like any other.
       game.enterView("aw_quest_resolution");
-      if (game.pending_stage) return ["modal", new StageCompleteModal(game)];
       if (game.pending_resolution) {
         // Catalog game: placeProgress() (gamestate.js, B-resolve Task 1)
         // deferred the actual advance mechanics here rather than doing them

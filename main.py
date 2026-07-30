@@ -24,7 +24,7 @@ from ui.screen_gameover import GameOverScreen
 from ui.screen_about import ScreenAbout
 from ui.screen_firstrun import FirstRunScreen, LegendScreen
 from ui.screen_quest import (ScenarioSourceScreen, PickCycleScreen,
-                              ChooseScenarioScreen, ScenarioOptionsScreen)
+                              ChooseScenarioScreen, ScenarioOptionsScreen, CatalogUnavailableScreen)
 import quest_catalog
 
 STATE_PATH = "/state.json"
@@ -128,6 +128,10 @@ def load_saved():
         with open(STATE_PATH) as f:
             d = json.load(f)
         game = GameState.from_dict(d["state"])
+        # A save with no scenario is from the removed manual/custom mode.
+        # There is no view to resume it into, so it is not offered.
+        if not (game.scenario or {}).get("slug"):
+            return None, None
         _rehydrate_stages(game)
         t = d.get("saved_at")
         if t:
@@ -405,15 +409,8 @@ def main():
         if modal is None and active == "play" and game.pending_resolution:
             forced = game.pending_resolution == "forced"
             game.pending_resolution = False
-            if game.stages:
-                from ui.modals import ResolutionModal
-                modal = ResolutionModal(game, force_advance=forced)
-            else:
-                excess = max(0, game.quest["progress"] - game.quest["points"]) \
-                    if game.quest["points"] > 0 else 0
-                game.pending_stage = {"cleared": game.quest_label(), "excess": excess}
-                from ui.modals import StageCompleteModal
-                modal = StageCompleteModal(game)
+            from ui.modals import ResolutionModal
+            modal = ResolutionModal(game, force_advance=forced)
             dirty = True
             continue
 
@@ -627,15 +624,15 @@ def main():
                                 if catalog_index is None:
                                     catalog_index = quest_catalog.load_index()
                             except Exception as e:
-                                print("quest catalog: load_index failed (%r) "
-                                      "- falling back to custom quest" % (e,))
-                                game.log_event(
-                                    "Quest catalog unavailable - continuing "
-                                    "with custom/manual setup")
-                                game.scenario = None
-                                game.view = "setup_game"
-                                active = "play"
-                                save_state(game)
+                                # No silent downgrade: there is no manual mode
+                                # to fall back to, and on the device this
+                                # means docs/data was never deployed - a bug
+                                # to see, not to paper over.
+                                print("quest catalog: load_index failed (%r)" % (e,))
+                                game.log_event("Quest catalog unavailable")
+                                screens["catalog_error"] = \
+                                    CatalogUnavailableScreen(e)
+                                active = "catalog_error"
                             else:
                                 if catalog_icons is None:
                                     catalog_icons = quest_catalog.load_icons()
@@ -701,10 +698,6 @@ def main():
                             game.view = "quest_setup"
                             active = "play"
                             save_state(game)
-                        elif kind == "start_custom":
-                            game.scenario = None
-                            game.view = "setup_game"
-                            active = "play"
                         elif kind == "save_quit":
                             save_state(game)
                             save_replay(game)

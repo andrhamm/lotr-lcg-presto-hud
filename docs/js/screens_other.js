@@ -9,6 +9,7 @@ import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { viewForStep, DEFAULT_START_THREAT, MAX_PLAYERS } from "./gamestate.js";
 import { PHASES, STEPS } from "./phases.js";
+import { CATALOG_UNAVAILABLE } from "./viewcopy.js";
 import { step as phaseStep } from "./phases.js";
 import { drawHeader, HEADER_H, QuestCardModal } from "./screens.js";
 import { iconFor, slugify } from "./quest_catalog.js";
@@ -637,8 +638,6 @@ export class PickCycleScreen {
   static ROW_H = 44;
   static ROW_STRIDE = 45;
   static LIST_Y0 = 50;
-  static CUSTOM_Y = 370;
-  static CUSTOM_H = 38;
 
   constructor(source, cycles) {
     this.source = source;
@@ -648,7 +647,7 @@ export class PickCycleScreen {
   }
   _pages() { return Math.max(1, Math.ceil(this.cycles.length / PickCycleScreen.PER_PAGE)); }
   draw(ctx, game) {
-    const { PER_PAGE, ROW_H, ROW_STRIDE, LIST_Y0, CUSTOM_Y, CUSTOM_H } = PickCycleScreen;
+    const { PER_PAGE, ROW_H, ROW_STRIDE, LIST_Y0 } = PickCycleScreen;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     // Was a bespoke bar: a card-coloured strip with its title centred on 250
@@ -680,10 +679,6 @@ export class PickCycleScreen {
       }
     }
 
-    const custom = new Button(["custom"], 8, CUSTOM_Y, 464, CUSTOM_H);
-    bevel(ctx, custom.x, custom.y, custom.w, custom.h, pal.btn);
-    textCenter(ctx, "Custom / uncatalogued quest", 240, CUSTOM_Y + 12, BODY, pal.tan);
-    this.buttons.push(custom);
 
     rect(ctx, 0, 410, 480, 1, pal.border);
     if (pages > 1) {
@@ -701,9 +696,54 @@ export class PickCycleScreen {
     const k = btn.id[0];
     if (k === "back") return ["goto", "scenario_source"];
     if (k === "cycle") return ["choose_scenario_list", this.source, btn.id[1]];
-    if (k === "custom") return ["start_custom"];
     if (k === "older") { this.page = Math.max(0, this.page - 1); return "redraw"; }
     if (k === "newer") { this.page = Math.min(this._pages() - 1, this.page + 1); return "redraw"; }
+    return null;
+  }
+}
+
+// Dead end when the card data cannot be read.
+//
+// There is no manual/custom quest mode to fall back to - the game is out of
+// print, so the catalog can be complete, and a hand-entry escape hatch was a
+// second and worse source of truth. That makes an unreadable catalog a real
+// failure rather than a branch, and quietly downgrading the player into
+// typing quest points themselves would hide exactly the bug worth seeing.
+//
+// So this says what is wrong and offers no way into a game.
+export class CatalogUnavailableScreen {
+  constructor(reason = null) {
+    this.reason = reason;
+    this.buttons = [];
+  }
+
+  draw(ctx, game) {
+    this.buttons = [];
+    rect(ctx, 0, 0, 480, 480, pal.bg);
+    drawHeader(ctx, game, this.buttons, {
+      title: "Card Data", roundLabel: "< Source", roundId: ["back"],
+    });
+    let y = 74;
+    icons.drawIcon(ctx, icons.THREAT, 16, y, pal.no_fg);
+    textLeft(ctx, "Card data unavailable", 48, y - 2, DISPLAY, pal.no_fg);
+    y += 44;
+    for (const ln of wrapText(CATALOG_UNAVAILABLE, BODY, 448)) {
+      textLeft(ctx, ln, 16, y, BODY, pal.tan);
+      y += 22;
+    }
+    if (this.reason) {
+      y += 10;
+      textLeft(ctx, "REASON", 16, y, LABEL, pal.muted);
+      y += 18;
+      for (const ln of wrapText(String(this.reason), BODY, 448).slice(0, 3)) {
+        textLeft(ctx, ln, 16, y, BODY, pal.dim);
+        y += 22;
+      }
+    }
+  }
+
+  onButton(btn) {
+    if (btn.id[0] === "back") return ["goto", "scenario_source"];
     return null;
   }
 }

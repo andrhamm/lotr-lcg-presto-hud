@@ -168,30 +168,21 @@ class QuestConfigModal:
                     pal.bg if self.sail else pal.tan, shadow=False)
         self.buttons.append(sb)
 
-        # A catalog game advances through the GUIDED flow, which knows about
-        # branch alternatives, victory and the location credit. A custom game
-        # has no ResolutionModal to open, so it keeps the manual edit it has
-        # always had. Showing both would be two buttons named "advance" that
-        # do different things.
-        if game.stages:
-            # The only way in for a stage with no quest points: ~137 of ~400
-            # stage cards advance on a condition, so there is no target to
-            # cross and nothing to trigger the flow on its own.
-            fa = Button(("force_adv",), 30, 344, 205, 48)
-            bevel(d, pal, fa.x, fa.y, fa.w, fa.h, pal.btn)
-            text_center(d, pal, "Advance anyway", fa.x + fa.w / 2, fa.y + 14,
-                        BODY, pal.tan)
-            self.buttons.append(fa)
-            vc = Button(("quest_card",), 245, 344, 205, 48)
-            bevel(d, pal, vc.x, vc.y, vc.w, vc.h, pal.btn)
-            text_center(d, pal, "View quest card", vc.x + vc.w / 2, vc.y + 14,
-                        BODY, pal.tan)
-            self.buttons.append(vc)
-        else:
-            adv = Button(("adv",), 30, 344, 420, 48)
-            bevel(d, pal, adv.x, adv.y, adv.w, adv.h, pal.btn)
-            text_center(d, pal, "Advance stage (progress -> 0)", adv.x + adv.w / 2, adv.y + 14, BODY, pal.tan)
-            self.buttons.append(adv)
+        # The only way in for a stage with no quest points: ~137 of ~400
+        # stage cards advance on a condition, so nothing crosses a target to
+        # trigger the guided flow on its own. This used to be gated on
+        # `game.stages` because a custom quest had no ResolutionModal to open;
+        # there are no custom quests now, so every game gets both actions.
+        fa = Button(("force_adv",), 30, 344, 205, 48)
+        bevel(d, pal, fa.x, fa.y, fa.w, fa.h, pal.btn)
+        text_center(d, pal, "Advance anyway", fa.x + fa.w / 2, fa.y + 14,
+                    BODY, pal.tan)
+        self.buttons.append(fa)
+        vc = Button(("quest_card",), 245, 344, 205, 48)
+        bevel(d, pal, vc.x, vc.y, vc.w, vc.h, pal.btn)
+        text_center(d, pal, "View quest card", vc.x + vc.w / 2, vc.y + 14,
+                    BODY, pal.tan)
+        self.buttons.append(vc)
 
         # No Done and no Cancel: every tap has already landed on the game.
         # The sheet edits a live copy the way PlayersDetailModal does, so the
@@ -211,15 +202,6 @@ class QuestConfigModal:
             return None
         if k == "pts":
             self.q["points"] = max(0, min(30, self.q["points"] + btn.id[1]))
-            self._apply()
-            return None
-        if k == "adv":
-            if self.q["side"] == "A":
-                self.q["side"] = "B"
-            else:
-                self.q["side"] = "A"
-                self.q["stage_n"] += 1
-            self.q["progress"] = 0
             self._apply()
             return None
         if k == "force_adv":
@@ -2045,15 +2027,11 @@ class QuestingProgressModal:
             loc = g.active_locations[i]
             loc["progress"] = self._clamp_adj(
                 loc["progress"], 1 if up else -1, loc["points"])
-            if not g.stages:
-                # Catalog games defer this to the guided resolution flow
-                # (close-time needs_resolution() check + ResolutionModal's
-                # "location" step, B-resolve Task 3) so overflow excess gets
-                # credited to the quest card (rulebook p.15) via
-                # resolve_location_overflow() instead of silently discarded.
-                # Custom games have no guided flow to defer to, so they keep
-                # the immediate auto-explore they've always had.
-                g.explore_location_if_done()
+            # NOT auto-explored here. The guided resolution flow does it
+            # (close-time needs_resolution() check + ResolutionModal's
+            # "location" step) so overflow excess is credited to the quest
+            # card (rulebook p.15) via resolve_location_overflow() rather
+            # than silently discarded.
             return None
         if k in ("sP-", "sP+"):
             s = g.side_quests[a]
@@ -2112,21 +2090,11 @@ class QuestingProgressModal:
             return "redraw"
         if k == "close":
             self._log_changes()
-            # Catalog games: any overflow (location/quest/side-quest) is
-            # safe to defer to ResolutionModal, since every one of its
-            # steps has a real close/dismiss escape hatch. Custom games
-            # have no ResolutionModal - their only fallback is the legacy
-            # StageCompleteModal, which has no safe "cancel" (only "go",
-            # committing a stage/side/points change, or "win") - so their
-            # trigger must stay scoped to the quest itself overflowing
-            # (what StageCompleteModal has always been opened for), not
-            # needs_resolution()'s broader check. A side-quest-only
-            # overflow must not force a custom-game player into that
-            # advance-or-victory dilemma.
-            if g.stages:
-                if g.needs_resolution():
-                    g.pending_resolution = "auto"
-            elif g.quest["points"] > 0 and g.quest["progress"] >= g.quest["points"]:
+            # Any overflow (location, quest or side quest) defers to
+            # ResolutionModal: every one of its steps has a real
+            # close/dismiss escape hatch, so handing it a state the player
+            # did not mean to reach is always recoverable.
+            if g.needs_resolution():
                 g.pending_resolution = "auto"
             return "close"
         return None
@@ -2247,93 +2215,15 @@ class SailingModal:
         return None
 
 
-class StageCompleteModal:
-    """After a quest stage clears, set up the next stage (number, side A-H,
-    quest points) - or declare the final stage a Victory."""
-
-    def __init__(self, game):
-        self.game = game
-        ps = game.pending_stage or {"cleared": "?", "excess": 0}
-        self.cleared = ps["cleared"]
-        self.excess = ps["excess"]
-        self.n = game.quest["stage_n"]
-        self.side = game.quest["side"]
-        self.pts = 0
-        self.buttons = []
-
-    def draw(self, hw, game, pal):
-        d = hw.display
-        self.buttons = []
-        d.set_pen(pal.bg)
-        d.clear()
-        text_center(d, pal, "Quest Stage %s cleared!" % self.cleared, 240, 26, DISPLAY, pal.gold)
-        y = 74
-        text_center(d, pal, "Set up the next stage", 240, y, BODY, pal.tan)
-        y += 40
-        text_left(d, pal, "Stage", 30, y + 14, BODY, pal.tan)
-        stepper(d, pal, self.buttons, ("n", -1), ("n", 1), 160, y, str(self.n), 130, 52)
-        stepper(d, pal, self.buttons, ("side", -1), ("side", 1), 316, y, self.side, 144, 52)
-        y += 76
-        text_left(d, pal, "Quest points", 30, y + 14, BODY, pal.tan)
-        stepper(d, pal, self.buttons, ("pts", -1), ("pts", 1), 240, y, str(self.pts), 210, 52)
-        y += 90
-        go = Button(("go",), 30, y, 420, 60)
-        bevel(d, pal, go.x, go.y, go.w, go.h, pal.btn_ok, t=3)
-        text_center(d, pal, "Continue to %d%s" % (self.n, self.side), 240, y + 20, BODY, pal.ok_fg)
-        self.buttons.append(go)
-        y += 74
-        win = Button(("win",), 30, y, 420, 60)
-        bevel(d, pal, win.x, win.y, win.w, win.h, pal.card_hi, t=3)
-        text_center(d, pal, "That was the final stage - Victory!", 240, y + 20, BODY, pal.gold)
-        self.buttons.append(win)
-        # A way out. The modal opens off game.pending_stage, so declining has
-        # to clear that flag or it reopens on the next draw - and without it
-        # a stage marked complete in error was unrecoverable: both other
-        # buttons advance the quest.
-        y += 66
-        no = Button(("not_yet",), 30, y, 420, 44)
-        bevel(d, pal, no.x, no.y, no.w, no.h, pal.btn_no, t=3)
-        text_center(d, pal, "Not yet - go back", 240, y + 12, BODY, pal.no_fg)
-        self.buttons.append(no)
-
-    def on_button(self, btn):
-        k = btn.id[0]
-        if k == "not_yet":
-            self.game.pending_stage = None
-            return "cancel"
-        if k == "n":
-            self.n = max(1, min(9, self.n + btn.id[1]))
-            return None
-        if k == "side":
-            i = (ord(self.side[0]) - 65 + btn.id[1] + 8) % 8   # cycle A-H
-            self.side = chr(65 + i)
-            return None
-        if k == "pts":
-            self.pts = max(0, min(30, self.pts + btn.id[1]))
-            return None
-        if k == "go":
-            g = self.game
-            g.quest["stage_n"] = self.n
-            g.quest["side"] = self.side
-            g.quest["points"] = self.pts
-            g.pending_stage = None
-            g.log_event("Advance to stage %s (needs %d)" % (g.quest_label(), self.pts))
-            return "close"
-        if k == "win":
-            self.game.pending_stage = None
-            self.game.set_game_over("victory")
-            return "close"
-        return None
-
-
 class ResolutionModal:
     """Guided post-edit/post-success resolution: location -> quest advance
     (branch/reveal/flip) -> side quests, one explicit step at a time,
-    re-deriving what's next from live game state after every action. Opened
-    only for catalog games (game.stages non-empty) - custom games keep the
-    legacy StageCompleteModal. See docs/superpowers/plans/
-    2026-07-24-quest-picker-bresolve.md for the full rationale, including
-    why at most one stage advance can ever happen per pass."""
+    re-deriving what's next from live game state after every action. The
+    ONLY advance flow - the legacy StageCompleteModal it used to share the
+    job with is gone, along with the custom-quest mode that needed it. See
+    docs/superpowers/plans/2026-07-24-quest-picker-bresolve.md for the full
+    rationale, including why at most one stage advance can ever happen per
+    pass."""
 
     def __init__(self, game, force_advance=False):
         self.game = game

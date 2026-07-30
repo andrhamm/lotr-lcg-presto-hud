@@ -441,7 +441,12 @@ def test_progress_row_steppers_win_over_the_detail_band():
                 for st in steps:
                     assert not hit(st, band), (band.id, st.id)
 
-def test_questing_progress_modal_location_current_bump_explores_when_done():
+def test_a_full_location_waits_for_the_guided_flow_rather_than_self_exploring():
+    # It used to auto-explore right here for a custom game, which raced ahead
+    # of the guided flow and discarded the overflow the quest card is owed
+    # (RR p.15). With custom games gone there is one behaviour: the location
+    # stays at its target and needs_resolution() reports it, so closing hands
+    # off to ResolutionModal.
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
@@ -449,8 +454,8 @@ def test_questing_progress_modal_location_current_bump_explores_when_done():
     m = modals.QuestingProgressModal(game)
     m.draw(hw, game, pal)
     assert m.on_button(_find(m, ("lP+", 0))) is None
-    assert not game.active_locations
-    assert any("Explored" in e["text"] for e in game.log)
+    assert game.active_locations[0]["progress"] == 3      # NOT explored here
+    assert game.needs_resolution() is True
 
 
 def test_location_sheet_explored_logs_and_clears():
@@ -1116,16 +1121,15 @@ def test_progress_cannot_exceed_the_target():
         m.on_button(_find(m, ("sP+", 0)))
     assert game.quest["progress"] == 3
     assert game.side_quests[0]["progress"] == 4
-    # The location caps the same way, but a custom game auto-explores at the cap
-    # so the row clears rather than pinning at 2/2 - redraw between taps, as the
-    # real loop does, or the button outlives its record.
+    # The location caps the same way, and now PINS at 2/2 rather than
+    # self-exploring: the guided flow owns that transition.
     for _ in range(8):
         m.draw(hw, game, pal)
         btn = [b for b in m.buttons if b.id == ("lP+", 0)]
         if not btn:
             break
         m.on_button(btn[0])
-    assert not game.active_locations
+    assert game.active_locations[0]["progress"] == 2
 
 
 def test_a_formula_stage_clamps_against_the_target_it_drew():

@@ -60,7 +60,6 @@ def window_after(v):
 
 # view -> representative step id (for the phases screen / log tags / LEDs)
 VIEW_STEP = {
-    "setup_game": "0.0",
     "quest_setup": "0.0",
     "resource": "1.R",
     "planning": "2.P",
@@ -252,7 +251,11 @@ class GameState:
                         for i in range(player_count)]
         for p in self.players:
             p.elimination = elimination_threat
-        self.view = "setup_game"     # one-time setup phase precedes round 1
+        # The one-time setup phase precedes round 1. Always the CATALOG one:
+        # there is no manual/custom quest mode. The game is out of print, so
+        # the card data can be complete, and an escape hatch that let a player
+        # hand-enter quest points was a second, worse source of truth.
+        self.view = "quest_setup"
         self.clock = None            # ms time source injected by main (host: fake)
         self._round_snap = None      # {t, threats, progress} at round start
         self.round = 1
@@ -550,7 +553,11 @@ class GameState:
         """Move to the next view; staging skips resolution (that view is only
         entered by a successful resolve). The one-time setup phase leads into
         round 1 and is never revisited."""
-        if self.view == "setup_game":
+        if self.view == "quest_setup":
+            # The one-time setup view leads into round 1 and is never
+            # revisited. A catalog game normally leaves it through the
+            # screen's "flip_to_b" CTA, which flips 1A -> 1B first; this is
+            # the generic path, kept so advance_view is total over every view.
             self.log_event("Setup complete - round 1 begins (quest %s needs %d)"
                            % (self.quest_label(), self.quest["points"]))
             self.enter_view(VIEW_ORDER[0])

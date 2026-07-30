@@ -226,9 +226,10 @@ def test_travel_contribution_clamps_at_zero():
     assert g.staging == 0
 
 
-def test_new_game_starts_at_setup_phase():
+def test_new_game_starts_at_the_catalog_setup_phase():
+    # Always quest_setup: there is no manual/custom setup any more.
     g = GameState()
-    assert g.view == "setup_game"
+    assert g.view == "quest_setup"
     assert g.step == "0.0"
 
 

@@ -46,7 +46,6 @@ citation for each line and the reasoning behind the wording.
 # <= 332px at DISPLAY - tests/test_screen_play.py enforces it over every value.
 # --------------------------------------------------------------------------
 VIEW_LABELS = {
-    "setup_game": "Setup",
     "quest_setup": "Quest Setup",
     "resource": "Resource",
     "planning": "Planning",
@@ -358,7 +357,7 @@ QUEST_SETUP = {
     # after. RR: "After completing these steps, players begin the game
     # starting with the first game round."
     #
-    # It is the same label the custom-quest path already uses on setup_game,
+    # It is the same label the one-time setup view uses,
     # so both routes into round 1 end with the same button. An ACTION cta:
     # single line, no NEXT PHASE kicker. The flip itself is a table action and
     # is named in the copy above, the same split the refresh view uses.
@@ -412,6 +411,15 @@ COMBAT_LAST_CHANCE = "Lower threat now or refresh may eliminate."
 # to the quest card. Each resolves the moment it is full, which is why
 # exploring a location can advance the quest in the same motion (and why p.22's
 # "excess is discarded" applies to the quest, not to the location).
+# Shown when the card catalog cannot be read. There is no manual/custom quest
+# mode to fall back to: the game is out of print, so the catalog can be
+# complete, and a hand-entry escape hatch was a second and worse source of
+# truth. An unreadable catalog is a real failure, and on the device it means
+# the deploy is missing docs/data.
+CATALOG_UNAVAILABLE = ("The scenario catalog could not be read, so there is "
+                       "nothing to pick from. On the device this usually "
+                       "means the card data was never copied across.")
+
 # A card face that prints no game text. Two-sided quest cards routinely have
 # one: side A carries the story and the Setup while side B carries only the
 # quest points, or the reverse. Said as what the CARD is, not as what the app

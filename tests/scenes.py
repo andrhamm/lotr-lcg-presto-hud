@@ -624,17 +624,6 @@ def _sailing_modal():
     return hw, m
 
 
-def _stage_complete_modal():
-    from ui.modals import StageCompleteModal
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    g = _game()
-    g.pending_stage = {"cleared": "2B", "excess": 2}
-    m = StageCompleteModal(g)
-    m.draw(hw, g, pal)
-    return hw, m
-
-
 def _quest_config_modal():
     from ui.modals import QuestConfigModal
     hw = FakeHardware()
@@ -1152,6 +1141,48 @@ def _quest_card_modal_preview():
     return hw, m
 
 
+def _catalog_unavailable():
+    """The dead end when the card data cannot be read. There is no manual
+    quest mode to fall back to, so this offers no way into a game."""
+    from ui.screen_quest import CatalogUnavailableScreen
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    s = CatalogUnavailableScreen(
+        OSError(2, "No such file or directory: '/data/index.json'"))
+    s.draw(hw, g, pal)
+    return hw, s
+
+
+def _catalog_unavailable_no_reason():
+    from ui.screen_quest import CatalogUnavailableScreen
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    s = CatalogUnavailableScreen()
+    s.draw(hw, g, pal)
+    return hw, s
+
+
+def _quest_setup_scene(sailing=False):
+    """The catalog setup view (quest_setup): stage 1A described, "View quest
+    card", and the flip CTA into round 1."""
+    def build():
+        from ui.screen_play import ScreenPlay
+        hw = FakeHardware()
+        pal = Palette(hw.display)
+        g = _resolution_game(flip=False)
+        g.view = "quest_setup"
+        g.step = VIEW_STEP["quest_setup"]
+        if sailing:
+            g.sailing = True
+            g.heading = 2
+        s = ScreenPlay()
+        s.draw(hw, g, pal)
+        return hw, s
+    return build
+
+
 def _resolution_game(flip=True):
     # Shared base for every ResolutionModal scene below: Passage Through
     # Mirkwood's real 3-stage tree (same _MIRKWOOD_STAGES the QuestCardModal
@@ -1348,8 +1379,13 @@ SCENES = {
     "setup": _setup([25]),
     "setup3": _setup([25, 27, 29], first=1),
     "setup4": _setup([25, 27, 29, 31], first=3),
-    "play_setup": _play("setup_game"),
-    "play_setup_sailing": _play("setup_game", mutate=_sailing_on),
+    # The one-time setup view, on a real scenario. There is no manual/custom
+    # setup any more - the game is out of print, so every game comes from the
+    # catalog and this view always has a stage 1A to describe.
+    "catalog_unavailable": _catalog_unavailable,
+    "catalog_unavailable_no_reason": _catalog_unavailable_no_reason,
+    "play_setup": _quest_setup_scene(),
+    "play_setup_sailing": _quest_setup_scene(sailing=True),
     "play_resource": _play("resource"),
     "play_planning": _play("planning"),
     "play_quest_sailing": _play("quest_sailing", mutate=_sailing_on),
@@ -1444,7 +1480,6 @@ SCENES = {
     "location_pick_manual_card_effect": _location_pick_manual_card_effect,
     "location_pick_no_catalog": _location_pick_no_catalog,
     "sailing_modal": _sailing_modal,
-    "stage_complete_modal": _stage_complete_modal,
     "resolution_reveal": _resolution_reveal,
     "resolution_location": _resolution_location,
     "resolution_branch": _resolution_branch,

@@ -1495,14 +1495,10 @@ export class QuestingProgressModal {
     }
     if (k === "close") {
       this._logChanges();
-      // Catalog games: any overflow (location/quest/side-quest) is safe to
-      // defer to ResolutionModal, since every one of its steps has a real
-      // close/dismiss escape hatch. Custom games have no ResolutionModal -
-      // their only fallback is the legacy StageCompleteModal, which has no safe
-      // "cancel" (only "go", committing a stage/side/points change, or "win") -
-      // so their trigger must stay scoped to the quest itself overflowing, not
-      // needsResolution()'s broader check. A side-quest-only overflow must not
-      // force a custom-game player into that advance-or-victory dilemma.
+      // Any overflow (location, quest or side quest) defers to
+      // ResolutionModal: every one of its steps has a real close/dismiss
+      // escape hatch, so handing it a state the player did not mean to reach
+      // is always recoverable.
       if (g.stages.length) {
         if (g.needsResolution()) g.pending_resolution = "auto";
       } else if (g.quest.points > 0 && g.quest.progress >= g.quest.points) {
@@ -1613,76 +1609,6 @@ export class SailingModal {
   }
 }
 
-export class StageCompleteModal {
-  constructor(game) {
-    this.game = game;
-    const ps = game.pending_stage ?? { cleared: "?", excess: 0 };
-    this.cleared = ps.cleared;
-    this.excess = ps.excess;
-    this.n = game.quest.stage_n;
-    this.side = game.quest.side;
-    this.pts = 0;
-    this.buttons = [];
-  }
-  draw(ctx) {
-    this.buttons = [];
-    rect(ctx, 0, 0, 480, 480, pal.bg);
-    textCenter(ctx, `Quest Stage ${this.cleared} cleared!`, 240, 26, DISPLAY, pal.gold);
-    let y = 74;
-    textCenter(ctx, "Set up the next stage", 240, y, BODY, pal.tan);
-    y += 40;
-    textLeft(ctx, "Stage", 30, y + 14, BODY, pal.tan);
-    stepper(ctx, this.buttons, ["n", -1], ["n", 1], 160, y, String(this.n), 130, 52);
-    // side cycles A-H (multi-variant quests go beyond A/B - DragnCards data)
-    stepper(ctx, this.buttons, ["side", -1], ["side", 1], 316, y, this.side, 144, 52);
-    y += 76;
-    textLeft(ctx, "Quest points", 30, y + 14, BODY, pal.tan);
-    stepper(ctx, this.buttons, ["pts", -1], ["pts", 1], 240, y, String(this.pts), 210, 52);
-    y += 90;
-    const go = new Button(["go"], 30, y, 420, 60);
-    bevel(ctx, go.x, go.y, go.w, go.h, pal.btn_ok, false, 3);
-    textCenter(ctx, `Continue to ${this.n}${this.side}`, 240, y + 20, BODY, pal.ok_fg);
-    this.buttons.push(go);
-    y += 74;
-    const win = new Button(["win"], 30, y, 420, 60);
-    bevel(ctx, win.x, win.y, win.w, win.h, pal.card_hi, false, 3);
-    textCenter(ctx, "That was the final stage - Victory!", 240, y + 20, BODY, pal.gold);
-    this.buttons.push(win);
-  }
-  onButton(btn) {
-    const k = btn.id[0];
-    if (k === "n") { this.n = Math.max(1, Math.min(9, this.n + btn.id[1])); return null; }
-    if (k === "side") {
-      const i = (this.side.charCodeAt(0) - 65 + btn.id[1] + 8) % 8;   // cycle A-H
-      this.side = String.fromCharCode(65 + i);
-      return null;
-    }
-    if (k === "pts") { this.pts = Math.max(0, Math.min(30, this.pts + btn.id[1])); return null; }
-    if (k === "go") {
-      const g = this.game;
-      g.quest.stage_n = this.n;
-      g.quest.side = this.side;
-      g.quest.points = this.pts;
-      g.pending_stage = null;
-      g.logEvent(`Advance to stage ${g.questLabel()} (needs ${this.pts})`);
-      return "close";
-    }
-    if (k === "win") {
-      this.game.pending_stage = null;
-      this.game.setGameOver("victory");
-      return "close";
-    }
-    return null;
-  }
-}
-
-// Guided post-edit/post-success resolution: location -> quest advance
-// (branch/reveal/flip) -> side quests, one explicit step at a time,
-// re-deriving what's next from live game state after every action. Opened
-// only for catalog games (game.stages non-empty) - custom games keep the
-// legacy StageCompleteModal. See docs/superpowers/plans/
-// 2026-07-24-quest-picker-bresolve.md for the full rationale, including why
-// at most one stage advance can ever happen per pass.
 export class ResolutionModal {
   constructor(game, forceAdvance = false) {
     this.game = game;

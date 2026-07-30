@@ -35,7 +35,7 @@ export const windowAfter = v =>
   (WINDOW_PREFIX + v) in VIEW_STEP ? WINDOW_PREFIX + v : null;
 
 export const VIEW_STEP = {
-  setup_game: "0.0", quest_setup: "0.0", resource: "1.R", planning: "2.P", quest_sailing: "3.1",
+  quest_setup: "0.0", resource: "1.R", planning: "2.P", quest_sailing: "3.1",
   quest_commit: "3.2",
   quest_staging: "3.3", quest_resolution: "3.4", travel: "4.2",
   enc_optional: "5.2", enc_checks: "5.3", combat_shadow: "6.2",
@@ -206,7 +206,11 @@ export class GameState {
       p.elimination = eliminationThreat;
       this.players.push(p);
     }
-    this.view = "setup_game";
+    // The one-time setup phase precedes round 1. Always the CATALOG one:
+    // there is no manual/custom quest mode. The game is out of print, so the
+    // card data can be complete, and an escape hatch that let a player
+    // hand-enter quest points was a second, worse source of truth.
+    this.view = "quest_setup";
     this.clock = null;
     this._round_snap = null;
     this.round = 1;
@@ -457,7 +461,11 @@ export class GameState {
   }
 
   advanceView() {
-    if (this.view === "setup_game") {
+    if (this.view === "quest_setup") {
+      // The one-time setup view leads into round 1 and is never revisited. A
+      // catalog game normally leaves it through the screen's "flip_to_b" CTA,
+      // which flips 1A -> 1B first; this is the generic path, kept so
+      // advanceView is total over every view.
       this.logEvent(`Setup complete - round 1 begins (quest ${this.questLabel()} needs ${this.quest.points})`);
       this.enterView(VIEW_ORDER[0]);
       this._snapshotRound();
