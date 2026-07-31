@@ -510,8 +510,14 @@ class ScenarioOptionsScreen:
         text_left(d, pal, name_s, 66, 54, BODY, pal.gold)
         # "<pack> - tap to change" is an affordance a player reads, not chrome:
         # BODY. It clears SETS TO GATHER at y=100 (76 + 16 = 92).
-        sub = truncate_text("%s - tap to change" % pack, BODY, 480 - 66 - 14, d.measure_text)
-        text_left(d, pal, sub, 66, 76, BODY, pal.dim)
+        # Truncate the PACK, never the composite. Truncating the whole string
+        # let a long pack name eat the instruction - "Two-Player Limited
+        # Edition Starter - tap .." - amputating the very affordance the line
+        # exists to advertise. Same shape as the name line above.
+        tail = " - tap to change"
+        pack_w = 480 - 66 - 14 - d.measure_text(tail, BODY)
+        text_left(d, pal, truncate_text(pack, BODY, pack_w, d.measure_text) + tail,
+                  66, 76, BODY, pal.dim)
         self.buttons.append(Button(("retitle",), 8, 46, 464, 50))
 
         text_left(d, pal, "SETS TO GATHER", 16, 100, LABEL, pal.muted)

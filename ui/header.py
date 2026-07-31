@@ -98,6 +98,12 @@ def draw_header(d, pal, game, buttons, highlight=None, title=None,
     if close:
         # Settings: DONE is the only nav
         buttons.append(Button(("nav", "close"), 408, 4, 64, 32))
+        # ...unless the screen put its own control in the round-stamp slot.
+        # round_id used to be honoured on the default branch only, so the Game
+        # Log's Story/All filter drew a label that nothing could tap. DONE sits
+        # at x=408 and the slot at 0..150, so they cannot shadow each other.
+        if round_id:
+            buttons.append(Button(round_id, 0, 0, 150, h))
     elif close_left:
         # Game Log: R# toggles closed; Set. still reachable
         buttons.append(Button(("nav", "close"), 0, 0, 150, h))

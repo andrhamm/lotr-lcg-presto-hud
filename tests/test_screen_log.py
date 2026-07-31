@@ -166,3 +166,70 @@ def test_per_page_shrank_to_make_room_for_the_transport():
     from ui.header import HEADER_H
     assert PER_PAGE == 11
     assert HEADER_H + 10 + PER_PAGE * ROW_H <= REPLAY_Y
+
+
+class _Btn:
+    """Bare button stand-in for handler tests that skip draw(). Distinct from
+    the _btn() lookup helper above, which finds a drawn button by id."""
+    def __init__(self, id_):
+        self.id = id_
+
+
+def _log_game():
+    return GameState(1, 29)
+
+
+def test_story_filter_hides_phase_rows_and_all_shows_them():
+    """The log recorded keystrokes, not the game: 73 rows over two rounds in
+    the 2026-07-30 playtest, ~11 of them meaningful. Phase transitions are
+    identical every round and carry no game state, and every row already shows
+    its own R<round>.<step>, so they are hidden by default and one tap away."""
+    g = _log_game()
+    g.log_event("Phase: Travel", cat="phase")
+    g.log_event("Traveled to Forest Gate (4 quest points)")
+    g.log_event("Phase: Encounter", cat="phase")
+    s = ScreenLog()
+    hw = FakeHardware()
+    s.draw(hw, g, Palette(hw.display))
+    shown = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
+    assert "Traveled to Forest Gate" in shown
+    assert "Phase: Travel" not in shown
+    assert "Story" in shown            # the toggle names the current filter
+
+    # Registered as a real tap target, not just drawn. draw_header honoured
+    # round_id on its default branch only, so with close=True the filter label
+    # rendered and nothing could tap it - caught in the browser, not by a test
+    # that called on_button directly.
+    filt = [b for b in s.buttons if b.id == ("filter",)]
+    assert filt, "the Story/All label is not a tap target"
+    s.on_button(filt[0], g)
+    assert s.show_all is True
+    hw2 = FakeHardware()
+    s.draw(hw2, g, Palette(hw2.display))
+    shown2 = " ".join(str(c[1]) for c in hw2.display.calls if c[0] == "text")
+    assert "Phase: Travel" in shown2
+    assert "All" in shown2
+
+
+def test_a_run_of_stepper_taps_is_one_row_not_eight():
+    """Committing 8 willpower wrote eight rows, one per tap. It is one
+    decision, so it is one row - naming the settled value."""
+    g = _log_game()
+    before = len(g.log)
+    for n in range(1, 9):
+        g.set_willpower(n)
+    rows = g.log[before:]
+    assert len(rows) == 1, [r["text"] for r in rows]
+    assert "8" in rows[0]["text"]
+
+
+def test_reopening_a_stepper_later_starts_a_new_row():
+    """The collapse must not span: seeing WHEN each change happened is the
+    point of a log, so an intervening entry breaks the run."""
+    g = _log_game()
+    g.set_willpower(3)
+    g.log_event("Traveled to Forest Gate (4 quest points)")
+    g.set_willpower(9)
+    tallies = [e for e in g.log if e.get("key") == "wp"]
+    assert len(tallies) == 2
+    assert "3" in tallies[0]["text"] and "9" in tallies[1]["text"]

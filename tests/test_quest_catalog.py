@@ -671,3 +671,31 @@ def test_every_sequenced_cycle_is_date_monotonic_under_the_play_order():
             continue
         assert dates == sorted(dates), (g["cycle"], dates)
 
+
+
+def test_the_change_scenario_affordance_survives_the_longest_pack_name():
+    """The subtitle used to compose "<pack> - tap to change" and truncate the
+    COMPOSITE, so the longest pack name in the catalog ate the instruction and
+    the line rendered "Two-Player Limited Edition Starter - tap ..".
+
+    The affordance is the whole point of the line, so it is the part that must
+    survive; the pack name is the variable part and is what gets cut. The
+    scenario name on the row above already worked this way.
+    """
+    from tests.fake_hardware import FakeHardware
+    from ui.theme import Palette
+    from ui.screen_quest import ScenarioOptionsScreen
+    from gamestate import GameState
+
+    entry = {"slug": "x", "name": "X", "pack": "Two-Player Limited Edition Starter",
+             "cycle": "Core Set (Mirkwood Paths)", "source": "official", "kind": "quest"}
+    hw = FakeHardware()
+    scr = ScenarioOptionsScreen(entry, {"slug": "x", "name": "X",
+                                        "pack": entry["pack"]})
+    scr.draw(hw, GameState(2, 25), Palette(hw.display))
+    subs = [str(c[1]) for c in hw.display.calls
+            if c[0] == "text" and "tap to change" in str(c[1])]
+    assert subs, "the change-scenario affordance is not on screen at all"
+    assert subs[0].endswith(" - tap to change"), (
+        "instruction was truncated instead of the pack name: %r" % subs[0])
+    assert ".." in subs[0], "the pack name should be the part that got cut"

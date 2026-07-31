@@ -258,10 +258,19 @@ def test_players_detail_modal_willpower_step_sets_the_commit_and_logs():
     assert any("P2 committed 1 willpower" in e["text"] for e in game.log)
 
 
-def test_opening_the_players_modal_resyncs_a_detached_total():
-    """The two sources must never quietly disagree. While the total was set
-    directly the per-player values were still stored - just no longer what the
-    total said - so opening the view that shows them adopts them again."""
+def test_opening_the_players_modal_does_not_destroy_a_committed_total():
+    """INVERTED 2026-07-30. This test used to assert that opening the modal
+    resynced the total down to the stale per-player sum. That was the bug.
+
+    Playtest repro (The Oath, solo): 11 willpower committed on the quest_commit
+    stepper, then the player pill tapped to record Eyes in the Dark's Doomed 1.
+    Threat went 33 -> 34 correctly and the committed willpower went 11 -> 0,
+    silently, because this constructor called resync_willpower(). The quest
+    then resolved 0 against 4 staging. Every threat-raising treachery pushes a
+    player into this modal mid-quest-phase, so it is not a corner case.
+
+    Opening a view that DISPLAYS numbers must never rewrite them.
+    """
     hw = FakeHardware()
     pal = Palette(hw.display)
     game = GameState()
@@ -269,10 +278,25 @@ def test_opening_the_players_modal_resyncs_a_detached_total():
     game.set_willpower(11)
     assert game.willpower_detached is True
 
-    modals.PlayersDetailModal(game)          # opening it is the resync
-    assert game.willpower == 4
-    assert game.willpower_detached is False
+    modals.PlayersDetailModal(game)          # opening it must change nothing
+    assert game.willpower == 11
+    assert game.willpower_detached is True
     assert game.players[0].commit == 4       # the stored value was never lost
+
+
+def test_editing_a_player_in_the_modal_is_what_reattaches_the_total():
+    """The reconciliation the constructor used to force still happens - at the
+    moment the player actually edits a breakdown, which is the only point where
+    the sum is unambiguously what they meant."""
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    game = GameState()
+    game.set_commit(0, 4)
+    game.set_willpower(11)
+    m = modals.PlayersDetailModal(game)
+    m.draw(hw, game, pal)
+    game.set_commit(0, 6)
+    assert game.willpower == 6 and game.willpower_detached is False
 
 
 def test_players_detail_modal_inline_edit_pad_commits_on_ok_and_returns_to_grid():
@@ -1648,3 +1672,19 @@ def test_the_web_twin_backs_out_of_the_new_game_flow_the_same_way():
         assert got[name] == expect[name], (
             "%s: web twin backs out to %s, firmware to %s"
             % (name, got[name], expect[name]))
+
+
+def test_an_x_threat_location_shows_x_and_not_zero():
+    """58 faces in the catalog print a literal X rather than a number, mostly
+    for threat. The picker rendered the absent value as 0, so Tangled Grove -
+    "X is the number of locations in the staging area" - read as the SAFEST
+    row in the list, for the one location whose threat scales with the board.
+    quest_catalog.locations_for already supplied threatKind; only the pill
+    discarded it. Found in the 2026-07-30 playtest of The Oath."""
+    from tests import scenes
+    hw, m = scenes.SCENES["location_pick_x_threat"]()
+    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+    assert "X" in texts, "the X-threat row still renders a number"
+    # the other five rows keep their real numbers
+    for n in ("2", "3", "4"):
+        assert n in texts

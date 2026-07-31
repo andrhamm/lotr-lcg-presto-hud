@@ -498,7 +498,14 @@ def test_window_views_are_not_logged_as_phase_starts():
     _advance(g)
     starts = [e for e in g.log if e["text"].startswith("Phase:")]
     assert not any("aw_" in e["text"] for e in starts)
-    assert g.log[-1]["text"] == "Action window: Travel"
+    # Stronger than it used to be. This asserted the window logged itself as
+    # "Action window: Travel"; windows are now not logged AT ALL. A window is
+    # not a state change, its own screen names it, and the R<round>.<step>
+    # column already carries the step - it was 8 of ~21 rows a round, every
+    # round, identically. (2026-07-30 playtest: 73 log rows over 2 rounds, ~11
+    # of them meaningful.)
+    assert g.log[-1]["text"] == "Phase: Travel"
+    assert not any(e["text"].startswith("Action window:") for e in g.log)
 
 
 # -- pre-list replay logs ---------------------------------------------------

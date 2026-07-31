@@ -262,11 +262,11 @@ def test_entering_views_logs_phase_starts_with_time():
     assert starts and starts[-1]["t"] == 5000
     t["v"] = 9000
     g.advance_view()   # -> the Resource action window
-    # A window is not a new phase, so it does not claim to be one in the log.
-    # That matters: the log's "Phase:" lines are how a reader reconstructs the
-    # round, and eight extra false phase starts per round would drown it.
-    assert g.log[-1]["text"] == "Action window: Resource"
-    assert g.log[-1]["t"] == 9000
+    # A window is not a state change, so it is not logged at all now - it used
+    # to write "Action window: Resource". The log's "Phase:" lines are how a
+    # reader reconstructs the round, and eight window rows per round drowned
+    # them. Nothing new is appended, so the tail is still the Resource phase.
+    assert g.log[-1]["text"] == "Phase: Resource"
     g.advance_view()   # -> planning
     assert g.log[-1]["text"] == "Phase: Planning"
     g.advance_view()   # -> quest_commit

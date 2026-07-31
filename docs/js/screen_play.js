@@ -4,7 +4,7 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, wrapText,
          drawHeart, drawFlag, disc, arcRuns, wxSmall, token,
          BAND_PAD, bandLineH, pill, pillWidth,
          PILL_H, PILL_GAP, PILL_ROW_GAP,
-         arrowLeft, arrowRight,
+         arrowLeft, arrowRight, frontFace,
          DISPLAY, BODY, LABEL } from "./ui.js";
 import { measureText } from "./metrics.js";
 import { step as phaseStep } from "./phases.js";
@@ -408,7 +408,11 @@ export class ScreenPlay {
         this.buttons.push(new Button([key], x + 36, y, half - 72, 84));
         this.buttons.push(new Button([key + "+"], x + half - 36, y, 36, 84));
         if (key === "stg") {
-          textCenter(ctx, `+${game.stagingRevealEstimate()} reveal estimate`,
+          // No fmt() here: that helper is scoped to another method, and
+          // reaching for it threw inside this forEach and silently dropped the
+          // whole caption. One %d, so a plain replace is enough.
+          const f = game.stagingEstimateIsFloor() ? STAGING.estimate_x : STAGING.estimate;
+          textCenter(ctx, f.replace("%d", String(game.stagingRevealEstimate())),
                      x + half / 2, y + 64, BODY, pal.dim);
         }
       }
@@ -624,7 +628,11 @@ export class ScreenPlay {
   // flip (1A -> 1B) that begins round 1. Reuses the standard zones (Task 8).
   _drawQuestSetup(ctx, game) {
     const card = game.stages[game.stage_idx].cards[game.card_idx];
-    const aFace = card.faces.find(f => f.side === "A") ?? {};
+    // By position, not by side letter - see ui.js frontFace. 22 stage cards
+    // in the catalog have no "A" face at all, and this lookup used to yield {}
+    // for every one of them, so the setup screen claimed the stage had no
+    // Setup instructions.
+    const aFace = frontFace(card);
     // No bespoke title block. A centred amber stage label over a
     // DISPLAY-gold card name was this view's own invention - nothing else
     // in the app presents content that way - and it pushed the actual
@@ -796,10 +804,21 @@ export class ScreenPlay {
       } else {
         const mn = new Button(["am", key, idx], mnX, y + 6, btnW, btnH);
         const pl = new Button(["ap", key, idx], plX, y + 6, btnW, btnH);
-        for (const [b, s] of [[mn, "-"], [pl, "+"]]) {
-          bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
-          textCenter(ctx, s, b.x + btnW / 2, b.y + 8, DISPLAY, pal.tan);
-          this.buttons.push(b);
+        // A stepper that cannot act must not look like one. Both used to be
+        // drawn fully beveled at every value and the handler just returned - so
+        // at the budget cap the "+" swallowed taps in silence. Same
+        // hidden-not-disabled convention QuestCardModal's nav and
+        // LocationPickModal's Travel button already use: no bevel, dim glyph,
+        // and NOT registered as a target.
+        for (const [b, s, live] of [[mn, "-", used > 0],
+                                    [pl, "+", used < game.pending_budget]]) {
+          if (live) {
+            bevel(ctx, b.x, b.y, b.w, b.h, pal.btn);
+            textCenter(ctx, s, b.x + btnW / 2, b.y + 8, DISPLAY, pal.tan);
+            this.buttons.push(b);
+          } else {
+            textCenter(ctx, s, b.x + btnW / 2, b.y + 8, DISPLAY, pal.border);
+          }
         }
         textCenter(ctx, String(add), cxPlace, y + 10, DISPLAY, add > 0 ? pal.gold : pal.dim);
       }

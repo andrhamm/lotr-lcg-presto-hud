@@ -307,6 +307,17 @@ STAGING = {
                  "and When Revealed effects.",
     "window": "Responses to the reveal.",
     "short": "one at a time / resolve each When Revealed",
+    # The caption under the staging stepper. It used to read "+3 reveal
+    # estimate", where the 3 was STAGING_HIGH_PER_PLAYER - a constant, so every
+    # scenario ever published showed the same number. It is now the worst
+    # printed threat in THIS scenario's own gathered pool, computed at build
+    # time (index.json's maxCardThreat). A fact the app computed beats a
+    # forecast it guessed.
+    "estimate": "+%d max per card",
+    # ...except a card printing a literal X has no printed maximum, so the
+    # number is a floor rather than a ceiling and has to say so. The Oath's
+    # Tangled Grove reads "X is the number of locations in the staging area".
+    "estimate_x": "+%d max, some print X",
 }
 
 TRAVEL = {

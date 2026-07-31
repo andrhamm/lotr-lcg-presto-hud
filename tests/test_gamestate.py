@@ -196,15 +196,52 @@ def test_typing_a_total_that_matches_the_players_is_not_detached():
     assert g.willpower_detached is False
 
 
-def test_resync_adopts_the_player_breakdown_as_the_total():
-    """Opening the players view is what makes the two agree again."""
+def test_resync_refuses_to_overwrite_a_detached_total():
+    """INVERTED 2026-07-30. This test used to assert the opposite - that
+    resync adopted the sum and cleared the flag - and that assertion was the
+    bug, written down.
+
+    resync_willpower() overwrote a committed TOTAL with a stale per-player sum,
+    and PlayersDetailModal called it from its constructor, so merely opening the
+    players view during the quest phase destroyed the commitment. See
+    test_opening_the_players_modal_does_not_destroy_a_committed_total.
+
+    A detached total is the NEWER of the two facts. Reconciliation happens when
+    a player edits a breakdown (set_commit), not when a view is opened.
+    """
     from gamestate import GameState
     g = GameState(3, 25)
     g.set_commit(0, 4)
     g.set_commit(1, 3)
     g.set_willpower(11)
+    assert g.resync_willpower() == 11
+    assert g.willpower == 11 and g.willpower_detached is True
+    # and the breakdown is still there, untouched, for whoever wants to edit it
+    assert [p.commit for p in g.players] == [4, 3, 0]
+
+
+def test_resync_still_adopts_the_breakdown_when_the_two_already_agree():
+    """The guard is on `detached`, not on the method - when nothing is out of
+    sync there is nothing to protect and resync stays a plain no-op."""
+    from gamestate import GameState
+    g = GameState(3, 25)
+    g.set_commit(0, 4)
+    g.set_commit(1, 3)
     assert g.resync_willpower() == 7
     assert g.willpower == 7 and g.willpower_detached is False
+
+
+def test_solo_writes_the_total_through_to_the_one_players_commit():
+    """With one player the total IS that player's commit, so there is no
+    breakdown to lose and nothing to flag. This also makes willpower_detached
+    unreachable in solo, which is what retires the meaningless "?" the pill
+    used to show for a number the player had just typed."""
+    from gamestate import GameState
+    g = GameState(1, 29)
+    g.set_willpower(11)
+    assert g.players[0].commit == 11
+    assert g.willpower == 11
+    assert g.willpower_detached is False
 
 
 def test_editing_a_player_reattaches_the_total():
@@ -237,6 +274,34 @@ def test_detached_flag_round_trips():
     assert g2.willpower == 9
     assert g2.willpower_detached is True
     assert g2.players[0].commit == 3
+
+
+def test_end_round_reattaches_the_total_in_both_twins():
+    """end_round re-derives the total from the commits, so the flag has to
+    clear with it - otherwise the pills keep showing "?" for a number that is
+    once again exactly the sum.
+
+    The web twin did only half of this: it copied the willpower line out of
+    gamestate.py and dropped the willpower_detached line under it, so a total
+    typed in round 1 left "?" on screen for the whole of round 2. Firmware
+    behaviour plus a source check on the twin - endRound is not reachable from
+    a DOM-free node probe cheaply, and this is the drift that actually
+    happened.
+    """
+    g = GameState(3, 25)
+    g.set_commit(0, 4)
+    g.set_willpower(11)
+    assert g.willpower_detached is True
+    g.end_round()
+    assert g.willpower == 4 and g.willpower_detached is False
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    js = open(os.path.join(root, "docs", "js", "gamestate.js")).read()
+    body = js[js.index("  endRound() {"):]
+    body = body[:body.index("\n  }")]
+    assert "willpower_detached = false" in body, (
+        "docs/js/gamestate.js endRound() must clear willpower_detached, "
+        "mirroring gamestate.py end_round")
 
 
 def test_quest_history_records_each_resolution():

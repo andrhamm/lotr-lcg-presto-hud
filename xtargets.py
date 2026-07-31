@@ -51,7 +51,11 @@ TARGETS = {
 
     # -- in play -----------------------------------------------------------
     "enemies_in_play": {"label": "Enemies in play", "auto": None},
-    "nazgul_in_play": {"label": "Nazgûl enemies in play", "auto": None},
+    # ASCII, not "Nazgul" with a circumflex: these labels are drawn with
+    # bitmap8, whose glyph table has no accented characters, and an unknown
+    # glyph measures 4px - so a diacritic passes every layout test and only
+    # breaks on the device. See test_copy_is_ascii_only.
+    "nazgul_in_play": {"label": "Nazgul enemies in play", "auto": None},
     "dark_locations_in_play": {"label": "Dark locations in play", "auto": None},
     "quest_cards_in_play": {"label": "Quest cards in play", "auto": None},
     "allies_in_play": {"label": "Ally cards in play", "auto": None},

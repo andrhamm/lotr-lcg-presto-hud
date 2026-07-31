@@ -240,10 +240,40 @@ def test_commit_staging_thirds_step_and_floor_at_zero():
     assert game.staging == 1
 
 
-def test_commit_staging_caption_reads_reveal_estimate():
+def test_commit_staging_caption_reads_the_scenario_aware_estimate():
+    """Was "+%d reveal estimate", where the number was
+    STAGING_HIGH_PER_PLAYER - a constant, so every scenario ever published
+    showed the same figure. It is now the worst printed threat in THIS
+    scenario's own gathered pool, computed at build time."""
+    from viewcopy import STAGING
     hw, pal, game, screen = _setup("quest_commit")
     screen.draw(hw, game, pal)
-    assert ("+%d reveal estimate" % game.staging_reveal_estimate()) in _texts(hw)
+    assert (STAGING["estimate"] % game.staging_reveal_estimate()) in _texts(hw)
+
+
+def test_the_estimate_follows_the_loaded_scenario_not_a_constant():
+    from viewcopy import STAGING
+    hw, pal, game, screen = _setup("quest_commit")
+    # The Oath: Spider Den prints 4, and Tangled Grove prints a literal X.
+    game.scenario = {"maxCardThreat": 4, "hasXThreat": True}
+    assert game.staging_reveal_estimate() == 4 * len(game.players)
+    assert game.staging_estimate_is_floor() is True
+    screen.draw(hw, game, pal)
+    # an X in the pool means the number is a floor, and the caption says so
+    assert (STAGING["estimate_x"] % (4 * len(game.players))) in _texts(hw)
+
+    # Passage Through Mirkwood tops out at 3 and prints no X.
+    hw2, pal2, game2, screen2 = _setup("quest_commit")
+    game2.scenario = {"maxCardThreat": 3}
+    assert game2.staging_reveal_estimate() == 3 * len(game2.players)
+    assert game2.staging_estimate_is_floor() is False
+
+
+def test_the_estimate_falls_back_when_no_scenario_is_loaded():
+    """Manual setup, or a save from before maxCardThreat was emitted."""
+    hw, pal, game, screen = _setup("quest_commit")
+    game.scenario = None
+    assert game.staging_reveal_estimate() == 3 * len(game.players)
 
 
 def test_commit_staging_tap_opens_counter():
@@ -996,3 +1026,46 @@ def test_other_play_views_still_gate_back_on_undo_history():
     screen.draw(hw, game, pal)
     ids = [b.id for b in screen.buttons]
     assert ("back",) not in ids and ("setup_back",) not in ids
+
+
+def test_the_allocation_plus_is_not_a_tap_target_once_the_budget_is_spent():
+    """auto_split hands out the whole budget on arrival, so in normal play the
+    "+" could never do anything - and it was drawn fully beveled anyway, so it
+    swallowed taps in silence. A control that cannot act must not look like
+    one. Observed in the 2026-07-30 playtest, trying to record Goblin Trail's
+    card-effect progress on this screen."""
+    hw, pal, game, screen = _setup("quest_resolution")
+    game.quest.update({"points": 8, "progress": 0})
+    game.pending_budget = 4
+    game.quest_outcome, game.quest_outcome_n = "success", 4
+    screen.draw(hw, game, pal)
+    a = screen.alloc
+    used = sum(a["locations"]) + a["quest"] + sum(a["side_quests"])
+    assert used == game.pending_budget, "auto_split should spend the budget"
+    ids = [b.id[0] for b in screen.buttons]
+    assert "ap" not in ids, "the + is still a tap target with nothing left to place"
+    assert "am" in ids, "the - must stay live so the split can be redistributed"
+
+
+def test_the_allocation_plus_comes_back_when_there_is_room():
+    hw, pal, game, screen = _setup("quest_resolution")
+    game.quest.update({"points": 8, "progress": 0})
+    game.pending_budget = 4
+    game.quest_outcome, game.quest_outcome_n = "success", 4
+    screen.draw(hw, game, pal)
+    minus = next(b for b in screen.buttons if b.id[0] == "am")
+    screen.on_button(minus, game)          # free one point back up
+    hw2 = FakeHardware()
+    screen.draw(hw2, game, Palette(hw2.display))
+    assert "ap" in [b.id[0] for b in screen.buttons]
+
+
+def test_the_allocation_minus_is_inert_when_nothing_is_allocated():
+    """The mirror case: a 0-point quest gives auto_split nowhere to place the
+    budget, so the "-" has nothing to pull back."""
+    hw, pal, game, screen = _setup("quest_resolution")
+    game.pending_budget = 4
+    game.quest_outcome, game.quest_outcome_n = "success", 4
+    screen.draw(hw, game, pal)
+    ids = [b.id[0] for b in screen.buttons]
+    assert "am" not in ids

@@ -142,6 +142,52 @@ def wrap_text(s, scale, max_w, measure):
     return lines
 
 
+def front_face(card):
+    """A card's front face, by POSITION - never by side letter.
+
+    Quest stage cards are not all ("A","B"). Measured over the 514 stage cards
+    in docs/data: 16 are ("C","D"), 5 are ("E","F"), 1 is ("G","H") and 4 are
+    ("A","A"), with 6 more running ("A","C") through ("A","H"). Looking the
+    front up as `side == "A"` therefore returned {} for 22 cards outright, so
+    the stage-advance panel drew an empty title AND claimed the stage had no
+    setup instructions - on cards that print plenty. faces[0] is the front on
+    every card in the catalog. Found in the 2026-07-30 playtest of The Oath.
+    """
+    faces = (card or {}).get("faces") or []
+    return faces[0] if faces else {}
+
+
+def back_face(card):
+    """A card's back face, by position. Same reason as front_face: the branch
+    preview looked its alternatives up as `side == "B"` and drew "?" for every
+    card whose faces are lettered anything else."""
+    faces = (card or {}).get("faces") or []
+    return faces[1] if len(faces) > 1 else {}
+
+
+MORE_MARKER = " [...] more"
+
+
+def fit_lines(measure, lines, max_lines, usable, more, marker=MORE_MARKER):
+    """Trim lines to max_lines, marking the cut with "[...] more" so a
+    truncated block never looks like the whole thing.
+
+    The marker has to be made room for, not appended and truncated - appending
+    then truncating cuts the marker itself down to "[...." and the affordance
+    silently disappears. Was a private method on QuestCardModal until the
+    stage-advance panel needed the same rule; one implementation, not two.
+    """
+    if len(lines) <= max_lines and not more:
+        return lines, False
+    keep = lines[:max_lines] or [""]
+    mw = measure(marker, BODY)
+    last = keep[-1]
+    while last and measure(last, BODY) + mw > usable:
+        last = last.rsplit(" ", 1)[0] if " " in last else last[:-1]
+    keep[-1] = last + marker
+    return keep, True
+
+
 def truncate_text(s, scale, max_w, measure):
     """Truncate s with '..' to fit max_w pixels at scale."""
     if measure(s, scale) <= max_w:

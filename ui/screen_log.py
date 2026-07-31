@@ -17,15 +17,27 @@ class ScreenLog:
     def __init__(self):
         self.buttons = []
         self.page = 0  # 0 = newest
+        # Story by default: phase transitions are hidden. They are identical
+        # every round, carry no game state, and the R<round>.<step> column
+        # already names the step - measured at 23 of 31 rows over two rounds.
+        # "All" is one tap away in the header, for replay/audit.
+        self.show_all = False
 
     def draw(self, hw, game, pal):
         d = hw.display
         self.buttons = []
         d.set_pen(pal.bg)
         d.clear()
-        draw_header(d, pal, game, self.buttons, title="Game Log", close=True)
+        # The filter lives in the round-stamp slot: on THIS screen the R#
+        # stamp is redundant, because every row already carries its own
+        # R<round>.<step> tag - which is exactly why that column exists. No new
+        # geometry, and the toggle sits where the eye already goes.
+        draw_header(d, pal, game, self.buttons, title="Game Log", close=True,
+                    round_label="All" if self.show_all else "Story",
+                    round_id=("filter",))
 
-        entries = list(reversed(game.log))
+        entries = [e for e in reversed(game.log)
+                   if self.show_all or e.get("cat", "move") != "phase"]
         pages = max(1, (len(entries) + PER_PAGE - 1) // PER_PAGE)
         self.page = min(self.page, pages - 1)
         chunk = entries[self.page * PER_PAGE:(self.page + 1) * PER_PAGE]
@@ -98,6 +110,10 @@ class ScreenLog:
         k = btn.id[0]
         if k == "nav":
             return ("goto", btn.id[1])
+        if k == "filter":
+            self.show_all = not self.show_all
+            self.page = 0        # row count changed under the pager
+            return True
         if k == "older":
             self.page += 1
             return True

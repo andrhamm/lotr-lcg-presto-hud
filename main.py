@@ -692,6 +692,13 @@ def main():
                                 "source": scn.get("source"), "kind": scn.get("kind"),
                                 "nightmare": difficulty == "Nightmare",
                                 "mode": difficulty,
+                                # Precomputed by build_card_data over the sets
+                                # this scenario actually gathers, so the staging
+                                # caption can name a real worst case instead of
+                                # a constant. See GameState.staging_reveal_
+                                # estimate.
+                                "maxCardThreat": scn.get("maxCardThreat"),
+                                "hasXThreat": scn.get("hasXThreat"),
                             }
                             stages = opts.data.get("quest", {}).get("stages", [])
                             game.preload_scenario(scenario_meta, stages)

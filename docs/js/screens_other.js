@@ -97,15 +97,26 @@ export class ScreenPhases {
 const REPLAY_Y = 348, REPLAY_H = 46, REPLAY_BTN_W = 56;
 
 export class ScreenLog {
-  constructor() { this.buttons = []; this.page = 0; }
+  // Story by default: phase transitions are hidden. They are identical every
+  // round, carry no game state, and the R<round>.<step> column already names
+  // the step - measured at 23 of 31 rows over two rounds. "All" is one tap
+  // away in the header, for replay/audit.
+  constructor() { this.buttons = []; this.page = 0; this.showAll = false; }
   draw(ctx, game) {
     // PER_PAGE dropped 13 -> 11 to free the transport row below (rows now end
     // at 336, transport 348..394, pager untouched at 420).
     const PER_PAGE = 11, ROW_H = 26;
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
-    drawHeader(ctx, game, this.buttons, { title: "Game Log", close: true });
-    const entries = [...game.log].reverse();
+    // The filter lives in the round-stamp slot: on THIS screen the R# stamp is
+    // redundant, because every row already carries its own R<round>.<step> tag
+    // - which is exactly why that column exists. No new geometry, and the
+    // toggle sits where the eye already goes.
+    drawHeader(ctx, game, this.buttons, { title: "Game Log", close: true,
+                                          roundLabel: this.showAll ? "All" : "Story",
+                                          roundId: ["filter"] });
+    const entries = [...game.log].reverse()
+      .filter(e => this.showAll || (e.cat ?? "move") !== "phase");
     const pages = Math.max(1, Math.ceil(entries.length / PER_PAGE));
     this.page = Math.min(this.page, pages - 1);
     const chunk = entries.slice(this.page * PER_PAGE, (this.page + 1) * PER_PAGE);
@@ -174,6 +185,11 @@ export class ScreenLog {
   onButton(btn, game) {
     const k = btn.id[0];
     if (k === "nav") return ["goto", btn.id[1]];
+    if (k === "filter") {
+      this.showAll = !this.showAll;
+      this.page = 0;        // row count changed under the pager
+      return true;
+    }
     if (k === "older") { this.page += 1; return true; }
     if (k === "newer") { this.page = Math.max(0, this.page - 1); return true; }
     // `|| null` turns the dispatcher's false into the router's
@@ -970,7 +986,13 @@ export class ScenarioOptionsScreen {
     textLeft(ctx, truncateText(name, BODY, 480 - 66 - 14), 66, 54, BODY, pal.gold);
     // "<pack> - tap to change" is an affordance a player reads, not chrome:
     // BODY. It clears SETS TO GATHER at y=100 (76 + 16 = 92).
-    textLeft(ctx, truncateText(`${pack} - tap to change`, BODY, 480 - 66 - 14), 66, 76, BODY, pal.dim);
+    // Truncate the PACK, never the composite. Truncating the whole string let a
+    // long pack name eat the instruction - "Two-Player Limited Edition Starter
+    // - tap .." - amputating the very affordance the line exists to advertise.
+    // Same shape as the name line above.
+    const tail = " - tap to change";
+    const packW = 480 - 66 - 14 - measureText(tail, BODY);
+    textLeft(ctx, truncateText(pack, BODY, packW) + tail, 66, 76, BODY, pal.dim);
     this.buttons.push(new Button(["retitle"], 8, 46, 464, 50));
 
     textLeft(ctx, "SETS TO GATHER", 16, 100, LABEL, pal.muted);

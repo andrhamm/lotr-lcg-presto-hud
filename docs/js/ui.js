@@ -194,6 +194,50 @@ export function wrapText(s, scale, maxW) {
   return lines;
 }
 
+// A card's front face, by POSITION - never by side letter.
+//
+// Quest stage cards are not all ("A","B"). Measured over the 514 stage cards in
+// docs/data: 16 are ("C","D"), 5 are ("E","F"), 1 is ("G","H") and 4 are
+// ("A","A"), with 6 more running ("A","C") through ("A","H"). Looking the front
+// up as `side === "A"` therefore returned {} for 22 cards outright, so the
+// stage-advance panel drew an empty title AND claimed the stage had no setup
+// instructions - on cards that print plenty. faces[0] is the front on every
+// card in the catalog. Found in the 2026-07-30 playtest of The Oath.
+export function frontFace(card) {
+  const faces = card?.faces ?? [];
+  return faces.length ? faces[0] : {};
+}
+
+// A card's back face, by position. Same reason as frontFace: the branch preview
+// looked its alternatives up as `side === "B"` and drew "?" for every card
+// whose faces are lettered anything else.
+export function backFace(card) {
+  const faces = card?.faces ?? [];
+  return faces.length > 1 ? faces[1] : {};
+}
+
+export const MORE_MARKER = " [...] more";
+
+// Trim lines to maxLines, marking the cut with "[...] more" so a truncated
+// block never looks like the whole thing.
+//
+// The marker has to be made room for, not appended and truncated - appending
+// then truncating cuts the marker itself down to "[...." and the affordance
+// silently disappears. Was a private method on QuestCardModal until the
+// stage-advance panel needed the same rule; one implementation, not two.
+export function fitLines(lines, maxLines, usable, more, marker = MORE_MARKER) {
+  if (lines.length <= maxLines && !more) return [lines, false];
+  const keep = lines.slice(0, maxLines);
+  if (!keep.length) keep.push("");
+  const mw = measureText(marker, BODY);
+  let last = keep[keep.length - 1];
+  while (last && measureText(last, BODY) + mw > usable) {
+    last = last.includes(" ") ? last.slice(0, last.lastIndexOf(" ")) : last.slice(0, -1);
+  }
+  keep[keep.length - 1] = last + marker;
+  return [keep, true];
+}
+
 export function truncateText(s, scale, maxW) {
   if (measureText(s, scale) <= maxW) return String(s);
   s = String(s);

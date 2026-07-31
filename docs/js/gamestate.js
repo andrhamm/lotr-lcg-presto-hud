@@ -195,6 +195,9 @@ export class Player {
 }
 
 export class GameState {
+  // Fallback only, for a game with no catalog scenario loaded (manual setup, or
+  // a save from before maxCardThreat was emitted). The real number comes from
+  // the scenario itself - see stagingRevealEstimate.
   static STAGING_HIGH_PER_PLAYER = 3;
 
   constructor(playerCount = 4, startingThreat = 0,
@@ -301,6 +304,11 @@ export class GameState {
     this.replay_step = -1;   // cursor INTO deltas, not a stack pointer:
                              // -1 = before the first delta, and deltas are
                              // never popped
+    // The log ENTRIES produced by the current action. Replaces a
+    // log.slice(-n) that assumed every entry of an action sits at the
+    // tail - false the moment logEvent coalesces into an earlier row.
+    this._action_entries = [];
+    this._last_phase_logged = null;
     this.messages = [];      // this action's log text, drained into the delta.
                              // Mirrors game["messages"].
     this._replay_moved = false;  // a cursor move happened inside the current
@@ -309,11 +317,41 @@ export class GameState {
 
   _now() { return this.clock ? this.clock() : null; }
 
-  logEvent(text) {
+  // `cat` classifies the entry so the Log screen can filter it:
+  //   "move"  something happened in the game. The DEFAULT, deliberately -
+  //           anything a caller forgets to tag stays visible.
+  //   "phase" a phase transition. Identical every round, carries no game
+  //           state, and the R<round>.<step> column already says it.
+  //   "tally" a number being dialled in on a stepper.
+  //
+  // `key` coalesces a tally. A run of taps on one stepper is ONE decision, not
+  // eight: committing 8 willpower used to write eight rows, and setting staging
+  // to 7 wrote five more. With a key, a repeat within the same (round, step)
+  // rewrites its own row in place instead of appending.
+  //
+  // Bounded by (key, round, step) on purpose, and broken by any intervening
+  // entry - re-opening a stepper later starts a NEW row, so *when* each change
+  // happened stays visible, which is the point of a log.
+  logEvent(text, cat = "move", key = null) {
+    const prev = this.log.length ? this.log[this.log.length - 1] : null;
+    if (key !== null && prev && prev.key === key
+        && prev.round === this.round && prev.step === this.step) {
+      this._seq += 1;
+      prev.seq = this._seq;
+      prev.text = text;
+      prev.t = this._now();
+      if (this.messages.length) this.messages[this.messages.length - 1] = text;
+      else this.messages.push(text);
+      return prev;
+    }
     this._seq += 1;
-    this.log.push({ seq: this._seq, round: this.round, step: this.step,
-                    text, t: this._now() });
+    const entry = { seq: this._seq, round: this.round, step: this.step,
+                    text, t: this._now(), cat };
+    if (key !== null) entry.key = key;
+    this.log.push(entry);
     this.messages.push(text);
+    this._action_entries.push(entry);
+    return entry;
   }
 
   adjustThreat(index, delta) {
@@ -333,9 +371,25 @@ export class GameState {
     this.logEvent(`P${index + 1} avoided elimination (card effect) - threat set to ${p.threat}`);
   }
 
+  // Worst printed threat on ONE revealed card, times the living players.
+  //
+  // This was `living * STAGING_HIGH_PER_PLAYER` with the constant pinned at 3,
+  // so it showed the same "+3" for every scenario ever published - a constant
+  // wearing the costume of a calculation, and wrong for The Oath, whose Spider
+  // Den prints 4. build_card_data.py now answers the question per scenario at
+  // build time, across the sets the scenario actually gathers, and stamps it on
+  // the index entry preloadScenario stores as this.scenario.
   stagingRevealEstimate() {
     const living = this.players.filter(p => !p.eliminated).length;
-    return living * GameState.STAGING_HIGH_PER_PLAYER;
+    const worst = (this.scenario ?? {}).maxCardThreat;
+    return living * (worst ? worst : GameState.STAGING_HIGH_PER_PLAYER);
+  }
+
+  // True when the pool holds a card whose printed threat is a literal X. Then
+  // the estimate is a floor, not a ceiling, and the caption has to say so
+  // rather than quote a number it knows can be exceeded.
+  stagingEstimateIsFloor() {
+    return Boolean((this.scenario ?? {}).hasXThreat);
   }
 
   dueNotifications() {
@@ -361,17 +415,27 @@ export class GameState {
   // appeared in the log.
   setWillpower(value) {
     const v = Math.max(0, value);
-    // Setting the total directly is the one way the two sources can disagree
-    // - unless the value happens to match the sum, in which case nothing is
-    // out of sync and there is nothing to flag.
-    const detached = v !== this.players.reduce((n, p) => n + p.commit, 0);
+    // Solo has no breakdown to lose: with one player the total IS that
+    // player's commit, so write it through. An identity, not a heuristic, and
+    // deliberately keyed on players.length rather than "one player not
+    // eliminated" - an eliminated player's stored commit is still real data.
+    let detached;
+    if (this.players.length === 1) {
+      this.players[0].commit = v;
+      detached = false;
+    } else {
+      // Setting the total directly is the one way the two sources can disagree
+      // - unless the value happens to match the sum, in which case nothing is
+      // out of sync and there is nothing to flag.
+      detached = v !== this.players.reduce((n, p) => n + p.commit, 0);
+    }
     if (v !== this.willpower) {
       // Two different facts, so two different sentences. Once the total is
       // set directly the per-player breakdown is unknown, and the log must
       // not imply one it does not have.
       this.logEvent(detached
         ? `Players committed ${v} willpower to the quest`
-        : `Willpower total ${v}, matching the player breakdown`);
+        : `Willpower total ${v}, matching the player breakdown`, "tally", "wp");
       this.willpower = v;
     }
     this.willpower_detached = detached;
@@ -382,19 +446,31 @@ export class GameState {
   setStaging(value) {
     const v = Math.max(0, value);
     if (v !== this.staging) {
-      this.logEvent(`Staging threat ${this.staging} -> ${v}`);
+      // State phrasing, not "%d -> %d". Coalescing rewrites the row in place,
+      // and a delta phrasing would then claim the run started wherever the last
+      // tap happened to be.
+      this.logEvent(`Staging area threat ${v}`, "tally", "stg");
       this.staging = v;
     }
     return this.staging;
   }
 
-  // Adopt the per-player breakdown as the questing total again.
+  // Adopt the per-player breakdown as the total, but ONLY when the two already
+  // agree.
   //
-  // Called when the players view is opened. The stored per-player values were
-  // never lost while the total was detached - they are simply no longer what
-  // the total says - so opening the view that shows them is the moment to
-  // make the two agree again.
+  // This used to overwrite the total unconditionally, and PlayersDetailModal
+  // called it from its constructor. So opening the players view during the
+  // quest phase - exactly what a Doomed keyword, Caught in a Web or a failed
+  // quest pushes you to do, to record the threat - silently threw away a
+  // committed total and replaced it with a stale sum. A solo player committed
+  // 11 willpower, tapped in +1 threat, and resolved the quest against 0. Found
+  // in the 2026-07-30 playtest of The Oath.
+  //
+  // A view that shows numbers must not rewrite them. Reconciliation still
+  // happens where it belongs: setCommit recomputes the total and clears the
+  // flag the moment a breakdown is actually edited.
   resyncWillpower() {
+    if (this.willpower_detached) return this.willpower;
     const total = this.players.reduce((n, p) => n + p.commit, 0);
     if (total !== this.willpower) {
       this.logEvent(`Willpower total ${this.willpower} -> ${total} (re-synced to the players)`);
@@ -427,9 +503,18 @@ export class GameState {
     if (v === "round_end") {
       this.logEvent(`End of Round ${this.round}`);
     } else if (isWindowView(v)) {
-      this.logEvent(`Action window: ${VIEW_LABELS[phaseViewOf(v)] ?? v}`);
+      // Action windows are no longer logged at all. A window is not a state
+      // change, its own screen names it, and the R<round>.<step> column already
+      // carries the step - it was 8 of the ~21 rows a round produced, every
+      // round, identically.
     } else {
-      this.logEvent(`Phase: ${VIEW_LABELS[v] ?? v}`);
+      // And a phase is logged only when the PHASE changes, not on every view
+      // transition. VIEW_ORDER has 21 entries but only 12 distinct phases.
+      const phase = VIEW_LABELS[v] ?? v;
+      if (phase !== this._last_phase_logged) {
+        this._last_phase_logged = phase;
+        this.logEvent(`Phase: ${phase}`, "phase");
+      }
     }
     // 7.3 and 7.4 happen on ARRIVAL at refresh, before its window opens.
     if (v === "refresh") this.applyRefresh();
@@ -643,7 +728,9 @@ export class GameState {
       this.logEvent(`Round ${this.round} ended: ${parts.length ? parts.join(", ") : "no changes"}`);
     }
     this.round += 1;
+    // commits persist as next round's defaults; refresh the derived total
     this.willpower = this.players.reduce((a, p) => a + p.commit, 0);
+    this.willpower_detached = false;
     this.quest_resolved = false;
     this.quest_outcome = null;
     this.refresh_applied = false;      // arm the next round's 7.3 / 7.4
@@ -980,6 +1067,7 @@ export class GameState {
   // before dispatching an action.
   beginAction() {
     this.messages = [];
+    this._action_entries = [];
     this._replay_moved = false;
     return this.snapshot();
   }
@@ -1012,8 +1100,8 @@ export class GameState {
     // Stamp this action's log entries with their delta index so the Log screen
     // can offer a jump target per row without matching on text. logEvent
     // appends to log and messages together, so the last N entries are ours.
-    const n = this.messages.length;
-    if (n) for (const e of this.log.slice(-n)) e.delta_i = this.replay_step;
+    for (const e of this._action_entries) e.delta_i = this.replay_step;
+    this._action_entries = [];
     this.messages = [];
     if (this.deltas.length > MAX_SAVED_DELTAS) {
       const drop = this.deltas.length - MAX_SAVED_DELTAS;

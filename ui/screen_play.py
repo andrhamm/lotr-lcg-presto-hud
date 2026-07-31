@@ -22,7 +22,7 @@ from ui.widgets import (Button, panel, bevel, text_center, text_left, ribbon,
                         BAND_PAD, band_line_h, pill, pill_width,
                         PILL_H, PILL_GAP, PILL_ROW_GAP,
                         truncate_text, draw_heart, draw_flag, disc, arc_runs, token,
-                        arrow_left, arrow_right,
+                        arrow_left, arrow_right, front_face,
                         wx_small)
 from ui.modal_counter import CounterModal
 from ui.modals import LocationPickModal
@@ -483,7 +483,9 @@ class ScreenPlay:
                 self.buttons.append(Button((key,), x + 36, y, half - 72, 84))
                 self.buttons.append(Button((key + "+",), x + half - 36, y, 36, 84))
                 if key == "stg":
-                    text_center(d, pal, "+%d reveal estimate" % game.staging_reveal_estimate(),
+                    fmt = (STAGING["estimate_x"] if game.staging_estimate_is_floor()
+                           else STAGING["estimate"])
+                    text_center(d, pal, fmt % game.staging_reveal_estimate(),
                                 x + half / 2, y + 64, BODY, pal.dim)
 
     # -- draw --------------------------------------------------------------
@@ -716,7 +718,11 @@ class ScreenPlay:
         first flip (1A -> 1B) that begins round 1. Reuses the standard zones
         (Task 8) - mirror of screen_play.js's _drawQuestSetup."""
         card = game.stages[game.stage_idx]["cards"][game.card_idx]
-        a_face = next((f for f in card["faces"] if f["side"] == "A"), {})
+        # By position, not by side letter - see widgets.front_face. 22 stage
+        # cards in the catalog have no "A" face at all, and this lookup used to
+        # yield {} for every one of them, so the setup screen claimed the stage
+        # had no Setup instructions.
+        a_face = front_face(card)
         # No bespoke title block. A centred amber stage label over a
         # DISPLAY-gold card name was this view's own invention - nothing else
         # in the app presents content that way - and it pushed the actual
@@ -891,10 +897,20 @@ class ScreenPlay:
             else:
                 mn = Button(("am", key, idx), mn_x, y + 6, btn_w, btn_h)
                 pl = Button(("ap", key, idx), pl_x, y + 6, btn_w, btn_h)
-                for b, s in ((mn, "-"), (pl, "+")):
-                    bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
-                    text_center(d, pal, s, b.x + btn_w / 2, b.y + 8, DISPLAY, pal.tan)
-                    self.buttons.append(b)
+                # A stepper that cannot act must not look like one. Both used
+                # to be drawn fully beveled at every value and the handler just
+                # returned - so at the budget cap the "+" swallowed taps in
+                # silence. Same hidden-not-disabled convention QuestCardModal's
+                # nav and LocationPickModal's Travel button already use: no
+                # bevel, dim glyph, and NOT registered as a target.
+                for b, s, live in ((mn, "-", used > 0),
+                                   (pl, "+", used < game.pending_budget)):
+                    if live:
+                        bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
+                        text_center(d, pal, s, b.x + btn_w / 2, b.y + 8, DISPLAY, pal.tan)
+                        self.buttons.append(b)
+                    else:
+                        text_center(d, pal, s, b.x + btn_w / 2, b.y + 8, DISPLAY, pal.border)
                 text_center(d, pal, str(add), cx_place, y + 10, DISPLAY,
                             pal.gold if add > 0 else pal.dim)
             text_center(d, pal, str(pts), cx_goal, y + 16, BODY, pal.tan)

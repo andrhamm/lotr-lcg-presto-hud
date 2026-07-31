@@ -95,6 +95,22 @@ def test_copy_is_ascii_only():
     assert not bad, "non-ASCII copy: %s" % bad[:5]
 
 
+def test_xtargets_labels_are_ascii_only():
+    """xtargets ships device-rendered stepper labels but had no ASCII gate.
+
+    _strings() walks viewcopy only, so "Nazgul enemies in play" sat in
+    xtargets.TARGETS with a circumflex for as long as the entry existed - drawn
+    on the counter modal, measured at 4px per unknown glyph, invisible to every
+    layout test. Same rule as test_copy_is_ascii_only, separate collector
+    because these are field labels rather than prose and the third-person and
+    spaced-dash rules do not govern them.
+    """
+    import xtargets
+    bad = [(k, v["label"]) for k, v in xtargets.TARGETS.items()
+           if any(ord(c) > 127 for c in v["label"])]
+    assert not bad, "non-ASCII xtargets label: %s" % bad
+
+
 def test_copy_uses_no_spaced_dash():
     """Use two sentences. A dash invites a trailing clause, and the trailing
     clause is where vague copy hides - splitting one such sentence is what

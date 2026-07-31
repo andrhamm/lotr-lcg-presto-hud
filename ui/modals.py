@@ -12,9 +12,10 @@ from ui.widgets import (Button, panel, bevel, text_center, text_left, button,
                         ring, wx_small, wrap_text, truncate_text, ribbon, ribbon_h,
                         stat_pill, phase_block, BAND_PAD, band_line_h,
                         prog_row_card, fill_bar, glyph, stepper_cluster,
+                        front_face, back_face, fit_lines,
                         ROW_H as W_ROW_H, ROW_H_COMPACT as W_ROW_H_COMPACT)
 from ui.counter import CounterState
-from viewcopy import PROGRESS_PLACEMENT, NO_CARD_TEXT
+from viewcopy import PROGRESS_PLACEMENT, NO_CARD_TEXT, QUEST_SETUP
 
 # Card gutter, matching the play screen's own band inset.
 MARGIN = 8
@@ -620,12 +621,14 @@ class PlayersDetailModal:
 
     def __init__(self, game):
         self.game = game
-        # Opening this view is what re-syncs the two sources. The per-player
-        # values were never lost while the total was detached - they are just
-        # no longer what the total says - so the moment the view that shows
-        # them opens, they become the truth again and the pills stop showing
-        # "?". See GameState.resync_willpower.
-        game.resync_willpower()
+        # This constructor used to call game.resync_willpower(), on the theory
+        # that opening the view that shows the per-player numbers made them the
+        # truth again. It did not: it overwrote a committed TOTAL with a stale
+        # sum. Opening this view mid-quest-phase - which recording a Doomed
+        # keyword or Caught in a Web forces - silently zeroed 11 committed
+        # willpower, and the quest then resolved against 0. A view that shows
+        # numbers must not rewrite them; reconciliation belongs in set_commit,
+        # which fires when a player actually edits a breakdown.
         self.buttons = []
         self.edit = None   # (i, stat, CounterState) while the inline pad is open
 
@@ -1264,10 +1267,19 @@ class LocationPickModal:
             # number and a separate "N qp": threat (black, on the light segment
             # that makes black possible) then quest points. Right-aligned so the
             # column lines up however long the name is.
-            pw = stat_pill(d, pal, 0, 0, e.get("threat") or 0,
-                           e.get("points") or 0, measure_only=True)
-            stat_pill(d, pal, 458 - pw, y + 8, e.get("threat") or 0,
-                      e.get("points") or 0)
+            # A card that prints a literal X gets an "X", not a 0. 58 faces in
+            # the catalog print X, mostly for threat, and rendering the absent
+            # number as 0 made Tangled Grove ("X is the number of locations in
+            # the staging area") read as the SAFEST location in the list - the
+            # one whose threat scales with the board. locations_for already
+            # hands the picker threatKind/pointsKind; only the pill threw them
+            # away. The tracker cannot resolve the count itself (xtargets marks
+            # locations_in_staging auto=None), so it shows X rather than
+            # inventing a number.
+            e_threat = "X" if e.get("threatKind") == "x" else (e.get("threat") or 0)
+            e_points = "X" if e.get("pointsKind") == "x" else (e.get("points") or 0)
+            pw = stat_pill(d, pal, 0, 0, e_threat, e_points, measure_only=True)
+            stat_pill(d, pal, 458 - pw, y + 8, e_threat, e_points)
             d.set_pen(pal.border)
             d.rectangle(8, y + self.ROW_H, 456, 1)
             self.buttons.append(Button(("row", e["id"]), 8, y, 456, self.ROW_H))
@@ -2237,12 +2249,22 @@ class ResolutionModal:
         g = self.game
         if g.quest["side"] == "A":
             card = g.stages[g.stage_idx]["cards"][g.card_idx]
-            face_a = next((f for f in card["faces"] if f["side"] == "A"), {})
-            return {"kind": "reveal", "stage_n": g.quest["stage_n"], "face_a": face_a,
+            # BOTH faces. The back is not decoration: 75 of 514 stage cards
+            # print their When Revealed on the back and nothing on the front,
+            # so reading only the front told the player there was nothing to do
+            # on cards that add enemies to staging or gate the stage's defeat.
+            return {"kind": "reveal", "stage_n": g.quest["stage_n"],
+                    "face_a": front_face(card), "face_b": back_face(card),
                     "next_points": card["questPoints"]}
         nxt_idx = g.stage_idx + 1
         if nxt_idx >= len(g.stages):
-            return {"kind": "victory", "cleared": g.quest_label()}
+            # The final stage's back face carries the win condition, and often
+            # a restriction on it ("cannot be defeated while X is in play").
+            # That sentence is the entire reason the victory prompt offers a
+            # "Not yet" button, so it has to travel with the step.
+            final = g.stages[g.stage_idx]["cards"][g.card_idx]
+            return {"kind": "victory", "cleared": g.quest_label(),
+                    "face_b": back_face(final)}
         nxt = g.stages[nxt_idx]
         if len(nxt["cards"]) > 1 and self.branch_pick is None:
             return {"kind": "branch", "cards": nxt["cards"], "mode": nxt.get("branch", "choice")}
@@ -2307,26 +2329,86 @@ class ResolutionModal:
         text_center(d, pal, "All resolved", 240, 200, DISPLAY, pal.gold)
         self._cta(d, pal, "Continue", ("close",))
 
-    def _draw_reveal(self, d, pal, st):
-        text_center(d, pal, "STAGE %d REVEALED" % st["stage_n"], 240, 64, BODY, pal.amber)
-        name = truncate_text(st["face_a"].get("name") or "", DISPLAY, 432, d.measure_text)
-        text_center(d, pal, name, 240, 92, DISPLAY, pal.gold)
-        tip_x, tip_w, tip_y = 24, 432, 130
-        ribbon_h, pad_top, line_h, pad_bottom, max_lines = 22, 10, 24, 10, 5
-        raw = st["face_a"].get("text")
-        body = raw if raw else "No setup instructions for this stage."
-        lines = wrap_text(body, BODY, tip_w - 28, measure=d.measure_text)[:max_lines]
-        tip_h = ribbon_h + pad_top + len(lines) * line_h + pad_bottom
-        d.set_pen(pal.border_gold); d.rectangle(tip_x, tip_y, tip_w, tip_h)
-        d.set_pen(pal.bg); d.rectangle(tip_x + 2, tip_y + 2, tip_w - 4, tip_h - 4)
-        d.set_pen(pal.border_gold); d.rectangle(tip_x + 4, tip_y + 4, tip_w - 8, tip_h - 8)
-        d.set_pen(pal.scroll); d.rectangle(tip_x + 6, tip_y + 6, tip_w - 12, tip_h - 12)
-        d.set_pen(pal.border_gold); d.rectangle(tip_x, tip_y, tip_w, ribbon_h)
-        text_left(d, pal, "STAGE ADVANCE - RESOLVE NOW", tip_x + 10, tip_y + 6, LABEL, pal.bg, shadow=False)
-        ly = tip_y + ribbon_h + pad_top
+    # Two bands of card text sit between the panel top (130) and the CTA (404).
+    # Each band costs 42px of chrome (22 ribbon + 10/10 padding) and 24px per
+    # line, and they sit 8px apart: (396 - 130 - 8 - 84) / 24 = 7 lines to
+    # share. The front takes up to 5 and the back takes the remainder, so a
+    # long front cannot squeeze the back out of existence.
+    REVEAL_Y = 130
+    REVEAL_W = 432
+    REVEAL_GAP = 8
+    REVEAL_LINES = 7
+    REVEAL_FRONT_MAX = 5
+
+    def _reveal_band(self, d, pal, y, label, text, max_lines):
+        """One scroll-edged band of card text. Returns (height, was_cut)."""
+        tip_x, tip_w = 24, self.REVEAL_W
+        rib_h, pad_top, line_h, pad_bottom = 22, 10, 24, 10
+        usable = tip_w - 28
+        wrapped = wrap_text(text, BODY, usable, measure=d.measure_text)
+        lines, cut = fit_lines(d.measure_text, wrapped, max_lines, usable,
+                               len(wrapped) > max_lines)
+        tip_h = rib_h + pad_top + len(lines) * line_h + pad_bottom
+        d.set_pen(pal.border_gold); d.rectangle(tip_x, y, tip_w, tip_h)
+        d.set_pen(pal.bg); d.rectangle(tip_x + 2, y + 2, tip_w - 4, tip_h - 4)
+        d.set_pen(pal.border_gold); d.rectangle(tip_x + 4, y + 4, tip_w - 8, tip_h - 8)
+        d.set_pen(pal.scroll); d.rectangle(tip_x + 6, y + 6, tip_w - 12, tip_h - 12)
+        d.set_pen(pal.border_gold); d.rectangle(tip_x, y, tip_w, rib_h)
+        text_left(d, pal, label, tip_x + 10, y + 6, LABEL, pal.bg, shadow=False)
+        ly = y + rib_h + pad_top
         for ln in lines:
             text_left(d, pal, ln, tip_x + 14, ly, BODY, pal.tan)
             ly += line_h
+        return tip_h, cut
+
+    def _draw_reveal(self, d, pal, st):
+        """Both faces, because the back is where a stage's rules often live.
+
+        This drew st["face_a"]["text"] alone and printed "No setup instructions
+        for this stage." when it was empty. 75 of 514 stage cards in the catalog
+        print their When Revealed on the BACK and nothing on the front, so the
+        panel actively told the player to do nothing on cards that add enemies
+        to staging or gate the stage's defeat. The Oath's stage 2 is one, and
+        its stage 3B carries the win condition. Found in the 2026-07-30
+        playtest.
+        """
+        text_center(d, pal, "STAGE %d REVEALED" % st["stage_n"], 240, 64, BODY, pal.amber)
+        face_a, face_b = st["face_a"], st.get("face_b") or {}
+        # Fall back to the back's name: on the 22 cards with no "A" face at all
+        # the front lookup used to yield {} and the title rendered empty.
+        name = truncate_text(face_a.get("name") or face_b.get("name") or "",
+                             DISPLAY, 432, d.measure_text)
+        text_center(d, pal, name, 240, 92, DISPLAY, pal.gold)
+
+        a_text, b_text = face_a.get("text"), face_b.get("text")
+        y, cut = self.REVEAL_Y, False
+        if not a_text and not b_text:
+            _, cut = self._reveal_band(d, pal, y, "STAGE ADVANCE - RESOLVE NOW",
+                                       QUEST_SETUP["none"] % st["stage_n"],
+                                       self.REVEAL_LINES)
+        else:
+            budget = self.REVEAL_LINES
+            if a_text:
+                cap = self.REVEAL_FRONT_MAX if b_text else budget
+                h, c = self._reveal_band(d, pal, y, "STAGE ADVANCE - RESOLVE NOW",
+                                         a_text, cap)
+                y += h + self.REVEAL_GAP
+                budget -= (h - 42) // 24
+                cut = cut or c
+            if b_text:
+                # "QUEST SIDE" only distinguishes it FROM the front band. When
+                # the back is the only text - the 75-card case - it is what the
+                # player has to resolve, so it wears the action label.
+                _, c = self._reveal_band(
+                    d, pal, y, "QUEST SIDE" if a_text else "STAGE ADVANCE - RESOLVE NOW",
+                    b_text, max(2, budget))
+                cut = cut or c
+        # Truncated text is a wrong rule, so the cut always comes with a way to
+        # read the rest: the whole panel opens the card. Same pending-flag route
+        # main.py already uses - a modal cannot open a modal.
+        if cut:
+            self.buttons.append(Button(("more_card",), 24, self.REVEAL_Y,
+                                       self.REVEAL_W, 396 - self.REVEAL_Y))
         self._cta(d, pal, "Flip to Side B  ->  %d qp" % st["next_points"], ("do_flip",))
 
     def _draw_location(self, d, pal, st):
@@ -2366,7 +2448,7 @@ class ResolutionModal:
         usable = 432 - 28
         y = self.BRANCH_Y0
         for i, card in enumerate(cards):
-            b_face = next((f for f in card["faces"] if f["side"] == "B"), {})
+            b_face = back_face(card)
             b = Button(("pick_branch", i), 24, y, 432, row_h)
             sel = self.branch_pick == i
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn_ok if sel else pal.btn, t=3)
@@ -2396,8 +2478,30 @@ class ResolutionModal:
         self._cta(d, pal, "Reveal Stage %d" % st["next_stage"], ("do_advance",))
 
     def _draw_victory(self, d, pal, st):
+        """The final stage's own text, so "Not yet" has a stated reason.
+
+        This screen offered Declare Victory with nothing but "That was the
+        final stage!" above it. The sentence that decides whether the game is
+        actually won - "This stage cannot be defeated while Goblin Troop is in
+        play" - is printed on the stage's BACK face, which nothing on this
+        screen ever read. In the 2026-07-30 playtest the HUD offered victory
+        with Goblin Troop alive in the staging area.
+        """
         text_center(d, pal, "Quest %s cleared" % st["cleared"], 240, 70, BODY, pal.tan)
         text_center(d, pal, "That was the final stage!", 240, 110, DISPLAY, pal.gold)
+        b_text = (st.get("face_b") or {}).get("text")
+        if b_text:
+            usable = 432 - 28
+            wrapped = wrap_text(b_text, BODY, usable, measure=d.measure_text)
+            # 150 to 330 is 180px = 7 lines at the 24px prose pitch.
+            lines, cut = fit_lines(d.measure_text, wrapped, 7, usable,
+                                   len(wrapped) > 7)
+            ly = 150
+            for ln in lines:
+                text_left(d, pal, ln, 38, ly, BODY, pal.muted)
+                ly += 24
+            if cut:
+                self.buttons.append(Button(("more_card",), 24, 150, 432, ly - 150))
         self._cta(d, pal, "Declare Victory", ("declare_victory",), y=340)
         self._cta(d, pal, "Not yet - keep playing", ("continue_without_victory",), y=404, ok=False)
 
@@ -2429,7 +2533,20 @@ class ResolutionModal:
             g.set_game_over("victory")
             return "close"
         if k == "continue_without_victory":
-            self.step = self._derive(); return "redraw"
+            # Must CLOSE, not redraw. _derive() recomputes the same victory step
+            # while progress >= points, so redrawing put the identical screen
+            # back and the tap read as a no-op - the player pressed it three
+            # times in the 2026-07-30 playtest before reaching for DONE.
+            g.log_event("Victory declined - the stage is not defeated yet")
+            return "close"
+        if k == "more_card":
+            # A modal cannot open a modal, so hand off through the router's
+            # pending flags: main.py checks pending_quest_card BEFORE
+            # pending_resolution, so the card opens, and closing it brings this
+            # modal straight back with its step re-derived from live state.
+            g.pending_quest_card = True
+            g.pending_resolution = "forced" if self.force_advance else True
+            return "close"
         if k == "resolve_side_quest":
             i = self.step["idx"]
             g.log_event("Side quest %d completed (resolution)" % (i + 1))
@@ -2533,19 +2650,9 @@ class QuestCardModal:
     MORE = " [...] more"
 
     def _fit(self, d, lines, max_lines, usable, more):
-        """Trims to max_lines, marking the cut with "[...] more" so a
-        truncated card never looks like the whole card. The marker has to be
-        made room for, not appended and truncated - doing the latter cuts the
-        marker itself down to "[...." and the affordance disappears."""
-        if len(lines) <= max_lines and not more:
-            return lines, False
-        keep = lines[:max_lines] or [""]
-        mw = d.measure_text(self.MORE, BODY)
-        last = keep[-1]
-        while last and d.measure_text(last, BODY) + mw > usable:
-            last = last.rsplit(" ", 1)[0] if " " in last else last[:-1]
-        keep[-1] = last + self.MORE
-        return keep, True
+        """Delegates to widgets.fit_lines - the stage-advance panel needs the
+        same measured-marker rule, so there is one implementation of it."""
+        return fit_lines(d.measure_text, lines, max_lines, usable, more, self.MORE)
 
     def _nav(self, d, pal, pages):
         """Prev/Next, equal width, pinned to the bottom and labelled with the

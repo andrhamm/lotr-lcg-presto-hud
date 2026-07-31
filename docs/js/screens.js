@@ -6,8 +6,9 @@ import { pal, Button, rect, panel, bevel, textLeft, textCenter, button,
          disc, arcRuns, ring, token, wxSmall, BAND_PAD, bandLineH,
          DISPLAY, BODY, LABEL , statPill,
          progRowCard, fillBar, glyph, stepperCluster, phaseBlock,
+         frontFace, backFace, fitLines,
          ROW_H, ROW_H_COMPACT } from "./ui.js";
-import { PROGRESS_PLACEMENT, NO_CARD_TEXT } from "./viewcopy.js";
+import { PROGRESS_PLACEMENT, NO_CARD_TEXT, QUEST_SETUP } from "./viewcopy.js";
 import { measureText } from "./metrics.js";
 import * as xtargets from "./xtargets.js";
 import * as icons from "./icons.js";
@@ -77,6 +78,11 @@ export function drawHeader(ctx, game, buttons, { highlight = null, title = null,
   rect(ctx, 0, h, 480, 1, pal.border);
   if (close) {
     buttons.push(new Button(["nav", "close"], 408, 4, 64, 32));
+    // ...unless the screen put its own control in the round-stamp slot.
+    // roundId used to be honoured on the default branch only, so the Game
+    // Log's Story/All filter drew a label that nothing could tap. DONE sits at
+    // x=408 and the slot at 0..150, so they cannot shadow each other.
+    if (roundId) buttons.push(new Button(roundId, 0, 0, 150, h));
   } else if (closeLeft) {
     buttons.push(new Button(["nav", "close"], 0, 0, 150, h));
     buttons.push(new Button(["nav", "settings"], 330, 0, 150, h));
@@ -465,8 +471,18 @@ export class LocationPickModal {
       // and a separate "N qp": threat (black, on the light segment that makes
       // black possible) then quest points. Right-aligned so the column lines up
       // however long the name is.
-      const pw = statPill(ctx, 0, 0, e.threat ?? 0, e.points ?? 0, { measure: true });
-      statPill(ctx, 458 - pw, y + 8, e.threat ?? 0, e.points ?? 0);
+      // A card that prints a literal X gets an "X", not a 0. 58 faces in the
+      // catalog print X, mostly for threat, and rendering the absent number as
+      // 0 made Tangled Grove ("X is the number of locations in the staging
+      // area") read as the SAFEST location in the list - the one whose threat
+      // scales with the board. locationsFor already hands the picker
+      // threatKind/pointsKind; only the pill threw them away. The tracker
+      // cannot resolve the count itself (xtargets marks locations_in_staging
+      // auto=null), so it shows X rather than inventing a number.
+      const eThreat = e.threatKind === "x" ? "X" : (e.threat ?? 0);
+      const ePoints = e.pointsKind === "x" ? "X" : (e.points ?? 0);
+      const pw = statPill(ctx, 0, 0, eThreat, ePoints, { measure: true });
+      statPill(ctx, 458 - pw, y + 8, eThreat, ePoints);
       rect(ctx, 8, y + S.ROW_H, 456, 1, pal.border);
       this.buttons.push(new Button(["row", e.id], 8, y, 456, S.ROW_H));
       y += S.ROW_STRIDE;
@@ -633,11 +649,14 @@ export class PlayersDetailModal {
 
   constructor(game) {
     this.game = game;
-    // Opening this view is what re-syncs the two sources. The per-player
-    // values were never lost while the total was detached - they are just no
-    // longer what the total says - so the moment the view that shows them
-    // opens, they become the truth again and the pills stop showing "?".
-    game.resyncWillpower();
+    // This constructor used to call game.resyncWillpower(), on the theory that
+    // opening the view that shows the per-player numbers made them the truth
+    // again. It did not: it overwrote a committed TOTAL with a stale sum.
+    // Opening this view mid-quest-phase - which recording a Doomed keyword or
+    // Caught in a Web forces - silently zeroed 11 committed willpower, and the
+    // quest then resolved against 0. A view that shows numbers must not
+    // rewrite them; reconciliation belongs in setCommit, which fires when a
+    // player actually edits a breakdown.
     this.buttons = [];
     this.edit = null;   // { i, stat, state: CounterState } while the inline pad is open
   }
@@ -1610,6 +1629,17 @@ export class SailingModal {
 }
 
 export class ResolutionModal {
+  // Two bands of card text sit between the panel top (130) and the CTA (404).
+  // Each band costs 42px of chrome (22 ribbon + 10/10 padding) and 24px per
+  // line, and they sit 8px apart: (396 - 130 - 8 - 84) / 24 = 7 lines to share.
+  // The front takes up to 5 and the back takes the remainder, so a long front
+  // cannot squeeze the back out of existence.
+  static REVEAL_Y = 130;
+  static REVEAL_W = 432;
+  static REVEAL_GAP = 8;
+  static REVEAL_LINES = 7;
+  static REVEAL_FRONT_MAX = 5;
+
   constructor(game, forceAdvance = false) {
     this.game = game;
     this.buttons = [];
@@ -1623,13 +1653,22 @@ export class ResolutionModal {
     const g = this.game;
     if (g.quest.side === "A") {
       const card = g.stages[g.stage_idx].cards[g.card_idx];
-      const faceA = card.faces.find(f => f.side === "A") ?? {};
-      return { kind: "reveal", stage_n: g.quest.stage_n, face_a: faceA,
+      // BOTH faces. The back is not decoration: 75 of 514 stage cards print
+      // their When Revealed on the back and nothing on the front, so reading
+      // only the front told the player there was nothing to do on cards that
+      // add enemies to staging or gate the stage's defeat.
+      return { kind: "reveal", stage_n: g.quest.stage_n,
+               face_a: frontFace(card), face_b: backFace(card),
                next_points: card.questPoints };
     }
     const nxtIdx = g.stage_idx + 1;
     if (nxtIdx >= g.stages.length) {
-      return { kind: "victory", cleared: g.questLabel() };
+      // The final stage's back face carries the win condition, and often a
+      // restriction on it ("cannot be defeated while X is in play"). That
+      // sentence is the entire reason the victory prompt offers a "Not yet"
+      // button, so it has to travel with the step.
+      const final = g.stages[g.stage_idx].cards[g.card_idx];
+      return { kind: "victory", cleared: g.questLabel(), face_b: backFace(final) };
     }
     const nxt = g.stages[nxtIdx];
     if (nxt.cards.length > 1 && this.branchPick === null) {
@@ -1696,26 +1735,76 @@ export class ResolutionModal {
     this._cta(ctx, "Continue", ["close"]);
   }
 
-  _drawReveal(ctx, st) {
-    textCenter(ctx, `STAGE ${st.stage_n} REVEALED`, 240, 64, BODY, pal.amber);
-    const name = truncateText(st.face_a.name || "", DISPLAY, 432);
-    textCenter(ctx, name, 240, 92, DISPLAY, pal.gold);
-    const tipX = 24, tipW = 432, tipY = 130;
-    const ribbonH = 22, padTop = 10, lineH = 24, padBottom = 10, maxLines = 5;
-    const raw = st.face_a.text;
-    const body = raw ? raw : "No setup instructions for this stage.";
-    const lines = wrapText(body, BODY, tipW - 28).slice(0, maxLines);
-    const tipH = ribbonH + padTop + lines.length * lineH + padBottom;
-    rect(ctx, tipX, tipY, tipW, tipH, pal.border_gold);
-    rect(ctx, tipX + 2, tipY + 2, tipW - 4, tipH - 4, pal.bg);
-    rect(ctx, tipX + 4, tipY + 4, tipW - 8, tipH - 8, pal.border_gold);
-    rect(ctx, tipX + 6, tipY + 6, tipW - 12, tipH - 12, pal.scroll);
-    rect(ctx, tipX, tipY, tipW, ribbonH, pal.border_gold);
-    textLeft(ctx, "STAGE ADVANCE - RESOLVE NOW", tipX + 10, tipY + 6, LABEL, pal.bg, false);
-    let ly = tipY + ribbonH + padTop;
+  // One scroll-edged band of card text. Returns [height, wasCut].
+  _revealBand(ctx, y, label, text, maxLines) {
+    const tipX = 24, tipW = ResolutionModal.REVEAL_W;
+    const ribH = 22, padTop = 10, lineH = 24, padBottom = 10;
+    const usable = tipW - 28;
+    const wrapped = wrapText(text, BODY, usable);
+    const [lines, cut] = fitLines(wrapped, maxLines, usable, wrapped.length > maxLines);
+    const tipH = ribH + padTop + lines.length * lineH + padBottom;
+    rect(ctx, tipX, y, tipW, tipH, pal.border_gold);
+    rect(ctx, tipX + 2, y + 2, tipW - 4, tipH - 4, pal.bg);
+    rect(ctx, tipX + 4, y + 4, tipW - 8, tipH - 8, pal.border_gold);
+    rect(ctx, tipX + 6, y + 6, tipW - 12, tipH - 12, pal.scroll);
+    rect(ctx, tipX, y, tipW, ribH, pal.border_gold);
+    textLeft(ctx, label, tipX + 10, y + 6, LABEL, pal.bg, false);
+    let ly = y + ribH + padTop;
     for (const ln of lines) {
       textLeft(ctx, ln, tipX + 14, ly, BODY, pal.tan);
       ly += lineH;
+    }
+    return [tipH, cut];
+  }
+
+  // Both faces, because the back is where a stage's rules often live.
+  //
+  // This drew st.face_a.text alone and printed "No setup instructions for this
+  // stage." when it was empty. 75 of 514 stage cards in the catalog print their
+  // When Revealed on the BACK and nothing on the front, so the panel actively
+  // told the player to do nothing on cards that add enemies to staging or gate
+  // the stage's defeat. The Oath's stage 2 is one, and its stage 3B carries the
+  // win condition. Found in the 2026-07-30 playtest.
+  _drawReveal(ctx, st) {
+    textCenter(ctx, `STAGE ${st.stage_n} REVEALED`, 240, 64, BODY, pal.amber);
+    const faceA = st.face_a, faceB = st.face_b ?? {};
+    // Fall back to the back's name: on the 22 cards with no "A" face at all the
+    // front lookup used to yield {} and the title rendered empty.
+    const name = truncateText(faceA.name || faceB.name || "", DISPLAY, 432);
+    textCenter(ctx, name, 240, 92, DISPLAY, pal.gold);
+
+    const aText = faceA.text, bText = faceB.text;
+    let y = ResolutionModal.REVEAL_Y, cut = false;
+    if (!aText && !bText) {
+      const [, c] = this._revealBand(ctx, y, "STAGE ADVANCE - RESOLVE NOW",
+                                     QUEST_SETUP.none.replace("%s", st.stage_n),
+                                     ResolutionModal.REVEAL_LINES);
+      cut = c;
+    } else {
+      let budget = ResolutionModal.REVEAL_LINES;
+      if (aText) {
+        const cap = bText ? ResolutionModal.REVEAL_FRONT_MAX : budget;
+        const [h, c] = this._revealBand(ctx, y, "STAGE ADVANCE - RESOLVE NOW", aText, cap);
+        y += h + ResolutionModal.REVEAL_GAP;
+        budget -= (h - 42) / 24;
+        cut = cut || c;
+      }
+      if (bText) {
+        // "QUEST SIDE" only distinguishes it FROM the front band. When the back
+        // is the only text - the 75-card case - it is what the player has to
+        // resolve, so it wears the action label.
+        const label = aText ? "QUEST SIDE" : "STAGE ADVANCE - RESOLVE NOW";
+        const [, c] = this._revealBand(ctx, y, label, bText, Math.max(2, budget));
+        cut = cut || c;
+      }
+    }
+    // Truncated text is a wrong rule, so the cut always comes with a way to
+    // read the rest: the whole panel opens the card. Same pending-flag route
+    // main.js already uses - a modal cannot open a modal.
+    if (cut) {
+      this.buttons.push(new Button(["more_card"], 24, ResolutionModal.REVEAL_Y,
+                                   ResolutionModal.REVEAL_W,
+                                   396 - ResolutionModal.REVEAL_Y));
     }
     this._cta(ctx, `Flip to Side B  ->  ${st.next_points} qp`, ["do_flip"]);
   }
@@ -1757,7 +1846,7 @@ export class ResolutionModal {
     const usable = 432 - 28;
     let y = S.BRANCH_Y0;
     st.cards.forEach((card, i) => {
-      const bFace = card.faces.find(f => f.side === "B") ?? {};
+      const bFace = backFace(card);
       const b = new Button(["pick_branch", i], 24, y, 432, rowH);
       const sel = this.branchPick === i;
       bevel(ctx, b.x, b.y, b.w, b.h, sel ? pal.btn_ok : pal.btn, false, 3);
@@ -1791,9 +1880,30 @@ export class ResolutionModal {
     this._cta(ctx, `Reveal Stage ${st.next_stage}`, ["do_advance"]);
   }
 
+  // The final stage's own text, so "Not yet" has a stated reason.
+  //
+  // This screen offered Declare Victory with nothing but "That was the final
+  // stage!" above it. The sentence that decides whether the game is actually
+  // won - "This stage cannot be defeated while Goblin Troop is in play" - is
+  // printed on the stage's BACK face, which nothing on this screen ever read.
+  // In the 2026-07-30 playtest the HUD offered victory with Goblin Troop alive
+  // in the staging area.
   _drawVictory(ctx, st) {
     textCenter(ctx, `Quest ${st.cleared} cleared`, 240, 70, BODY, pal.tan);
     textCenter(ctx, "That was the final stage!", 240, 110, DISPLAY, pal.gold);
+    const bText = (st.face_b ?? {}).text;
+    if (bText) {
+      const usable = 432 - 28;
+      const wrapped = wrapText(bText, BODY, usable);
+      // 150 to 330 is 180px = 7 lines at the 24px prose pitch.
+      const [lines, cut] = fitLines(wrapped, 7, usable, wrapped.length > 7);
+      let ly = 150;
+      for (const ln of lines) {
+        textLeft(ctx, ln, 38, ly, BODY, pal.muted);
+        ly += 24;
+      }
+      if (cut) this.buttons.push(new Button(["more_card"], 24, 150, 432, ly - 150));
+    }
     this._cta(ctx, "Declare Victory", ["declare_victory"], 340);
     this._cta(ctx, "Not yet - keep playing", ["continue_without_victory"], 404, 56, false);
   }
@@ -1828,7 +1938,23 @@ export class ResolutionModal {
       return "redraw";
     }
     if (k === "declare_victory") { g.setGameOver("victory"); return "close"; }
-    if (k === "continue_without_victory") { this.step = this._derive(); return "redraw"; }
+    if (k === "continue_without_victory") {
+      // Must CLOSE, not redraw. _derive() recomputes the same victory step
+      // while progress >= points, so redrawing put the identical screen back
+      // and the tap read as a no-op - the player pressed it three times in the
+      // 2026-07-30 playtest before reaching for DONE.
+      g.logEvent("Victory declined - the stage is not defeated yet");
+      return "close";
+    }
+    if (k === "more_card") {
+      // A modal cannot open a modal, so hand off through the router's pending
+      // flags: main.js checks pending_quest_card BEFORE pending_resolution, so
+      // the card opens, and closing it brings this modal straight back with its
+      // step re-derived from live state.
+      g.pending_quest_card = true;
+      g.pending_resolution = this.forceAdvance ? "forced" : true;
+      return "close";
+    }
     if (k === "resolve_side_quest") {
       const i = this.step.idx;
       g.logEvent(`Side quest ${i + 1} completed (resolution)`);
@@ -2338,17 +2464,10 @@ export class QuestCardModal {
   // The marker has to be made room for, not appended and truncated - doing
   // the latter cuts the marker itself down to "[...." and the affordance
   // disappears.
+  // Delegates to ui.js fitLines - the stage-advance panel needs the same
+  // measured-marker rule, so there is one implementation of it.
   _fit(lines, maxLines, usable, more) {
-    if (lines.length <= maxLines && !more) return [lines, false];
-    const keep = lines.slice(0, maxLines);
-    if (!keep.length) keep.push("");
-    const mw = measureText(QuestCardModal.MORE, BODY);
-    let last = keep[keep.length - 1];
-    while (last && measureText(last, BODY) + mw > usable) {
-      last = last.includes(" ") ? last.slice(0, last.lastIndexOf(" ")) : last.slice(0, -1);
-    }
-    keep[keep.length - 1] = last + QuestCardModal.MORE;
-    return [keep, true];
+    return fitLines(lines, maxLines, usable, more, QuestCardModal.MORE);
   }
 
   _nav(ctx, pages) {

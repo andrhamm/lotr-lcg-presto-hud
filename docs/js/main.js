@@ -416,6 +416,10 @@ function main() {
           slug: scn.slug, name: scn.name, pack: scn.pack, cycle: scn.cycle,
           source: scn.source, kind: scn.kind,
           nightmare: difficulty === "Nightmare", mode: difficulty,
+          // Precomputed by build_card_data over the sets this scenario actually
+          // gathers, so the staging caption can name a real worst case instead
+          // of a constant. See stagingRevealEstimate.
+          maxCardThreat: scn.maxCardThreat, hasXThreat: scn.hasXThreat,
         };
         game.preloadScenario(scenarioMeta, opts.data?.quest?.stages ?? []);
         game.view = "quest_setup";

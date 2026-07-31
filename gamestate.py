@@ -360,6 +360,13 @@ class GameState:
         self.replay_step = -1        # cursor INTO deltas. -1 = before the
                                      # first delta. Not a stack pointer:
                                      # deltas are never popped.
+        # The log ENTRIES produced by the current action. Replaces a
+        # self.log[-n:] slice that assumed every entry of an action sits
+        # at the tail - false the moment log_event coalesces into an
+        # earlier row. Holds the dicts themselves, so stamping is by
+        # identity rather than by position.
+        self._action_entries = []
+        self._last_phase_logged = None
         self.messages = []           # log text produced by the current action,
                                      # drained into the next delta's metadata.
                                      # Mirrors game["messages"].
@@ -370,12 +377,47 @@ class GameState:
     def _now(self):
         return self.clock() if self.clock else None
 
-    def log_event(self, text):
-        """Append a log entry tagged with round, step, and session time."""
+    def log_event(self, text, cat="move", key=None):
+        """Append a log entry tagged with round, step, and session time.
+
+        `cat` classifies the entry so the Log screen can filter it:
+          "move"  something happened in the game. The DEFAULT, deliberately -
+                  anything a caller forgets to tag stays visible.
+          "phase" a phase transition. Identical every round, carries no game
+                  state, and the R<round>.<step> column already says it.
+          "tally" a number being dialled in on a stepper.
+
+        `key` coalesces a tally. A run of taps on one stepper is ONE decision,
+        not eight: committing 8 willpower used to write eight rows ("Players
+        committed 1 willpower" ... "...8 willpower"), and setting staging to 7
+        wrote five more. With a key, a repeat within the same (round, step)
+        rewrites its own entry in place instead of appending.
+
+        Coalescing is bounded by (key, round, step) on purpose. Re-opening a
+        stepper later in the round starts a NEW entry, so *when* each change
+        happened stays visible - which is the point of a log.
+        """
+        prev = self.log[-1] if self.log else None
+        if (key is not None and prev is not None and prev.get("key") == key
+                and prev.get("round") == self.round and prev.get("step") == self.step):
+            self._seq += 1
+            prev.update({"seq": self._seq, "text": text, "t": self._now()})
+            # messages feeds the delta's metadata; replace the superseded one
+            # so a coalesced run contributes a single line there too.
+            if self.messages:
+                self.messages[-1] = text
+            else:
+                self.messages.append(text)
+            return prev
         self._seq += 1
-        self.log.append({"seq": self._seq, "round": self.round,
-                         "step": self.step, "text": text, "t": self._now()})
+        entry = {"seq": self._seq, "round": self.round, "step": self.step,
+                 "text": text, "t": self._now(), "cat": cat}
+        if key is not None:
+            entry["key"] = key
+        self.log.append(entry)
         self.messages.append(text)
+        self._action_entries.append(entry)
+        return entry
 
     def adjust_threat(self, index, delta):
         """Change a player's threat by delta, clamping at 0. Updates elimination."""
@@ -398,17 +440,33 @@ class GameState:
         self.log_event("P%d avoided elimination (card effect) - threat set to %d"
                        % (index + 1, p.threat))
 
-    # High-end estimate of threat added by the staging reveal (1 card per
-    # living player). Community quest analyses put the average revealed card
-    # at ~1.4-1.6 threat with singles topping out near 3-4 and Surge chains
-    # offset by 0-threat treacheries — so ~3x living players is a fair
-    # worst-typical ceiling. (Deck distribution is fixed: round number and
-    # current threat do not change the reveal odds.)
+    # Fallback only, for a game with no catalog scenario loaded (manual setup,
+    # or a save from before maxCardThreat was emitted). The real number comes
+    # from the scenario itself - see staging_reveal_estimate.
     STAGING_HIGH_PER_PLAYER = 3
 
     def staging_reveal_estimate(self):
+        """Worst printed threat on ONE revealed card, times the living players.
+
+        This was `living * STAGING_HIGH_PER_PLAYER` with the constant pinned at
+        3, so it showed the same "+3" for every scenario ever published - a
+        constant wearing the costume of a calculation, and wrong for The Oath,
+        whose Spider Den prints 4. tools/build_card_data.py now answers the
+        question per scenario at build time, across the sets the scenario
+        actually gathers, and stamps it on the index entry that preload_scenario
+        stores as self.scenario.
+        """
         living = sum(1 for p in self.players if not p.eliminated)
-        return living * self.STAGING_HIGH_PER_PLAYER
+        worst = (self.scenario or {}).get("maxCardThreat")
+        return living * (worst if worst else self.STAGING_HIGH_PER_PLAYER)
+
+    def staging_estimate_is_floor(self):
+        """True when the pool holds a card whose printed threat is a literal X.
+
+        Then the estimate is a floor, not a ceiling, and the caption has to say
+        so rather than quote a number it knows can be exceeded.
+        """
+        return bool((self.scenario or {}).get("hasXThreat"))
 
     def due_notifications(self):
         """Enabled reminder notifications for the current view. Archery only
@@ -437,10 +495,19 @@ class GameState:
         the attribute, so none of them appeared in the log.
         """
         v = max(0, value)
-        # Setting the total directly is the one way the two sources can
-        # disagree - unless the value happens to match the sum, in which case
-        # nothing is out of sync and there is nothing to flag.
-        detached = v != sum(p.commit for p in self.players)
+        # Solo has no breakdown to lose: with one player the total IS that
+        # player's commit, so write it through. This is an identity, not a
+        # heuristic, and it is deliberately keyed on len(players) rather than
+        # on "one player not eliminated" - an eliminated player's stored commit
+        # is still real data.
+        if len(self.players) == 1:
+            self.players[0].commit = v
+            detached = False
+        else:
+            # Setting the total directly is the one way the two sources can
+            # disagree - unless the value happens to match the sum, in which
+            # case nothing is out of sync and there is nothing to flag.
+            detached = v != sum(p.commit for p in self.players)
         if v != self.willpower:
             # Two different facts, so two different sentences. Once the total
             # is set directly the per-player breakdown is unknown, and the log
@@ -448,7 +515,8 @@ class GameState:
             # match the players' own numbers, it is not hiding anything.
             self.log_event(
                 ("Players committed %d willpower to the quest" % v) if detached
-                else ("Willpower total %d, matching the player breakdown" % v))
+                else ("Willpower total %d, matching the player breakdown" % v),
+                cat="tally", key="wp")
             self.willpower = v
         self.willpower_detached = detached
         return self.willpower
@@ -458,18 +526,31 @@ class GameState:
         points as set_willpower, same reason."""
         v = max(0, value)
         if v != self.staging:
-            self.log_event("Staging threat %d -> %d" % (self.staging, v))
+            # State phrasing, not "%d -> %d". Coalescing rewrites the row in
+            # place, and a delta phrasing would then claim the run started
+            # wherever the last tap happened to be.
+            self.log_event("Staging area threat %d" % v, cat="tally", key="stg")
             self.staging = v
         return self.staging
 
     def resync_willpower(self):
-        """Adopt the per-player breakdown as the questing total again.
+        """Adopt the per-player breakdown as the total, but ONLY when the two
+        already agree.
 
-        Called when the players view is opened. The stored per-player values
-        were never lost while the total was detached - they are simply no
-        longer what the total says - so opening the view that shows them is
-        the moment to make the two agree again.
+        This used to overwrite the total unconditionally, and PlayersDetailModal
+        called it from its constructor. So opening the players view during the
+        quest phase - which is exactly what a Doomed keyword, Caught in a Web or
+        a failed quest pushes you to do, to record the threat - silently threw
+        away a committed total and replaced it with a stale sum. A solo player
+        committed 11 willpower, tapped in +1 threat, and resolved the quest
+        against 0. Found in the 2026-07-30 playtest of The Oath.
+
+        A view that shows numbers must not rewrite them. Reconciliation still
+        happens, at the moment the player actually edits a breakdown:
+        set_commit recomputes the total and clears the flag.
         """
+        if self.willpower_detached:
+            return self.willpower
         total = sum(p.commit for p in self.players)
         if total != self.willpower:
             self.log_event("Willpower total %d -> %d (re-synced to the players)"
@@ -503,10 +584,19 @@ class GameState:
             # already shows it.
             self.log_event("End of Round %d" % self.round)
         elif is_window_view(v):
-            self.log_event("Action window: %s"
-                           % VIEW_LABELS.get(phase_view_of(v), v))
+            # Action windows are no longer logged at all. A window is not a
+            # state change, its own screen names it, and the R<round>.<step>
+            # column already carries the step - it was 8 of the ~21 rows a
+            # round produced, every round, identically.
+            pass
         else:
-            self.log_event("Phase: %s" % VIEW_LABELS.get(v, v))
+            # And a phase is logged only when the PHASE changes, not on every
+            # view transition. VIEW_ORDER has 21 entries but only 12 distinct
+            # phases, so this halves what is left.
+            phase = VIEW_LABELS.get(v, v)
+            if phase != self._last_phase_logged:
+                self._last_phase_logged = phase
+                self.log_event("Phase: %s" % phase, cat="phase")
         # 7.3 and 7.4 happen on ARRIVAL at refresh, before its window opens.
         # After the log line, so the log reads arrival-then-effect.
         if v == "refresh":
@@ -1189,6 +1279,7 @@ class GameState:
         game["messages"] before dispatching an action.
         """
         self.messages = []
+        self._action_entries = []
         self._replay_moved = False
         return self.snapshot()
 
@@ -1230,10 +1321,9 @@ class GameState:
         # screen can offer a jump target per row without matching on text.
         # log_event appends to self.log and self.messages together, so the
         # last len(messages) entries are exactly this action's.
-        n = len(self.messages)
-        if n:
-            for e in self.log[-n:]:
-                e["delta_i"] = self.replay_step
+        for e in self._action_entries:
+            e["delta_i"] = self.replay_step
+        self._action_entries = []
         self.messages = []
         if len(self.deltas) > MAX_SAVED_DELTAS:
             drop = len(self.deltas) - MAX_SAVED_DELTAS

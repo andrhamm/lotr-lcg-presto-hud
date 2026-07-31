@@ -258,6 +258,34 @@ def _scenario_options_no_enrichment():
     return hw, s
 
 
+# The longest pack name in the catalog, which is what exposed the truncation
+# bug: the subtitle used to compose "<pack> - tap to change" and THEN truncate
+# the whole thing, so this pack ate the instruction and the line rendered
+# "Two-Player Limited Edition Starter - tap ..". The affordance the line exists
+# to advertise was the part that got cut. The Oath is the scenario in it.
+_SCENARIO_OPTIONS_ENTRY_LONG_PACK = {
+    "slug": "the-oath", "name": "The Oath",
+    "pack": "Two-Player Limited Edition Starter",
+    "cycle": "Core Set (Mirkwood Paths)", "source": "official", "kind": "quest",
+    "hasNightmare": False,
+}
+_SCENARIO_OPTIONS_DATA_LONG_PACK = {
+    "slug": "the-oath", "name": "The Oath",
+    "pack": "Two-Player Limited Edition Starter",
+    "includedSets": ["The Oath", "The Goblins"],
+}
+
+
+def _scenario_options_long_pack():
+    from ui.screen_quest import ScenarioOptionsScreen
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    s = ScenarioOptionsScreen(dict(_SCENARIO_OPTIONS_ENTRY_LONG_PACK),
+                              dict(_SCENARIO_OPTIONS_DATA_LONG_PACK))
+    s.draw(hw, _game(), pal)
+    return hw, s
+
+
 # Real rasterized masks (tools/build_icons.py output, docs/data/icons.json
 # - not committed, see CLAUDE.md's Card data section) for the M4-B icons
 # Task 3 scene below: just enough real 24-row bitmasks to exercise
@@ -979,6 +1007,34 @@ _LOCATION_SAMPLE = [
 ]
 
 
+# The Oath's six, which include the one card whose threat is a printed X.
+# Tangled Grove reads "X is the number of locations in the staging area" and
+# used to render as threat 0 - the safest-looking row in the list, for the one
+# location whose threat scales with the board.
+_LOCATION_SAMPLE_X = [
+    {"id": "x1", "name": "Abandoned Camp", "points": 3, "threat": 2, "set": "The Oath"},
+    {"id": "x2", "name": "Forest Gate", "points": 4, "threat": 2, "set": "The Oath"},
+    {"id": "x3", "name": "Goblin Trail", "points": 6, "threat": 3, "set": "The Oath"},
+    {"id": "x4", "name": "Spider Den", "points": 4, "threat": 4, "set": "The Oath"},
+    {"id": "x5", "name": "Tangled Grove", "points": 3, "threat": 0, "threatKind": "x",
+     "threatX": {"target": "locations_in_staging",
+                 "text": "the number of locations in the staging area"},
+     "set": "The Oath"},
+    {"id": "x6", "name": "The Eaves of Mirkwood", "points": 2, "threat": 2, "set": "The Oath"},
+]
+
+
+def _location_pick_x_threat():
+    from ui.modals import LocationPickModal
+    hw = FakeHardware()
+    pal = Palette(hw.display)
+    g = _game()
+    g.active_locations = []
+    m = LocationPickModal(g, mode="new", entries=list(_LOCATION_SAMPLE_X))
+    m.draw(hw, g, pal)
+    return hw, m
+
+
 def _location_pick():
     # The list step as Travel opens it: nothing selected yet, so Manual is
     # the only footer button (Travel is hidden, not disabled).
@@ -1215,6 +1271,56 @@ def _resolution_reveal():
     return hw, m
 
 
+# The three shapes the stage-advance panel used to get wrong. All are real
+# catalog shapes, not invented ones - see widgets.front_face for the census.
+_OATH_STAGE_B_ONLY = [
+    {"stage": 2, "cards": [{"questPoints": 12, "victory": None, "sailing": False,
+        "faces": [
+            {"side": "A", "name": "Mirkwood Forest", "text": None},
+            {"side": "B", "name": "Mirkwood Forest",
+             "text": "When Revealed: Each player searches the encounter deck and "
+                     "discard pile for a Forest location and adds it to the staging "
+                     "area. Shuffle the encounter deck. This stage cannot be defeated "
+                     "unless at least 1 copy of Goblin Trail is in the victory display."}]}]},
+]
+_LETTER_PAIR_STAGE = [
+    {"stage": 3, "cards": [{"questPoints": 7, "victory": None, "sailing": False,
+        "faces": [
+            {"side": "C", "name": "Attack on Dol Guldur",
+             "text": "When Revealed: Add the set-aside Nazgul to the staging area."},
+            {"side": "D", "name": "Attack on Dol Guldur", "text": None}]}]},
+]
+_GATED_FINAL_STAGE = [
+    {"stage": 3, "cards": [{"questPoints": 6, "victory": None, "sailing": False,
+        "faces": [
+            {"side": "A", "name": "The Rearguard", "text": "When Revealed: Add Goblin Troop."},
+            {"side": "B", "name": "The Rearguard",
+             "text": "This stage cannot be defeated while Goblin Troop is in play. "
+                     "When this stage is defeated, the heroes discover the trail to "
+                     "the Goblins' secret lair and the players win the game."}]}]},
+]
+
+
+def _resolution_scene(stages, flip=False, progress=None):
+    def build():
+        from ui.modals import ResolutionModal
+        hw = FakeHardware()
+        pal = Palette(hw.display)
+        g = GameState(1, 29)
+        g.preload_scenario(
+            {"slug": "the-oath", "name": "The Oath", "pack": "Core Set",
+             "cycle": "Core Set (Mirkwood Paths)", "source": "official",
+             "kind": "quest", "nightmare": False, "mode": "Standard"}, stages)
+        if flip:
+            g.flip_to_b()
+        if progress is not None:
+            g.quest["progress"] = progress
+        m = ResolutionModal(g, True)
+        m.draw(hw, g, pal)
+        return hw, m
+    return build
+
+
 def _resolution_location():
     # "location" step: active location 1 progress over its 2 points - the
     # excess (1) will be credited to the quest card on Continue.
@@ -1418,6 +1524,7 @@ SCENES = {
     "scenario_options_dropdown": _scenario_options_dropdown,
     "scenario_options_icons": _scenario_options_icons,
     "scenario_options_no_enrichment": _scenario_options_no_enrichment,
+    "scenario_options_long_pack": _scenario_options_long_pack,
     "phases_screen": _screen("ui.screen_phases", "ScreenPhases"),
     # An expanded phase is the only state that draws the step rows, and the
     # 5-step phases (Quest, Combat) are the tallest the list ever gets - the
@@ -1473,6 +1580,8 @@ SCENES = {
     "side_quest_pick_quests": _side_quest_pick_quests,
     "side_quest_pick_empty": _side_quest_pick_empty,
     "location_pick": _location_pick,
+    # The one card in the list whose threat is a printed X.
+    "location_pick_x_threat": _location_pick_x_threat,
     "location_pick_selected": _location_pick_selected,
     "location_pick_change": _location_pick_change,
     "location_pick_paged": _location_pick_paged,
@@ -1481,6 +1590,14 @@ SCENES = {
     "location_pick_no_catalog": _location_pick_no_catalog,
     "sailing_modal": _sailing_modal,
     "resolution_reveal": _resolution_reveal,
+    # The three shapes the panel used to get wrong: text on the back only
+    # (75 of 514 catalog stage cards), faces lettered C/D rather than A/B
+    # (22 cards, which drew an EMPTY title), and a final stage whose gate
+    # sentence is what the victory prompt's "Not yet" button exists for.
+    "resolution_reveal_b_only": _resolution_scene(_OATH_STAGE_B_ONLY),
+    "resolution_reveal_letter_pair": _resolution_scene(_LETTER_PAIR_STAGE),
+    "resolution_victory_gate": _resolution_scene(_GATED_FINAL_STAGE, flip=True,
+                                                 progress=6),
     "resolution_location": _resolution_location,
     "resolution_branch": _resolution_branch,
     "resolution_advance": _resolution_advance,
