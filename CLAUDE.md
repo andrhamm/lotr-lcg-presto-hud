@@ -14,8 +14,11 @@ implementations:
    `docs/js/`, then ported to the Python. The two stay in lockstep —
    a change that lands in one and not the other is unfinished work.
 2. `tools/gen_web_data.py` regenerates shared data (turn sequence, icon
-   masks, font metrics) whenever `phases.py`, `ui/icons.py`, or the metrics
-   change. Never hand-edit `docs/js/{phases,icons,metrics}.js`.
+   masks, font metrics, play copy, printed-X targets) whenever `phases.py`,
+   `ui/icons.py`, `viewcopy.py`, `xtargets.py`, or the metrics change. Never
+   hand-edit `docs/js/{phases,icons,metrics,viewcopy,xtargets}.js` — all five
+   carry a `GENERATED` header, and `tests/test_viewcopy.py` re-runs the
+   generator and byte-compares.
 3. `python3 -m pytest tests/` must stay green (includes the layout linter
    over every screen scene). Add scenes for new screens/modals.
 3b. **Follow the design system**

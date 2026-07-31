@@ -113,7 +113,7 @@ gamestate.py    pure game logic (host-tested)
 phases.py       official turn-sequence data (from the DragnCards plugin)
 ui/             PicoGraphics screens, modals, icons, theme
 tools/          preview renderer, web-data generator
-tests/          266+ host tests incl. a 63-check layout linter
+tests/          ~2000 host tests incl. a 14-rule layout linter over 114 scenes
 ```
 
 The twin shares the firmware's architecture — same screens, same button
