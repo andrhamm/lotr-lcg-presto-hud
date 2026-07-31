@@ -1,0 +1,12 @@
+# Data policy (CLAUDE.md): verbatim third-party content is never committed.
+#
+# _ringsdb_*.json  raw RingsDB API responses - third-party card database
+# state.json       live game state; embeds full card records incl. printed text
+# log.jsonl        append-only ledger; its state snapshots embed the same
+#
+# What IS committed is our own writing: engine.py, README.md, and log.md - the
+# rendered narrative, which names cards and quotes a line where a rules point
+# turns on it, exactly as quests/*.md and CLAUDE.md already do.
+_ringsdb_*.json
+state.json
+log.jsonl
