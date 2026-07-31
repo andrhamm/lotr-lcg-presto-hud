@@ -348,3 +348,90 @@ def test_the_oath_stage_one_faces_are_no_longer_identical():
     assert a and "Setup:" in a
     assert b is None, "side B should print no text, got %r" % (b,)
 
+
+
+# --------------------------------------------------------------------------
+# Corrections + ASCII folding (tools/corrections.py) - 2026-07-30 playtest
+# --------------------------------------------------------------------------
+
+import corrections as _corr
+
+
+def _row(**kw):
+    base = {"databaseId": "1", "name": "", "encounterSet": "", "text": "",
+            "shadow": "", "traits": "", "packName": "", "side": "A", "type": "Enemy"}
+    base.update(kw)
+    return base
+
+
+def test_set_rename_rewrites_the_encounter_set_on_every_row():
+    """An encounterSet rewrite is what makes an upstream-split scenario
+    slug-collide back into one, so it has to happen at ROW level - before
+    build_outputs buckets rows by slugify(encounterSet)."""
+    rows = [_row(encounterSet="Journey Along the Anduin", name="A"),
+            _row(encounterSet="Journey Along the Anduin", name="B"),
+            _row(encounterSet="Something Else", name="C")]
+    out, unmatched = _corr.apply_corrections(
+        rows, {"sets": [{"from": "Journey Along the Anduin",
+                         "to": "Journey Down the Anduin"}]})
+    assert [r["encounterSet"] for r in out] == [
+        "Journey Down the Anduin", "Journey Down the Anduin", "Something Else"]
+    assert unmatched == []
+
+
+def test_a_correction_that_matches_nothing_is_reported_not_raised():
+    """Upstream fixing a typo must show up as a printed line, not as a crash
+    and not as silent divergence."""
+    _, unmatched = _corr.apply_corrections(
+        [_row(text="all correct here")],
+        {"text": [{"find": "Gret Spider", "replace": "Great Spider"}],
+         "sets": [{"from": "Nonexistent Set", "to": "X"}]})
+    assert len(unmatched) == 2
+    assert any("Gret Spider" in u for u in unmatched)
+    assert any("Nonexistent Set" in u for u in unmatched)
+
+
+def test_absent_or_corrupt_corrections_degrade_to_a_no_op(tmp_path):
+    """Same posture as _load_enrichment: never fail a catalog build."""
+    assert b._load_corrections(str(tmp_path / "absent.json")) == {}
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    assert b._load_corrections(str(bad)) == {}
+    rows = [_row(text="untouched")]
+    out, unmatched = _corr.apply_corrections(rows, {})
+    assert out[0]["text"] == "untouched" and unmatched == []
+
+
+def test_only_possessive_backticks_become_apostrophes():
+    """~half the backticks in the catalog are quote DELIMITERS wrapping nested
+    card text, not apostrophes. A blanket replace would be a new error, so the
+    delimiter case is deliberately left alone."""
+    rows = [_row(text="each player`s deck"),
+            _row(text="his heroes` resource pool"),
+            _row(text="it gains: `Response: When...`")]
+    out, _ = _corr.apply_corrections(rows, {"global": ["possessive_backtick"]})
+    assert out[0]["text"] == "each player's deck"
+    assert out[1]["text"] == "his heroes' resource pool"
+    assert out[2]["text"] == "it gains: `Response: When...`"   # untouched
+
+
+def test_fold_ascii_covers_every_glyph_the_device_font_lacks():
+    """BITMAP8_W has 82 entries and returns 4px for anything absent, so a
+    circumflex passes every host layout test and only breaks on hardware."""
+    assert _corr.fold_ascii("The Caves of Nibin-Dûm") == "The Caves of Nibin-Dum"
+    assert _corr.fold_ascii("The Horse Lord’s Ire") == "The Horse Lord's Ire"
+    assert _corr.fold_ascii("Nazgûl") == "Nazgul"
+    assert _corr.fold_ascii("look‐outs") == "look-outs"
+    assert _corr.fold_ascii("Card text © FFG") == "Card text (c) FFG"
+    assert _corr.fold_ascii(None) is None
+
+
+def test_fold_payload_catches_strings_merged_in_after_the_row_pass():
+    """includedSets and the per-stage advance conditions arrive from committed
+    distillations AFTER grouping, so the row pass never sees them - they were
+    15 of the 16 non-ASCII characters left in docs/data."""
+    payload = {"scenarios": {"s": {"includedSets": ["Morgul Nazgûl"],
+                                   "quest": {"stages": [{"advance": "no Nazgûl"}]}}}}
+    out = _corr.fold_payload(payload)
+    assert out["scenarios"]["s"]["includedSets"] == ["Morgul Nazgul"]
+    assert out["scenarios"]["s"]["quest"]["stages"][0]["advance"] == "no Nazgul"

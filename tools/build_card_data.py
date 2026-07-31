@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import alep
+import corrections as corrections_mod
 import quest_catalog
 # For match_key(): the scenario-order table joins on a folded name, and that
 # rule must have exactly one definition - the tool that writes the table.
@@ -564,7 +565,8 @@ def _group_pack_meta(group):
     return pack, _pack_meta(pack)
 
 
-def build_outputs(stream, meta=None, enrichment=None, extra_rows=None):
+def build_outputs(stream, meta=None, enrichment=None, extra_rows=None,
+                  corrections=None):
     """Compile the card DB. `extra_rows` are additional already-parsed TSV
     rows to compile alongside the pinned cardDb.tsv - the ALeP branch's
     per-pack TSVs (see tools/alep.py), errata already folded in by the
@@ -572,7 +574,14 @@ def build_outputs(stream, meta=None, enrichment=None, extra_rows=None):
     list before grouping."""
     meta = meta or {"generated": "", "source": ""}
     enr_scenarios = (enrichment or {}).get("scenarios") or {}
-    cards = group_cards(parse_tsv(stream) + list(extra_rows or []))
+    rows = parse_tsv(stream) + list(extra_rows or [])
+    # Row level, before grouping: a correction has to be able to reach `name`
+    # and `encounterSet`, not just face text, and an encounterSet rewrite is
+    # what makes an upstream-split scenario slug-collide back into one.
+    rows, unmatched = corrections_mod.apply_corrections(rows, corrections)
+    for u in unmatched:
+        print("build_card_data: correction matched nothing - %s" % u)
+    cards = group_cards(rows)
     enc_groups, enc_name, player_groups, player_name, rules = {}, {}, {}, {}, []
     for c in cards:
         if c["type"] == "Rules":
@@ -650,6 +659,33 @@ def build_outputs(stream, meta=None, enrichment=None, extra_rows=None):
         if included_sets:
             scenarios[slug]["includedSets"] = included_sets
             index_entry["gatherCount"] = len(included_sets)
+        # Answer "how bad can one revealed card be?" once, here, for THIS
+        # scenario. The staging estimate on the play screen used to be a
+        # hardcoded 3-per-player - the same number for every scenario ever
+        # published - which is not an estimate, it is a constant wearing the
+        # costume of a calculation. The build already holds every pack in
+        # memory and knows which sets a scenario gathers, so it can say what
+        # the pool's worst printed threat actually is.
+        #
+        # Two fields, because one number cannot tell the whole truth: a card
+        # printing a literal X (Tangled Grove: "X is the number of locations in
+        # the staging area") has no printed maximum at all, and the UI has to
+        # say so rather than quote a number it knows is a floor.
+        pool_slugs = [slug] + [slugify(n) for n in (included_sets or [])]
+        worst, has_x = 0, False
+        for ps in pool_slugs:
+            for card in enc_groups.get(ps) or []:
+                if card["type"] == "Quest":
+                    continue
+                for face in card["faces"]:
+                    if face.get("threatKind") == "x":
+                        has_x = True
+                    t = face.get("threat")
+                    if isinstance(t, int) and t > worst:
+                        worst = t
+        index_entry["maxCardThreat"] = worst
+        if has_x:
+            index_entry["hasXThreat"] = True
         index_scn.append(index_entry)
 
     packs, players_index = {}, []
@@ -712,6 +748,22 @@ def _load_enrichment(path):
         return data if isinstance(data.get("scenarios"), dict) else None
     except Exception:
         return None
+
+# Our own corrections to the pinned upstream card DB - committed derived data,
+# same posture as enrichment.json. See tools/corrections.py.
+CORRECTIONS_FILE = os.path.join(os.path.dirname(__file__), "data",
+                                "corrections.json")
+
+def _load_corrections(path):
+    """Best-effort load of the committed corrections table. Absent or corrupt
+    degrades to {} rather than failing a catalog build - same rule as
+    _load_enrichment and _load_distilled."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
 ADVANCEMENT_FILE = os.path.join(os.path.dirname(__file__), "data",
                                 "advancement_distilled.json")
@@ -851,6 +903,11 @@ def _dump(obj, path):
         json.dump(obj, f, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 def emit(outputs, out_dir):
+    # Last stop before disk: fold everything to glyphs the device font can
+    # draw. The row-level pass runs before grouping and so misses strings
+    # merged in later (includedSets, stage advance conditions, the
+    # disclaimer). See corrections.fold_payload.
+    outputs = corrections_mod.fold_payload(outputs)
     for sub in ("scenarios", "players"):
         d = os.path.join(out_dir, sub)
         if os.path.isdir(d):
@@ -898,6 +955,10 @@ def main(argv=None):
                      help="optional tools/build_hob_enrichment.py output to merge "
                           "in (default: %(default)s); a missing or corrupt file is "
                           "silently skipped - see CLAUDE.md's Card data section")
+    ap.add_argument("--corrections", default=CORRECTIONS_FILE,
+                     help="committed corrections to the upstream card DB "
+                          "(default: %(default)s); a missing or corrupt file is "
+                          "silently skipped - see tools/corrections.py")
     ap.add_argument("--no-alep", action="store_true",
                      help="skip the fan-made A Long Extended Party packs "
                           "(see tools/alep.py); official cards only")
@@ -941,6 +1002,15 @@ def main(argv=None):
                      "join key may have shifted upstream, see tools/alep.py)"
                      % orphans))
 
+    corrections = _load_corrections(args.corrections)
+    if corrections:
+        print("build_card_data: applying %d set rename(s) and %d text fix(es) from %s"
+              % (len(corrections.get("sets") or []),
+                 len(corrections.get("text") or []), args.corrections))
+    else:
+        print("build_card_data: no corrections table at %r - upstream card text "
+              "ships as-is" % args.corrections)
+
     enrichment = _load_enrichment(args.enrichment)
     if enrichment is None:
         print("build_card_data: no sets-to-gather enrichment at %r - scenarios will "
@@ -956,7 +1026,8 @@ def main(argv=None):
                         meta={"generated": datetime.date.today().isoformat(),
                               "source": src},
                         enrichment=enrichment,
-                        extra_rows=alep_rows)
+                        extra_rows=alep_rows,
+                        corrections=corrections)
     emit(out, args.out)
     print("Wrote %d scenarios, %d player packs, %d rules to %s"
           % (len(out["scenarios"]), len(out["players"]["packs"]), len(out["rules"]), args.out))

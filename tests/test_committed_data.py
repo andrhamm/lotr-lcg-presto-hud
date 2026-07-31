@@ -170,3 +170,69 @@ def test_refresh_bypasses_the_guard(module, tmp_path):
     with pytest.raises(SystemExit):
         module.main(["--out", str(out), "--refresh",
                      "--index", str(tmp_path / "absent.json")])
+
+
+def test_every_shipped_string_is_device_renderable():
+    """The device font (bitmap8) has 82 glyphs and no accented characters, and
+    BITMAP8_W.get(c, 4) returns 4 for anything absent - so a curly quote or a
+    circumflex passes every host layout test and only breaks on hardware.
+
+    Before tools/corrections.py's fold, 75 of 145 pickable scenarios carried
+    non-ASCII in strings the HUD renders, including the pickable ALeP scenario
+    "The Horse Lord's Ire" and the pack name shown on Scenario Options.
+    Guards the whole emitted catalog, not just scenario names.
+    """
+    import glob
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    files = (glob.glob(os.path.join(root, "docs", "data", "*.json"))
+             + glob.glob(os.path.join(root, "docs", "data", "scenarios", "*.json"))
+             + glob.glob(os.path.join(root, "docs", "data", "players", "*.json")))
+    if not files:
+        return          # generated catalog absent on a bare tree
+    offenders = []
+
+    def walk(obj, where):
+        if isinstance(obj, str):
+            for ch in obj:
+                if ord(ch) > 126 or (ord(ch) < 32 and ch not in "\n"):
+                    offenders.append((where, ch, obj[:60]))
+                    return
+        elif isinstance(obj, dict):
+            for k, v in obj.items():
+                walk(v, where)
+        elif isinstance(obj, list):
+            for v in obj:
+                walk(v, where)
+
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            walk(json.load(fh), os.path.basename(path))
+    assert not offenders, ("non-renderable characters in docs/data: %s"
+                           % offenders[:6])
+
+
+def test_the_two_upstream_split_scenarios_are_merged():
+    """Upstream attached each scenario's Quest cards to a misspelled encounter
+    set, leaving the correct spelling as a 0-stage stub the picker hides. The
+    committed corrections table unifies them.
+
+    The Anduin case also fixed a live bug: _has_nightmare probes
+    slugify(encounterSet + " - Nightmare"), so before the Nightmare set was
+    renamed too, the PICKABLE Core Set quest advertised no Nightmare mode while
+    the invisible stub claimed one.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    idx_path = os.path.join(root, "docs", "data", "index.json")
+    if not os.path.exists(idx_path):
+        return
+    with open(idx_path, encoding="utf-8") as fh:
+        scns = json.load(fh)["scenarios"]
+    names = [s["name"] for s in scns]
+    assert "Journey Along the Anduin" not in names
+    assert "The Caves of Nibin-Dum" in names
+    anduin = [s for s in scns if s["name"] == "Journey Down the Anduin"]
+    assert len(anduin) == 1
+    assert anduin[0]["stageCount"] == 3
+    assert anduin[0]["hasNightmare"] is True
+    caves = [s for s in scns if s["slug"] == "the-caves-of-nibin-dum"]
+    assert len(caves) == 1 and caves[0]["stageCount"] == 4

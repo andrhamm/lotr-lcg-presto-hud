@@ -1,0 +1,64 @@
+{
+  "_readme": [
+    "Committed derived data: OUR corrections to the pinned upstream card DB.",
+    "docs/data/ is generated and gitignored, so it cannot be hand-edited; this",
+    "table is merged at build time by tools/corrections.py, the same posture as",
+    "tools/data/enrichment.json. Every entry carries a 'why' so the next person",
+    "can re-check it without redoing the research. An entry that stops matching",
+    "is printed as unmatched at build time - that means upstream fixed it and",
+    "the entry should be deleted, not that the build is broken."
+  ],
+
+  "sets": [
+    {
+      "from": "Journey Along the Anduin",
+      "to": "Journey Down the Anduin",
+      "why": "Upstream split one scenario across two encounter-set spellings. The Quest cards sit on 'Journey Down the Anduin' (Core Set, 3 stages, pickable); 'Journey Along the Anduin' (Revised Core Set) holds strays and shows 0 stages, so quest_catalog.group_by_cycle's stageCount>0 filter hides it. Unifying merges them. Unify onto the DOWN spelling, not the correct-per-Revised ALONG spelling, because the pickable slug journey-down-the-anduin is already a key in tools/data/enrichment.json and in saved games. tools/build_scenario_order.ALIASES still maps it to Hall of Beorn's 'along' and stays live."
+    },
+    {
+      "from": "Journey Along the Anduin - Nightmare",
+      "to": "Journey Down the Anduin - Nightmare",
+      "why": "The consequence bug, and the reason the base rename alone is not enough. build_card_data._has_nightmare probes slugify(encounterSet + ' - Nightmare'), so with the base set renamed to 'Down' and the Nightmare deck still named 'Along', the probe misses and the pickable Core Set quest advertises no Nightmare mode. Verified: hasNightmare was false on the pickable entry and true on the invisible 0-stage stub."
+    },
+    {
+      "from": "The Caves of Nibin-Dûm",
+      "to": "The Caves of Nibin-Dum",
+      "why": "Same split. Quest cards sit on the ASCII 'Nibin-Dum' (Two-Player Limited Edition Starter, 4 stages, pickable); the circumflex spelling (Dark of Mirkwood) holds 2 treacheries and shows 0 stages. Unify onto the ASCII form: the correct spelling is Nibin-dum with a circumflex (Dark of Mirkwood rulebook), but the device font has no such glyph, and folding happens anyway - unifying here keeps the existing slug the-caves-of-nibin-dum rather than minting the-caves-of-nibin-d-m and orphaning saved games."
+    }
+  ],
+
+  "text": [
+    {
+      "set": "The Oath", "name": "Great Spider",
+      "find": "Gret Spider", "replace": "Great Spider",
+      "why": "Transcription typo in the upstream TSV. The printed card reads 'Forced: After Great Spider engages you, exhaust a character you control.'"
+    },
+    {
+      "set": "The Goblins", "name": "Goblintown Scavengers",
+      "find": "Goblintown Savengers", "replace": "Goblintown Scavengers",
+      "why": "Transcription typo; the card's own title two lines above is spelled correctly."
+    },
+    {
+      "set": "The Goblins", "name": "Wild Wargs",
+      "find": "discrad", "replace": "discard",
+      "why": "Transcription typo in 'discard the top card of the encounter deck'."
+    },
+    {
+      "set": "The Oath", "name": "Mirkwood Forest",
+      "find": "vitory display", "replace": "victory display",
+      "why": "Quest stage cards are rows too, matched on the stage's own name. Typo on stage 2B, in the clause that gates the whole stage: 'cannot be defeated unless at least 1 copy of Goblin Trail is in the victory display'. Rules Reference spells the zone 'victory display'."
+    },
+    {
+      "set": "The Oath", "name": "After the Raid",
+      "find": "Shuffle of the encounter deck", "replace": "Shuffle the encounter deck",
+      "why": "Transcription slip on stage 1A. Every other scenario's setup text reads 'Then, shuffle the encounter deck.'"
+    }
+  ],
+
+  "global": ["possessive_backtick", "fold_ascii"],
+
+  "_todo": [
+    "Delimiter backticks are deliberately NOT rewritten. Of ~165 backticks in the catalog roughly half wrap nested card text (\"it gains: `Response: ...`\") rather than standing in for an apostrophe. Turning those into quotes is a presentation choice about how DragnCards quotes nested abilities, not a transcription fix, and needs its own decision.",
+    "Pre-Revised gendered wording ('his hand', 'with him', 'he controls') is left alone. FFG degendered card text for the Revised Core Set, but correcting it here is a rules claim under CLAUDE.md iron rule 4 and each instance needs a citation to the Revised printing before it can ship."
+  ]
+}
