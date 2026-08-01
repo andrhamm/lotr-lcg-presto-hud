@@ -173,6 +173,59 @@ function deepEqual(a, b) {
 // primitive and changes wholesale - which is why snapshot() keys its
 // collections instead of listing them, exactly as the reference models
 // everything as groupById/cardById/stackById.
+// -- phase-relative rebasing -----------------------------------------------
+//
+// The rule, from the original TODO card: "all stat changes / events are
+// recorded for the given phase. if you click the back button and make a
+// change, the 'final' values for that page are adjusted, the next page always
+// bases stat changes relative to the final values from the previous phase."
+//
+// So a phase owns the AMOUNT it changed each stat by, not the value it left
+// behind. Separate from getDelta/applyDelta on purpose - those are the
+// DragnCards replay port and are ABSOLUTE by design, because undo means "put
+// it back exactly as it was", the opposite of rebasing.
+export const PHASE_NAV_KEYS = ["view", "step", "round"];
+
+// Structural diff where numbers carry HOW MUCH they moved. Leaves are
+// ["+", amount] for numbers and ["=", value] for everything else - a bool, a
+// string or a null has no meaningful "+".
+export function relDelta(old, cur) {
+  if (JSON.stringify(old) === JSON.stringify(cur)) return null;
+  const bothObj = old && cur && typeof old === "object" && typeof cur === "object" &&
+                  !Array.isArray(old) && !Array.isArray(cur);
+  if (bothObj) {
+    const out = {};
+    for (const k of Object.keys(cur)) {
+      if (!(k in old)) { out[k] = ["=", cur[k]]; continue; }
+      const d = relDelta(old[k], cur[k]);
+      if (d !== null) out[k] = d;
+    }
+    for (const k of Object.keys(old)) if (!(k in cur)) out[k] = ["x", null];
+    return Object.keys(out).length ? out : null;
+  }
+  if (typeof old === "boolean" || typeof cur === "boolean") return ["=", cur];
+  if (typeof old === "number" && typeof cur === "number") return ["+", cur - old];
+  return ["=", cur];
+}
+
+// Replay a relDelta onto `state` in place; returns state.
+export function applyRel(state, rel) {
+  if (!state || !rel || typeof state !== "object" || typeof rel !== "object") return state;
+  for (const [k, v] of Object.entries(rel)) {
+    if (!Array.isArray(v)) {
+      if (state[k] && typeof state[k] === "object") applyRel(state[k], v);
+      continue;
+    }
+    const [op, val] = v;
+    if (op === "x") delete state[k];
+    else if (op === "+") {
+      const base = typeof state[k] === "number" ? state[k] : 0;
+      state[k] = base + val;
+    } else state[k] = val;
+  }
+  return state;
+}
+
 export function getDelta(old, cur) {
   if (deepEqual(old, cur)) return null;
   if (isMap(old) && isMap(cur)) {
@@ -321,6 +374,11 @@ export class GameState {
     this.quest_outcome = null;      // "success" | "fail" | "tie" - last resolution
     this.quest_outcome_n = 0;       // progress gained / threat taken
     this.quest_history = [];        // by-round chart data, capped at last 20
+    // Phase-relative rebasing, round-scoped. _phase_bases[view] is the state
+    // as that view was ENTERED; _phase_deltas[view] is how much it moved
+    // things by the time it was left. See relDelta above.
+    this._phase_bases = {};
+    this._phase_deltas = {};
     this.sailed_this_round = false;  // the winds have shifted for this one
     this.sailing = false;
     this.heading = 0;
@@ -539,7 +597,36 @@ export class GameState {
                          quest: this.quest.progress };
   }
 
-  enterView(v) {
+  // -- phase-relative bookkeeping ------------------------------------------
+  _phaseProjection() {
+    const m = this.snapshot();
+    for (const k of PHASE_NAV_KEYS) delete m[k];
+    return m;
+  }
+
+  // Close the current view's phase: store how much it moved things.
+  _recordPhaseDelta() {
+    const base = this._phase_bases[this.view];
+    if (!base) return;
+    const d = relDelta(base, this._phaseProjection());
+    if (d) this._phase_deltas[this.view] = d;
+    else delete this._phase_deltas[this.view];
+  }
+
+  // Put live state back to what it was when `view` was entered - which is by
+  // definition the previous phase's final values.
+  _restorePhaseEntry(view) {
+    const base = this._phase_bases[view];
+    if (!base) return false;
+    this.loadSnapshot({ ...this.snapshot(), ...base });
+    return true;
+  }
+
+  // Closes the outgoing phase's delta, then re-applies the incoming view's own
+  // delta relative to wherever the numbers now stand. `rebase` is false only
+  // for backView, which restores rather than replays.
+  enterView(v, rebase = true) {
+    this._recordPhaseDelta();
     this.view = v;
     this.step = VIEW_STEP[v];
     // A window is not a new phase, so it does not claim to be one in the log:
@@ -563,6 +650,23 @@ export class GameState {
     }
     // 7.3 and 7.4 happen on ARRIVAL at refresh, before its window opens.
     if (v === "refresh") this.applyRefresh();
+
+    if (v === VIEW_ORDER[0]) {
+      // A round boundary. endRound() has banked the stats, bumped the counter
+      // and re-derived the willpower total, so no phase of the closed round
+      // has a base worth rebasing onto.
+      this._phase_bases = {};
+      this._phase_deltas = {};
+    }
+    // The base is taken AFTER any arrival effect, so applyRefresh's threat
+    // raise and the sailing shift stay out of the phase delta - both are
+    // once-per-round arrival effects with their own idempotence guards, and
+    // replaying them relatively would raise threat a second time.
+    this._phase_bases[v] = this._phaseProjection();
+    if (rebase) {
+      const d = this._phase_deltas[v];
+      if (d) this.loadSnapshot(applyRel(this.snapshot(), d));
+    }
   }
 
   nextView() {
@@ -646,14 +750,24 @@ export class GameState {
     return this.prevView() !== null;
   }
 
-  // Navigation, not undo: values entered on the view being left stay exactly
-  // as they are, and every downstream view recomputes from them (questPreview,
-  // the totals row and the meter all read live state).
+  // Navigation, not undo - but the values it lands on are the PREVIOUS phase's
+  // final ones, which is the same thing as this phase's entry state. What this
+  // phase changed is not thrown away: it was banked as a relative delta, and
+  // walking forward again re-applies it on top of whatever the earlier phase
+  // now says. So correcting an upstream count moves everything downstream with
+  // it instead of overwriting it.
   backView() {
     const prev = this.prevView();
     if (prev === null) return false;
     if (this.view === "quest_resolution") this.unresolveQuest();
-    this.enterView(prev);
+    const leaving = this.view;
+    this._recordPhaseDelta();
+    this._restorePhaseEntry(leaving);
+    // Straight assignment, not enterView: going back must not re-log the
+    // phase, re-run its arrival effect, or reset the base of the view being
+    // returned to - that base is what makes ITS delta come out right.
+    this.view = prev;
+    this.step = VIEW_STEP[prev];
     return true;
   }
 
@@ -682,6 +796,10 @@ export class GameState {
           !this.players[this.pending_elim].eliminated) this.pending_elim = null;
     }
     if (this.quest_history.length) this.quest_history.pop();
+    // A resolution is DERIVED from willpower vs staging, so it must be
+    // recomputed rather than replayed - drop the phase delta that would
+    // otherwise re-apply the old outcome on the way forward.
+    delete this._phase_deltas.quest_resolution;
     this.quest_resolved = false;
     this.quest_outcome = null;
     this.quest_outcome_n = 0;

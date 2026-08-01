@@ -216,17 +216,58 @@ def test_back_returns_to_the_view_you_came_from():
     assert game.view == "resource"
 
 
-def test_back_does_not_rewind_the_values_you_typed():
-    """The whole point of navigation-not-undo: going back to look at a screen
-    must not silently discard what you entered on the one you left."""
+def test_a_phase_owns_the_amount_it_changed_not_the_value_it_left():
+    """The original TODO card, verbatim: "the next page always bases stat
+    changes relative to the final values from the previous phase."
+
+    Commit ends on 4. Staging bumps it to 6, so Staging is worth +2. Back up,
+    correct Commit to 2, and coming forward must land on 4 - Staging still
+    contributed +2, applied to the corrected base. It used to land on 2: the
+    later phase's contribution was simply lost.
+    """
     hw, pal, game, screen = _setup("quest_commit")
-    game.set_staging(6)
+    game.set_willpower(4)
     _advance(screen, hw, pal, game, 2)
     assert game.view == "quest_staging"
-    game.set_willpower(9)
+    game.set_willpower(6)                       # this phase is worth +2
+
     screen.draw(hw, game, pal)
     screen.on_button(_find(screen, ("back",)), game)
-    assert game.willpower == 9 and game.staging == 6
+    assert game.view == "aw_quest_commit"
+    assert game.willpower == 4, "back lands on the previous phase's final value"
+
+    game.set_willpower(2)                       # the miscount, corrected
+    _advance(screen, hw, pal, game)
+    assert game.view == "quest_staging"
+    assert game.willpower == 4, "2 + Staging's own +2"
+
+
+def test_a_phase_delta_rebases_every_field_that_moved():
+    """Not just willpower - whatever a phase changed, it owns the amount of.
+    Threat is the one that matters most at the table."""
+    hw, pal, game, screen = _setup("quest_commit")
+    start = game.players[0].threat
+    _advance(screen, hw, pal, game, 2)
+    game.adjust_threat(0, 3)                    # +3 on Staging
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    assert game.players[0].threat == start
+    game.adjust_threat(0, 10)                   # a correction upstream
+    _advance(screen, hw, pal, game)
+    assert game.players[0].threat == start + 10 + 3
+
+
+def test_going_back_and_forward_with_no_edit_changes_nothing():
+    """The delta round-trips exactly, so a stray Back/Forward is inert."""
+    hw, pal, game, screen = _setup("quest_commit")
+    game.set_willpower(4)
+    _advance(screen, hw, pal, game, 2)
+    game.set_willpower(6)
+    before = game.snapshot()
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    _advance(screen, hw, pal, game)
+    assert game.snapshot() == before
 
 
 def test_an_edit_made_after_going_back_flows_forward():

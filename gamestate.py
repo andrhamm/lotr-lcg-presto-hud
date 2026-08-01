@@ -225,6 +225,80 @@ def fold_replay(ops):
     return deltas, step
 
 
+# -- phase-relative rebasing -----------------------------------------------
+#
+# The rule, from the original TODO card: "all stat changes / events are
+# recorded for the given phase. if you click the back button and make a
+# change, the 'final' values for that page are adjusted, the next page always
+# bases stat changes relative to the final values from the previous phase."
+#
+# So a phase owns the AMOUNT it changed each stat by, not the value it left
+# behind. Bump willpower 4 -> 6 on Staging, back up and correct Commit to 2,
+# and coming forward lands on 4: Staging still contributed +2, applied to the
+# corrected base.
+#
+# This is a separate mechanism from get_delta/apply_delta, deliberately. Those
+# are the DragnCards replay port and they are ABSOLUTE by design - undo means
+# "put it back exactly as it was", which is the opposite of rebasing.
+#
+# view/step/round are excluded: they are the navigation doing the rebasing,
+# not state a phase changed.
+PHASE_NAV_KEYS = ("view", "step", "round")
+
+
+def rel_delta(old, new):
+    """Structural diff where numbers carry HOW MUCH they moved.
+
+    Returns None when nothing changed. Leaves are ["+", amount] for numbers
+    and ["=", value] for everything else - a bool, a string or a None has no
+    meaningful "+", so it is simply replayed as itself.
+    """
+    if old == new:
+        return None
+    if isinstance(old, dict) and isinstance(new, dict):
+        out = {}
+        for k in new:
+            if k not in old:
+                out[k] = ["=", new[k]]
+            else:
+                d = rel_delta(old[k], new[k])
+                if d is not None:
+                    out[k] = d
+        for k in old:
+            if k not in new:
+                out[k] = ["x", None]
+        return out or None
+    # bool is a subclass of int, so it has to be caught FIRST or eliminated
+    # would "add" to 1 and a re-applied phase would resurrect a dead player.
+    if isinstance(old, bool) or isinstance(new, bool):
+        return ["=", new]
+    if isinstance(old, (int, float)) and isinstance(new, (int, float)):
+        return ["+", new - old]
+    return ["=", new]
+
+
+def apply_rel(state, rel):
+    """Replay a rel_delta onto `state` in place; returns state."""
+    if not (isinstance(state, dict) and isinstance(rel, dict)):
+        return state
+    for k, v in rel.items():
+        if isinstance(v, dict):
+            if isinstance(state.get(k), dict):
+                apply_rel(state[k], v)
+            continue
+        op, val = v
+        if op == "x":
+            state.pop(k, None)
+        elif op == "+":
+            base = state.get(k, 0)
+            if isinstance(base, bool) or not isinstance(base, (int, float)):
+                base = 0
+            state[k] = base + val
+        else:
+            state[k] = val
+    return state
+
+
 def get_delta(old, new):
     """Recursive structural diff. Returns None when nothing changed.
 
@@ -394,6 +468,11 @@ class GameState:
         self.quest_outcome = None    # "success" | "fail" | "tie" - last resolution
         self.quest_outcome_n = 0     # progress gained / threat taken
         self.quest_history = []      # by-round chart data, capped at last 20
+        # Phase-relative rebasing, round-scoped. _phase_bases[view] is the
+        # state as that view was ENTERED; _phase_deltas[view] is how much it
+        # moved things by the time it was left. See rel_delta above.
+        self._phase_bases = {}
+        self._phase_deltas = {}
         self.sailing = False         # Dream-chaser Sailing test active
         self.heading = 0             # index into HEADINGS (0 = on-course)
         self.game_over = None        # or {"result", "round", "duration"}
@@ -631,8 +710,43 @@ class GameState:
                             "progress": self._total_progress(),
                             "quest": self.quest["progress"]}
 
-    def enter_view(self, v):
-        """Central view transition: sets the step and logs the phase start."""
+    # -- phase-relative bookkeeping ----------------------------------------
+    def _phase_projection(self):
+        m = self.snapshot()
+        for k in PHASE_NAV_KEYS:
+            m.pop(k, None)
+        return m
+
+    def _record_phase_delta(self):
+        """Close the current view's phase: store how much it moved things."""
+        base = self._phase_bases.get(self.view)
+        if base is None:
+            return
+        d = rel_delta(base, self._phase_projection())
+        if d:
+            self._phase_deltas[self.view] = d
+        else:
+            self._phase_deltas.pop(self.view, None)
+
+    def _restore_phase_entry(self, view):
+        """Put live state back to what it was when `view` was entered - which
+        is by definition the previous phase's final values."""
+        base = self._phase_bases.get(view)
+        if base is None:
+            return False
+        m = self.snapshot()
+        m.update(base)
+        self.load_snapshot(m)
+        return True
+
+    def enter_view(self, v, rebase=True):
+        """Central view transition: sets the step and logs the phase start.
+
+        Closes the outgoing phase's delta, then re-applies the incoming
+        view's own delta relative to wherever the numbers now stand. `rebase`
+        is False only for back_view, which restores rather than replays.
+        """
+        self._record_phase_delta()
         self.view = v
         self.step = VIEW_STEP[v]
         if v == "round_end":
@@ -660,6 +774,24 @@ class GameState:
         # After the log line, so the log reads arrival-then-effect.
         if v == "refresh":
             self.apply_refresh()
+
+        if v == VIEW_ORDER[0]:
+            # A round boundary. end_round() has banked the stats, bumped the
+            # counter and re-derived the willpower total, so no phase of the
+            # closed round has a base worth rebasing onto.
+            self._phase_bases = {}
+            self._phase_deltas = {}
+        # The base is taken AFTER any arrival effect, so apply_refresh's threat
+        # raise and the sailing shift stay out of the phase delta - both are
+        # once-per-round arrival effects with their own idempotence guards, and
+        # replaying them relatively would raise threat a second time.
+        self._phase_bases[v] = self._phase_projection()
+        if rebase:
+            d = self._phase_deltas.get(v)
+            if d:
+                m = self.snapshot()
+                apply_rel(m, d)
+                self.load_snapshot(m)
 
     def next_view(self):
         """Where advance_view() would go from here, without going there.
@@ -768,16 +900,26 @@ class GameState:
     def back_view(self):
         """Step back one phase view. Returns False if there is none.
 
-        Navigation, not undo: values entered on the view being left stay
-        exactly as they are, and every downstream view recomputes from them
-        (quest_preview, the totals row and the meter all read live state).
+        Navigation, not undo - but the values it lands on are the PREVIOUS
+        phase's final ones, which is the same thing as this phase's entry
+        state. What this phase changed is not thrown away: it was just banked
+        as a relative delta, and walking forward again re-applies it on top of
+        whatever the earlier phase now says. So correcting an upstream count
+        moves everything downstream with it instead of overwriting it.
         """
         prev = self.prev_view()
         if prev is None:
             return False
         if self.view == "quest_resolution":
             self.unresolve_quest()
-        self.enter_view(prev)
+        leaving = self.view
+        self._record_phase_delta()
+        self._restore_phase_entry(leaving)
+        # Straight assignment, not enter_view: going back must not re-log the
+        # phase, re-run its arrival effect, or reset the base of the view being
+        # returned to - that base is what makes ITS delta come out right.
+        self.view = prev
+        self.step = VIEW_STEP[prev]
         return True
 
     def unresolve_quest(self):
@@ -811,6 +953,10 @@ class GameState:
                 self.pending_elim = None
         if self.quest_history:
             self.quest_history.pop()
+        # A resolution is DERIVED from willpower vs staging, so it must be
+        # recomputed rather than replayed - drop the phase delta that would
+        # otherwise re-apply the old outcome on the way forward.
+        self._phase_deltas.pop("quest_resolution", None)
         self.quest_resolved = False
         self.quest_outcome = None
         self.quest_outcome_n = 0

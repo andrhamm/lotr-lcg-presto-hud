@@ -21,6 +21,7 @@ across columns, and surface blockers here.
 	* incrementors/button taps are slow (work in progress to fix that already), which only made it more painful that some of the incr/decr UI don't indicate the new delta (at least one view DOES show the delta, the total willpower/threat editor maybe?)
 	* loooots of tapping. need to plan how to utilize some of the space we gained back (in the widget rework) to allow skipping directly to later phases. for example, when there are no enemies in the staging area or engaged following staging, we can completely skip over combat. 
 	* a Doom shortcut on the staging views, and/or and "all players +1" button on the players threat view
+	* Questing: Staging framework text MUST start with "Reveal 1 encounter card" ("Reveal" is an important term here). Also need to check if it should say that the first player is the one revealing them (because effects target them)
 
 * game setup no longer needs the manual "Sailing quest" On/Off toggle, nor the manual Stage 1B quest-points stepper — when a quest is picked from the catalog we already know both (`stages[0].cards[0].sailing` and `.questPoints`). Keep the manual path only for the custom/no-catalog game, which is what `setup_game` is really for.
 * Choose an appropriate license, fully open source but with care regarding the copyrighted IP

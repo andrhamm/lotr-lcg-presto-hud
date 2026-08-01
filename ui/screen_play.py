@@ -932,12 +932,18 @@ class ScreenPlay:
             from ui.modals import QuestingProgressModal
             return ("modal", QuestingProgressModal(game))
         if k == "stage_advance":
+            # Enter the phase BEFORE resolving. The resolve is this CTA's own
+            # mutation, and whichever view is current when it runs is the phase
+            # that owns it - resolving first put a threat raise and a
+            # quest_history row inside STAGING's delta, so backing out of
+            # Resolution restored a base that already had them baked in and the
+            # corrected numbers could never re-resolve.
+            game.enter_view("quest_resolution")
             if not game.quest_resolved:
                 res = game.resolve_quest(game.willpower, game.staging)
                 self.alloc = None
                 if res["outcome"] == "success":
                     game.pending_budget = res["budget"]
-            game.enter_view("quest_resolution")
             return True
         if k in ("am", "ap"):
             key, idx = btn.id[1], btn.id[2]

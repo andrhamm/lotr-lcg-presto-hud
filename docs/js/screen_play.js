@@ -853,12 +853,18 @@ export class ScreenPlay {
     // Task 10 reworks the modal this opens.
     if (k === "progress_detail") return ["modal", new QuestingProgressModal(game)];
     if (k === "stage_advance") {
+      // Enter the phase BEFORE resolving. The resolve is this CTA's own
+      // mutation, and whichever view is current when it runs is the phase that
+      // owns it - resolving first put a threat raise and a quest_history row
+      // inside STAGING's delta, so backing out of Resolution restored a base
+      // that already had them baked in and the corrected numbers could never
+      // re-resolve.
+      game.enterView("quest_resolution");
       if (!game.quest_resolved) {
         const res = game.resolveQuest(game.willpower, game.staging);
         this.alloc = null;
         if (res.outcome === "success") game.pending_budget = res.budget;
       }
-      game.enterView("quest_resolution");
       return true;
     }
     if (k === "am" || k === "ap") {
