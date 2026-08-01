@@ -39,7 +39,7 @@ def test_snapshot_keys_collections_as_maps_not_lists():
 def test_snapshot_excludes_transient_and_setup_only_fields():
     g = _round1(GameState(2, 25))
     s = g.snapshot()
-    for k in ("log", "messages", "clock", "_round_snap", "reminders",
+    for k in ("log", "messages", "clock", "_round_snap",
               "scenario", "stages", "elimination_threat",
               "pending_quest_card", "pending_location_pick"):
         assert k not in s, k

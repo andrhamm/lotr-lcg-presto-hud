@@ -118,13 +118,6 @@ def view_for_step(step_id):
     return _PHASE_VIEW[phases.step(step_id)["phase"]]
 
 
-# Encounter reminders: (key, checkbox label, view that triggers the toast,
-# toast text). Grounded in the rules/FAQ: archery resolves at combat start and
-# is not blocked by defense; Surge/Doomed resolve on every reveal; Battle/Siege
-# quests commit ATK/DEF; shadow cards are discarded at the end of combat; one
-# Time counter is removed each refresh.
-
-
 def fmt_ms(ms):
     """1m35s-style duration for the log."""
     s = ms // 1000
@@ -144,14 +137,6 @@ HEADINGS = [
     ("Off-course", "STORM", "Stormy", "worst possible setting"),
 ]
 
-# (key, label, view, notification text, icon name or None)
-# (trimmed 2026-07-22: shadow-discard + Time counters dropped per user)
-REMINDER_DEFS = [
-    ("archery", "Archery damage", "combat_shadow",
-     "Archery: deal damage now (defense does not block)", "ARCHERY"),
-    ("battle", "Battle / Siege questing", "quest_commit",
-     "Battle/Siege: commit ATK/DEF instead of willpower", None),
-]
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +157,72 @@ REMOVED = ":removed"       # sentinel: the key does not exist on this side
 MAX_SAVED_DELTAS = 500     # ~47 KB, ~31 rounds. Reference caps at 5 for
                            # non-supporters (game.ex trim_saved_deltas/2);
                            # we have no paywall, just a bound.
+
+
+def fold_log(records):
+    """Rebuild `game.log` from the append-only log store.
+
+    The store records log EVENTS, not final rows, because log_event is not
+    purely append: a keyed tally rewrites its own row in place so that a run
+    of eight stepper taps stays one line. Replaying therefore has to apply the
+    identical rule - a record whose (key, round, step) matches the last
+    retained row REPLACES it - or the same run comes back as eight rows.
+
+    Keeping the fold here, beside log_event, is deliberate: the two rules must
+    agree, and agreement is easier to hold when they are adjacent.
+    """
+    out = []
+    for r in records:
+        prev = out[-1] if out else None
+        if (r.get("key") is not None and prev is not None
+                and prev.get("key") == r.get("key")
+                and prev.get("round") == r.get("round")
+                and prev.get("step") == r.get("step")):
+            out[-1] = dict(r)
+        else:
+            out.append(dict(r))
+    return out
+
+
+def fold_replay(ops):
+    """Rebuild (deltas, replay_step) from the append-only replay journal.
+
+    The store is append-only, so the two things that are NOT appends are
+    recorded as tombstones and replayed here:
+
+        {"op": "d", "d": delta}   a new delta
+        {"op": "t", "to": n}      a fresh action after an undo discarded the
+                                  redo future - keep only the first n
+        {"op": "x", "n": k}       MAX_SAVED_DELTAS compaction dropped k from
+                                  the front
+        {"op": "s", "i": n}       the cursor moved (written, not recomputed -
+                                  Divergence D3)
+
+    Order matters: a truncate is emitted before the delta that caused it, so
+    replaying in file order reproduces the sequence exactly.
+    """
+    deltas = []
+    step = -1
+    for o in ops:
+        op = o.get("op")
+        if op == "d":
+            deltas.append(o.get("d"))
+            step = len(deltas) - 1
+        elif op == "t":
+            deltas = deltas[:o.get("to", 0)]
+            if step > len(deltas) - 1:
+                step = len(deltas) - 1
+        elif op == "x":
+            k = o.get("n", 0)
+            deltas = deltas[k:]
+            step -= k
+        elif op == "s":
+            step = o.get("i", -1)
+    if step < -1:
+        step = -1
+    if step > len(deltas) - 1:
+        step = len(deltas) - 1
+    return deltas, step
 
 
 def get_delta(old, new):
@@ -337,9 +388,9 @@ class GameState:
         # a modal's can do mid-tap, and `back` is how it knows whether to
         # return you to the play screen or reopen the Progress modal.
         self.pending_location_pick = None
-        self.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
         self.quest_resolved = False  # quest resolved this round
         self.refresh_applied = False  # 7.3 / 7.4 done for this round
+        self.sailed_this_round = False  # the winds have shifted for this one
         self.quest_outcome = None    # "success" | "fail" | "tie" - last resolution
         self.quest_outcome_n = 0     # progress gained / threat taken
         self.quest_history = []      # by-round chart data, capped at last 20
@@ -366,6 +417,17 @@ class GameState:
         # earlier row. Holds the dicts themselves, so stamping is by
         # identity rather than by position.
         self._action_entries = []
+        # Log rows created OR rewritten by the current action, drained by
+        # take_log_appends() at the commit point. The log lives in its own
+        # append-only store rather than inside the save: it was 96% of
+        # state.json and was rewritten in full on every tap.
+        self._log_appends = []
+        # Replay-journal ops produced by the current action, drained at the
+        # commit point. The replay store used to be a whole-file rewrite of
+        # every delta on every tap - 42 KB and 875 ms by round 10 - so it is
+        # append-only now, and undo/compaction are recorded as tombstones
+        # rather than by rewriting history. See fold_replay.
+        self._replay_appends = []
         self._last_phase_logged = None
         self.messages = []           # log text produced by the current action,
                                      # drained into the next delta's metadata.
@@ -408,6 +470,7 @@ class GameState:
                 self.messages[-1] = text
             else:
                 self.messages.append(text)
+            self._log_appends.append(prev)
             return prev
         self._seq += 1
         entry = {"seq": self._seq, "round": self.round, "step": self.step,
@@ -417,7 +480,15 @@ class GameState:
         self.log.append(entry)
         self.messages.append(text)
         self._action_entries.append(entry)
+        self._log_appends.append(entry)
         return entry
+
+    def take_log_appends(self):
+        """Rows this action created or rewrote, then clear. Call AFTER
+        add_delta, which stamps `delta_i` onto the new rows."""
+        out = self._log_appends
+        self._log_appends = []
+        return out
 
     def adjust_threat(self, index, delta):
         """Change a player's threat by delta, clamping at 0. Updates elimination."""
@@ -467,18 +538,6 @@ class GameState:
         so rather than quote a number it knows can be exceeded.
         """
         return bool((self.scenario or {}).get("hasXThreat"))
-
-    def due_notifications(self):
-        """Enabled reminder notifications for the current view. Archery only
-        matters while there is threat (cards) in the staging area."""
-        out = []
-        for key, _label, view, text, icon in REMINDER_DEFS:
-            if view != self.view or not self.reminders.get(key):
-                continue
-            if key == "archery" and self.staging <= 0:
-                continue
-            out.append((icon, text))
-        return out
 
     def set_commit(self, index, value):
         """Set a player's committed willpower; total willpower = sum of commits."""
@@ -658,9 +717,106 @@ class GameState:
             return
         nxt = self.next_view()
         self.enter_view(nxt)
-        # a Sailing test begins by shifting one step off-course (rulebook p.6)
-        if nxt == "quest_sailing":
+        # A Sailing test begins by shifting one step off-course (rulebook p.6).
+        # That is an ARRIVAL effect, once per round - backing out to Planning
+        # and coming forward again is one arrival, not two. Guarded the same
+        # way and for the same reason as apply_refresh's refresh_applied, and
+        # the flag is in snapshot() so undo restores it with the heading.
+        if nxt == "quest_sailing" and not self.sailed_this_round:
+            self.sailed_this_round = True
             self.shift_heading(1, "winds shift")
+
+    def prev_view(self):
+        """Where back_view() would go from here, without going there.
+
+        The inverse of next_view(), and derived from the PHASE SEQUENCE rather
+        than from a history of screens visited. Back means "the previous phase
+        view" - what the forward arrow means, read backwards. Two consequences
+        worth stating, because an earlier draft of this kept a visited-screens
+        stack and got both wrong: nothing has to be recorded for it to work, so
+        a resumed game has Back on the first frame; and it can never reopen a
+        modal flow, because a modal is not a view.
+        """
+        v = self.view
+        if v == "quest_setup":
+            return None          # its Back leaves the game - see setup_back
+        if v == "quest_sailing":
+            return "planning"
+        if v == "quest_commit":
+            return "quest_sailing" if self.sailing else "planning"
+        if v == "quest_resolution":
+            # Entered from quest_staging by resolving, never through the
+            # staging window - see the play screen's stage_advance CTA.
+            return "quest_staging"
+        if v not in VIEW_ORDER:
+            return None
+        i = VIEW_ORDER.index(v)
+        # A closed round is a hard floor: end_round() has already banked its
+        # stats, bumped the counter and re-derived the willpower total.
+        return None if i == 0 else VIEW_ORDER[i - 1]
+
+    def can_go_back(self):
+        """Whether the bottom bar's Back arrow has somewhere to go.
+
+        Not can_undo(): Back is navigation. The two answered the same question
+        only by accident - can_undo() is true from the first tap of the game
+        onward, so Back was offered at the top of every round, where the only
+        thing behind you is a round that has already been closed out.
+        """
+        return self.prev_view() is not None
+
+    def back_view(self):
+        """Step back one phase view. Returns False if there is none.
+
+        Navigation, not undo: values entered on the view being left stay
+        exactly as they are, and every downstream view recomputes from them
+        (quest_preview, the totals row and the meter all read live state).
+        """
+        prev = self.prev_view()
+        if prev is None:
+            return False
+        if self.view == "quest_resolution":
+            self.unresolve_quest()
+        self.enter_view(prev)
+        return True
+
+    def unresolve_quest(self):
+        """Reopen a resolved quest so advancing runs the comparison again.
+
+        resolve_quest() latches quest_resolved and the play screen only
+        resolves `if not game.quest_resolved`, so without this a staging count
+        corrected after backing out would still resolve against the old
+        numbers - the stale-reference case exactly.
+
+        This is a TRACKER: a player who miscounted may retcon, including out of
+        an elimination. So a fail's threat raise is taken back rather than
+        being a reason to refuse to move.
+        """
+        if not self.quest_resolved:
+            return False
+        if self.quest_outcome == "fail":
+            n = self.quest_outcome_n
+            for i, p in enumerate(self.players):
+                # Who took the raise, worked back from the state it produced.
+                # resolve_quest raised the LIVING only, and `eliminated` is
+                # purely threat >= elimination, so a player is still eliminated
+                # after the reversal exactly when they were already eliminated
+                # before it. Exact, and needs nothing extra persisted.
+                if not p.eliminated or p.threat - n < p.elimination:
+                    self.adjust_threat(i, -n)
+            # adjust_threat raises the prompt but never lowers it, and the
+            # player it was raised for may be back under their level now.
+            if (self.pending_elim is not None
+                    and not self.players[self.pending_elim].eliminated):
+                self.pending_elim = None
+        if self.quest_history:
+            self.quest_history.pop()
+        self.quest_resolved = False
+        self.quest_outcome = None
+        self.quest_outcome_n = 0
+        self.pending_budget = 0
+        self.log_event("Quest resolution reopened")
+        return True
 
     # -- sailing / game end ------------------------------------------------
     def heading_label(self):
@@ -689,6 +845,28 @@ class GameState:
         t0 = self.log[0]["t"] if self.log else None
         now = self._now()
         return fmt_ms(now - t0) if (t0 is not None and now is not None) else None
+
+    def history_record(self):
+        """A finished game, in the shape the history store keeps.
+
+        ~220 B measured, which is what makes appending one per game free
+        forever (~63 ms regardless of how many are stored). Deliberately a flat
+        summary rather than the whole save: the stats screens aggregate over
+        these, and reading 4000 full saves back took 15.9 s.
+        """
+        scn = self.scenario or {}
+        return {
+            "scn": scn.get("slug"),
+            "name": scn.get("name"),
+            "mode": scn.get("mode"),
+            "source": scn.get("source"),
+            "players": len(self.players),
+            "won": bool(self.game_over and self.game_over.get("result") == "victory"),
+            "rounds": self.round,
+            "duration": (self.game_over or {}).get("duration"),
+            "threats": [p.threat for p in self.players],
+            "eliminated": sum(1 for p in self.players if p.eliminated),
+        }
 
     def set_game_over(self, result):
         if self.game_over:
@@ -883,6 +1061,7 @@ class GameState:
         self.quest_resolved = False
         self.quest_outcome = None
         self.refresh_applied = False      # arm the next round's 7.3 / 7.4
+        self.sailed_this_round = False    # ...and the next round's winds
         self.log_event("New round %d begins" % self.round)
         # enter_view rather than assigning view/step directly: that is what
         # keeps the step, the log line and any on-entry rules effect in step.
@@ -1223,6 +1402,7 @@ class GameState:
             "card_idx": self.card_idx,
             "quest_resolved": self.quest_resolved,
             "refresh_applied": self.refresh_applied,
+            "sailed_this_round": self.sailed_this_round,
             "quest_outcome": self.quest_outcome,
             "quest_outcome_n": self.quest_outcome_n,
             "game_over": dict(self.game_over) if self.game_over else None,
@@ -1263,6 +1443,9 @@ class GameState:
         self.card_idx = m["card_idx"]
         self.quest_resolved = m["quest_resolved"]
         self.refresh_applied = m["refresh_applied"]
+        # .get: deltas recorded before the flag existed carry no such key, and
+        # a snapshot is replayed as a whole map.
+        self.sailed_this_round = m.get("sailed_this_round", False)
         self.quest_outcome = m["quest_outcome"]
         self.quest_outcome_n = m["quest_outcome_n"]
         self.game_over = dict(m["game_over"]) if m["game_over"] else None
@@ -1314,8 +1497,13 @@ class GameState:
         # A fresh action after an undo discards the redo future. Python's slice
         # handles replay_step == -1 naturally; the reference needs an explicit
         # guard there because Elixir's 0..-1 range means "to the end".
+        if self.replay_step + 1 < len(self.deltas):
+            # A fresh action after an undo discards the redo future. The
+            # journal cannot un-append, so record the truncation instead.
+            self._replay_appends.append({"op": "t", "to": self.replay_step + 1})
         self.deltas = self.deltas[:self.replay_step + 1]
         self.deltas.append(d)
+        self._replay_appends.append({"op": "d", "d": d})
         self.replay_step = len(self.deltas) - 1
         # Stamp this action's log entries with their delta index, so the Log
         # screen can offer a jump target per row without matching on text.
@@ -1332,6 +1520,8 @@ class GameState:
             for e in self.log:
                 if "delta_i" in e:
                     e["delta_i"] -= drop      # may go negative: not a target
+            self._replay_appends.append({"op": "x", "n": drop})
+        self._replay_appends.append({"op": "s", "i": self.replay_step})
         return True
 
     def can_undo(self):
@@ -1402,12 +1592,20 @@ class GameState:
         """Parity: game_ui.ex step_through/2."""
         size = options.get("size")
         if size == "single":
-            return self.step_replay(options.get("direction"))
-        if size == "round":
-            return self.apply_deltas_until_round_change(options.get("direction"))
-        if size == "index":
-            return self.apply_deltas_until_index(options.get("index"))
-        return False
+            moved = self.step_replay(options.get("direction"))
+        elif size == "round":
+            moved = self.apply_deltas_until_round_change(options.get("direction"))
+        elif size == "index":
+            moved = self.apply_deltas_until_index(options.get("index"))
+        else:
+            return False
+        if moved:
+            # replay_step is WRITTEN, not recomputed (Divergence D3), so a
+            # cursor move has to reach the journal too - otherwise a save made
+            # mid-undo reloads a cursor claiming end-of-history over a state
+            # several steps back.
+            self._replay_appends.append({"op": "s", "i": self.replay_step})
+        return moved
 
     # -- replay persistence ------------------------------------------------
     # Parity: the Replay schema's two columns (backend/lib/dragn/replay.ex) -
@@ -1422,6 +1620,22 @@ class GameState:
 
     def replay_to_dict(self):
         return {"deltas": self.deltas, "replay_step": self.replay_step}
+
+    def take_replay_appends(self):
+        """Journal ops this action produced, then clear."""
+        out = self._replay_appends
+        self._replay_appends = []
+        return out
+
+    def seed_replay_journal(self):
+        """The ops that would rebuild the CURRENT history from empty.
+
+        Used when the journal is first created for a game that already has
+        deltas (an upgrade from the whole-file store), and after compaction.
+        """
+        ops = [{"op": "d", "d": d} for d in self.deltas]
+        ops.append({"op": "s", "i": self.replay_step})
+        return ops
 
     @staticmethod
     def _migrate_delta(delta):
@@ -1513,8 +1727,8 @@ class GameState:
             "pending_quest_config": self.pending_quest_config,
             "pending_side_quest_detail": self.pending_side_quest_detail,
             "pending_location_pick": self.pending_location_pick,
-            "reminders": dict(self.reminders),
             "refresh_applied": self.refresh_applied,
+            "sailed_this_round": self.sailed_this_round,
             "quest_resolved": self.quest_resolved,
             "quest_outcome": self.quest_outcome,
             "quest_outcome_n": self.quest_outcome_n,
@@ -1525,7 +1739,12 @@ class GameState:
             "pending_stage": dict(self.pending_stage) if self.pending_stage else None,
             "pending_resolution": self.pending_resolution,
             "elimination_threat": self.elimination_threat,
-            "log": [dict(e) for e in self.log],
+            # `log` is deliberately NOT saved here, for the same reason
+            # `stages` is not (see the note above): it was 96% of a save that
+            # is rewritten on every tap - 37,887 B of which ~36,000 was log -
+            # and it is append-only in practice, since snapshot() excludes it
+            # so undo never touches it. It lives in its own append-only store;
+            # main.py's save_log/load_log own it, and fold_log rebuilds it.
             "seq": self._seq,
         }
 
@@ -1582,17 +1801,20 @@ class GameState:
         g.pending_quest_config = d.get("pending_quest_config", False)
         g.pending_side_quest_detail = d.get("pending_side_quest_detail", False)
         g.pending_location_pick = d.get("pending_location_pick", None)
-        g.reminders = {k: False for k, _, _, _, _ in REMINDER_DEFS}
-        saved_rem = d.get("reminders", {})
-        for k in g.reminders:
-            if k in saved_rem:
-                g.reminders[k] = saved_rem[k]
         # A save written before this flag existed, resumed AT or AFTER the
         # refresh view, has already had its threat raised. Defaulting False
         # there would raise it a second time on the next back-and-forward.
         g.refresh_applied = d.get("refresh_applied",
                                   d.get("view") in ("refresh", "aw_refresh",
                                                     "round_end"))
+        # Same reasoning one field up: a save written before this flag existed,
+        # resumed at or after the sailing test, has already shifted its
+        # heading. Defaulting False there would shift it again on the next
+        # back-and-forward.
+        g.sailed_this_round = d.get(
+            "sailed_this_round",
+            bool(d.get("sailing")) and d.get("view") not in
+            ("resource", "aw_resource", "planning"))
         g.quest_resolved = d.get("quest_resolved", False)
         g.quest_outcome = d.get("quest_outcome", None)
         g.quest_outcome_n = d.get("quest_outcome_n", 0)
@@ -1604,6 +1826,9 @@ class GameState:
         ps = d.get("pending_stage", None)
         g.pending_stage = dict(ps) if ps else None
         g.pending_resolution = d.get("pending_resolution", False)
-        g.log = [dict(e) for e in d["log"]]
-        g._seq = d["seq"]
+        # `log` moved to its own append-only store, so it is absent from new
+        # saves - but a save written before that split still carries it, and
+        # loading it is free. main.py's load_log() fills it for new saves.
+        g.log = [dict(e) for e in d.get("log", [])]
+        g._seq = d.get("seq", 0)
         return g

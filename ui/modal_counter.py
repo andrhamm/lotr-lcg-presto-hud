@@ -11,8 +11,22 @@ from ui import icons
 
 STEPS = [(-5, "-5"), (-1, "-1"), (1, "+1"), (5, "+5")]
 
-# icon name -> (mask attr, palette pen attr)
-ICONS = {"threat": ("THREAT", "red"), "willpower": ("WILLPOWER", "gold")}
+# icon name -> (mask attr, palette pen attr, ground pen attr or None)
+#
+# "threat" and "staging" are the SAME glyph in two different inks, and that is
+# the point: red is the player's threat, black is the staging area's. Sharing
+# one key made the staging counter wear the player-threat colour, so the only
+# editor for that number contradicted every readout of it (the totals row and
+# willpower_staging_meter both ink it pal.outline, per design/stat-system.md's
+# staging/enemy-threat rule).
+#
+# Black ink needs a ground. pal.bg is (16, 12, 9) and pal.outline is (0, 0, 0),
+# so an unbacked staging icon is a black shape on near-black - the same reason
+# the by-round chart stripes its staging row (ui/theme.py: row_stripe).
+ICONS = {"threat": ("THREAT", "red", None),
+         "staging": ("THREAT", "outline", "row_stripe"),
+         "willpower": ("WILLPOWER", "gold", None)}
+ICON_PAD = 4
 
 
 class CounterModal:
@@ -33,10 +47,15 @@ class CounterModal:
         d.clear()
 
         if self.icon in ICONS:
-            mask_name, pen_name = ICONS[self.icon]
+            mask_name, pen_name, ground = ICONS[self.icon]
+            mask = getattr(icons, mask_name)
             w = d.measure_text(self.title, 3)
             ix = int(240 - w / 2 - 30)
-            icons.draw(d, getattr(icons, mask_name), ix, 30, getattr(pal, pen_name))
+            if ground:
+                s = len(mask) + 2 * ICON_PAD
+                d.set_pen(getattr(pal, ground))
+                d.rectangle(ix - ICON_PAD, 30 - ICON_PAD, s, s)
+            icons.draw(d, mask, ix, 30, getattr(pal, pen_name))
             text_center(d, pal, self.title, 240 + 12, 28, 3, pal.gold)
         else:
             text_center(d, pal, self.title, 240, 28, 3, pal.gold)

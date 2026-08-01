@@ -1,7 +1,8 @@
-// Port of main.py — boot flow, nav stack, modal loop, notifications,
+// Port of main.py — boot flow, nav stack, modal loop,
 // persistence (localStorage instead of flash), virtual LED strip.
 import { pal, bevel, rect } from "./ui.js";
 import { GameState, VIEW_LABELS, viewForStep } from "./gamestate.js";
+import { DataClient } from "./db.js";
 import { step as phaseStep, phase as phaseInfo } from "./phases.js";
 import { ScreenPlay } from "./screen_play.js";
 import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
@@ -11,31 +12,24 @@ import { ScreenPhases, ScreenLog, ScreenSettings, BootScreen, SetupScreen,
 import { EliminationModal, QuestCardModal, SideQuestPickModal,
          ResolutionModal, LocationPickModal,
          QuestingProgressModal, LocationConfigModal } from "./screens.js";
-import { loadIndex, loadScenario, cyclesFor, groupByCycle, loadPlayerSideQuests,
-         loadIcons, loadTips, loadLocations,
-         resumePickerState } from "./quest_catalog.js";
+import { cyclesFor, groupByCycle, resumePickerState } from "./quest_catalog.js";
 
-const STATE_KEY = "lotr-hud-state";
-const PREFS_KEY = "lotr-hud-prefs";
+// Every key, cache and durability rule lives in db.js - the single place the
+// twin touches storage. Mirror of main.py's `db`.
+const db = new DataClient();
+
 const canvas = document.getElementById("screen");
 const ctx = canvas.getContext("2d");
 const clock = () => Math.floor(performance.now());
-// Pre-game screens with no live game to animate: LED/notification/elimination
-// per-tick housekeeping (below) is skipped while any of these is active.
+// Pre-game screens with no live game to animate: LED/elimination per-tick
+// housekeeping (below) is skipped while any of these is active.
 const PREGAME_ACTIVE = ["boot", "setup", "scenario_source", "pick_cycle",
                         "choose_scenario", "scenario_options", "firstrun", "legend"];
 
-function loadPrefs() {
-  try {
-    const d = JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {};
-    return { brightness: d.brightness ?? 100, scene: d.scene ?? "phase" };
-  } catch { return { brightness: 100, scene: "phase" }; }
-}
-function savePrefs(prefs) { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }
 
 function loadSaved() {
   try {
-    const d = JSON.parse(localStorage.getItem(STATE_KEY));
+    const d = db.session.loadState();
     if (!d) return [null, null];
     const game = GameState.fromDict(d.state);
     // A save with no scenario is from the removed manual/custom mode. There is
@@ -54,29 +48,8 @@ function loadSaved() {
     return [game, { round: game.round, step: game.step, saved_at: when }];
   } catch { return [null, null]; }
 }
-function saveState(game) {
-  localStorage.setItem(STATE_KEY,
-    JSON.stringify({ saved_at: Date.now(), state: game.toDict() }));
-}
-function clearState() { localStorage.removeItem(STATE_KEY); }
 
-// -- delta replay store ------------------------------------------------------
-// Parity: the Replay schema's two columns (backend/lib/dragn/replay.ex).
-// Divergence D4 - two stores rather than one row: state.json/STATE_KEY keeps
-// its exact shape and every-tap write path, and the history rides in its own
-// key. Losing the history must never cost you the game, so every failure here
-// is swallowed and simply leaves Back unavailable.
-const REPLAY_KEY = "lotr-hud-replay";
-function saveReplay(game) {
-  try { localStorage.setItem(REPLAY_KEY, JSON.stringify(game.replayToDict())); }
-  catch { /* history is expendable; the game is not */ }
-}
-function loadReplay(game) {
-  try { game.replayFromDict(JSON.parse(localStorage.getItem(REPLAY_KEY))); }
-  catch { game.replayFromDict(null); }
-}
-function clearReplay() { localStorage.removeItem(REPLAY_KEY); }
-function saveExists() { return localStorage.getItem(STATE_KEY) !== null; }
+
 
 // virtual LED strip (mirrors leds.py scenes)
 const ledEls = [...document.querySelectorAll(".led")];
@@ -115,8 +88,8 @@ function main() {
   let [savedGame, savedMeta] = loadSaved();
   let game = savedGame ?? new GameState();
   game.clock = clock;
-  if (savedGame) loadReplay(game);
-  const prefs = loadPrefs();
+  if (savedGame) { db.session.loadReplay(game); db.session.loadLog(game); }
+  const prefs = db.loadPrefs();
 
   const bootImg = new Image();
   bootImg.src = "assets/boot_bg.png";
@@ -149,10 +122,11 @@ function main() {
   // a handoff is in flight the last frame simply stays on screen.
   let modalPending = 0;
   let tick = 0;
+  // A finished game is appended to history once. Reset wherever
+  // `game` is rebound (new game / end game).
+  let recordedGameOver = false;
   let prevView = game.view;
-  const NOTIF_TICKS = 200;
-  let notifT = 0;
-  let catalogIndex = null;   // cached loadIndex() result (fetched once)
+  let catalogIndex = null;   // db.index() result, held so the screens share it
   let iconsCache = null;     // cached loadIcons() result (fetched once; loadIcons()
                               // never rejects, so no extra try/catch needed)
   let tipsCache = null;      // cached loadTips() result (M4-B tips; never rejects
@@ -161,7 +135,7 @@ function main() {
                               // resumed game that skipped the picker this session
                               // still gets tips - see the two "if (!tipsCache)" sites
                               // below)
-  let locationsCache = null; // cached loadLocations() result for the picked
+  let locationsCache = null; // db.locations() result for the picked
                               // scenario (never rejects either). Fetched on the
                               // first Travel / "+ Add location" tap and kept for
                               // the game - the picked scenario cannot change
@@ -175,12 +149,28 @@ function main() {
     }
   }
 
+  // See main.py: 90 ms was chosen when the hold hid a flash write. With the
+  // write off the tap path it was most of the felt latency, not feedback.
+  const PRESS_MS = 30;
+
   function pressFeedback(b) {
     const t = 2;
     rect(ctx, b.x, b.y, b.w, t, pal.bevel_d);
     rect(ctx, b.x, b.y, t, b.h, pal.bevel_d);
     rect(ctx, b.x, b.y + b.h - t, b.w, t, pal.bevel_l);
     rect(ctx, b.x + b.w - t, b.y, t, b.h, pal.bevel_l);
+  }
+
+  // The pressed bevel stays lit for PRESS_MS. That used to be 90 ms of doing
+  // NOTHING (setTimeout(handler, 90)) with the handler and its store write
+  // stacked on afterwards. Running the handler inside the window instead makes
+  // the write free: the button was going to stay lit that long anyway. Mirror
+  // of press_begin/press_end in main.py.
+  function pressBegin(b) { pressFeedback(b); return performance.now(); }
+
+  function pressEnd(t0, done) {
+    const left = PRESS_MS - (performance.now() - t0);
+    if (left > 0) setTimeout(done, left); else done();
   }
 
   // -- the record point ------------------------------------------------------
@@ -200,27 +190,29 @@ function main() {
   }
 
   function commitAction() {
+    // addDelta returns false for a no-op action and for any window that
+    // contained a replay cursor move (gamestate.js addDelta). Writing the
+    // history back unchanged in those cases is a whole extra store write - on
+    // the device that is ~50 ms of flash, and the 90 ms press window only has
+    // room for one. Every navigation tap used to pay it.
     if (pendingSnap && pendingGame === game) game.addDelta(pendingSnap);
     pendingSnap = pendingGame = null;
-    saveState(game);
-    saveReplay(game);
+    db.session.commit(game);
   }
 
   function handleTap(x, y) {
     if (modal) {
       for (const b of modal.buttons) {
         if (b.hit(x, y)) {
-          pressFeedback(b);
+          const t0 = pressBegin(b);
           beginAction();
-          setTimeout(() => {
-            const result = modal.onButton(b);
-            if (result === "close") {
-              if (modal instanceof LedModal) savePrefs(prefs);
-              else commitAction();
-              modal = null;
-            } else if (result === "cancel") modal = null;
-            dirty = true;
-          }, 90);
+          const result = modal.onButton(b);
+          if (result === "close") {
+            if (modal instanceof LedModal) db.savePrefs(prefs);
+            else commitAction();
+            modal = null;
+          } else if (result === "cancel") modal = null;
+          pressEnd(t0, () => { dirty = true; });
           return;
         }
       }
@@ -228,12 +220,12 @@ function main() {
     }
     for (const b of screens[active].buttons) {
       if (b.hit(x, y)) {
-        pressFeedback(b);
+        const t0 = pressBegin(b);
         beginAction();
-        setTimeout(async () => {
+        (async () => {
           await handleResult(screens[active].onButton(b, game));
-          dirty = true;
-        }, 90);
+          pressEnd(t0, () => { dirty = true; });
+        })();
         return;
       }
     }
@@ -270,7 +262,7 @@ function main() {
     try {
       const slug = game.scenario?.slug;
       if (!slug) return;
-      const data = await loadScenario(slug);
+      const data = await db.scenario(slug);
       if (game.rehydrateStages(data?.quest?.stages ?? [])) dirty = true;
     } catch (e) {
       console.warn("resume: could not re-read the stage tree", e);
@@ -279,11 +271,11 @@ function main() {
 
   async function rehydratePickers() {
     try {
-      if (!catalogIndex) catalogIndex = await loadIndex();
+      if (!catalogIndex) catalogIndex = await db.index();
       const state = resumePickerState(catalogIndex, game.scenario);
       if (!state) return;
-      if (!iconsCache) iconsCache = await loadIcons();
-      const data = await loadScenario(state.entry.slug);
+      if (!iconsCache) iconsCache = await db.icons();
+      const data = await db.scenario(state.entry.slug);
       screens.pick_cycle = new PickCycleScreen(state.source, state.cycles);
       const chooser = new ChooseScenarioScreen(state.source, state.cycle,
                                                state.siblings);
@@ -329,20 +321,21 @@ function main() {
         // builds the modal itself, so tips are attached here instead of at
         // construction (mirrors main.py's equivalent "modal" handling).
         if (modal instanceof QuestCardModal) {
-          if (!tipsCache) tipsCache = await loadTips();
+          if (!tipsCache) tipsCache = await db.tips();
           modal.tips = tipsCache;
         }
       } else if (kind === "boot") {
         if (result[1] === "resume") { active = "play"; rehydrateStages(); }
         else if (result[1] === "about") { navStack.push("boot"); active = "about"; }
-        else { screens.setup.hasSave = saveExists(); active = "setup"; }
+        else { screens.setup.hasSave = db.session.exists(); active = "setup"; }
       } else if (kind === "open_repo") {
         window.open("https://github.com/andrhamm/lotr-lcg-presto-hud", "_blank");
       } else if (kind === "start_game") {
         const [, threats, first] = result;
-        clearState();
-        clearReplay();
+        db.session.clear();
+        db.session.clear();
         game = new GameState(threats.length);
+      recordedGameOver = false;
         threats.forEach((t, i) => {
           game.players[i].threat = t;
           game.players[i].starting_threat = t;
@@ -350,7 +343,7 @@ function main() {
         game.first_player = first ?? 0;
         game.clock = clock;
         game.logEvent(`New game: ${threats.length} players, threat ${threats.join("/")}, first P${(first ?? 0) + 1}`);
-        saveState(game);
+        db.session.saveState(game);
         prevView = game.view;
         active = "scenario_source";
       } else if (kind === "choose_scenario") {
@@ -361,9 +354,9 @@ function main() {
         // promise.
         const source = result[1];
         try {
-          if (!catalogIndex) catalogIndex = await loadIndex();
-          if (!iconsCache) iconsCache = await loadIcons();
-          if (!tipsCache) tipsCache = await loadTips();
+          if (!catalogIndex) catalogIndex = await db.index();
+          if (!iconsCache) iconsCache = await db.icons();
+          if (!tipsCache) tipsCache = await db.tips();
           screens.pick_cycle = new PickCycleScreen(source, cyclesFor(catalogIndex, source));
           active = "pick_cycle";
         } catch (e) {
@@ -399,7 +392,7 @@ function main() {
         // chooser rather than derailing the game.
         const slug = result[1];
         try {
-          const data = await loadScenario(slug);
+          const data = await db.scenario(slug);
           const entry = catalogIndex?.scenarios?.find(s => s.slug === slug) ?? {};
           screens.scenario_options = new ScenarioOptionsScreen(entry, data, iconsCache);
           active = "scenario_options";
@@ -424,18 +417,20 @@ function main() {
         game.preloadScenario(scenarioMeta, opts.data?.quest?.stages ?? []);
         game.view = "quest_setup";
         active = "play";
-        saveState(game);
+        db.session.saveState(game);
             } else if (kind === "save_quit") {
-        saveState(game);
-        saveReplay(game);
+        db.session.saveState(game);
+        db.session.saveLog(game);
+        db.session.saveReplay(game);
         const [, meta] = loadSaved();
         screens.boot = new BootScreen(meta, bootImg);
         navStack = [];
         active = "boot";
       } else if (kind === "end_game") {
-        clearState();
-        clearReplay();
+        db.session.clear();
+        db.session.clear();
         game = new GameState();
+      recordedGameOver = false;
         game.clock = clock;
         screens.boot = new BootScreen(null, bootImg);
         navStack = [];
@@ -459,39 +454,11 @@ function main() {
   });
 
   setInterval(() => {
-    // reminder + action-window notifications on view change
-    if (game.view !== prevView) {
-      prevView = game.view;
-      // No "Action Window" toast: it fired twice per window (the phase view
-      // and its window view share a step) and announced a screen that says so
-      // itself. See main.py.
-      const msgs = game.dueNotifications().map(([ic, t]) => [ic, t, "amber"]);
-      if (msgs.length) {
-        screens.play.notif = msgs;
-        screens.play.notifFrac = 1.0;
-        notifT = NOTIF_TICKS;
-        dirty = true;
-      }
-    }
-    // a requested toast (e.g. quest-resolution outcome) overrides view notifs
-    if (screens.play.toast) {
-      screens.play.notif = screens.play.toast;
-      screens.play.notifFrac = 1.0;
-      notifT = NOTIF_TICKS;
-      screens.play.toast = null;
-      dirty = true;
-    }
-    if (notifT > 0) {
-      notifT -= 1;
-      const play = screens.play;
-      if (!play.notif) notifT = 0;
-      else if (notifT === 0) { play.notif = null; dirty = true; }
-      else if (notifT % 10 === 0 && !dirty && !modal && active === "play" && play.notifPie) {
-        play.notifFrac = notifT / NOTIF_TICKS;
-        const [cx, cy, r] = play.notifPie;
-        import("./screens.js").then(m => m.drawNotifPie(ctx, cx, cy, r, play.notifFrac, play.notifEdge));
-      }
-    }
+    // A view change no longer raises anything: the timed notification
+    // overlay and the quest-outcome toast are gone. Contextual, per-stage
+    // reminders will live in the phase content areas instead.
+    if (game.view !== prevView) prevView = game.view;
+
     // elimination confirmation
     if (!modal && !PREGAME_ACTIVE.includes(active) && game.pending_elim !== null) {
       modal = new EliminationModal(game, game.pending_elim);
@@ -507,7 +474,7 @@ function main() {
       // picker (e.g. a resumed game) - fetch once, same cache-or-fetch
       // idiom as the side-quest-pick block below, then open the modal.
       modalPending += 1;
-      (tipsCache ? Promise.resolve(tipsCache) : loadTips()).then(tips => {
+      db.tips().then(tips => {
         tipsCache = tips;
         modal = new QuestCardModal(game, tips);
         modalPending -= 1;
@@ -554,13 +521,13 @@ function main() {
     //
     // pending_side_quest_pick is cleared synchronously so a later tick can't
     // re-enter this block while the fetch is in flight. A missing/
-    // unreadable catalog (loadPlayerSideQuests() resolves []) skips the
+    // unreadable catalog (db.sideQuests() resolves []) skips the
     // picker and keeps today's direct-append behavior instead of showing an
     // empty list.
     if (!modal && active === "play" && game.pending_side_quest_pick) {
       game.pending_side_quest_pick = false;
       modalPending += 1;
-      loadPlayerSideQuests().then(entries => {
+      db.sideQuests().then(entries => {
         if (entries.length) {
           modal = new SideQuestPickModal(game, entries);
         } else {
@@ -568,8 +535,7 @@ function main() {
           game.side_quests.push({ points: 4, progress: 0 });
           game.logEvent(`Side quest ${game.side_quests.length} added (progress view)`);
           game.addDelta(snap);
-          saveState(game);
-          saveReplay(game);
+          db.session.commit(game);
         }
         modalPending -= 1;
         dirty = true;
@@ -591,7 +557,7 @@ function main() {
       modalPending += 1;
       (locationsCache
         ? Promise.resolve(locationsCache)
-        : loadLocations(game.scenario?.slug)).then(entries => {
+        : db.locations(game.scenario?.slug)).then(entries => {
         locationsCache = entries;
         // `idx` says WHICH seat a "change" replaces - the location sheet's
         // "Replaced" passes its own. Dropping it here sent every replacement
@@ -617,8 +583,13 @@ function main() {
       const snap = game.beginAction();
       game.setGameOver("defeat");
       game.addDelta(snap);
-      saveState(game);
-      saveReplay(game);
+      // Record the finished game once, on the transition into the
+      // game-over screen, then make it durable.
+      if (!recordedGameOver) {
+        recordedGameOver = true;
+        db.history.append(game.historyRecord());
+        db.session.flush(game);
+      }
       dirty = true;
     }
     // game-over screen takes over the play surface
@@ -636,6 +607,11 @@ function main() {
     // than flashing the screen underneath it. dirty stays set, so the redraw
     // happens as soon as the replacement modal exists.
     if (dirty && !(modalPending && !modal)) { draw(); dirty = false; }
+    else {
+      // Background persistence: gameplay writes RAM only, and the durable
+      // work is drained on frames with nothing to draw. Mirror of main.py.
+      db.session.tick(game);
+    }
   }, 20);
 
   draw();

@@ -472,16 +472,57 @@ def disc(d, cx, cy, rad, pen):
 
 
 def arc_runs(d, cx, cy, R, r, a0, a1, pen):
-    """Ring/arc band between radii r..R and angles a0..a1 (0deg=top, cw)."""
+    """Ring/arc band between radii r..R and angles a0..a1 (0deg=top, cw).
+
+    The original walked every pixel of the bounding box calling math.sqrt AND
+    math.atan2 on each - ~2,070 pixels and ~4,100 trig calls for one r=22
+    token, 119 ms, and PlayersDetailModal draws four of them, so a tap inside
+    it cost 963 ms.
+
+    Two changes, both of which reproduce the original's pixels exactly (there
+    is a test that diffs them):
+
+    * A FULL ring needs no angle test, so each row is two spans computed from
+      integer arithmetic - the same shape `disc` above already uses. Comparing
+      SQUARED distances keeps it exact: dd <= R is dx*dx + dy*dy <= R*R.
+    * A PARTIAL arc still needs the angle, but only across the annulus this
+      row actually covers, not the whole bounding box.
+    """
     d.set_pen(pen)
+    full = a1 is None or (a0 <= 0 and a1 >= 360)
+    R2 = R * R
+    r2 = r * r
     for py in range(int(cy - R), int(cy + R) + 1):
+        dy = py - cy
+        outer = R2 - dy * dy
+        if outer < 0:
+            continue
+        hi = int(math.sqrt(outer))
+        while (hi + 1) * (hi + 1) <= outer:      # exact floor
+            hi += 1
+        while hi * hi > outer:
+            hi -= 1
+        inner = r2 - dy * dy
+        if inner <= 0:
+            lo = 0                                # row misses the hole
+        else:
+            lo = int(math.sqrt(inner))
+            while lo * lo < inner:                # exact ceil
+                lo += 1
+        if full:
+            if lo == 0:
+                d.rectangle(int(cx - hi), py, 2 * hi + 1, 1)
+            elif lo <= hi:
+                d.rectangle(int(cx - hi), py, hi - lo + 1, 1)
+                d.rectangle(int(cx + lo), py, hi - lo + 1, 1)
+            continue
         run = False
         x0 = 0
-        for px in range(int(cx - R), int(cx + R) + 2):
-            dx, dy = px - cx, py - cy
-            dd = math.sqrt(dx * dx + dy * dy)
-            on = r <= dd <= R
-            if on and a1 is not None:
+        for px in range(int(cx - hi), int(cx + hi) + 2):
+            dx = px - cx
+            dd2 = dx * dx + dy * dy
+            on = r2 <= dd2 <= R2
+            if on:
                 ang = math.degrees(math.atan2(dx, -dy)) % 360.0
                 on = a0 <= ang <= a1
             if on and not run:
@@ -489,6 +530,8 @@ def arc_runs(d, cx, cy, R, r, a0, a1, pen):
             elif not on and run:
                 d.rectangle(x0, py, px - x0, 1)
                 run = False
+        if run:
+            d.rectangle(x0, py, int(cx + hi) + 2 - x0, 1)
 
 
 def ring(d, cx, cy, R, w, frac, fill, track):
@@ -608,6 +651,22 @@ def _pill_shape(d, x, y, w, h, pen):
     d.rectangle(x + w - c, y + h - c, c - 1, c - 1)
 
 
+def _cap_left_fill(d, x, y, w, h, pen, c=PILL_CAP):
+    """Fill a rect whose LEFT end is chamfered like _pill_shape's, right end
+    square.
+
+    The first-player ribbon used a plain rectangle here, which painted over the
+    pill's left chamfer and left that end looking square while the right end
+    stayed rounded. The ribbon is the pill's own ground, so it has to take the
+    pill's shape.
+    """
+    d.set_pen(pen)
+    d.rectangle(x + c, y, w - c, h)
+    d.rectangle(x, y + c, c, h - 2 * c)
+    d.rectangle(x + 1, y + 1, c - 1, c - 1)
+    d.rectangle(x + 1, y + h - c, c - 1, c - 1)
+
+
 def _pill_slash(d, x, y, w, h, pen, t=3):
     """A diagonal strike, stepped out of 1px rects - the device has no line
     primitive, and a triangle this thin renders as a wedge."""
@@ -643,8 +702,11 @@ def pill(d, pal, x, y, segs, border=None, ribbon=False, dead=False):
     d.set_pen(ink("gold") if ribbon else ink("well"))
     if ribbon:
         # the ribbon takes the bite: ground through the notch column, then a
-        # wedge of the pill's own fill cut back out of its right end
-        d.rectangle(x + 1, y + 1, hw + PILL_NOTCH - 1, PILL_H - 2)
+        # wedge of the pill's own fill cut back out of its right end. The
+        # ground is left-capped so the ribbon end stays as round as the far
+        # end of the pill - a square left edge here read as a rendering bug.
+        _cap_left_fill(d, x + 1, y + 1, hw + PILL_NOTCH - 1, PILL_H - 2,
+                       ink("gold"))
         d.set_pen(ink("card"))
         d.triangle(x + hw + PILL_NOTCH, y + 1,
                    x + hw + PILL_NOTCH, y + PILL_H - 1,

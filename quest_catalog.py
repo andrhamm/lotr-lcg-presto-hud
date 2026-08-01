@@ -10,6 +10,7 @@ which fetches the same paths relative to the Pages root instead).
 
 import json
 import re
+import struct
 
 # Verified product/cycle order (see docs/superpowers/plans/
 # 2026-07-24-quest-picker-bcore.md Task-2 findings — includes the "Ered
@@ -166,6 +167,150 @@ def resume_picker_state(index, scenario):
         # saved before that field existed just reads as Standard.
         "difficulty": scenario.get("mode") or "Standard",
     }
+
+
+CATALOG_PACK_PATH = "/data/catalog.bin"
+_PACK_MAGIC = b"LCG1"
+_PACK_HEADER = "<4sHHI"
+_PACK_RECORD = "<HHHHHBBHHHB"
+_PACK_REC_SIZE = struct.calcsize(_PACK_RECORD)
+_PACK_SOURCES = ("official", "alep")
+_PACK_KINDS = ("quest", "encounter", "nightmare", "campaign")
+
+
+class CatalogPack:
+    """Lazy reader over catalog.bin (see tools/build_catalog_pack.py).
+
+    Exists because parsing index.json cost 429 ms on the device, ~87% of it
+    decode and allocation rather than I/O - MicroPython's JSON decoder is pure
+    Python on this build while struct.unpack_from is C. Decoding only the
+    fields a screen reads takes the cycle list to 6 ms and the full row set to
+    33 ms, from a file 12.6x smaller.
+
+    Strings are decoded on demand and memoised, so a scan that only compares
+    string IDs never materialises text at all.
+    """
+
+    def __init__(self, blob):
+        magic, self.count, self.nstr, self._stroff = struct.unpack_from(
+            _PACK_HEADER, blob, 0)
+        if magic != _PACK_MAGIC:
+            raise ValueError("not a catalog pack")
+        self._blob = blob
+        self._recoff = struct.calcsize(_PACK_HEADER)
+        self._cache = {}
+        self._offsets = None
+
+    def _string(self, sid):
+        s = self._cache.get(sid)
+        if s is not None:
+            return s
+        if self._offsets is None:
+            offs = []
+            pos = self._stroff
+            for _ in range(self.nstr):
+                (n,) = struct.unpack_from("<H", self._blob, pos)
+                offs.append((pos + 2, n))
+                pos += 2 + n
+            self._offsets = offs
+        start, n = self._offsets[sid]
+        s = str(self._blob[start:start + n], "utf-8")
+        self._cache[sid] = s
+        return s
+
+    def _raw(self, i):
+        return struct.unpack_from(_PACK_RECORD, self._blob,
+                                  self._recoff + i * _PACK_REC_SIZE)
+
+    def _field(self, i, offset):
+        """One 2-byte field without touching the rest of the record."""
+        return struct.unpack_from(
+            "<H", self._blob, self._recoff + i * _PACK_REC_SIZE + offset)[0]
+
+    def entry(self, i):
+        """Materialise one row in the shape the picker screens expect."""
+        (slug, name, pack, cycle, date, src, kind,
+         stages, order, threat, flags) = self._raw(i)
+        return {
+            "slug": self._string(slug), "name": self._string(name),
+            "pack": self._string(pack), "cycle": self._string(cycle),
+            "releaseDate": self._string(date) or None,
+            "source": _PACK_SOURCES[src] if src < len(_PACK_SOURCES) else "official",
+            "kind": _PACK_KINDS[kind] if kind < len(_PACK_KINDS) else "quest",
+            "stageCount": stages,
+            "order": None if order == 0xFFFF else order,
+            "maxCardThreat": threat,
+            "hasNightmare": bool(flags & 1),
+            "hasXThreat": bool(flags & 2),
+            "sailing": bool(flags & 4),
+        }
+
+    def cycle_names(self, source):
+        """Distinct cycle names for a source, in first-seen record order.
+
+        Compares string IDs, so only the handful of cycle names that survive
+        are ever decoded - this is the 6 ms path.
+        """
+        want = _PACK_SOURCES.index(source) if source in _PACK_SOURCES else 0
+        seen = []
+        for i in range(self.count):
+            if self._raw(i)[5] != want:
+                continue
+            cid = self._field(i, 6)
+            if cid not in seen:
+                seen.append(cid)
+        return [self._string(c) for c in seen]
+
+    def rows(self, source=None, cycle=None):
+        """Rows filtered by source and/or cycle name, cheapest test first."""
+        want = None
+        if source is not None:
+            want = _PACK_SOURCES.index(source) if source in _PACK_SOURCES else 0
+        out = []
+        for i in range(self.count):
+            if want is not None and self._raw(i)[5] != want:
+                continue
+            if cycle is not None and self._string(self._field(i, 6)) != cycle:
+                continue
+            out.append(self.entry(i))
+        return out
+
+    def find(self, slug):
+        """Binary search by slug - records are written slug-sorted."""
+        lo, hi = 0, self.count - 1
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            s = self._string(self._field(mid, 0))
+            if s == slug:
+                return self.entry(mid)
+            if s < slug:
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        return None
+
+
+def pack_as_index(pack):
+    """Adapt a CatalogPack to the shape the pure functions already take.
+
+    Deliberately NOT a second implementation of the grouping: `group_by_cycle`,
+    `cycles_for` and `resume_picker_state` are pure and host-tested, so the
+    pack replaces the PARSE and leaves the logic exactly where it is. That is
+    also why the pack carries `releaseDate` - without it these would have had
+    to be reimplemented, and a reimplementation is where the twins drift.
+    """
+    return {"scenarios": pack.rows()}
+
+
+def load_catalog_pack():
+    """Read catalog.bin. Returns None when it is absent or unreadable, so the
+    caller can fall back to load_index() - the pack is an optimisation, not a
+    new source of truth."""
+    try:
+        with open(CATALOG_PACK_PATH, "rb") as f:
+            return CatalogPack(f.read())
+    except Exception:
+        return None
 
 
 def load_index():

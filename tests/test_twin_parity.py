@@ -80,7 +80,7 @@ _ROUTED = {
     "./screen_play.js": ["ScreenPlay"],
     "./screens.js": ["CounterModal", "PlayerSettingsModal", "SideQuestsModal",
                      "LocationPickModal", "PlayersDetailModal",
-                     "RemindersModal", "EliminationModal",
+                     "EliminationModal",
                      "QuestingProgressModal", "SailingModal",
                      "ResolutionModal",
                      "QuestConfigModal", "QuestCardModal",
@@ -120,7 +120,7 @@ def test_screen_play_twins_expose_the_same_methods():
     # Long-standing structural divergence, checked to be functional parity
     # rather than missing behaviour: the twin inlines these into draw()'s
     # branches instead of factoring them out. They predate this gate.
-    inlined_in_js = {"_draw_notif", "_draw_sailing", "_draw_staging"}
+    inlined_in_js = {"_draw_sailing", "_draw_staging"}
     from ui.screen_play import ScreenPlay
     py = {m for m, v in vars(ScreenPlay).items()
           if callable(v) and not m.startswith("__")} - inlined_in_js

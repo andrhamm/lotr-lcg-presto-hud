@@ -17,6 +17,11 @@ across columns, and surface blockers here.
 
 ## Ideas
 
+* Notes from first full real 2-player play test (real people)
+	* incrementors/button taps are slow (work in progress to fix that already), which only made it more painful that some of the incr/decr UI don't indicate the new delta (at least one view DOES show the delta, the total willpower/threat editor maybe?)
+	* loooots of tapping. need to plan how to utilize some of the space we gained back (in the widget rework) to allow skipping directly to later phases. for example, when there are no enemies in the staging area or engaged following staging, we can completely skip over combat. 
+	* a Doom shortcut on the staging views, and/or and "all players +1" button on the players threat view
+
 * game setup no longer needs the manual "Sailing quest" On/Off toggle, nor the manual Stage 1B quest-points stepper — when a quest is picked from the catalog we already know both (`stages[0].cards[0].sailing` and `.questPoints`). Keep the manual path only for the custom/no-catalog game, which is what `setup_game` is really for.
 * Choose an appropriate license, fully open source but with care regarding the copyrighted IP
 * Contributing.md and section on the README
@@ -24,7 +29,6 @@ across columns, and surface blockers here.
 * Feasibility report: could we add audio by taking advantage of the Qwiic port and something like this (with a small speaker(s)) https://www.adafruit.com/product/6258
 	* daisy chain qwiic to add haptic feedback driver?
 	* i've purchased a qwiic haptic driver as well as a  as well as a qwiic DAC+speaker component for audio (same makers as the Presto)
-* action windows. interstitial screens for action windows. when you advance to the next phase, if there is an action window, you land on the action window view, which has a 3 second timer. when timer reaches 0, automatic movement to the next phase. "perform actions" button dismisses the timer. tip explains action window rules. allows adjusting players/progress zones, which get recorded as having been done in the action window. Next phase primary call to action button. this is a setting that can be disabled, which reverts to the action window toast reminder instead of the interstitial view.
 * long term: campaign mode tracking, long term historical game results, stats, sharing
 * feasibility report: how could a basic wireless camera be incorporated? low FPS / just occasional snapshots of the board state at the table. something easy to build with raspberry pi / xioa camera, battery just adequate for a single game session. 3d printed enclosure with 1/4-20 mount for gorillapod or similar. communicates with the presto / web app over wifi, images saved.
 * RingsDB integration - specify which deck each player is using

@@ -35,10 +35,13 @@ DEVICE_MODULES = {
 LOCAL_MODULES = {
     "gamestate", "phases", "leds", "hardware", "quest_catalog", "ui",
     "viewcopy", "xtargets",
+    # The data client - the only module that touches storage (see
+    # tests/test_no_stray_io.py).
+    "db",
 }
 
 FIRMWARE_FILES = (
-    ["gamestate.py", "main.py", "phases.py", "leds.py", "hardware.py",
+    ["gamestate.py", "main.py", "db.py", "phases.py", "leds.py", "hardware.py",
      "quest_catalog.py", "viewcopy.py", "xtargets.py"]
     + [os.path.join("ui", f) for f in sorted(os.listdir(os.path.join(ROOT, "ui")))
        if f.endswith(".py")]

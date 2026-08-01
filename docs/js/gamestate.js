@@ -89,14 +89,6 @@ export const HEADINGS = [
   ["Off-course", "STORM", "Stormy", "worst possible setting"],
 ];
 
-// [key, label, view, notification text, icon name or null]
-// (trimmed 2026-07-22: shadow-discard + Time counters dropped per user)
-export const REMINDER_DEFS = [
-  ["archery", "Archery damage", "combat_shadow",
-    "Archery: deal damage now (defense does not block)", "ARCHERY"],
-  ["battle", "Battle / Siege questing", "quest_commit",
-    "Battle/Siege: commit ATK/DEF instead of willpower", null],
-];
 
 // ---------------------------------------------------------------------------
 // Delta replay engine.
@@ -117,6 +109,48 @@ export const MAX_SAVED_DELTAS = 500; // ~47 KB, ~31 rounds. The reference caps
                                      // at 5 for non-supporters
                                      // (game.ex trim_saved_deltas/2); we have
                                      // no paywall, just a bound.
+
+// Rebuild (deltas, replay_step) from the append-only replay journal. The two
+// operations that are NOT appends are recorded as tombstones and replayed
+// here: {op:"t",to} an undo-truncation, {op:"x",n} a MAX_SAVED_DELTAS front
+// trim, {op:"s",i} a cursor move. Mirror of gamestate.py's fold_replay.
+export function foldReplay(ops) {
+  let deltas = [];
+  let step = -1;
+  for (const o of ops) {
+    if (o.op === "d") { deltas.push(o.d); step = deltas.length - 1; }
+    else if (o.op === "t") {
+      deltas = deltas.slice(0, o.to ?? 0);
+      if (step > deltas.length - 1) step = deltas.length - 1;
+    } else if (o.op === "x") { deltas = deltas.slice(o.n ?? 0); step -= (o.n ?? 0); }
+    else if (o.op === "s") { step = o.i ?? -1; }
+  }
+  if (step < -1) step = -1;
+  if (step > deltas.length - 1) step = deltas.length - 1;
+  return [deltas, step];
+}
+
+// Rebuild `game.log` from the append-only log store.
+//
+// The store records log EVENTS, not final rows, because logEvent is not purely
+// append: a keyed tally rewrites its own row in place so a run of eight stepper
+// taps stays one line. Replaying has to apply the identical rule - a record
+// whose (key, round, step) matches the last retained row REPLACES it - or the
+// same run comes back as eight rows. Mirror of gamestate.py's fold_log; kept
+// beside logEvent because the two rules must agree.
+export function foldLog(records) {
+  const out = [];
+  for (const r of records) {
+    const prev = out.length ? out[out.length - 1] : null;
+    if (r.key !== undefined && r.key !== null && prev
+        && prev.key === r.key && prev.round === r.round && prev.step === r.step) {
+      out[out.length - 1] = { ...r };
+    } else {
+      out.push({ ...r });
+    }
+  }
+  return out;
+}
 
 function isMap(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -283,11 +317,11 @@ export class GameState {
     // knows whether to return you to the play screen or reopen the Progress
     // modal.
     this.pending_location_pick = null;
-    this.reminders = Object.fromEntries(REMINDER_DEFS.map(d => [d[0], false]));
     this.quest_resolved = false;
     this.quest_outcome = null;      // "success" | "fail" | "tie" - last resolution
     this.quest_outcome_n = 0;       // progress gained / threat taken
     this.quest_history = [];        // by-round chart data, capped at last 20
+    this.sailed_this_round = false;  // the winds have shifted for this one
     this.sailing = false;
     this.heading = 0;
     this.game_over = null;
@@ -308,6 +342,17 @@ export class GameState {
     // log.slice(-n) that assumed every entry of an action sits at the
     // tail - false the moment logEvent coalesces into an earlier row.
     this._action_entries = [];
+    // Log rows created OR rewritten by the current action, drained by
+    // takeLogAppends() at the commit point. The log lives in its own
+    // append-only store rather than inside the save: it was 96% of
+    // state.json and was rewritten in full on every tap.
+    this._log_appends = [];
+    // Replay-journal ops produced by the current action, drained at the
+    // commit point. The replay store used to be a whole-file rewrite of every
+    // delta on every tap - 42 KB and 875 ms by round 10 on the device - so it
+    // is append-only now, and undo/compaction are recorded as tombstones
+    // rather than by rewriting history. See foldReplay.
+    this._replay_appends = [];
     this._last_phase_logged = null;
     this.messages = [];      // this action's log text, drained into the delta.
                              // Mirrors game["messages"].
@@ -342,6 +387,7 @@ export class GameState {
       prev.t = this._now();
       if (this.messages.length) this.messages[this.messages.length - 1] = text;
       else this.messages.push(text);
+      this._log_appends.push(prev);
       return prev;
     }
     this._seq += 1;
@@ -351,7 +397,16 @@ export class GameState {
     this.log.push(entry);
     this.messages.push(text);
     this._action_entries.push(entry);
+    this._log_appends.push(entry);
     return entry;
+  }
+
+  // Rows this action created or rewrote, then clear. Call AFTER addDelta,
+  // which stamps `delta_i` onto the new rows.
+  takeLogAppends() {
+    const out = this._log_appends;
+    this._log_appends = [];
+    return out;
   }
 
   adjustThreat(index, delta) {
@@ -390,16 +445,6 @@ export class GameState {
   // rather than quote a number it knows can be exceeded.
   stagingEstimateIsFloor() {
     return Boolean((this.scenario ?? {}).hasXThreat);
-  }
-
-  dueNotifications() {
-    const out = [];
-    for (const [key, _label, view, text, icon] of REMINDER_DEFS) {
-      if (view !== this.view || !this.reminders[key]) continue;
-      if (key === "archery" && this.staging <= 0) continue;
-      out.push([icon, text]);
-    }
-    return out;
   }
 
   setCommit(index, value) {
@@ -559,8 +604,90 @@ export class GameState {
     if (this.view === "quest_sailing") { this.enterView("quest_commit"); return; }
     const nxt = this.nextView();
     this.enterView(nxt);
-    // a Sailing test begins by shifting one step off-course (rulebook p.6)
-    if (nxt === "quest_sailing") this.shiftHeading(1, "winds shift");
+    // A Sailing test begins by shifting one step off-course (rulebook p.6).
+    // That is an ARRIVAL effect, once per round - backing out to Planning and
+    // coming forward again is one arrival, not two. Guarded the same way and
+    // for the same reason as applyRefresh's refresh_applied, and the flag is
+    // in snapshot() so undo restores it with the heading.
+    if (nxt === "quest_sailing" && !this.sailed_this_round) {
+      this.sailed_this_round = true;
+      this.shiftHeading(1, "winds shift");
+    }
+  }
+
+  // Where backView() would go from here, without going there.
+  //
+  // The inverse of nextView(), and derived from the PHASE SEQUENCE rather than
+  // from a history of screens visited. Back means "the previous phase view" -
+  // what the forward arrow means, read backwards. Two consequences worth
+  // stating, because an earlier draft kept a visited-screens stack and got
+  // both wrong: nothing has to be recorded for it to work, so a resumed game
+  // has Back on the first frame; and it can never reopen a modal flow, because
+  // a modal is not a view.
+  prevView() {
+    const v = this.view;
+    if (v === "quest_setup") return null;    // its Back leaves the game
+    if (v === "quest_sailing") return "planning";
+    if (v === "quest_commit") return this.sailing ? "quest_sailing" : "planning";
+    // Entered from quest_staging by resolving, never through the staging
+    // window - see the play screen's stage_advance CTA.
+    if (v === "quest_resolution") return "quest_staging";
+    const i = VIEW_ORDER.indexOf(v);
+    // A closed round is a hard floor: endRound() has already banked its stats,
+    // bumped the counter and re-derived the willpower total.
+    return i <= 0 ? null : VIEW_ORDER[i - 1];
+  }
+
+  canGoBack() {
+    // Not canUndo(): Back is navigation. The two answered the same question
+    // only by accident - canUndo() is true from the first tap of the game
+    // onward, so Back was offered at the top of every round, where the only
+    // thing behind you is a round that has already been closed out.
+    return this.prevView() !== null;
+  }
+
+  // Navigation, not undo: values entered on the view being left stay exactly
+  // as they are, and every downstream view recomputes from them (questPreview,
+  // the totals row and the meter all read live state).
+  backView() {
+    const prev = this.prevView();
+    if (prev === null) return false;
+    if (this.view === "quest_resolution") this.unresolveQuest();
+    this.enterView(prev);
+    return true;
+  }
+
+  // Reopen a resolved quest so advancing runs the comparison again.
+  // resolveQuest() latches quest_resolved and the play screen only resolves
+  // `if (!game.quest_resolved)`, so without this a staging count corrected
+  // after backing out would still resolve against the old numbers.
+  //
+  // This is a TRACKER: a player who miscounted may retcon, including out of an
+  // elimination. So a fail's threat raise is taken back rather than being a
+  // reason to refuse to move.
+  unresolveQuest() {
+    if (!this.quest_resolved) return false;
+    if (this.quest_outcome === "fail") {
+      const n = this.quest_outcome_n;
+      this.players.forEach((p, i) => {
+        // Who took the raise, worked back from the state it produced.
+        // resolveQuest raised the LIVING only, and `eliminated` is purely
+        // threat >= elimination, so a player is still eliminated after the
+        // reversal exactly when they were already eliminated before it.
+        if (!p.eliminated || p.threat - n < p.elimination) this.adjustThreat(i, -n);
+      });
+      // adjustThreat raises the prompt but never lowers it, and the player it
+      // was raised for may be back under their level now.
+      if (this.pending_elim !== null &&
+          !this.players[this.pending_elim].eliminated) this.pending_elim = null;
+    }
+    if (this.quest_history.length) this.quest_history.pop();
+    this.quest_resolved = false;
+    this.quest_outcome = null;
+    this.quest_outcome_n = 0;
+    this.pending_budget = 0;
+    this.logEvent("Quest resolution reopened");
+    return true;
   }
 
   headingLabel() { return HEADINGS[this.heading][0]; }
@@ -587,6 +714,26 @@ export class GameState {
     const t0 = this.log.length ? this.log[0].t : null;
     const now = this._now();
     return (t0 !== null && now !== null) ? fmtMs(now - t0) : null;
+  }
+
+  // A finished game, in the shape the history store keeps. ~220 B, which is
+  // what makes appending one per game free forever. Deliberately a flat
+  // summary rather than the whole save: the stats screens aggregate over
+  // these, and reading 4000 full saves back took 15.9 s on device.
+  historyRecord() {
+    const scn = this.scenario ?? {};
+    return {
+      scn: scn.slug ?? null,
+      name: scn.name ?? null,
+      mode: scn.mode ?? null,
+      source: scn.source ?? null,
+      players: this.players.length,
+      won: !!(this.game_over && this.game_over.result === "victory"),
+      rounds: this.round,
+      duration: this.game_over?.duration ?? null,
+      threats: this.players.map(p => p.threat),
+      eliminated: this.players.filter(p => p.eliminated).length,
+    };
   }
 
   setGameOver(result) {
@@ -734,6 +881,7 @@ export class GameState {
     this.quest_resolved = false;
     this.quest_outcome = null;
     this.refresh_applied = false;      // arm the next round's 7.3 / 7.4
+    this.sailed_this_round = false;    // ...and the next round's winds
     this.logEvent(`New round ${this.round} begins`);
     this.enterView(VIEW_ORDER[0]);
     this._snapshotRound();
@@ -1016,6 +1164,7 @@ export class GameState {
       card_idx: this.card_idx,
       quest_resolved: this.quest_resolved,
       refresh_applied: this.refresh_applied,
+      sailed_this_round: this.sailed_this_round,
       quest_outcome: this.quest_outcome,
       quest_outcome_n: this.quest_outcome_n,
       game_over: this.game_over ? { ...this.game_over } : null,
@@ -1051,6 +1200,9 @@ export class GameState {
     this.card_idx = m.card_idx;
     this.quest_resolved = m.quest_resolved;
     this.refresh_applied = m.refresh_applied;
+    // ??: deltas recorded before the flag existed carry no such key, and a
+    // snapshot is replayed as a whole map.
+    this.sailed_this_round = m.sailed_this_round ?? false;
     this.quest_outcome = m.quest_outcome;
     this.quest_outcome_n = m.quest_outcome_n;
     this.game_over = m.game_over ? { ...m.game_over } : null;
@@ -1093,9 +1245,14 @@ export class GameState {
     const d = getDelta(prevSnapshot, this.snapshot());
     if (d === null) { this.messages = []; return false; }
     d._delta_metadata = { unix_ms: this._now(), log_messages: this.messages };
-    // A fresh action after an undo discards the redo future.
+    // A fresh action after an undo discards the redo future. The journal
+    // cannot un-append, so record the truncation instead.
+    if (this.replay_step + 1 < this.deltas.length) {
+      this._replay_appends.push({ op: "t", to: this.replay_step + 1 });
+    }
     this.deltas = this.deltas.slice(0, this.replay_step + 1);
     this.deltas.push(d);
+    this._replay_appends.push({ op: "d", d });
     this.replay_step = this.deltas.length - 1;
     // Stamp this action's log entries with their delta index so the Log screen
     // can offer a jump target per row without matching on text. logEvent
@@ -1110,8 +1267,25 @@ export class GameState {
       for (const e of this.log) {
         if ("delta_i" in e) e.delta_i -= drop;   // may go negative: not a target
       }
+      this._replay_appends.push({ op: "x", n: drop });
     }
+    this._replay_appends.push({ op: "s", i: this.replay_step });
     return true;
+  }
+
+  // Journal ops this action produced, then clear.
+  takeReplayAppends() {
+    const out = this._replay_appends;
+    this._replay_appends = [];
+    return out;
+  }
+
+  // The ops that would rebuild the CURRENT history from empty - used when the
+  // journal is first created for a game that already has deltas.
+  seedReplayJournal() {
+    const ops = this.deltas.map(d => ({ op: "d", d }));
+    ops.push({ op: "s", i: this.replay_step });
+    return ops;
   }
 
   canUndo() { return this.replay_step >= 0; }
@@ -1167,10 +1341,15 @@ export class GameState {
 
   stepThrough(options) {                     // parity: game_ui.ex step_through/2
     const size = options && options.size;
-    if (size === "single") return this.stepReplay(options.direction);
-    if (size === "round") return this.applyDeltasUntilRoundChange(options.direction);
-    if (size === "index") return this.applyDeltasUntilIndex(options.index);
-    return false;
+    let moved;
+    if (size === "single") moved = this.stepReplay(options.direction);
+    else if (size === "round") moved = this.applyDeltasUntilRoundChange(options.direction);
+    else if (size === "index") moved = this.applyDeltasUntilIndex(options.index);
+    else return false;
+    // replay_step is WRITTEN, not recomputed (Divergence D3), so a cursor
+    // move has to reach the journal too.
+    if (moved) this._replay_appends.push({ op: "s", i: this.replay_step });
+    return moved;
   }
 
   // -- replay persistence ------------------------------------------------
@@ -1258,17 +1437,21 @@ export class GameState {
       pending_quest_config: this.pending_quest_config,
       pending_side_quest_detail: this.pending_side_quest_detail,
       pending_location_pick: this.pending_location_pick,
-      reminders: { ...this.reminders },
       elimination_threat: this.elimination_threat,
       quest_resolved: this.quest_resolved,
       refresh_applied: this.refresh_applied,
+      sailed_this_round: this.sailed_this_round,
       quest_outcome: this.quest_outcome, quest_outcome_n: this.quest_outcome_n,
       quest_history: this.quest_history.map(e => ({ ...e })),
       sailing: this.sailing, heading: this.heading,
       game_over: this.game_over ? { ...this.game_over } : null,
       pending_stage: this.pending_stage ? { ...this.pending_stage } : null,
       pending_resolution: this.pending_resolution,
-      log: this.log.map(e => ({ ...e })), seq: this._seq,
+      // `log` is deliberately NOT saved here, for the same reason `stages`
+      // is not: it was 96% of a save rewritten on every tap, and it is
+      // append-only in practice (snapshot() excludes it, so undo never
+      // touches it). It lives in its own append-only store; foldLog rebuilds it.
+      seq: this._seq,
     };
   }
 
@@ -1320,14 +1503,15 @@ export class GameState {
     g.pending_quest_config = d.pending_quest_config ?? false;
     g.pending_side_quest_detail = d.pending_side_quest_detail ?? false;
     g.pending_location_pick = d.pending_location_pick ?? null;
-    g.reminders = Object.fromEntries(REMINDER_DEFS.map(dd => [dd[0], false]));
-    for (const k of Object.keys(g.reminders)) {
-      if (d.reminders && k in d.reminders) g.reminders[k] = d.reminders[k];
-    }
     // A save written before this flag existed, resumed AT or AFTER the
     // refresh view, has already had its threat raised.
     g.refresh_applied = d.refresh_applied ??
       ["refresh", "aw_refresh", "round_end"].includes(d.view);
+    // Same reasoning one field up: a save written before this flag existed,
+    // resumed at or after the sailing test, has already shifted its heading.
+    g.sailed_this_round = d.sailed_this_round ??
+      (Boolean(d.sailing) &&
+       !["resource", "aw_resource", "planning"].includes(d.view));
     g.quest_resolved = d.quest_resolved ?? false;
     g.quest_outcome = d.quest_outcome ?? null;
     g.quest_outcome_n = d.quest_outcome_n ?? 0;

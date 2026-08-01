@@ -40,35 +40,12 @@ NAV_PAD = 8            # clearance between a nav square and the label between th
 
 
 
-def draw_notif_pie(d, pal, cx, cy, r, frac, color="amber"):
-    """Countdown indicator: full disc that loses a growing pac-man mouth as
-    frac drops from 1.0 to 0. Drawn as a triangle fan (device-safe)."""
-    import math
-    d.set_pen(pal.card_hi)
-    d.rectangle(cx - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4)
-    steps = 24
-    remaining = max(0, min(steps, int(frac * steps + 0.5)))
-    d.set_pen(getattr(pal, color))
-    start = -90 + (steps - remaining) * (360 // steps)  # mouth eats clockwise
-    for i in range(remaining):
-        a0 = math.radians(start + i * (360 / steps))
-        a1 = math.radians(start + (i + 1) * (360 / steps))
-        d.triangle(cx, cy,
-                   cx + int(r * math.cos(a0)), cy + int(r * math.sin(a0)),
-                   cx + int(r * math.cos(a1)), cy + int(r * math.sin(a1)))
-
 
 class ScreenPlay:
     def __init__(self):
         self.buttons = []
         self.banner = None        # (text, kind, view-it-belongs-to)
-        self.notif = None         # list of reminder lines, drawn as an overlay
-        self.notif_frac = 1.0     # countdown fraction for the pie indicator
-        self.notif_pie = None     # (cx, cy, r) of the pie, for partial updates
-        self.notif_edge = "amber" # banner/pie colour; every caller is amber
-                                  # now that the purple window toast is gone
         self.alloc = None         # resolution-view allocation state
-        self.toast = None         # [(icon, text, color)] picked up by the main loop
 
     # -- shared pieces -----------------------------------------------------
     MAX_ZONE_ROWS = 2      # a 4-player game needs two; more than that starts
@@ -405,12 +382,12 @@ class ScreenPlay:
         cy = CTA_Y + CTA_H // 2
         fwd_x = 480 - MARGIN - NAV_W
 
-        # Quest Setup has no undo history - it is the first screen of a game -
-        # but it is also the last point where the scenario and difficulty can
-        # still be changed. Its Back leaves the game rather than undoing a
-        # move, so it carries its own id.
+        # Quest Setup has nothing behind it - it is the first screen of a game
+        # - but it is also the last point where the scenario and difficulty can
+        # still be changed. Its Back leaves the game rather than moving a view,
+        # so it carries its own id.
         back_id = ("setup_back",) if game.view == "quest_setup" else ("back",)
-        if game.view == "quest_setup" or game.can_undo():
+        if game.view == "quest_setup" or game.can_go_back():
             back = Button(back_id, MARGIN, CTA_Y, NAV_W, CTA_H)
             bevel(d, pal, back.x, back.y, back.w, back.h, pal.btn, t=3)
             arrow_left(d, pal, MARGIN + NAV_W // 2, cy, ARROW, pal.tan)
@@ -466,10 +443,13 @@ class ScreenPlay:
                     bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn)
                     text_center(d, pal, s, b.x + 26, b.y + 10, DISPLAY, pal.tan)
                     self.buttons.append(b)
-                if key == "stg":
-                    self.buttons.append(Button(("enc_rem",), x + 64, y, half - 128, 84))
-                if key == "wp":
-                    self.buttons.append(Button(("wp",), x + 64, y, half - 128, 84))
+                # Centre editor for BOTH keys. A panel is one control with
+                # three parts (- | editor | +), and this branch used to
+                # register the middle one for "wp" only - so on the Staging
+                # view, the screen where the player stares hardest at that
+                # number, the Staging panel's centre was dead and the
+                # staging-threat counter had no way in.
+                self.buttons.append(Button((key,), x + 64, y, half - 128, 84))
             elif key in tappable:
                 # thin inset dividers + tan ± glyphs (matches the mock - no
                 # button chrome). Left/right strips tap ±; centre = big editor
@@ -609,50 +589,12 @@ class ScreenPlay:
             nxt = game.next_phase_view()
             self._cta(d, pal, game, "Next: %s" % VIEW_LABELS.get(nxt, nxt), ("advance",))
 
-        self._draw_notif(d, pal)
 
         if self.banner and self.banner[2] == view:
             btext, bkind = self.banner[0], self.banner[1]
             bpen = {"good": pal.green, "bad": pal.red, "mid": pal.amber}[bkind]
             btext = truncate_text(btext, BODY, 480 - 2 * MARGIN, d.measure_text)
             text_center(d, pal, btext, 240, CTA_Y - 26, BODY, bpen)
-
-    def _draw_notif(self, d, pal):
-        if not self.notif:
-            self.notif_pie = None
-            return
-        entries = []
-        for e in self.notif:
-            if isinstance(e, tuple):
-                entries.append(e if len(e) == 3 else (e[0], e[1], "amber"))
-            else:
-                entries.append((None, e, "amber"))
-        has_icon = any(ic for ic, _s, _c in entries)
-        edge = entries[0][2]
-        self.notif_edge = edge
-        tx0 = MARGIN + (48 if has_icon else 14)
-        usable = 480 - MARGIN - 48 - tx0
-        lines = []
-        for _ic, s, c in entries:
-            for ln in wrap_text(s, BODY, usable, d.measure_text):
-                lines.append((ln, c))
-        th = max(14 + 22 * len(lines), 40 if has_icon else 34)
-        bevel(d, pal, MARGIN, HEADER_H + 2, 480 - 2 * MARGIN, th, pal.card_hi, t=2)
-        d.set_pen(getattr(pal, edge))
-        d.rectangle(MARGIN, HEADER_H + 2, 4, th)
-        if has_icon:
-            first_ic, _s, first_c = [e for e in entries if e[0]][0]
-            icons.draw(d, getattr(icons, first_ic), MARGIN + 14,
-                       HEADER_H + 2 + (th - 24) // 2, getattr(pal, first_c))
-        ty = HEADER_H + 9
-        for s, c in lines:
-            text_left(d, pal, s, tx0, ty, BODY, getattr(pal, c))
-            ty += 22
-        cx, cy, r = 480 - MARGIN - 22, HEADER_H + 2 + th // 2, 11
-        self.notif_pie = (cx, cy, r)
-        draw_notif_pie(d, pal, cx, cy, r, self.notif_frac, edge)
-        self.buttons.append(Button(("notif_dismiss",), MARGIN, HEADER_H + 2,
-                                   480 - 2 * MARGIN, th))
 
     def _draw_sailing(self, d, pal, game):
         self._stat_zone(d, pal, game)
@@ -780,13 +722,6 @@ class ScreenPlay:
             text_center(d, pal, TRAVEL["btn_replace"], 240, y + 14, BODY, pal.muted)
             self.buttons.append(cb)
         self._cta(d, pal, game, "Next: %s" % VIEW_LABELS["enc_optional"], ("advance",))
-
-    def _outcome_toast(self, game):
-        if game.quest_outcome == "success":
-            return ("TRAIL", OUTCOME["toast_success"] % game.quest_outcome_n, "green")
-        if game.quest_outcome == "fail":
-            return ("THREAT_SM", OUTCOME["toast_fail"] % game.quest_outcome_n, "red")
-        return (None, OUTCOME["toast_tie"], "amber")
 
     def _draw_resolution(self, d, pal, game):
         if game.quest_outcome != "success":
@@ -936,14 +871,17 @@ class ScreenPlay:
         if k == "nav":
             return ("goto", btn.id[1])
         if k == "back":
-            if not game.undo():
+            # Navigation, NOT undo. This called game.undo() straight out, so
+            # one tap of Back rewound one DELTA - one tap of anything else -
+            # and walking back three screens meant tapping it a dozen times
+            # while values silently reverted. Undo/redo already has a home in
+            # the Game Log's < > replay controls, which is also the only thing
+            # that reverses a failed quest's threat raise.
+            if not game.back_view():
                 return None
             # screen-local scratch describes the view we just left
             self.alloc = None
             self.banner = None
-            return True
-        if k == "notif_dismiss":
-            self.notif = None
             return True
         if k == "open_card_modal":
             from ui.modals import QuestCardModal
@@ -972,14 +910,11 @@ class ScreenPlay:
                 game.set_willpower(v)
             return ("modal", CounterModal(TOTALS["willpower_modal"], game.willpower,
                                           on_commit=set_wp, icon="willpower"))
-        if k == "enc_rem":
-            from ui.modals import RemindersModal
-            return ("modal", RemindersModal(game))
         if k == "stg":
             def set_stg(v, game=game):
                 game.set_staging(v)
             return ("modal", CounterModal(TOTALS["staging_modal"], game.staging,
-                                          on_commit=set_stg, icon="threat"))
+                                          on_commit=set_stg, icon="staging"))
         if k == "wp-":
             game.set_willpower(game.willpower - 1)
             return True
@@ -1002,7 +937,6 @@ class ScreenPlay:
                 self.alloc = None
                 if res["outcome"] == "success":
                     game.pending_budget = res["budget"]
-                self.toast = [self._outcome_toast(game)]
             game.enter_view("quest_resolution")
             return True
         if k in ("am", "ap"):

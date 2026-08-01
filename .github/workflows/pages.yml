@@ -32,6 +32,14 @@ jobs:
         # 9 minutes. Ditto docs/data/tips.json, committed and simply
         # uploaded with the rest of docs/ below.
         run: python3 tools/build_card_data.py
+      - name: Pack the quest-picker catalog
+        # catalog.bin: the picker's rows as fixed-width struct records plus a
+        # deduped string table. Parsing index.json on the device cost 713 ms
+        # and 263 KB resident, ~87% of it decode rather than I/O (MicroPython's
+        # json is pure Python on that build; struct.unpack is C). Reads no
+        # network, needs no deps, and depends only on the index.json the step
+        # above just wrote.
+        run: python3 tools/build_catalog_pack.py
       - name: Install icon rasterizer deps
         # librsvg2-bin provides the rsvg-convert CLI - build_icons.py's
         # svg_to_mask() fallback backend when the cairosvg package isn't

@@ -125,7 +125,7 @@ def _game_fingerprint(g):
             tuple(dict(l) for l in g.active_locations),
             [dict(s) for s in g.side_quests],
             g.willpower, g.staging, g.sailing, g.heading, g.round,
-            g.first_player, dict(g.reminders))
+            g.first_player)
 
 
 def _fresh_game():
@@ -159,7 +159,7 @@ def test_every_play_screen_control_that_changes_state_logs_it():
     from gamestate import VIEW_STEP, VIEW_ORDER
 
     skip = ("nav", "advance", "back", "players_detail", "progress_detail",
-            "open_card_modal", "setup_back", "banner", "notif_dismiss")
+            "open_card_modal", "setup_back", "banner")
     offenders = []
     for view in VIEW_ORDER:
         def build():
@@ -200,8 +200,7 @@ def test_every_modal_control_that_changes_state_logs_it():
 
     Some commit on Save and some edit live, so this taps and then closes by
     whichever affordance the modal offers - which is also what caught that the
-    progress modal was fine (it flushes one summary on close) while the
-    reminders toggle genuinely said nothing.
+    progress modal was fine, flushing one summary on close.
     """
     from tests.fake_hardware import FakeHardware
     from ui.theme import Palette
@@ -212,7 +211,6 @@ def test_every_modal_control_that_changes_state_logs_it():
         (modals.LocationConfigModal, lambda g: modals.LocationConfigModal(g)),
         (modals.SideQuestsModal, lambda g: modals.SideQuestsModal(g)),
         (modals.QuestingProgressModal, lambda g: modals.QuestingProgressModal(g)),
-        (modals.RemindersModal, lambda g: modals.RemindersModal(g)),
         (modals.SailingModal, lambda g: modals.SailingModal(g)),
         (modals.PlayersDetailModal, lambda g: modals.PlayersDetailModal(g)),
         (modals.PlayerSettingsModal, lambda g: modals.PlayerSettingsModal(g, 1)),

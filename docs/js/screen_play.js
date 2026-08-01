@@ -16,8 +16,8 @@ import { VIEW_LABELS, SETUP_TIP, ACTION_WINDOW_TIPS, PHASE_FRAMEWORK, PHASE_WIND
          STAGING, TRAVEL,
          OUTCOME, SAILING, QUEST_SETUP, TOTALS,
          REFRESH } from "./viewcopy.js";
-import { drawHeader, drawNotifPie, HEADER_H, CounterModal,
-         PlayersDetailModal, RemindersModal, LocationPickModal, SideQuestsModal,
+import { drawHeader, HEADER_H, CounterModal,
+         PlayersDetailModal, LocationPickModal, SideQuestsModal,
          QuestConfigModal, SailingModal,
          QuestingProgressModal, QuestCardModal, ResolutionModal } from "./screens.js";
 
@@ -56,12 +56,7 @@ export class ScreenPlay {
   constructor() {
     this.buttons = [];
     this.banner = null;      // [text, kind, view]
-    this.notif = null;       // list of [icon, text, color]
-    this.notifFrac = 1.0;
-    this.notifPie = null;
-    this.notifEdge = "amber";
     this.alloc = null;
-    this.toast = null;       // [[icon, text, color]] picked up by the main loop
   }
 
   // The top zone: a flowing row of segmented pills. Sets and returns
@@ -328,11 +323,11 @@ export class ScreenPlay {
     const cy = CTA_Y + CTA_H / 2;
     const fwdX = 480 - MARGIN - NAV_W;
 
-    // Quest Setup has no undo history - it is the first screen of a game -
+    // Quest Setup has nothing behind it - it is the first screen of a game -
     // but it is also the last point where the scenario and difficulty can
-    // still be changed. Its Back leaves the game rather than undoing a move.
+    // still be changed. Its Back leaves the game rather than moving a view.
     const backId = game.view === "quest_setup" ? ["setup_back"] : ["back"];
-    if (game.view === "quest_setup" || game.canUndo()) {
+    if (game.view === "quest_setup" || game.canGoBack()) {
       const back = new Button(backId, MARGIN, CTA_Y, NAV_W, CTA_H);
       bevel(ctx, back.x, back.y, back.w, back.h, pal.btn, false, 3);
       arrowLeft(ctx, MARGIN + NAV_W / 2, cy, ARROW, pal.tan);
@@ -394,8 +389,11 @@ export class ScreenPlay {
           textCenter(ctx, s, b.x + 26, b.y + 10, DISPLAY, pal.tan);
           this.buttons.push(b);
         }
-        if (key === "stg") this.buttons.push(new Button(["enc_rem"], x + 64, y, half - 128, 84));
-        if (key === "wp") this.buttons.push(new Button(["wp"], x + 64, y, half - 128, 84));
+        // Centre editor for BOTH keys - a panel is one control with three
+        // parts (- | editor | +). This line was a half-applied edit that left
+        // two nested ifs which can never both hold, so the twin registered no
+        // centre editor here at all.
+        this.buttons.push(new Button([key], x + 64, y, half - 128, 84));
       } else if (tappable.includes(key)) {
         // thin inset dividers + tan +/- glyphs (matches the mock — no button
         // chrome). Left/right strips tap +/-; centre = big editor (direct
@@ -582,40 +580,6 @@ export class ScreenPlay {
       this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt] ?? nxt}`, ["advance"]);
     }
 
-    if (this.notif) {
-      const entries = this.notif.map(e =>
-        Array.isArray(e) ? (e.length === 3 ? e : [e[0], e[1], "amber"]) : [null, e, "amber"]);
-      const hasIcon = entries.some(([ic]) => ic);
-      const edge = entries[0][2];
-      this.notifEdge = edge;
-      const tx0 = MARGIN + (hasIcon ? 48 : 14);
-      const usable = 480 - MARGIN - 48 - tx0;
-      const lines = [];
-      for (const [, s, c] of entries) {
-        for (const ln of wrapText(s, BODY, usable)) lines.push([ln, c]);
-      }
-      const th = Math.max(14 + 22 * lines.length, hasIcon ? 40 : 34);
-      bevel(ctx, MARGIN, HEADER_H + 2, 480 - 2 * MARGIN, th, pal.card_hi, false, 2);
-      rect(ctx, MARGIN, HEADER_H + 2, 4, th, pal[edge]);
-      if (hasIcon) {
-        const [firstIc, , firstC] = entries.find(([ic]) => ic);
-        icons.drawIcon(ctx, icons[firstIc], MARGIN + 14,
-                       HEADER_H + 2 + Math.floor((th - 24) / 2), pal[firstC]);
-      }
-      let ty = HEADER_H + 9;
-      for (const [s, c] of lines) {
-        textLeft(ctx, s, tx0, ty, BODY, pal[c]);
-        ty += 22;
-      }
-      const cx = 480 - MARGIN - 22, cy = HEADER_H + 2 + Math.floor(th / 2), r = 11;
-      this.notifPie = [cx, cy, r];
-      drawNotifPie(ctx, cx, cy, r, this.notifFrac, edge);
-      this.buttons.push(new Button(["notif_dismiss"], MARGIN, HEADER_H + 2,
-                                   480 - 2 * MARGIN, th));
-    } else {
-      this.notifPie = null;
-    }
-
     if (this.banner && this.banner[2] === view) {
       const [btextRaw, bkind] = this.banner;
       const bpen = { good: pal.green, bad: pal.red, mid: pal.amber }[bkind];
@@ -689,14 +653,6 @@ export class ScreenPlay {
       this.buttons.push(cb);
     }
     this._cta(ctx, game, `Next: ${VIEW_LABELS.enc_optional}`, ["advance"]);
-  }
-
-  _outcomeToast(game) {
-    if (game.quest_outcome === "success")
-      return ["TRAIL", `Quested successfully! +${game.quest_outcome_n} progress`, "green"];
-    if (game.quest_outcome === "fail")
-      return ["THREAT_SM", `Quest failed. +${game.quest_outcome_n} threat to all`, "red"];
-    return [null, OUTCOME.toast_tie, "amber"];
   }
 
   _drawResolution(ctx, game) {
@@ -847,20 +803,16 @@ export class ScreenPlay {
     const k = btn.id[0];
     if (k === "nav") return ["goto", btn.id[1]];
     if (k === "back") {
-      if (!game.undo()) return null;
+      // Navigation, NOT undo. This called game.undo() straight out, so one tap
+      // of Back rewound one DELTA - one tap of anything else - and walking
+      // back three screens meant tapping it a dozen times while values
+      // silently reverted. Undo/redo already has a home in the Game Log's < >
+      // replay controls, which is also the only thing that reverses a failed
+      // quest's threat raise.
+      if (!game.backView()) return null;
       // screen-local scratch describes the view we just left
       this.alloc = null;
       this.banner = null;
-      return true;
-    }
-    if (k === "notif_dismiss") { this.notif = null; return true; }
-    if (k === "qp") {
-      const was = game.quest.points;
-      game.quest.points = Math.max(0, Math.min(30, was + btn.id[1]));
-      if (game.quest.points !== was) {
-        game.logEvent(`Stage ${game.quest.stage_n}${game.quest.side} quest points `
-                      + `${was} -> ${game.quest.points}`);
-      }
       return true;
     }
     if (k === "setup" ) return null;
@@ -890,10 +842,9 @@ export class ScreenPlay {
       return ["modal", new CounterModal(TOTALS.willpower_modal, game.willpower,
         v => { game.setWillpower(v); }, "willpower")];
     }
-    if (k === "enc_rem") return ["modal", new RemindersModal(game)];
     if (k === "stg") {
       return ["modal", new CounterModal(TOTALS.staging_modal, game.staging,
-        v => { game.setStaging(v); }, "threat")];
+        v => { game.setStaging(v); }, "staging")];
     }
     if (k === "wp-") { game.setWillpower(game.willpower - 1); return true; }
     if (k === "wp+") { game.setWillpower(game.willpower + 1); return true; }
@@ -906,7 +857,6 @@ export class ScreenPlay {
         const res = game.resolveQuest(game.willpower, game.staging);
         this.alloc = null;
         if (res.outcome === "success") game.pending_budget = res.budget;
-        this.toast = [this._outcomeToast(game)];   // shown as a toast, not a banner
       }
       game.enterView("quest_resolution");
       return true;

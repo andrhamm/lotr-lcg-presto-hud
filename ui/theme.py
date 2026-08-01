@@ -82,7 +82,7 @@ class Palette:
         self.bevel_l = d.create_pen(96, 86, 54)
         self.bevel_d = d.create_pen(7, 5, 3)
         self.shadow = d.create_pen(34, 30, 24)
-        # leadership purple (action-window notifications)
+        # leadership purple
         self.purple = d.create_pen(166, 122, 196)
         # true black-ish ink (staging threat value/icon, shadows)
         self.outline = d.create_pen(0, 0, 0)

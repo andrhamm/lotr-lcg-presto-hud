@@ -135,6 +135,144 @@ these rather than re-researching; correct them only with a better citation.
   player checks, then each other player in order, then the first player makes a
   *second* check, and so on until no enemy in staging can engage anyone.
 
+## The data client (`db.py` / `docs/js/db.js`)
+
+**All data access goes through the client. Nothing else opens a file or calls
+`fetch`/`localStorage`** — `tests/test_no_stray_io.py` enforces it by walking
+the AST of every firmware module and grepping `docs/js/`. Before it existed,
+I/O was split across `main.py` and `quest_catalog.py` with four ad-hoc closure
+caches, and `load_player_side_quests()` was re-read **on every "+ Side quest"
+tap** because no single place owned the question.
+
+Three collections, because measurement says they are three different problems:
+`catalog` (immutable, keyed random read), `session` (state + log + delta
+journal, written every tap), `history` (finished games, appended once).
+
+**The scenario bundle** — `db.bundle(slug)` loads every static datapoint a
+scenario needs in one go and pins it for the game (~10 KB: detail record +
+locations union + tips). After it returns there is **not a single catalog read
+during play**. It replaces four inconsistent paths: the scenario dict held on a
+screen *and* deep-copied into `game.stages`, locations read lazily on the first
+Travel tap, all 122 scenarios' tips loaded to show one, and a re-read on resume.
+
+**Caching is pinned, and the working set is kept small on purpose** — GC pause
+scales with the *live* set (~70 ns/byte: 4 ms at 64 KB, **70 ms at 1 MB**), so
+a small resident cache is a latency win, not just a memory one. Parsing
+`index.json` alone used to hold ~263 KB.
+
+**`quest_catalog.py` is the one allowed exception** to the no-I/O rule: it is
+the catalog reader the client delegates to, and its pure functions are
+separately host-tested.
+
+**There is no swappable `Store` interface** — considered and cut. The bake-off
+rejected every alternative engine (SQLite corrupts and hangs; TinyDB is ~40x
+slower than files; btree's `open()` never returns), so nothing will be swapped;
+and a get/put/append/scan lowest common denominator cannot express *truncate*,
+*compact* or *delete*, which the session genuinely needs. The two real backends
+are also structurally unlike: LittleFS appends natively, localStorage has no
+append at all.
+
+## Rendering: fill is linear, so never repaint what did not change
+
+Measured on device: the framebuffer fills at **5.1 Mpx/s**, so cost tracks area
+exactly — a full `clear()` is **45 ms**, a 48px token box is **2.4 ms**.
+Presenting follows the same rule: `hw.update()` is **23.6 ms**, a
+`partial_update` of that token box **1.8 ms**.
+
+**Two per-pixel Python loops were most of the app's draw time.** Both are fixed;
+do not reintroduce the pattern:
+
+- `widgets.arc_runs` walked every pixel of the bounding box calling
+  `math.sqrt` AND `math.atan2` per pixel — ~4,100 trig calls for one token.
+  A full ring now uses integer scanline spans (comparing SQUARED distances, so
+  it stays exact); a partial arc still needs the angle but only scans the
+  annulus. `tests/test_widgets_arc.py` diffs it pixel-for-pixel against the
+  original across 60 configurations — **any rewrite must keep that green**.
+- `icons.draw` tested one bit per pixel, and each test shifted a `size`-bit
+  integer: 7,056 big-int shifts for the 84px `WILLPOWER_XL`, **147 ms**. Runs
+  are now decoded once per mask and cached in `_RUNS` (masks are module
+  constants). **2.8 ms.**
+
+**Partial repaint protocol.** A modal that changes one widget sets
+`self.dirty_rect = (x, y, w, h)` in `on_button` and implements
+`draw_partial(hw, game, pal)` returning that rect; the main loop repaints and
+`partial_update`s just that region instead of a full draw plus present.
+`PlayersDetailModal` (per-token) and `CommitModal` (value band) do this.
+
+Net: a stat increment went **967 ms -> 37 ms**.
+
+## Persistence: gameplay runs off RAM, storage happens in the background
+
+**A tap must never touch storage.** It mutates RAM, queues what changed, and
+returns — measured at **3.35 ms median / 7.56 ms worst** on device. The durable
+work is drained by `db.session.tick()`, which `main.py` calls *only on frames
+with nothing to draw*, so it never lands on a frame the player is waiting for.
+This is a product requirement, not an optimisation.
+
+Two rules make the background actually invisible:
+
+- **Batch the journal.** Draining on every idle frame put a ~55 ms append in
+  every gap between taps. `tick()` treats `_idle == 0` as "a tap arrived since
+  last tick" and holds records in RAM until either `BATCH` have piled up or the
+  run stops. Idle ticks are **0 ms median** as a result.
+- **Debounce the checkpoint.** The `state.json` rewrite is the one expensive
+  operation (~89 ms), so it waits `IDLE_BEFORE_STATE` quiet ticks — a real
+  pause, of which a card game has many. Nothing is at risk meanwhile: the
+  journal is already durable and is what reconstructs the state.
+
+`flush()` goes **straight at the queue, not through `tick()`** — `tick()`
+declines to write while the player looks active, which is right for a
+background frame and wrong for a flush. Routing flush through it meant a
+save-and-quit could return with records still in RAM. Flush points: save-quit,
+game over, and before every `game` rebind.
+
+**The queue is tagged with its game object.** `main.py` rebinds `game` on
+new-game and end-game, and a queued write derived from a different game is
+garbage — the same hazard `pending[1] is game` guards for deltas. A rebind
+**drops** the queue; otherwise a late write resurrects a save the player just
+ended. `tests/test_background_persistence.py` covers this.
+
+There is no real background *thread*: Pimoroni disables `MICROPY_PY_THREAD` for
+the Presto (`boards/presto/mpconfigboard.h`), so no second core and no sidecar
+process is available from Python. The main loop's idle path is the equivalent.
+
+A durable file write costs **~50 ms and is FLAT** — rewriting 1500 B costs the
+same whether the file previously held 0 or 100 KB (measured; it is
+per-open/write/close, not block-chain traversal). That is why none of this may
+happen on the tap path.
+
+- **`/state.json`** — the resumable game, ~1.5 KB. Written **atomically**
+  (temp file + `os.rename`; rename over an existing target is permitted on this
+  build, 8.6 ms). `open(path,"w")` truncated before the data landed, so a power
+  cut left an unloadable save.
+- **`/log.bin`** — the game log, append-only. It was **96% of `state.json`**
+  (37,887 B rewritten every tap). `to_dict()` no longer carries it.
+- **`/replay.bin`** — the delta history, append-only. Was a whole-file rewrite
+  of every delta on every tap: 42 KB and **875 ms** by round 10.
+
+Both append-only stores use the same framing: 2-byte little-endian length, then
+the payload. A torn tail is **truncated at, never skipped** — for a delta
+stream, applying records past a gap produces a *wrong* state rather than a
+missing one.
+
+**Two folds keep the stores honest, and both must mirror their writer:**
+- `fold_log` — `log_event` is **not** purely append: a keyed tally rewrites its
+  own row in place so eight stepper taps stay one line. The store records
+  *events*, and the fold reapplies that same (key, round, step) rule.
+- `fold_replay` — the journal cannot un-append, so the two non-append
+  operations become tombstones: `{"op":"t"}` an undo discarding the redo
+  future, `{"op":"x"}` the `MAX_SAVED_DELTAS` front-trim, `{"op":"s"}` a cursor
+  move (`replay_step` is *written*, not recomputed — Divergence D3).
+
+`tests/test_replay_journal.py` asserts the load-bearing invariant —
+`fold_replay(journal) == (game.deltas, game.replay_step)` — including after
+undo-truncation and after compaction. Legacy `/replay.json` is still read and
+seeded into the journal, honouring "losing the history must never cost you the
+game".
+
+Measured end-to-end over 10 rounds: a tap went **1735 ms → 3.35 ms**, and
+31 ms/tap counting every background write the run triggered.
+
 ## What may be committed (data policy)
 
 Decided by the user, 2026-07-25. The line is **verbatim vs derived**, not
@@ -224,6 +362,35 @@ catalog whose picker offers scenarios whose cards never arrived. Cycle names
 and order come from the plugin's own `jsons/zz-ALeP---*.menu.json`, mirrored
 into `CYCLE_ORDER` in **both** `quest_catalog.py` and
 `docs/js/quest_catalog.js`.
+
+`tools/build_catalog_pack.py` packs the quest-picker rows into
+`docs/data/catalog.bin` — fixed-width `struct` records plus a deduped string
+table, slug-sorted for binary search. Same gitignored/regenerated posture as
+the rest of `docs/data/`; runs in CI right after `build_card_data.py` and reads
+nothing but the `index.json` it just wrote.
+
+**Why binary, measured on the device — do not "simplify" this back to JSON.**
+`type(json.loads)` is `<class 'function'>` on the Presto's MicroPython build:
+the JSON decoder is **pure Python**, while `struct.unpack_from` is C. Parsing
+`index.json` cost **713 ms and 263 KB resident**; the pack loads in **8 ms and
+11 KB**. Two independent savings, both taken: 242 of 396 rows are unpickable
+(`group_by_cycle` filters `stageCount > 0`) and `counts` alone is 23 KB with
+zero runtime readers — so ship less *and* encode tight.
+
+The pack deliberately carries `releaseDate` so `quest_catalog.pack_as_index()`
+can feed the **existing** pure `group_by_cycle`/`cycles_for`/
+`resume_picker_state` rather than reimplementing the grouping — a
+reimplementation is where the twins drift. `CatalogPack` also exposes lazy
+accessors (`cycle_names` 16 ms, `find` 1 ms via binary search) that decode no
+text at all; `main.py` does not use them yet, because using them *would* mean
+reimplementing the grouping. Absent or corrupt `catalog.bin` falls back to
+`load_index()` — it is an optimisation, not a new source of truth.
+
+**Slug namespaces collide and the build asserts on it:** `players/` and
+`scenarios/` both key by `slugify()`, and **53 of 107 packs share a slug with a
+scenario** (`a-journey-to-rhosgobel` is both a quest and a player pack). A flat
+keyspace aliases them as *wrong data*, not a crash, so keys are typed
+(`("scenario", slug)` / `("pack", slug)`).
 
 `tools/build_icons.py` rasterizes the community SVG icon pack (encounter-set
 + expansion-symbol symbols) into `docs/data/icons.json` (24×24 1-bit masks,

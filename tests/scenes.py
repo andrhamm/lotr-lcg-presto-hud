@@ -350,17 +350,6 @@ def _led_modal():
     return hw, m
 
 
-def _reminders_modal():
-    from ui.modals import RemindersModal
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    g = _game()
-    g.reminders["archery"] = True
-    g.reminders["battle"] = True
-    m = RemindersModal(g)
-    m.draw(hw, g, pal)
-    return hw, m
-
 
 def _counter():
     from ui.modal_counter import CounterModal
@@ -1558,7 +1547,6 @@ SCENES = {
     "elim_modal": _elim_modal,
     "players_detail_modal": _players_detail_modal,
     "players_detail_edit_modal": _players_detail_edit_modal,
-    "reminders_modal": _reminders_modal,
     "led_modal": _led_modal,
     "questing_progress_modal": _questing_progress_modal,
     "questing_progress_modal_condition_stage": _questing_progress_modal_condition_stage,

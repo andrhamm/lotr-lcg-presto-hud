@@ -622,6 +622,17 @@ function pillShape(ctx, x, y, w, h, pen) {
   rect(ctx, x + w - c, y + h - c, c - 1, c - 1, pen);
 }
 
+// Fill a rect whose LEFT end is chamfered like pillShape's, right end square.
+// The first-player ribbon used a plain rectangle, which painted over the pill's
+// left chamfer and left that end square while the right end stayed rounded.
+// The ribbon is the pill's own ground, so it has to take the pill's shape.
+function capLeftFill(ctx, x, y, w, h, pen, c = PILL_CAP) {
+  rect(ctx, x + c, y, w - c, h, pen);
+  rect(ctx, x, y + c, c, h - 2 * c, pen);
+  rect(ctx, x + 1, y + 1, c - 1, c - 1, pen);
+  rect(ctx, x + 1, y + h - c, c - 1, c - 1, pen);
+}
+
 // A diagonal strike, stepped out of 1px rects - the device has no line
 // primitive, and a triangle this thin renders as a wedge.
 function pillSlash(ctx, x, y, w, h, pen, t = 3) {
@@ -662,8 +673,9 @@ export function pill(ctx, x, y, segs, border, ribbon, dead, icons) {
   const hw = PILL_HEAD_W;
   const headBg = ribbon ? ink("gold") : ink("well");
   if (ribbon) {
-    // the ribbon takes the bite
-    rect(ctx, x + 1, y + 1, hw + PILL_NOTCH - 1, PILL_H - 2, headBg);
+    // the ribbon takes the bite. Left-capped so the ribbon end stays as round
+    // as the far end of the pill - a square left edge read as a rendering bug.
+    capLeftFill(ctx, x + 1, y + 1, hw + PILL_NOTCH - 1, PILL_H - 2, headBg);
     ctx.fillStyle = ink("card");
     ctx.beginPath();
     ctx.moveTo(x + hw + PILL_NOTCH, y + 1);

@@ -631,6 +631,10 @@ class PlayersDetailModal:
         # which fires when a player actually edits a breakdown.
         self.buttons = []
         self.edit = None   # (i, stat, CounterState) while the inline pad is open
+        # Set by on_button when a tap changes exactly ONE token. The loop then
+        # repaints that token alone instead of the whole modal: a full draw is
+        # ~214 ms (four tokens plus a 45 ms clear), one token is ~14 ms.
+        self.dirty_rect = None
 
     def _open_edit(self, i, stat):
         game = self.game
@@ -674,11 +678,65 @@ class PlayersDetailModal:
     # apart makes the grouping legible, and a hairline divider seals it (the
     # same one the play screen draws between its two zones).
 
-    def _editor_row(self, d, pal, i, key, cx, cy, value, frac, ring_fill):
+    def _token_rect(self, key, i):
+        """Bounding box of one editor row: the -/+ buttons AND the token.
+
+        It has to include the buttons, not just the token: press_begin paints
+        a pressed bevel over the button that was tapped, and whatever the
+        partial repaint does not cover keeps that pressed look forever. The
+        row is still a fraction of the modal.
+        """
+        cx = 160 if key == "t" else 360
+        cy = self.ROW_TOP + i * self.ROW_H
+        half_w = self.STEP_DX + max(self.STEP_R, self.HIT // 2) + 3
+        half_h = max(self.TOKEN_R, self.STEP_R, self.HIT // 2) + 3
+        return (cx - half_w, cy - half_h, 2 * half_w, 2 * half_h)
+
+    def draw_partial(self, hw, game, pal):
+        """Repaint only the token the last tap changed.
+
+        Costs the background fill of a ~48px box plus one token, against a
+        full draw's clear-plus-four-tokens. Returns the rect so the loop can
+        partial_update just that area (1.8 ms, versus 23.6 ms for a full
+        present)."""
+        rect = self.dirty_rect
+        self.dirty_rect = None
+        if rect is None or self.edit:
+            return None
+        d = hw.display
+        x, y, w, h = rect
+        d.set_pen(pal.bg)
+        d.rectangle(x, y, w, h)
+        for key, cx in (("t", 160), ("w", 360)):
+            for i, p in enumerate(game.players):
+                if self._token_rect(key, i) != rect:
+                    continue
+                cy = self.ROW_TOP + i * self.ROW_H
+                if key == "t":
+                    danger = p.threat >= p.elimination - 10
+                    frac = p.threat / p.elimination if p.elimination > 0 else 0
+                    self._editor_row(d, pal, i, "t", cx, cy, p.threat, frac,
+                                     pal.red if danger else pal.gold,
+                                     register=False)
+                else:
+                    self._editor_row(d, pal, i, "w", cx, cy, p.commit, 1.0,
+                                     pal.gold, register=False)
+        return rect
+
+    def _editor_row(self, d, pal, i, key, cx, cy, value, frac, ring_fill,
+                    register=True):
+        """One row: -/+ buttons and the stat token.
+
+        `register=False` for the partial repaint - the hit boxes are already in
+        self.buttons, and appending them again on every tap would grow the list
+        without bound and leave duplicate targets behind.
+        """
         circ_btn(d, pal, cx - self.STEP_DX, cy, self.STEP_R, "-")
         circ_btn(d, pal, cx + self.STEP_DX, cy, self.STEP_R, "+")
         token(d, pal, cx, cy, self.TOKEN_R, 3, value, pal.value, frac,
               ring_fill, pal.dim, vscale=DISPLAY)
+        if not register:
+            return
         h = self.HIT // 2
         self.buttons.append(Button((key, i, -1), cx - self.STEP_DX - h, cy - h,
                                    self.HIT, self.HIT))
@@ -783,6 +841,8 @@ class PlayersDetailModal:
             return "close"
         if k in ("t", "w"):
             i, action = btn.id[1], btn.id[2]
+            if action in (-1, 1):
+                self.dirty_rect = self._token_rect(k, i)
             if action == "edit":
                 self._open_edit(i, "threat" if k == "t" else "willpower")
                 return None
@@ -801,66 +861,6 @@ class PlayersDetailModal:
             return None
         return None
 
-
-class RemindersModal:
-    """Encounter reminders — modal header (R# left, DONE right). Checkboxes
-    enable a timed toast at the start of the matching phase view."""
-
-    def __init__(self, game):
-        self.game = game
-        self.buttons = []
-
-    def draw(self, hw, game, pal):
-        from gamestate import REMINDER_DEFS
-        from ui.header import modal_header
-        d = hw.display
-        self.buttons = []
-        d.set_pen(pal.bg)
-        d.clear()
-        modal_header(d, pal, self.game, "Encounter Reminders", self.buttons)
-
-        y = 56
-        for key, label, view, _toast, _icon in REMINDER_DEFS:
-            on = self.game.reminders.get(key, False)
-            row = Button(("tog", key), 16, y, 448, 62)
-            bevel(d, pal, row.x, row.y, row.w, row.h, pal.card_hi if on else pal.card)
-            # checkbox well
-            d.set_pen(pal.well if hasattr(pal, "well") else pal.bg)
-            d.rectangle(30, y + 17, 28, 28)
-            if on:
-                d.set_pen(pal.ok_fg)
-                d.rectangle(36, y + 23, 16, 16)
-            text_left(d, pal, label, 76, y + 12, BODY, pal.tan if on else pal.muted)
-            from ui.header import VIEW_LABEL
-            # "At <view>", not "Notifies at <view>": at BODY the archery row
-            # ("Combat: Shadow Cards" plus the staging condition) runs 22px
-            # past the row at the longer wording. Shortening the copy is the
-            # fix; shrinking the caption is not (see the design system spec).
-            if key == "archery":
-                part1 = "At %s if staging " % VIEW_LABEL.get(view, view)
-                w1 = d.measure_text(part1, BODY)
-                text_left(d, pal, part1, 76, y + 38, BODY, pal.dim)
-                icons.draw(d, icons.THREAT_SM, 76 + w1 + 2, y + 38, pal.dim)
-                text_left(d, pal, "> 0", 76 + w1 + 18, y + 38, BODY, pal.dim)
-            else:
-                text_left(d, pal, "At %s" % VIEW_LABEL.get(view, view), 76, y + 38, BODY, pal.dim)
-            self.buttons.append(row)
-            y += 70
-
-    def on_button(self, btn):
-        k = btn.id[0]
-        if k == "tog":
-            key = btn.id[1]
-            on = not self.game.reminders.get(key, False)
-            self.game.reminders[key] = on
-            from gamestate import REMINDER_DEFS
-            label = next((lb for k2, lb, _v, _t, _i in REMINDER_DEFS
-                          if k2 == key), key)
-            self.game.log_event("Reminder %s: %s" % (label, "on" if on else "off"))
-            return None
-        if k == "close":
-            return "close"
-        return None
 
 
 class CommitModal:
@@ -882,6 +882,11 @@ class CommitModal:
         self.pos = 0
         self.state = CounterState(game.players[self.order[0]].commit)
         self.buttons = []
+        # A step tap changes only the big value; the header, the four step
+        # buttons and Done/Next are unchanged. Repainting just the value zone
+        # is ~30 ms against a 227 ms full draw (a 45 ms clear plus every
+        # control redrawn).
+        self.dirty_rect = None
 
     @property
     def idx(self):
@@ -899,17 +904,14 @@ class CommitModal:
         if v != before:
             self.game.log_event("P%d committed %d willpower" % (self.idx + 1, v))
 
-    def draw(self, hw, game, pal):
-        from ui.counter import CounterState
-        d = hw.display
-        self.buttons = []
-        d.set_pen(pal.bg)
-        d.clear()
+    #: The value band PLUS the step-button row beneath it. The buttons have to
+    #: be included: press_begin paints a pressed bevel on the one that was
+    #: tapped, and anything the partial repaint misses keeps that look.
+    VALUE_RECT = (0, 58, 480, 268)
 
-        text_center(d, pal, "P%d quests for..." % (self.idx + 1), 240, 28, DISPLAY, pal.gold)
-
-        # big value + official willpower icon as a trailing currency symbol,
-        # centered in the zone between the header and the step buttons
+    def _draw_value(self, d, pal):
+        """The big number and its trailing willpower glyph, centred in the
+        zone between the header and the step buttons."""
         val = self.state.preview
         VSCALE = 12                      # digit ink height = 7 rows x 12 = 84px
         ISZ = 84                         # icon matches the digit ink height
@@ -921,6 +923,10 @@ class CommitModal:
         text_left(d, pal, str(val), vx, vy, VSCALE, pal.gold)
         icons.draw(d, icons.WILLPOWER_XL, vx + vw + 14, vy, pal.gold)
 
+    def _draw_steps(self, d, pal, buttons=None):
+        """The four step buttons. `buttons` is the list to register hit boxes
+        on - the partial repaint passes None, because the boxes are already
+        registered and appending again would grow the list on every tap."""
         bw, bh, gap = 104, 76, 8
         total = 4 * bw + 3 * gap
         x0 = (480 - total) // 2
@@ -928,7 +934,36 @@ class CommitModal:
             b = Button(("step", step), x0 + i * (bw + gap), 250, bw, bh)
             bevel(d, pal, b.x, b.y, b.w, b.h, pal.btn, t=3)
             text_center(d, pal, label, b.x + bw / 2, b.y + 26, DISPLAY, pal.tan)
-            self.buttons.append(b)
+            if buttons is not None:
+                buttons.append(b)
+
+    def draw_partial(self, hw, game, pal):
+        """Repaint the value band and the step row after a step tap."""
+        rect = self.dirty_rect
+        self.dirty_rect = None
+        if rect is None:
+            return None
+        d = hw.display
+        d.set_pen(pal.bg)
+        d.rectangle(*rect)
+        self._draw_value(d, pal)
+        self._draw_steps(d, pal)
+        return rect
+
+    def draw(self, hw, game, pal):
+        from ui.counter import CounterState
+        d = hw.display
+        self.buttons = []
+        self.dirty_rect = None
+        d.set_pen(pal.bg)
+        d.clear()
+
+        text_center(d, pal, "P%d quests for..." % (self.idx + 1), 240, 28, DISPLAY, pal.gold)
+
+        # big value + official willpower icon as a trailing currency symbol
+        self._draw_value(d, pal)
+
+        self._draw_steps(d, pal, self.buttons)
 
         done = Button(("done",), 24, 360, 200, 92)
         nxt = Button(("next",), 256, 360, 200, 92)
@@ -953,6 +988,8 @@ class CommitModal:
                 self.state.zero()
             else:
                 self.state.tap(btn.id[1])
+            # Only the big value changed - repaint that band, not the modal.
+            self.dirty_rect = self.VALUE_RECT
             return None
         if k == "next":
             if self.final:

@@ -84,6 +84,10 @@ def test_resource_and_planning_each_show_only_their_own_copy():
     assert "gains a resource" not in t
 
 
+def _texts(hw):
+    return [str(c[1]) for c in hw.display.calls if c[0] == "text"]
+
+
 def test_commit_view_shows_each_players_willpower_in_their_stat_pill():
     """Willpower is the third segment of a player's pill, not a per-player
     "commit" button. One tap target per pill, all routing to the same detail
@@ -149,6 +153,298 @@ def test_staging_view_has_direct_steppers():
         assert k in ids
 
 
+def test_both_totals_rows_expose_the_same_three_targets_per_panel():
+    """A panel is one control with three parts: - | editor | +.
+
+    The two rows were built from different branches and only one of them
+    registered the centre editor for both keys: quest_commit (tappable) gave
+    "wp" and "stg" one each, quest_staging (steppers) gave it to "wp" only.
+    So the Staging panel's centre was dead on the one screen the player stares
+    at it, and the staging-threat counter had no way in from there at all.
+    """
+    for view in ("quest_commit", "quest_staging"):
+        hw, pal, game, screen = _setup(view)
+        screen.draw(hw, game, pal)
+        ids = _ids(screen)
+        for k in ("wp", "wp-", "wp+", "stg", "stg-", "stg+"):
+            assert k in ids, "%s is missing %r" % (view, k)
+
+
+def test_staging_counter_wears_the_black_threat_icon():
+    """Staging threat is never red.
+
+    widgets.willpower_staging_meter and _totals_row both ink it pal.outline,
+    per design/stat-system.md's staging/enemy-threat rule - red is the PLAYER
+    threat colour. The counter shared the player-threat icon, so the one
+    editor for the number contradicted every readout of it.
+    """
+    hw, pal, game, screen = _setup("quest_staging")
+    screen.draw(hw, game, pal)
+    modal = screen.on_button(_find(screen, ("stg",)), game)[1]
+    hw.display.calls = []
+    modal.draw(hw, game, pal)
+    pens = {c[5] for c in hw.display.calls if c[0] == "rect"}
+    assert pal.outline in pens, "the staging counter must ink its icon black"
+    assert pal.red not in pens, "staging threat is never red"
+    # Black ink needs a lighter ground or it is invisible on pal.bg (16,12,9)
+    # - the same reason the by-round chart stripes its staging row.
+    assert pal.row_stripe in pens, "the black icon needs a ground to read on"
+
+
+# -- the Back arrow is navigation, not undo --------------------------------
+#
+# It used to call game.undo() straight out, so one tap of Back rewound one
+# DELTA - i.e. one tap of anything else. Undo/redo already has a home (the
+# Game Log's < > replay controls, ui/screen_log.py), and a bottom-bar arrow
+# next to a forward arrow reads as "the screen before this one" to everybody.
+
+def _advance(screen, hw, pal, game, n=1):
+    for _ in range(n):
+        screen.draw(hw, game, pal)
+        screen.on_button(_find(screen, ("advance",)), game)
+
+
+def test_back_returns_to_the_view_you_came_from():
+    hw, pal, game, screen = _setup("resource")
+    _advance(screen, hw, pal, game, 2)
+    assert game.view == "planning"
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    assert game.view == "aw_resource"
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    assert game.view == "resource"
+
+
+def test_back_does_not_rewind_the_values_you_typed():
+    """The whole point of navigation-not-undo: going back to look at a screen
+    must not silently discard what you entered on the one you left."""
+    hw, pal, game, screen = _setup("quest_commit")
+    game.set_staging(6)
+    _advance(screen, hw, pal, game, 2)
+    assert game.view == "quest_staging"
+    game.set_willpower(9)
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    assert game.willpower == 9 and game.staging == 6
+
+
+def test_an_edit_made_after_going_back_flows_forward():
+    """Downstream views compute from live state, so a value corrected on an
+    earlier screen is what the later screen resolves against."""
+    hw, pal, game, screen = _setup("quest_commit")
+    game.set_willpower(5)
+    game.set_staging(4)
+    _advance(screen, hw, pal, game, 2)
+    assert game.view == "quest_staging"
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)     # -> aw_quest_commit
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)     # -> quest_commit
+    assert game.view == "quest_commit"
+    game.set_willpower(9)
+    _advance(screen, hw, pal, game, 2)
+    assert game.view == "quest_staging"
+    outcome, n, _room = game.quest_preview()
+    assert (outcome, n) == ("success", 5), "9 vs 4, not the pre-Back 5 vs 4"
+
+
+def test_back_never_crosses_a_round_boundary():
+    """A closed round is a hard floor. Backing into it would offer to re-enter
+    a round whose end_round() has already banked its stats, bumped the counter
+    and re-derived the willpower total."""
+    hw, pal, game, screen = _setup("resource")
+    _advance(screen, hw, pal, game, 2)
+    game.end_round()
+    assert game.view == "resource" and game.round == 2
+    assert game.can_go_back() is False
+    screen.draw(hw, game, pal)
+    assert ("back",) not in [b.id for b in screen.buttons]
+
+
+def test_backing_out_of_a_resolved_quest_reopens_it():
+    """resolve_quest() latches quest_resolved, and stage_advance only resolves
+    `if not game.quest_resolved` - so without this the staging number could be
+    corrected and the resolution would still report the old comparison."""
+    hw, pal, game, screen = _setup("quest_staging")
+    game.willpower, game.staging = 11, 7
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("stage_advance",)), game)
+    assert game.view == "quest_resolution" and game.pending_budget == 4
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    assert game.view == "quest_staging"
+    assert game.quest_resolved is False and game.pending_budget == 0
+    assert game.quest_history == []          # the row it appended went with it
+    game.set_staging(3)
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("stage_advance",)), game)
+    assert game.pending_budget == 8          # recomputed, not the stale 4
+
+
+def test_backing_out_of_a_failed_quest_takes_the_threat_raise_back():
+    """This is a TRACKER, not a referee. A fail is the one resolution that
+    changes something on its own - it raises every living player's threat - and
+    that is exactly the count a player is most likely to have got wrong. So
+    Back reverses it rather than refusing to move.
+    """
+    hw, pal, game, screen = _setup("quest_staging")
+    game.willpower, game.staging = 3, 8
+    before = [p.threat for p in game.players]
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("stage_advance",)), game)
+    assert game.view == "quest_resolution" and game.quest_outcome == "fail"
+    assert [p.threat for p in game.players] == [t + 5 for t in before]
+
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    assert game.view == "quest_staging"
+    assert [p.threat for p in game.players] == before, "the raise must come back"
+    assert game.quest_resolved is False and game.quest_history == []
+
+    game.set_staging(3)                       # the miscount, corrected
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("stage_advance",)), game)
+    assert game.quest_outcome == "tie"
+    assert [p.threat for p in game.players] == before
+
+
+def test_backing_out_of_a_fail_that_eliminated_a_player_brings_them_back():
+    """The case the user named: an elimination happened, then the count turned
+    out to be wrong. p.eliminated is derived from threat >= elimination, so
+    lowering the threat un-eliminates on its own - what needs saying is that
+    the pending prompt goes with it."""
+    hw, pal, game, screen = _setup("quest_staging")
+    game.players[0].elimination = game.players[0].threat + 3
+    game.willpower, game.staging = 0, 5
+    before = [p.threat for p in game.players]
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("stage_advance",)), game)
+    assert game.players[0].eliminated is True
+    assert game.pending_elim == 0
+
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    assert [p.threat for p in game.players] == before
+    assert game.players[0].eliminated is False
+    assert game.pending_elim is None, "the elimination prompt must go too"
+
+
+def test_a_fail_only_takes_back_the_threat_it_actually_raised():
+    """resolve_quest raises LIVING players only. A player already eliminated
+    when the quest failed took no raise, so reversing must not lower them -
+    which is why the indices are recorded rather than re-derived from who
+    happens to be eliminated now."""
+    hw, pal, game, screen = _setup("quest_staging")
+    game.players[1].eliminated = True
+    dead_threat = game.players[1].threat
+    game.willpower, game.staging = 2, 6
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("stage_advance",)), game)
+    assert game.players[1].threat == dead_threat
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    assert game.players[1].threat == dead_threat
+
+
+def test_back_works_on_a_resumed_game_with_nothing_recorded():
+    """Back is derived from the phase sequence, so it needs no session state
+    and works on the frame a save is resumed. An earlier draft kept a
+    visited-screens stack, which left a resumed game with no Back at all."""
+    from gamestate import GameState
+    hw, pal, game, screen = _setup("resource")
+    _advance(screen, hw, pal, game, 2)
+    assert game.view == "planning"
+    g2 = GameState.from_dict(game.to_dict())
+    assert g2.can_go_back() is True
+    assert g2.back_view() is True
+    assert g2.view == "aw_resource"
+
+
+def test_prev_view_is_the_inverse_of_next_view():
+    """The two must agree, or Back and Forward describe different sequences.
+    Checked over every view either function is total on, including the two
+    that are not plain neighbours in VIEW_ORDER (the sailing detour, and
+    resolution being entered by resolving rather than by advancing)."""
+    from gamestate import GameState, VIEW_ORDER
+    for sailing in (False, True):
+        for v in list(VIEW_ORDER) + ["quest_sailing"]:
+            # travel has two forward predecessors on paper - aw_quest_staging
+            # and aw_quest_resolution - so prev_view has to pick one. The
+            # staging window is unreachable in the catalog flow (quest_staging
+            # advances through stage_advance, straight to resolution), so
+            # travel's real predecessor is the resolution window.
+            if v == "aw_quest_staging":
+                continue
+            # round_end -> resource is the one forward step that is not a
+            # phase move but a ROUND move: end_round() bumps the counter,
+            # re-derives the willpower total and re-arms the per-round flags.
+            # Back stops there - see test_back_never_crosses_a_round_boundary.
+            if v == "round_end":
+                continue
+            # You cannot be standing on the sailing view in a game that has no
+            # sailing test - forcing it makes an unreachable state.
+            if v == "quest_sailing" and not sailing:
+                continue
+            g = GameState()
+            g.sailing = sailing
+            g.view = v
+            nxt = g.next_view()
+            g.view = nxt
+            assert g.prev_view() == v, (
+                "%s -> %s -> %s (sailing=%s)"
+                % (v, nxt, g.prev_view(), sailing))
+
+
+def test_backing_into_sailing_does_not_shift_the_heading_twice():
+    """advance_view() shifts one step off-course on the way INTO the sailing
+    test (rulebook p.6). That is an arrival effect, not a per-tap one."""
+    hw, pal, game, screen = _setup("planning")
+    game.sailing = True
+    _advance(screen, hw, pal, game)
+    assert game.view == "quest_sailing"
+    heading = game.heading
+    screen.draw(hw, game, pal)
+    screen.on_button(_find(screen, ("back",)), game)
+    assert game.view == "planning"
+    _advance(screen, hw, pal, game)
+    assert game.view == "quest_sailing"
+    assert game.heading == heading, "the winds shifted twice for one arrival"
+
+
+def _twin(name):
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return open(os.path.join(root, "docs", "js", name)).read()
+
+
+def test_the_twins_totals_row_registers_the_same_centre_editors():
+    """Source check on the twin, the way test_gamestate.py checks endRound.
+
+    The JS branch was left as two nested ifs by a half-applied edit -
+    `if (key === "stg") if (key === "wp") ...` - which parses, imports, and
+    passes the structural parity probe while registering NO centre editor at
+    all. Only reading the line finds it.
+    """
+    js = _twin("screen_play.js")
+    body = js[js.index("  _totalsRow("):]
+    body = body[:body.index("\n  }")]
+    assert 'new Button([key], x + 64, y, half - 128, 84)' in body, (
+        "docs/js/screen_play.js _totalsRow must push a centre editor for both "
+        "keys, mirroring ui/screen_play.py _totals_row")
+    assert 'if (key === "wp") this.buttons.push' not in body
+
+
+def test_the_twins_staging_counter_asks_for_the_staging_icon():
+    js = _twin("screen_play.js")
+    body = js[js.index('if (k === "stg") {'):]
+    # to the end of the returned ["modal", ...] tuple - NOT the first "}",
+    # which closes the on-commit arrow function well before the icon argument.
+    body = body[:body.index("];")]
+    assert '"staging"' in body, (
+        'docs/js/screen_play.js must open the staging counter with the '
+        '"staging" icon (black), not "threat" (the player-threat red)')
+
+
 def test_resolve_success_enters_resolution_view_with_budget():
     hw, pal, game, screen = _setup("quest_staging")
     game.willpower = 11
@@ -160,912 +456,3 @@ def test_resolve_success_enters_resolution_view_with_budget():
     assert game.quest_outcome == "success"
 
 
-def test_resolve_failure_enters_resolution_with_outcome_toast():
-    hw, pal, game, screen = _setup("quest_staging")
-    game.willpower = 2
-    game.staging = 7
-    screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("stage_advance",)), game)
-    assert game.view == "quest_resolution"     # outcome shown on the resolution view
-    assert game.players[0].threat == 5         # shortfall applied to all
-    assert game.quest_outcome == "fail"
-    assert screen.toast is not None            # picked up by the main loop
-    screen.draw(hw, game, pal)                 # fail resolution -> Travel CTA
-    ids = [b.id[0] for b in screen.buttons]
-    assert "advance" in ids
-
-
-def test_banner_does_not_leak_to_other_views():
-    hw, pal, game, screen = _setup("quest_staging")
-    screen.banner = ("Quest failed. +5", "bad", "quest_staging")
-    game.view = "travel"
-    screen.draw(hw, game, pal)
-    texts = [c[1] for c in hw.display.calls if c[0] == "text"]
-    assert not any("failed" in str(t) for t in texts)
-
-
-def test_commit_view_wp_and_stg_have_inline_thirds():
-    hw, pal, game, screen = _setup("quest_commit")
-    screen.draw(hw, game, pal)
-    ids = [b.id[0] for b in screen.buttons]
-    assert "wp" in ids and "wp-" in ids and "wp+" in ids
-    assert "stg" in ids and "stg-" in ids and "stg+" in ids
-
-
-def test_commit_wp_thirds_geometry_flanks_centre():
-    hw, pal, game, screen = _setup("quest_commit")
-    screen.draw(hw, game, pal)
-    minus = _find(screen, ("wp-",))
-    centre = _find(screen, ("wp",))
-    plus = _find(screen, ("wp+",))
-    for b in (minus, centre, plus):
-        assert b.h == 84 and b.w >= 24
-    assert minus.x < centre.x < plus.x
-    assert minus.x + minus.w == centre.x
-    assert centre.x + centre.w == plus.x
-    assert minus.w == plus.w
-
-
-def test_commit_wp_thirds_step_and_floor_at_zero():
-    hw, pal, game, screen = _setup("quest_commit")
-    game.willpower = 0
-    screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("wp-",)), game)
-    assert game.willpower == 0
-    screen.on_button(_find(screen, ("wp+",)), game)
-    assert game.willpower == 1
-
-
-def test_commit_staging_thirds_geometry_flanks_centre():
-    hw, pal, game, screen = _setup("quest_commit")
-    screen.draw(hw, game, pal)
-    minus = _find(screen, ("stg-",))
-    centre = _find(screen, ("stg",))
-    plus = _find(screen, ("stg+",))
-    for b in (minus, centre, plus):
-        assert b.h == 84 and b.w >= 24           # layout linter's MIN_TARGET
-    assert minus.x < centre.x < plus.x           # left / centre / right order
-    assert minus.x + minus.w == centre.x         # thirds tile with no gaps
-    assert centre.x + centre.w == plus.x
-    assert minus.w == plus.w                     # outer thirds are symmetric
-
-
-def test_commit_staging_thirds_step_and_floor_at_zero():
-    hw, pal, game, screen = _setup("quest_commit")
-    game.staging = 0
-    screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("stg-",)), game)
-    assert game.staging == 0                     # floored, never negative
-    screen.on_button(_find(screen, ("stg+",)), game)
-    assert game.staging == 1
-
-
-def test_commit_staging_caption_reads_the_scenario_aware_estimate():
-    """Was "+%d reveal estimate", where the number was
-    STAGING_HIGH_PER_PLAYER - a constant, so every scenario ever published
-    showed the same figure. It is now the worst printed threat in THIS
-    scenario's own gathered pool, computed at build time."""
-    from viewcopy import STAGING
-    hw, pal, game, screen = _setup("quest_commit")
-    screen.draw(hw, game, pal)
-    assert (STAGING["estimate"] % game.staging_reveal_estimate()) in _texts(hw)
-
-
-def test_the_estimate_follows_the_loaded_scenario_not_a_constant():
-    from viewcopy import STAGING
-    hw, pal, game, screen = _setup("quest_commit")
-    # The Oath: Spider Den prints 4, and Tangled Grove prints a literal X.
-    game.scenario = {"maxCardThreat": 4, "hasXThreat": True}
-    assert game.staging_reveal_estimate() == 4 * len(game.players)
-    assert game.staging_estimate_is_floor() is True
-    screen.draw(hw, game, pal)
-    # an X in the pool means the number is a floor, and the caption says so
-    assert (STAGING["estimate_x"] % (4 * len(game.players))) in _texts(hw)
-
-    # Passage Through Mirkwood tops out at 3 and prints no X.
-    hw2, pal2, game2, screen2 = _setup("quest_commit")
-    game2.scenario = {"maxCardThreat": 3}
-    assert game2.staging_reveal_estimate() == 3 * len(game2.players)
-    assert game2.staging_estimate_is_floor() is False
-
-
-def test_the_estimate_falls_back_when_no_scenario_is_loaded():
-    """Manual setup, or a save from before maxCardThreat was emitted."""
-    hw, pal, game, screen = _setup("quest_commit")
-    game.scenario = None
-    assert game.staging_reveal_estimate() == 3 * len(game.players)
-
-
-def test_commit_staging_tap_opens_counter():
-    hw, pal, game, screen = _setup("quest_commit")
-    screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("stg",)), game)
-    assert result[0] == "modal"
-    modal = result[1]
-    modal.state.tap(5)
-    modal.state.confirm()
-    modal.on_commit(modal.state.value)
-    assert game.staging == 5
-
-
-def test_resolution_apply_places_and_goes_to_travel():
-    hw, pal, game, screen = _setup("quest_resolution")
-    game.quest = {"stage_n": 1, "side": "B", "points": 8, "progress": 0}
-    game.quest_outcome = "success"
-    game.quest_outcome_n = 4
-    game.pending_budget = 4
-    screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("apply_alloc",)), game)
-    assert game.quest["progress"] == 4
-    # Applying progress IS step 3.4, so it hands off to 3.4's action window
-    # rather than skipping past it to travel. That window is where a
-    # just-revealed location can still be dealt with before travel.
-    assert game.view == "aw_quest_resolution"
-    assert game.next_phase_view() == "travel"
-    assert game.pending_budget == 0
-
-
-def test_travel_buttons_flag_the_location_picker():
-    # The picker needs the scenario's gather-list union read out of the
-    # catalog first, so the screen raises a flag and main.py's loop builds
-    # the modal - it no longer returns one directly.
-    hw, pal, game, screen = _setup("travel")
-    screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("travel_new",)), game)
-    assert game.pending_location_pick == {"mode": "new", "back": "play"}
-
-    game.active_locations = [{"points": 3, "progress": 1}]
-    screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("travel_change",)), game)
-    assert game.pending_location_pick == {"mode": "change", "back": "play"}
-
-
-def test_travel_new_logs_precisely():
-    g = GameState()
-    m = LocationPickModal(g, mode="new")
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    m.draw(hw, g, pal)
-    save = [b for b in m.buttons if b.id == ("save",)][0]
-    m.on_button(save)
-    assert g.active_locations[0]["points"] == 3
-    assert g.active_locations[0]["progress"] == 0
-    assert "Traveled to new location" in g.log[-1]["text"]
-
-
-def _texts(hw):
-    return [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-
-
-def test_progress_zone_shows_quest_loc_side_labels_and_remaining_values():
-    hw, pal, game, screen = _setup("enc_optional")
-    game.quest = {"stage_n": 2, "side": "B", "points": 8, "progress": 1}
-    game.active_locations = [{"points": 9, "progress": 4}]
-    game.side_quests = [{"points": 9, "progress": 3}]
-    screen.draw(hw, game, pal)
-    texts = _texts(hw)
-    for t in ("Q", "L", "S1"):                       # flipped zone: short headers
-        assert t in texts
-    for remaining in ("7", "5", "6"):                # points - progress each
-        assert remaining in texts
-
-
-def test_progress_zone_tap_present_and_sq_add_card_dropped():
-    # The +SQ placeholder card is gone; every play view routes progress edits
-    # (incl. adding side quests) through the Questing Progress view.
-    for view in ("resource", "quest_commit", "quest_staging",
-                 "enc_optional", "refresh", "travel"):
-        hw, pal, game, screen = _setup(view)
-        screen.draw(hw, game, pal)
-        ids = [b.id[0] for b in screen.buttons]
-        assert "progress_detail" in ids, view
-        assert "sq_add" not in ids, view
-
-
-def test_progress_detail_opens_questing_progress_modal():
-    from ui.modals import QuestingProgressModal
-    hw, pal, game, screen = _setup("resource")
-    screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("progress_detail",)), game)
-    assert isinstance(result[1], QuestingProgressModal)
-
-
-def test_commit_view_shows_the_stat_zone_then_the_note():
-    from ui.screen_play import ZONE_TOP
-    hw, pal, game, screen = _setup("quest_commit")
-    screen.draw(hw, game, pal)
-    assert "Q" in _texts(hw)                         # the quest progress pill
-    players = _find(screen, ("players_detail",))
-    progress = _find(screen, ("progress_detail",))
-    assert players.y == ZONE_TOP                     # first row starts the zone
-    assert players.x == 8
-    # progress pills follow the players, so they are at or below them
-    assert progress.y >= players.y
-    # RR 3.2 p.23: commitment is in player order - not simultaneous and not
-    # secret - so the copy has to say so. Joined: the line wraps.
-    assert "In player order, exhaust characters to commit" in " ".join(_texts(hw))
-    assert "commit_tip" not in [b.id[0] for b in screen.buttons]
-
-
-def test_the_stat_zone_hands_its_unused_space_back_to_the_view():
-    """The point of the pills: the zone takes only the room it needs, and the
-    content band starts under it rather than at a fixed line. Two fixed 90px
-    matrices always ended at 136 no matter how few players were in the game."""
-    from ui.screen_play import ZONE_TOP, PILL_H, CONTENT_Y
-    hw, pal, game, screen = _setup("refresh")
-    game.active_locations = []
-    game.side_quests = []
-    game.players = game.players[:2]
-    screen.draw(hw, game, pal)
-    # legend + 2 players + Q fit one row, so content starts a row's height in
-    assert screen.content_y == ZONE_TOP + PILL_H + 10
-    assert screen.content_y < CONTENT_Y, (
-        "a two-player game should start higher than the old fixed line")
-
-
-def test_stat_zone_caps_its_rows_keeping_oldest_side_quests_and_sailing():
-    """Pills wrap, so without a cap ten side quests would flow straight
-    through the content band and off the screen. Same overflow policy the
-    fixed-column zone had: Q, L, the oldest sides and sailing stay."""
-    from ui.screen_play import ZONE_TOP, PILL_H, PILL_ROW_GAP
-    hw, pal, game, screen = _setup("resource")
-    game.active_locations = [{"points": 5, "progress": 0}]
-    game.sailing = True
-    game.side_quests = [{"points": 5, "progress": 0} for _ in range(10)]
-    screen.draw(hw, game, pal)
-    texts = _texts(hw)
-    for lab in ("Q", "L", "S1"):
-        assert lab in texts
-    assert "S10" not in texts                        # newest sides dropped
-    bottom = ZONE_TOP + screen.MAX_ZONE_ROWS * PILL_H \
-        + (screen.MAX_ZONE_ROWS - 1) * PILL_ROW_GAP
-    assert screen.content_y <= bottom + 10, "the zone grew past its row cap"
-
-
-def test_stat_zone_shows_the_sailing_pill_regardless_of_view():
-    """Sailing rides along as its own two-segment pill (wheel + the heading's
-    weather glyph) whenever game.sailing is true, on every view."""
-    hw, pal, game, screen = _setup("travel")
-    game.sailing = False
-    screen.draw(hw, game, pal)
-    without = len([b for b in screen.buttons if b.id == ("progress_detail",)])
-
-    hw, pal, game, screen = _setup("travel")
-    game.sailing = True
-    game.heading = 2
-    screen.draw(hw, game, pal)
-    with_sail = len([b for b in screen.buttons if b.id == ("progress_detail",)])
-    # icons rasterize to runs of 1px rects, so the mask cannot be asserted on
-    # directly - the pill's own tap target is the observable thing
-    assert with_sail == without + 1, "sailing adds no pill"
-
-
-def test_round_end_view_turns_the_round():
-    """The round turns on 0.1's CTA, not on the refresh view.
-
-    RR keeps them separate (7.5 Refresh phase ends, THEN 0.1 Round ends), and
-    refresh is an ordinary phase view now: its CTA is a plain phase handoff
-    like every other."""
-    hw, pal, game, screen = _setup("round_end")
-    screen.draw(hw, game, pal)
-    assert game.round == 1                       # 0.1 belongs to THIS round
-    screen.on_button(_find(screen, ("endround",)), game)
-    assert game.round == 2
-    assert game.view == "resource"
-
-
-def test_refresh_applies_7_3_and_7_4_on_entry():
-    hw, pal, game, screen = _setup("combat_player")
-    screen.draw(hw, game, pal)
-    before = [p.threat for p in game.players]
-    game.enter_view("refresh")
-    assert [p.threat for p in game.players] == [t + 1 for t in before]
-    assert game.first_player == 1
-    assert game.round == 1                       # still this round
-
-
-def test_totals_cards_renamed_with_currency_icons():
-    hw, pal, game, screen = _setup("quest_staging")
-    screen.draw(hw, game, pal)
-    texts = _texts(hw)
-    assert "Questing for" in texts and "Staging area" in texts
-    assert "Willpower" not in texts and "Staging threat" not in texts
-
-
-def test_staging_center_tap_opens_reminders():
-    from ui.modals import RemindersModal
-    hw, pal, game, screen = _setup("quest_staging")
-    screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("enc_rem",)), game)
-    assert isinstance(result[1], RemindersModal)
-
-
-def test_staging_shows_framework_window_and_meter():
-    hw, pal, game, screen = _setup("quest_staging")
-    game.willpower, game.staging = 11, 7
-    screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert _has_framework(hw, pal) and _has_window(hw, pal)
-    fills = [c for c in hw.display.calls if c[0] == "rect" and c[4] == 10
-             and c[5] in (pal.gold, pal.outline)]
-    assert len(fills) == 2
-
-
-def test_staging_meter_and_totals_row_both_clear_of_cta():
-    from ui.screen_play import CTA_Y
-    hw, pal, game, screen = _setup("quest_staging")
-    screen.draw(hw, game, pal)
-    ids = _ids(screen)
-    assert "stg-" in ids and "wp-" in ids     # totals_row steppers still present
-    stepper = _find(screen, ("stg-",))
-    assert stepper.y + stepper.h <= CTA_Y
-
-
-def test_staging_tied_shows_dim_tie_message():
-    hw, pal, game, screen = _setup("quest_staging")
-    game.willpower = game.staging = 7
-    screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert any("Tied" in t for t in texts)
-
-
-def test_commit_tip_button_is_gone():
-    hw, pal, game, screen = _setup("quest_commit")
-    screen.draw(hw, game, pal)
-    assert "commit_tip" not in [b.id[0] for b in screen.buttons]
-
-
-def test_the_commit_view_has_no_confirm_ritual():
-    """Committing willpower per player, then confirming it, is gone. The two
-    sources that remain are the player widgets and the Questing For stepper,
-    and they are kept in sync rather than ratified."""
-    hw, pal, game, screen = _setup("quest_commit")
-    screen.draw(hw, game, pal)
-    ids = _ids(screen)
-    assert "confirm_all" not in ids
-    assert "wp+" in ids and "wp-" in ids       # the Questing For tool stays
-
-
-def test_editing_the_total_makes_the_player_pills_say_unknown():
-    """The per-player values are still stored, but they no longer add up to
-    the total, so the pills must not assert a breakdown that is not true."""
-    hw, pal, game, screen = _setup("quest_commit")
-    game.set_commit(0, 4)
-    screen.draw(hw, game, pal)
-    assert "4" in _texts(hw)
-
-    hw, pal, game, screen = _setup("quest_commit")
-    game.set_commit(0, 4)
-    game.set_willpower(11)
-    screen.draw(hw, game, pal)
-    texts = _texts(hw)
-    assert texts.count("?") == len(game.players)
-
-
-def test_notification_overlay_draws_with_pie_and_dismiss():
-    hw, pal, game, screen = _setup("combat_shadow")
-    screen.notif = ["Archery: deal damage now"]
-    screen.notif_frac = 0.5
-    screen.draw(hw, game, pal)
-    assert any("Archery" in str(c[1]) for c in hw.display.calls if c[0] == "text")
-    assert any(c[0] == "tri" for c in hw.display.calls)   # pie fan drawn
-    assert screen.notif_pie is not None
-    screen.on_button(_find(screen, ("notif_dismiss",)), game)
-    assert screen.notif is None
-
-
-def test_notification_pie_fraction_controls_fan_size():
-    from ui.screen_play import draw_notif_pie
-    hw = FakeHardware()
-    pal = Palette(hw.display)
-    draw_notif_pie(hw.display, pal, 100, 100, 11, 1.0)
-    full = sum(1 for c in hw.display.calls if c[0] == "tri")
-    hw.display.calls.clear()
-    draw_notif_pie(hw.display, pal, 100, 100, 11, 0.25)
-    quarter = sum(1 for c in hw.display.calls if c[0] == "tri")
-    assert full == 24 and quarter == 6
-
-
-def test_resolution_apply_always_enabled_and_shows_discard():
-    hw, pal, game, screen = _setup("quest_resolution")
-    game.quest = {"stage_n": 1, "side": "B", "points": 8, "progress": 0}
-    game.active_locations = []
-    game.quest_outcome = "success"
-    game.pending_budget = 4
-    screen.draw(hw, game, pal)          # auto-split places all 4
-    assert any(b.id == ("apply_alloc",) for b in screen.buttons)
-    screen.on_button(_find(screen, ("areset",)), game)   # clear allocation
-    screen.draw(hw, game, pal)
-    ids = [b.id for b in screen.buttons]
-    assert ("apply_alloc",) in ids       # always enabled (no gating)
-    assert "Unplaced (discarded)" in _texts(hw)
-
-
-def test_travel_modal_passes_contribution():
-    hw, pal, game, screen = _setup("travel")
-    game.active_locations = []
-    game.staging = 6
-    screen.draw(hw, game, pal)
-    screen.on_button(_find(screen, ("travel_new",)), game)
-    # main.py's loop builds the modal from the flag; with no catalog entries
-    # it opens straight on the manual stepper, exactly as before.
-    m = LocationPickModal(game, mode=game.pending_location_pick["mode"])
-    m.draw(hw, game, pal)
-    ctr_plus = [b for b in m.buttons if b.id == ("ctr", 1)][0]
-    m.on_button(ctr_plus)   # 2 -> 3
-    save = [b for b in m.buttons if b.id == ("save",)][0]
-    m.on_button(save)
-    assert game.staging == 3
-
-
-def test_header_shows_round_and_step_decimal():
-    hw, pal, game, screen = _setup("quest_resolution")
-    game.round = 2
-    game.step = "3.4"
-    screen.draw(hw, game, pal)
-    assert "R2 3.4" in _texts(hw)
-
-
-def test_progress_detail_edits_quest_and_logs_on_close():
-    hw, pal, game, screen = _setup("travel")
-    game.active_locations = [{"points": 3, "progress": 1}]
-    game.side_quests = [{"points": 5, "progress": 2}]
-    screen.draw(hw, game, pal)
-    m = screen.on_button(_find(screen, ("progress_detail",)), game)[1]
-    m.draw(hw, game, pal)
-    # bump quest progress via its stepper, bump the side quest, then close
-    m.on_button([b for b in m.buttons if b.id == ("qP+", None)][0])
-    m.on_button([b for b in m.buttons if b.id == ("sP+", 0)][0])
-    m.on_button([b for b in m.buttons if b.id == ("close",)][0])
-    assert game.quest["progress"] == 1
-    assert game.side_quests[0]["progress"] == 3
-    assert any("(progress view)" in e["text"] for e in game.log)
-
-
-def test_questing_for_card_taps_open_direct_total_editor_on_both_views():
-    for view in ("quest_commit", "quest_staging"):
-        hw, pal, game, screen = _setup(view)
-        game.willpower = 5
-        screen.draw(hw, game, pal)
-        result = screen.on_button(_find(screen, ("wp",)), game)
-        assert result[0] == "modal", view
-        modal = result[1]
-        modal.state.tap(1)
-        modal.state.confirm()
-        modal.on_commit(modal.state.value)
-        assert game.willpower == 6, view
-
-
-# -- Task 8: Quest Setup (R0 pre-round-1) ----------------------------------
-
-_QS_SCN = {"slug": "p", "name": "P", "pack": "Core Set", "cycle": "Core Set",
-           "source": "official", "kind": "quest", "nightmare": False, "mode": "Standard"}
-_QS_STAGES = [{"stage": 1, "cards": [{"questPoints": 8, "victory": None, "sailing": False,
-    "faces": [{"side": "A", "name": "Flies and Spiders", "text": "Setup: do the thing."},
-              {"side": "B", "name": "Flies and Spiders", "text": None}]}]}]
-
-
-def test_quest_setup_flip_to_b_enters_round_1():
-    hw, pal, game, screen = _setup("quest_setup")
-    game.preload_scenario(_QS_SCN, _QS_STAGES)
-    screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("flip_to_b",)), game)
-    assert result is True
-    assert game.quest["side"] == "B" and game.quest["points"] == 8
-    assert game.view == "resource"        # VIEW_ORDER[0]
-    assert game._round_snap is not None
-    messages = [e["text"] for e in game.log]
-    assert any("Setup complete" in m and "1B" in m and "8" in m for m in messages)
-
-
-def test_quest_setup_card_modal_button_opens_quest_card_modal():
-    from ui.modals import QuestCardModal
-    hw, pal, game, screen = _setup("quest_setup")
-    game.preload_scenario(_QS_SCN, _QS_STAGES)
-    screen.draw(hw, game, pal)
-    result = screen.on_button(_find(screen, ("open_card_modal",)), game)
-    assert isinstance(result, tuple) and result[0] == "modal"
-    assert isinstance(result[1], QuestCardModal)
-
-
-def test_quest_setup_shows_stage_and_setup_text():
-    hw, pal, game, screen = _setup("quest_setup")
-    game.preload_scenario(_QS_SCN, _QS_STAGES)
-    screen.draw(hw, game, pal)
-    texts = _texts(hw)
-    joined = " ".join(texts)
-    # No bespoke title block: the stage and the card name are named IN the
-    # instruction. A centred amber stage label over a DISPLAY-gold card name
-    # was this view's own invention, and presenting the card is not the
-    # tracker's job - saying what to do in the phase is.
-    assert "STAGE 1A" not in texts
-    # Learn to Play's own words (setup step 7), not a paraphrase.
-    assert "Perform the Setup instructions on Stage 1A, Flies and Spiders." in joined
-    assert "flip the card to its Stage 1B side" in joined
-    # The card's Setup text is NOT printed here. This screen says what to DO;
-    # the text lives one tap away on the card that prints it.
-    assert not any("Setup: do the thing." in t for t in texts)
-    assert "View quest card" in joined
-    # Quest setup happens once per game and hands straight to the resource
-    # phase, so the button says what completing it does. Same label the
-    # generic advance_view path uses: both routes into round 1 end with
-    # the same button. An ACTION cta - single line, no NEXT PHASE kicker.
-    assert "Begin Round 1" in texts
-    assert "NEXT PHASE" not in texts
-    assert not any("qp" in t for t in texts)      # no fact crammed into a label
-
-
-def test_quest_setup_no_setup_text_shows_fallback():
-    hw, pal, game, screen = _setup("quest_setup")
-    stages = [{"stage": 1, "cards": [{"questPoints": 8, "victory": None, "sailing": False,
-        "faces": [{"side": "A", "name": "x", "text": None},
-                  {"side": "B", "name": "x", "text": None}]}]}]
-    game.preload_scenario(_QS_SCN, stages)
-    screen.draw(hw, game, pal)
-    assert any("Stage 1A has no Setup instructions." in t for t in _texts(hw))
-    # Still offers the card: a player may want to read side A's story even
-    # when it carries no Setup instructions.
-    assert any("View quest card" in t for t in _texts(hw))
-
-
-def test_travel_no_location_shows_framework_and_travel_button():
-    hw, pal, game, screen = _setup("travel")
-    game.active_locations = []
-    screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert _has_framework(hw, pal)
-    assert "travel_new" in _ids(screen)
-
-
-def test_travel_with_location_says_travel_is_blocked():
-    """"Explore it first" was CUT, not reworded.
-
-    A location is explored when progress on it reaches its quest points, and
-    progress lands at 3.4 - already over by the time this screen appears.
-    Exploring during travel needs a card effect placing progress out of
-    sequence, so the old copy advised something the player generally cannot
-    do at that moment."""
-    hw, pal, game, screen = _setup("travel")
-    game.active_locations = [{"points": 3, "progress": 1}]
-    screen.draw(hw, game, pal)
-    assert "travel_change" in _ids(screen)
-    texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
-    assert "no travel this phase" in texts.lower()
-    assert "explore" not in texts.lower()
-
-
-def test_enc_optional_has_no_framework_block_and_says_why_to_engage():
-    """The threat caption was CUT, not reworded.
-
-    It duplicated the following window screen, which says the same thing on
-    the screen where a player can still act on it, and it was the last
-    second-person line on this view ("your threat... engage you") - meaningless
-    on a device four players share.
-
-    What this view owes the player is why anyone would engage VOLUNTARILY,
-    and that needs no strategy claim: 5.2 ignores engagement cost where 5.3
-    requires it to be at or below the player's threat.
-    """
-    hw, pal, game, screen = _setup("enc_optional")
-    screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert not _has_framework(hw, pal) and _has_window(hw, pal)
-    joined = " ".join(texts)
-    assert "engagement cost is ignored" in joined.lower()
-    assert "staging area" in joined.lower()
-    assert "engage you" not in joined
-
-
-def test_enc_checks_shows_the_loop_and_the_engagement_rule():
-    """Engagement checks are a LOOP, so the view is a flow diagram now rather
-    than a framework band.
-
-    RR 5.3 has two nested loops: each player engages one enemy in player
-    order, then the whole rotation runs again, "until there are no enemies
-    remaining in the staging area that can engage any of the players"."""
-    hw, pal, game, screen = _setup("enc_checks")
-    screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert any("Repeat until" in t for t in texts), "the loop must show its exit"
-    # FFG's own term - Rules Reference p.10 glossary "In Player Order" - not
-    # "clockwise", and not the non-existent "turn order". Joined because the
-    # phrase wraps across drawn lines.
-    joined = " ".join(texts).lower()
-    assert "in player order" in joined
-    # RR 5.3: ONE enemy engages per player at a time, the highest engagement
-    # cost at or below that player's threat - not several in descending order.
-    # "check" itself is gone from the body: it is RR's name for one player
-    # comparing their threat against staging, and nothing on screen defines
-    # it, so every later reference inherited the debt.
-    assert "highest engagement cost" in joined
-    assert "not optional" in joined     # 5.2 was optional; 5.3 is not
-    assert "one check engages" not in joined
-
-
-def test_combat_shadow_shows_framework_only_ordering_text():
-    hw, pal, game, screen = _setup("combat_shadow")
-    screen.draw(hw, game, pal)
-    texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
-    assert _has_framework(hw, pal)
-    # RR 6.2 p.24: dealt in player order, and within one player's enemies the
-    # highest ENGAGEMENT cost first. Both halves must reach the screen.
-    joined = texts.lower()          # the phrase now LEADS the sentence
-    assert "in player order" in joined
-    assert "highest engagement cost" in joined
-    # The two orderings are NESTED, and "that player's" is the word that says
-    # so: player order picks WHOSE enemies, engagement cost orders WITHIN one
-    # player's. Side by side with no link they read as a contradiction.
-    assert "that player's" in joined
-
-
-def test_combat_enemy_sailing_appends_ship_note_to_framework():
-    hw, pal, game, screen = _setup("combat_enemy")
-    game.sailing = True
-    screen.draw(hw, game, pal)
-    texts = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
-    assert "ship-enemy" in texts.lower()
-
-
-def test_combat_enemy_flavor_icon_still_drawn():
-    hw, pal, game, screen = _setup("combat_enemy")
-    screen.draw(hw, game, pal)
-    icon_rows = [c for c in hw.display.calls if c[0] == "rect" and c[4] == 1
-                 and c[1] >= 480 - 8 - 34]
-    assert icon_rows
-
-
-def test_combat_player_names_both_ranged_rules():
-    """CUT: "1 attack per engaged enemy".
-
-    RR 6.7 and 6.8a say only that the active player "may declare an attack
-    against one of their enemies", repeated - no per-enemy cap anywhere. The
-    cap IS stated on the enemy side (6.3: each engaged enemy "will have one
-    opportunity to make an attack"), which is what made the omission easy to
-    miss. Uncited, so it does not ship.
-
-    What replaces it is the thing that WAS missing: Ranged appears twice in
-    this flow, one step apart, and the old copy had only one of them."""
-    hw, pal, game, screen = _setup("combat_player")
-    screen.draw(hw, game, pal)
-    joined = " ".join(str(c[1]) for c in hw.display.calls if c[0] == "text")
-    assert "1 attack per engaged enemy" not in joined
-    # 6.8b: an all-Ranged attack may target any enemy engaged with any player
-    assert "every attacker has Ranged" in joined
-    # 6.8.1: other players' ranged characters may exhaust to join
-    assert "Other players' Ranged" in joined
-    # 6.8b also requires exhausting the attackers, which was never on screen
-    assert "exhausts characters" in joined
-
-def test_refresh_shows_framework_and_window():
-    hw, pal, game, screen = _setup("refresh")
-    screen.draw(hw, game, pal)
-    assert _has_framework(hw, pal) and _has_window(hw, pal)
-
-
-def test_refresh_does_not_project_a_threat_raise_that_already_happened():
-    """The view used to print "After +1 threat:" and a P1 20->21 row per
-    player.
-
-    It became wrong when the raise moved to view ENTRY: apply_refresh runs in
-    enter_view, so by the time this screen draws, threat is already raised and
-    the row projected a SECOND raise that never comes - directly contradicting
-    the band above it, which says the tracker has already done it. Removing it
-    was also what the user asked for on its own merits ("people know how to do
-    +1 math"), but the staleness is why it must not come back in some other
-    form.
-    """
-    from gamestate import GameState
-    g = GameState(4, 25)
-    g.view = "combat_player"
-    g.enter_view("refresh")
-    assert g.players[0].threat == 26, "the raise happens on entering the view"
-
-    hw, pal, game, screen = _setup("refresh")
-    for i, p in enumerate(game.players):
-        p.threat = 20 + i
-    screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert not any("After +1" in t for t in texts)
-    assert not any("->" in t and t.startswith("P") for t in texts)
-
-
-
-# --- the CTA earns DISPLAY by staying short --------------------------------
-# The primary CTA renders at DISPLAY, which only fits because its labels were
-# cut for it ("Next Phase:" -> "Next:", "End round (raise threat, pass token)"
-# -> "End Round"). A longer label would overflow the button silently, and the
-# design system forbids the obvious "fix" of shrinking it back down - so the
-# ceiling is asserted here instead.
-
-def test_every_label_fits_between_the_nav_squares():
-    """Replaces the old full-width CTA ceiling. Dropping the "Next: " prefix
-    took the longest label from 408px to 330px, and the label now lives in the
-    fixed span between the two nav squares - the same frame whether or not
-    Back is drawn."""
-    import gamestate
-    from ui.screen_play import MARGIN, NAV_W, NAV_PAD
-    from ui.theme import DISPLAY
-    hw = FakeHardware()
-    lx = MARGIN + NAV_W + NAV_PAD
-    usable = (480 - MARGIN - NAV_W - NAV_PAD) - lx
-    labels = ["Begin Round 1", "End Round", "Confirm all commits",
-              "Flip to Side B  ->  10 qp"] + [
-        # Window views are excluded on purpose: their label never reaches a
-        # CTA. A phase view's button names the next PHASE, and a window's own
-        # button does too, so "Action Window: Questing: Resolution" is a log
-        # string, not something that has to fit between the nav squares.
-        v for k, v in gamestate.VIEW_LABELS.items()
-        if not gamestate.is_window_view(k)]
-    over = [(s, hw.display.measure_text(s, DISPLAY)) for s in labels
-            if hw.display.measure_text(s, DISPLAY) > usable]
-    assert not over, "nav labels overflow %dpx at DISPLAY: %s" % (usable, over)
-
-
-def test_nav_rule_is_drawn_full_width():
-    from ui.screen_play import NAV_RULE_Y
-    hw, pal, game, screen = _setup("resource")
-    screen.draw(hw, game, pal)
-    rules = [c for c in hw.display.calls
-             if c[0] == "rect" and c[2] == NAV_RULE_Y and c[3] == 480 and c[4] == 1]
-    assert len(rules) == 1
-
-
-def test_back_square_absent_with_no_history():
-    hw, pal, game, screen = _setup("resource")
-    screen.draw(hw, game, pal)
-    assert "back" not in _ids(screen)
-
-
-def test_back_square_appears_with_history_and_undoes():
-    from ui.screen_play import NAV_W, CTA_H, CTA_Y, MARGIN
-    hw, pal, game, screen = _setup("resource")
-    screen.draw(hw, game, pal)
-    snap = game.begin_action()
-    screen.on_button(_find(screen, ("advance",)), game)
-    game.add_delta(snap)
-    screen.draw(hw, game, pal)
-    back = _find(screen, ("back",))
-    assert (back.x, back.y, back.w, back.h) == (MARGIN, CTA_Y, NAV_W, CTA_H)
-    assert back.w == back.h == CTA_H          # square by construction
-    assert screen.on_button(back, game) is True
-    assert game.view == "resource"
-
-
-def test_forward_hit_area_spans_label_and_arrow():
-    """The most-tapped control keeps a large target even though only the arrow
-    square is drawn as a button."""
-    from ui.screen_play import NAV_W, MARGIN, NAV_PAD, CTA_Y, CTA_H
-    hw, pal, game, screen = _setup("travel")
-    screen.draw(hw, game, pal)
-    fwd = _find(screen, ("advance",))
-    assert fwd.x == MARGIN + NAV_W + NAV_PAD
-    assert fwd.x + fwd.w == 480 - MARGIN
-    assert (fwd.y, fwd.h) == (CTA_Y, CTA_H)
-
-
-def test_label_frame_does_not_move_when_back_appears():
-    hw, pal, game, screen = _setup("travel")
-    screen.draw(hw, game, pal)
-    before = [c[2] for c in hw.display.calls
-              if c[0] == "text" and str(c[1]) == "Encounter: Opt. Engage"]
-    snap = game.begin_action()
-    game.adjust_threat(0, 1)
-    game.add_delta(snap)
-    hw.display.calls.clear()
-    screen.draw(hw, game, pal)
-    after = [c[2] for c in hw.display.calls
-             if c[0] == "text" and str(c[1]) == "Encounter: Opt. Engage"]
-    assert before and before == after
-
-
-def test_phase_advance_uses_a_kicker_and_the_bare_phase_name():
-    hw, pal, game, screen = _setup("combat_enemy")
-    screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "NEXT PHASE" in texts
-    assert "Combat: Player Attacks" in texts
-    assert "Next: Combat: Player Attacks" not in texts
-
-
-def test_action_ctas_are_a_single_line_with_no_kicker():
-    """Setup's CTA is an action, not a phase handoff, so it gets no kicker.
-
-    Refresh used to be the other example, with "End Round". It is not any
-    more: refresh is an ordinary phase now, and the round turns on round_end
-    (0.1). That removed the last CTA doing two jobs at once - End Round both
-    applied 7.3 and crossed the round boundary."""
-    hw, pal, game, screen = _setup("quest_setup")
-    game.preload_scenario(_QS_SCN, _QS_STAGES)
-    game.view = "quest_setup"
-    screen.draw(hw, game, pal)
-    texts = [str(c[1]) for c in hw.display.calls if c[0] == "text"]
-    assert "Begin Round 1" in texts
-    assert "NEXT PHASE" not in texts
-
-
-def test_back_is_a_noop_when_history_is_empty():
-    from ui.widgets import Button
-    hw, pal, game, screen = _setup("resource")
-    screen.draw(hw, game, pal)
-    assert screen.on_button(Button(("back",), 0, 0, 1, 1), game) is None
-
-
-def test_back_clears_screen_local_allocation_and_banner():
-    hw, pal, game, screen = _setup("quest_staging")
-    game.willpower, game.staging = 11, 7
-    screen.draw(hw, game, pal)
-    snap = game.begin_action()
-    screen.on_button(_find(screen, ("stage_advance",)), game)
-    game.add_delta(snap)
-    screen.draw(hw, game, pal)
-    assert screen.alloc is not None
-    screen.on_button(_find(screen, ("back",)), game)
-    assert screen.alloc is None
-    assert screen.banner is None
-    assert game.view == "quest_staging"
-
-
-def test_quest_setup_offers_back_even_with_no_undo_history():
-    """Quest Setup is the first screen of a game, so there is nothing to undo
-    - but it is also the last point where the scenario and difficulty can
-    still be changed. Its Back leaves the game rather than undoing a move, so
-    it carries its own id and is not gated on can_undo()."""
-    hw, pal, game, screen = _setup("quest_setup")
-    game.preload_scenario(_QS_SCN, _QS_STAGES)
-    assert not game.can_undo()
-    screen.draw(hw, game, pal)
-    ids = [b.id for b in screen.buttons]
-    assert ("setup_back",) in ids
-    assert ("back",) not in ids, "must not offer undo when there is none"
-    assert screen.on_button(_find(screen, ("setup_back",)), game) == \
-        ("goto", "scenario_options")
-
-
-def test_other_play_views_still_gate_back_on_undo_history():
-    hw, pal, game, screen = _setup("travel")
-    screen.draw(hw, game, pal)
-    ids = [b.id for b in screen.buttons]
-    assert ("back",) not in ids and ("setup_back",) not in ids
-
-
-def test_the_allocation_plus_is_not_a_tap_target_once_the_budget_is_spent():
-    """auto_split hands out the whole budget on arrival, so in normal play the
-    "+" could never do anything - and it was drawn fully beveled anyway, so it
-    swallowed taps in silence. A control that cannot act must not look like
-    one. Observed in the 2026-07-30 playtest, trying to record Goblin Trail's
-    card-effect progress on this screen."""
-    hw, pal, game, screen = _setup("quest_resolution")
-    game.quest.update({"points": 8, "progress": 0})
-    game.pending_budget = 4
-    game.quest_outcome, game.quest_outcome_n = "success", 4
-    screen.draw(hw, game, pal)
-    a = screen.alloc
-    used = sum(a["locations"]) + a["quest"] + sum(a["side_quests"])
-    assert used == game.pending_budget, "auto_split should spend the budget"
-    ids = [b.id[0] for b in screen.buttons]
-    assert "ap" not in ids, "the + is still a tap target with nothing left to place"
-    assert "am" in ids, "the - must stay live so the split can be redistributed"
-
-
-def test_the_allocation_plus_comes_back_when_there_is_room():
-    hw, pal, game, screen = _setup("quest_resolution")
-    game.quest.update({"points": 8, "progress": 0})
-    game.pending_budget = 4
-    game.quest_outcome, game.quest_outcome_n = "success", 4
-    screen.draw(hw, game, pal)
-    minus = next(b for b in screen.buttons if b.id[0] == "am")
-    screen.on_button(minus, game)          # free one point back up
-    hw2 = FakeHardware()
-    screen.draw(hw2, game, Palette(hw2.display))
-    assert "ap" in [b.id[0] for b in screen.buttons]
-
-
-def test_the_allocation_minus_is_inert_when_nothing_is_allocated():
-    """The mirror case: a 0-point quest gives auto_split nowhere to place the
-    budget, so the "-" has nothing to pull back."""
-    hw, pal, game, screen = _setup("quest_resolution")
-    game.pending_budget = 4
-    game.quest_outcome, game.quest_outcome_n = "success", 4
-    screen.draw(hw, game, pal)
-    ids = [b.id[0] for b in screen.buttons]
-    assert "am" not in ids

@@ -5,9 +5,10 @@ phase name -> Phases, tap Set. -> Settings. Boot offers resume/new; new game
 runs the setup screen (players / starting threat / elimination level).
 """
 
-import json
 import time
 
+import db as dbmod
+import gamestate
 import hardware
 import leds
 import phases
@@ -27,13 +28,12 @@ from ui.screen_quest import (ScenarioSourceScreen, PickCycleScreen,
                               ChooseScenarioScreen, ScenarioOptionsScreen, CatalogUnavailableScreen)
 import quest_catalog
 
-STATE_PATH = "/state.json"
-REPLAY_PATH = "/replay.json"
-PREFS_PATH = "/device.json"
-DEFAULT_PREFS = {"brightness": 100, "scene": "phase"}
+# Every path, cache and durability rule lives in db.py - the single place the
+# firmware touches storage (enforced by tests/test_no_stray_io.py).
+db = dbmod.DataClient()
 
-# Pre-game screens with no live game to animate: LED/notification/elimination
-# per-tick housekeeping (below) is skipped while any of these is active.
+# Pre-game screens with no live game to animate: LED/elimination per-tick
+# housekeeping (below) is skipped while any of these is active.
 PREGAME_ACTIVE = ("boot", "setup", "scenario_source", "pick_cycle",
                   "choose_scenario", "scenario_options", "firstrun", "legend")
 
@@ -60,13 +60,13 @@ def _rehydrate_pickers(screens, game, catalog_index, catalog_icons):
     """
     try:
         if catalog_index is None:
-            catalog_index = quest_catalog.load_index()
+            catalog_index = db.index()
         state = quest_catalog.resume_picker_state(catalog_index, game.scenario)
         if state is None:
             return catalog_index, catalog_icons
         if catalog_icons is None:
-            catalog_icons = quest_catalog.load_icons()
-        data = quest_catalog.load_scenario(state["entry"]["slug"])
+            catalog_icons = db.icons()
+        data = db.scenario(state["entry"]["slug"])
         screens["pick_cycle"] = PickCycleScreen(state["source"], state["cycles"])
         chooser = ChooseScenarioScreen(state["source"], state["cycle"],
                                        state["siblings"])
@@ -78,24 +78,6 @@ def _rehydrate_pickers(screens, game, catalog_index, catalog_icons):
     except Exception as e:
         print("resume: could not rebuild the picker screens (%r)" % e)
     return catalog_index, catalog_icons
-
-
-def load_prefs():
-    try:
-        with open(PREFS_PATH) as f:
-            d = json.load(f)
-        return {"brightness": d.get("brightness", 100),
-                "scene": d.get("scene", "phase")}
-    except Exception:
-        return dict(DEFAULT_PREFS)
-
-
-def save_prefs(prefs):
-    try:
-        with open(PREFS_PATH, "w") as f:
-            json.dump(prefs, f)
-    except Exception:
-        pass
 
 
 def _rehydrate_stages(game):
@@ -115,7 +97,7 @@ def _rehydrate_stages(game):
     if not slug:
         return False
     try:
-        data = quest_catalog.load_scenario(slug)
+        data = db.scenario(slug)
         stages = ((data or {}).get("quest") or {}).get("stages") or []
     except Exception:
         return False
@@ -123,10 +105,12 @@ def _rehydrate_stages(game):
 
 
 def load_saved():
-    """Return (game, meta) or (None, None)."""
+    """Return (game, meta) or (None, None). The read itself is db.py's; this
+    owns the rehydration and the boot-subtitle formatting."""
     try:
-        with open(STATE_PATH) as f:
-            d = json.load(f)
+        d = db.session.load_state()
+        if d is None:
+            return None, None
         game = GameState.from_dict(d["state"])
         # A save with no scenario is from the removed manual/custom mode.
         # There is no view to resume it into, so it is not offered.
@@ -154,63 +138,27 @@ def load_saved():
         return None, None
 
 
-def save_state(game):
-    try:
-        with open(STATE_PATH, "w") as f:
-            json.dump({"saved_at": time.time(), "state": game.to_dict()}, f)
-    except Exception:
-        pass
+# How long the pressed bevel stays lit. Was 90 ms, chosen when the hold was
+# hiding a ~50 ms flash write; with the write off the tap path and the
+# repaint down to ~37 ms, 90 ms was most of the felt latency and read as lag
+# rather than as feedback. 30 ms still registers as a press.
+PRESS_MS = 30
+# ticks_ms/ticks_diff are MicroPython-only; the fallbacks keep this importable
+# on the host (same guard style as the `clock` binding in main()).
+_ticks = getattr(time, "ticks_ms", None) or (lambda: int(time.time() * 1000))
+_ticks_diff = getattr(time, "ticks_diff", None) or (lambda a, b: a - b)
 
 
-def save_exists():
-    try:
-        import os
-        os.stat(STATE_PATH)
-        return True
-    except Exception:
-        return False
+def press_begin(hw, pal, b):
+    """Video-game button press: invert the bevel edges, and START the press
+    clock. Returns the start tick for press_end.
 
-
-def clear_state():
-    try:
-        import os
-        os.remove(STATE_PATH)
-    except Exception:
-        pass
-
-
-# -- delta replay store -----------------------------------------------------
-# Parity: the Replay schema's two columns (backend/lib/dragn/replay.ex).
-# Divergence D4 - two files rather than one row: state.json keeps its exact
-# shape and every-tap write path, and the history rides in its own file.
-# Losing the history must never cost you the game, so every failure here is
-# swallowed and simply leaves Back unavailable.
-def save_replay(game):
-    try:
-        with open(REPLAY_PATH, "w") as f:
-            json.dump(game.replay_to_dict(), f)
-    except Exception:
-        pass
-
-
-def load_replay(game):
-    try:
-        with open(REPLAY_PATH) as f:
-            game.replay_from_dict(json.load(f))
-    except Exception:
-        game.replay_from_dict(None)
-
-
-def clear_replay():
-    try:
-        import os
-        os.remove(REPLAY_PATH)
-    except Exception:
-        pass
-
-
-def press_feedback(hw, pal, b):
-    """Video-game button press: invert the bevel edges for ~90 ms."""
+    Split from the old single press_feedback() because those 90 ms were spent
+    asleep BEFORE the handler ran, and then the handler's flash write was added
+    on top. A durable small write costs ~50 ms on this board (measured, and
+    flat regardless of file size), so running the handler INSIDE the press
+    window makes it free: the button was going to stay lit that long anyway.
+    """
     d = hw.display
     t = 2
     d.set_pen(pal.bevel_d)
@@ -220,7 +168,15 @@ def press_feedback(hw, pal, b):
     d.rectangle(b.x, b.y + b.h - t, b.w, t)
     d.rectangle(b.x + b.w - t, b.y, t, b.h)
     hw.partial_update(b.x, b.y, b.w, b.h)
-    time.sleep(0.09)
+    return _ticks()
+
+
+def press_end(t0):
+    """Hold the pressed bevel for whatever is LEFT of PRESS_MS after the
+    handler has already run. Zero if it overran."""
+    left = PRESS_MS - _ticks_diff(_ticks(), t0)
+    if left > 0:
+        time.sleep(left / 1000.0)
 
 
 def update_leds(hw, game, prefs, tick=0):
@@ -239,7 +195,8 @@ def main():
     clock = getattr(time, "ticks_ms", None) or (lambda: int(time.time() * 1000))
     game.clock = clock
     if saved_game:
-        load_replay(game)
+        db.session.load_replay(game)
+        db.session.load_log(game)
 
     # -- the record point ---------------------------------------------------
     # One snapshot before a tap is dispatched, one diff after it settles -
@@ -258,13 +215,16 @@ def main():
         pending[1] = game
 
     def commit_action():
+        # Each of the three stores writes only what this action touched, and
+        # each is a no-op when that is nothing. A durable write is ~50 ms flat
+        # on this board, so the 90 ms press window has room for about one -
+        # which is why none of these may be a whole-file rewrite.
         if pending[0] is not None and pending[1] is game:
             game.add_delta(pending[0])
         pending[0] = pending[1] = None
-        save_state(game)
-        save_replay(game)
+        db.session.commit(game)
 
-    prefs = load_prefs()
+    prefs = db.load_prefs()
 
     screens = {
         "play": ScreenPlay(),
@@ -286,16 +246,16 @@ def main():
     nav_stack = []  # origins to return to when overlay screens (log/settings) close
     modal = None
     dirty = True
-    catalog_index = None  # cached quest_catalog.load_index() result (fetched once)
-    catalog_icons = None  # cached quest_catalog.load_icons() result (fetched once;
+    catalog_index = None  # db.index() result, held so the screens can share it
+    catalog_icons = None  # cached db.icons() result (fetched once;
                            # load_icons() never raises, so no try/except needed)
-    catalog_tips = None    # cached quest_catalog.load_tips() result (M4-B tips;
+    catalog_tips = None    # cached db.tips() result (M4-B tips;
                             # never raises either - lazily loaded both when entering
                             # the picker AND right before each QuestCardModal is
                             # built, so a resumed game that skipped the picker this
                             # session still gets tips - see the two "if catalog_tips
                             # is None" sites below)
-    catalog_locations = None   # cached quest_catalog.load_locations() result for
+    catalog_locations = None   # db.locations() result for
                                # the picked scenario (never raises either). Loaded
                                # on the first Travel / "+ Add location" tap and kept
                                # for the game - the picked scenario cannot change
@@ -303,49 +263,18 @@ def main():
 
     tick = 0
     torch_t = 0
+    # A finished game is appended to history once, not on every
+    # frame the game-over screen is up. Reset wherever `game` is
+    # rebound (new game / end game).
+    recorded_game_over = False
     prev_view = game.view
-    NOTIF_TICKS = 200  # ~4 s at the 0.02 s loop sleep
-    notif_t = 0
 
     while True:
-        # reminder notifications fire when the play view changes
+        # A view change no longer raises anything: the timed notification
+        # overlay and the quest-outcome toast are gone. Contextual, per-stage
+        # reminders will live in the phase content areas instead.
         if game.view != prev_view:
             prev_view = game.view
-            # No "Action Window" toast here any more. It was the prototype's
-            # stand-in for a window screen, and it survived the real ones:
-            # arriving at travel (4.2) toasted, then advancing to aw_travel -
-            # which SHARES step 4.2 - toasted again. Twice per window, both
-            # times announcing a screen that either had not opened yet or was
-            # already on screen saying so itself in its own header.
-            msgs = [(ic, t, "amber") for ic, t in game.due_notifications()]
-            if msgs:
-                screens["play"].notif = msgs
-                screens["play"].notif_frac = 1.0
-                notif_t = NOTIF_TICKS
-                dirty = True
-        # a requested toast (e.g. quest-resolution outcome) overrides view notifs
-        if screens["play"].toast:
-            screens["play"].notif = screens["play"].toast
-            screens["play"].notif_frac = 1.0
-            notif_t = NOTIF_TICKS
-            screens["play"].toast = None
-            dirty = True
-        if notif_t > 0:
-            notif_t -= 1
-            play = screens["play"]
-            if play.notif is None:
-                notif_t = 0  # dismissed by tap
-            elif notif_t == 0:
-                play.notif = None
-                dirty = True
-            elif notif_t % 10 == 0 and not dirty and modal is None \
-                    and active == "play" and play.notif_pie:
-                play.notif_frac = notif_t / NOTIF_TICKS
-                cx, cy, r = play.notif_pie
-                from ui.screen_play import draw_notif_pie
-                draw_notif_pie(hw.display, pal, cx, cy, r, play.notif_frac,
-                               play.notif_edge)
-                hw.partial_update(cx - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4)
 
         # Pending-modal resolution runs BEFORE the draw. A modal that wants
         # to hand off to another one closes itself and raises a flag (the
@@ -368,7 +297,7 @@ def main():
             from ui.modals import QuestCardModal
             game.pending_quest_card = False
             if catalog_tips is None:
-                catalog_tips = quest_catalog.load_tips()
+                catalog_tips = db.tips()
             modal = QuestCardModal(game, tips=catalog_tips)
             dirty = True
             continue
@@ -435,7 +364,7 @@ def main():
         # empty list.
         if modal is None and active == "play" and game.pending_side_quest_pick:
             game.pending_side_quest_pick = False
-            entries = quest_catalog.load_player_side_quests()
+            entries = db.side_quests()
             if entries:
                 from ui.modals import SideQuestPickModal
                 modal = SideQuestPickModal(game, entries)
@@ -444,8 +373,9 @@ def main():
                 game.side_quests.append({"points": 4, "progress": 0})
                 game.log_event("Side quest %d added (progress view)" % len(game.side_quests))
                 game.add_delta(snap)
-                save_state(game)
-                save_replay(game)
+                db.session.save_state(game)
+                db.session.save_log(game)
+                db.session.save_replay(game)
             dirty = True
             continue
 
@@ -462,8 +392,7 @@ def main():
             req = game.pending_location_pick
             game.pending_location_pick = None
             if catalog_locations is None:
-                catalog_locations = quest_catalog.load_locations(
-                    (game.scenario or {}).get("slug"))
+                catalog_locations = db.locations((game.scenario or {}).get("slug"))
             from ui.modals import LocationPickModal
             # `idx` says WHICH seat a "change" replaces - the location
             # sheet's "Replaced" passes its own. Dropping it here sent every
@@ -487,6 +416,15 @@ def main():
             continue
 
 
+        if dirty and modal is not None and getattr(modal, "dirty_rect", None):
+            # A tap that changed exactly one widget repaints that widget alone.
+            # Filling is linear in area (5.1 Mpx/s measured), so a 48px token
+            # box is 2.4 ms against 45 ms for a full clear, and presenting it
+            # is 1.8 ms against 23.6 ms - a stat increment goes ~238 ms -> ~14.
+            rect = modal.draw_partial(hw, game, pal)
+            if rect:
+                hw.partial_update(*rect)
+                dirty = False
         if dirty:
             if modal is not None:
                 modal.draw(hw, game, pal)
@@ -496,6 +434,12 @@ def main():
                     update_leds(hw, game, prefs, tick)
             hw.update()
             dirty = False
+        else:
+            # Background persistence. Gameplay writes RAM only; the durable
+            # work is drained here, on frames with nothing to draw, so it never
+            # lands on a frame the player is waiting for. One bounded unit per
+            # call - never a stall.
+            db.session.tick(game)
 
         # torchlight flickers ~5x/sec without needing a redraw
         if prefs["scene"] == "torch" and active not in PREGAME_ACTIVE:
@@ -512,6 +456,13 @@ def main():
                 and game.players and game.all_eliminated():
             game.set_game_over("defeat")
         if modal is None and active == "play" and game.game_over:
+            # Record the finished game exactly once, on the transition into the
+            # game-over screen. The rollup is bumped with it, so the stats
+            # screens never need to scan the history.
+            if not recorded_game_over:
+                recorded_game_over = True
+                db.history.append(game.history_record())
+                db.session.flush(game)   # the game is over: make it durable now
             active = "gameover"
             dirty = True
             continue
@@ -523,18 +474,19 @@ def main():
             if modal is not None:
                 for b in modal.buttons:
                     if b.hit(x, y):
-                        press_feedback(hw, pal, b)
+                        press_t0 = press_begin(hw, pal, b)
                         begin_action()
                         result = modal.on_button(b)
                         if result == "close":
                             from ui.modals import LedModal
                             if isinstance(modal, LedModal):
-                                save_prefs(prefs)
+                                db.save_prefs(prefs)
                             else:
                                 commit_action()
                             modal = None
                         elif result == "cancel":
                             modal = None
+                        press_end(press_t0)
                         dirty = True
                         break
                 time.sleep(0.02)
@@ -542,7 +494,7 @@ def main():
 
             for b in screens[active].buttons:
                 if b.hit(x, y):
-                    press_feedback(hw, pal, b)
+                    press_t0 = press_begin(hw, pal, b)
                     begin_action()
                     result = screens[active].on_button(b, game)
                     if isinstance(result, tuple):
@@ -582,7 +534,7 @@ def main():
                             from ui.modals import QuestCardModal
                             if isinstance(modal, QuestCardModal):
                                 if catalog_tips is None:
-                                    catalog_tips = quest_catalog.load_tips()
+                                    catalog_tips = db.tips()
                                 modal.tips = catalog_tips
                         elif kind == "boot":
                             if result[1] == "resume":
@@ -591,16 +543,19 @@ def main():
                                 nav_stack.append("boot")
                                 active = "about"
                             else:
-                                screens["setup"].has_save = save_exists()
+                                screens["setup"].has_save = db.session.exists()
                                 active = "setup"
                         elif kind == "open_repo":
                             pass  # no browser on the device; link lives in the web twin
                         elif kind == "start_game":
+                            db.session.flush(game)
                             threats = result[1]
                             first = result[2] if len(result) > 2 else 0
-                            clear_state()
-                            clear_replay()
+                            db.session.clear()
+                            db.session.clear()
+                            
                             game = GameState(player_count=len(threats))
+                            recorded_game_over = False
                             for i, t in enumerate(threats):
                                 game.players[i].threat = t
                                 game.players[i].starting_threat = t
@@ -610,7 +565,7 @@ def main():
                                            % (len(threats),
                                               "/".join(str(t) for t in threats),
                                               first + 1))
-                            save_state(game)
+                            db.session.save_state(game)
                             active = "scenario_source"
                         elif kind == "choose_scenario":
                             # Official/Community gate tapped: load (and cache)
@@ -622,7 +577,7 @@ def main():
                             source = result[1]
                             try:
                                 if catalog_index is None:
-                                    catalog_index = quest_catalog.load_index()
+                                    catalog_index = db.index()
                             except Exception as e:
                                 # No silent downgrade: there is no manual mode
                                 # to fall back to, and on the device this
@@ -635,9 +590,9 @@ def main():
                                 active = "catalog_error"
                             else:
                                 if catalog_icons is None:
-                                    catalog_icons = quest_catalog.load_icons()
+                                    catalog_icons = db.icons()
                                 if catalog_tips is None:
-                                    catalog_tips = quest_catalog.load_tips()
+                                    catalog_tips = db.tips()
                                 cycles = quest_catalog.cycles_for(catalog_index, source)
                                 screens["pick_cycle"] = PickCycleScreen(source, cycles)
                                 active = "pick_cycle"
@@ -670,7 +625,7 @@ def main():
                             # on the chooser rather than derailing the game.
                             slug = result[1]
                             try:
-                                data = quest_catalog.load_scenario(slug)
+                                data = db.scenario(slug)
                             except Exception as e:
                                 print("quest catalog: load_scenario(%r) failed "
                                       "(%r) - staying on chooser" % (slug, e))
@@ -704,24 +659,30 @@ def main():
                             game.preload_scenario(scenario_meta, stages)
                             game.view = "quest_setup"
                             active = "play"
-                            save_state(game)
+                            db.session.save_state(game)
                         elif kind == "save_quit":
-                            save_state(game)
-                            save_replay(game)
+                            db.session.flush(game)
+                            db.session.save_state(game)
+                            db.session.save_log(game)
+                            db.session.save_replay(game)
                             _, meta = load_saved()
                             screens["boot"] = BootScreen(meta)
                             nav_stack = []
                             active = "boot"
                         elif kind == "end_game":
-                            clear_state()
-                            clear_replay()
+                            db.session.flush(game)
+                            db.session.clear()
+                            db.session.clear()
+                            
                             game = GameState()
+                            recorded_game_over = False
                             game.clock = clock
                             screens["boot"] = BootScreen(None)
                             nav_stack = []
                             active = "boot"
                     elif result:
                         commit_action()
+                    press_end(press_t0)
                     dirty = True
                     break
         time.sleep(0.02)

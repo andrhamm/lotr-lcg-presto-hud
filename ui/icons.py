@@ -638,12 +638,25 @@ WHEEL_SM = [
     0b0000000110000000,
 ]
 
-def draw(d, mask, x, y, pen, scale=1):
-    """Draw a bitmask icon with the given pen at (x, y). The mask's size is
-    its row count (square)."""
+# Decoded run lists, keyed by mask identity. Masks are module-level constants,
+# so this is computed once per icon for the life of the process.
+#
+# The decode is what cost, not the drawing: scanning a mask tests one bit per
+# pixel, and each test shifts a `size`-bit integer. For the 84x84 WILLPOWER_XL
+# that is 7,056 big-int shifts - 147 ms, which made a single "+1" tap in
+# CommitModal take 178 ms even after the band was already being repainted
+# alone. The runs themselves are only a couple of hundred rectangles.
+_RUNS = {}
+
+
+def _runs_for(mask):
+    key = id(mask)
+    runs = _RUNS.get(key)
+    if runs is not None:
+        return runs
     size = len(mask)
     top = size - 1
-    d.set_pen(pen)
+    runs = []
     for row in range(size):
         bits = mask[row]
         col = 0
@@ -652,8 +665,21 @@ def draw(d, mask, x, y, pen, scale=1):
                 run = col
                 while run < size and bits & (1 << (top - run)):
                     run += 1
-                d.rectangle(x + col * scale, y + row * scale,
-                            (run - col) * scale, scale)
+                runs.append((row, col, run - col))
                 col = run
             else:
                 col += 1
+    _RUNS[key] = runs
+    return runs
+
+
+def draw(d, mask, x, y, pen, scale=1):
+    """Draw a bitmask icon with the given pen at (x, y). The mask's size is
+    its row count (square)."""
+    d.set_pen(pen)
+    if scale == 1:
+        for row, col, width in _runs_for(mask):
+            d.rectangle(x + col, y + row, width, 1)
+    else:
+        for row, col, width in _runs_for(mask):
+            d.rectangle(x + col * scale, y + row * scale, width * scale, scale)

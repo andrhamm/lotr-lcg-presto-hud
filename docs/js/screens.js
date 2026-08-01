@@ -12,7 +12,7 @@ import { PROGRESS_PLACEMENT, NO_CARD_TEXT, QUEST_SETUP } from "./viewcopy.js";
 import { measureText } from "./metrics.js";
 import * as xtargets from "./xtargets.js";
 import * as icons from "./icons.js";
-import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, REMINDER_DEFS, HEADINGS,
+import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS,
          DEFAULT_START_THREAT, MAX_PLAYERS, viewForStep, fmtMs } from "./gamestate.js";
 import { PHASES, STEPS, step as phaseStep } from "./phases.js";
 import { tipsFor } from "./quest_catalog.js";
@@ -138,23 +138,6 @@ export function circBtn(ctx, cx, cy, r, glyph, pen = pal.tan) {
   textCenter(ctx, glyph, cx, Math.round(cy - 8), BODY, pen);
 }
 
-export function drawNotifPie(ctx, cx, cy, r, frac, color = "amber") {
-  rect(ctx, cx - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4, pal.card_hi);
-  const steps = 24;
-  const remaining = Math.max(0, Math.min(steps, Math.round(frac * steps)));
-  ctx.fillStyle = pal[color];
-  const start = -90 + (steps - remaining) * (360 / steps);
-  for (let i = 0; i < remaining; i++) {
-    const a0 = (start + i * (360 / steps)) * Math.PI / 180;
-    const a1 = (start + (i + 1) * (360 / steps)) * Math.PI / 180;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + r * Math.cos(a0), cy + r * Math.sin(a0));
-    ctx.lineTo(cx + r * Math.cos(a1), cy + r * Math.sin(a1));
-    ctx.closePath();
-    ctx.fill();
-  }
-}
 
 // ---------------------------------------------------------------- modals
 function footer(ctx, buttons, saveLabel = "Save") {
@@ -182,7 +165,16 @@ export class CounterState {
 
 export class CounterModal {
   static STEPS = [[-5, "-5"], [-1, "-1"], [1, "+1"], [5, "+5"]];
-  static ICONS = { threat: ["THREAT", "red"], willpower: ["WILLPOWER", "gold"] };
+  // icon name -> [mask, pen, ground pen or null]. "threat" and "staging" are
+  // the SAME glyph in two inks: red is the player's threat, black is the
+  // staging area's (design/stat-system.md's staging/enemy-threat rule). Black
+  // needs a ground - pal.bg is (16,12,9) and pal.outline is (0,0,0).
+  static ICONS = {
+    threat: ["THREAT", "red", null],
+    staging: ["THREAT", "outline", "row_stripe"],
+    willpower: ["WILLPOWER", "gold", null],
+  };
+  static ICON_PAD = 4;
 
   constructor(title, value, onCommit = null, icon = null, subtext = null) {
     this.title = title;
@@ -197,10 +189,16 @@ export class CounterModal {
     this.buttons = [];
     rect(ctx, 0, 0, 480, 480, pal.bg);
     if (this.icon && CounterModal.ICONS[this.icon]) {
-      const [maskName, penName] = CounterModal.ICONS[this.icon];
+      const [maskName, penName, ground] = CounterModal.ICONS[this.icon];
+      const mask = icons[maskName];
       const w = measureText(this.title, DISPLAY);
       const ix = Math.floor(240 - w / 2 - 30);
-      icons.drawIcon(ctx, icons[maskName], ix, 30, pal[penName]);
+      if (ground) {
+        // mask is [size, rows] - mask[0] is the size, .length is always 2.
+        const p = CounterModal.ICON_PAD, s = mask[0] + 2 * p;
+        rect(ctx, ix - p, 30 - p, s, s, pal[ground]);
+      }
+      icons.drawIcon(ctx, mask, ix, 30, pal[penName]);
       textCenter(ctx, this.title, 240 + 12, 28, DISPLAY, pal.gold);
     } else {
       textCenter(ctx, this.title, 240, 28, DISPLAY, pal.gold);
@@ -803,51 +801,6 @@ export class PlayersDetailModal {
   }
 }
 
-export class RemindersModal {
-  constructor(game) { this.game = game; this.buttons = []; }
-  draw(ctx) {
-    this.buttons = [];
-    rect(ctx, 0, 0, 480, 480, pal.bg);
-    modalHeader(ctx, this.game, "Encounter Reminders", this.buttons);
-    let y = 56;
-    for (const [key, label, view] of REMINDER_DEFS) {
-      const on = this.game.reminders[key];
-      const row = new Button(["tog", key], 16, y, 448, 62);
-      bevel(ctx, row.x, row.y, row.w, row.h, on ? pal.card_hi : pal.card);
-      rect(ctx, 30, y + 17, 28, 28, pal.well);
-      if (on) rect(ctx, 36, y + 23, 16, 16, pal.ok_fg);
-      textLeft(ctx, label, 76, y + 12, BODY, on ? pal.tan : pal.muted);
-      // "At <view>", not "Notifies at <view>": at BODY the archery row
-      // ("Combat: Shadow Cards" plus the staging condition) runs 22px past
-      // the row at the longer wording. Shortening the copy is the fix;
-      // shrinking the caption is not (see the design system spec).
-      if (key === "archery") {
-        const part1 = `At ${VIEW_LABELS[view]} if staging `;
-        const w1 = measureText(part1, BODY);
-        textLeft(ctx, part1, 76, y + 38, BODY, pal.dim);
-        icons.drawIcon(ctx, icons.THREAT_SM, 76 + w1 + 2, y + 38, pal.dim);
-        textLeft(ctx, "> 0", 76 + w1 + 18, y + 38, BODY, pal.dim);
-      } else {
-        textLeft(ctx, `At ${VIEW_LABELS[view]}`, 76, y + 38, BODY, pal.dim);
-      }
-      this.buttons.push(row);
-      y += 70;
-    }
-  }
-  onButton(btn) {
-    const k = btn.id[0];
-    if (k === "tog") {
-      const key = btn.id[1];
-      const on = !this.game.reminders[key];
-      this.game.reminders[key] = on;
-      const def = REMINDER_DEFS.find(d => d[0] === key);
-      this.game.logEvent(`Reminder ${def ? def[1] : key}: ${on ? "on" : "off"}`);
-      return null;
-    }
-    if (k === "close") return "close";
-    return null;
-  }
-}
 
 export class CommitModal {
   static STEPS = [["zero", "->0"], [-1, "-1"], [1, "+1"], [5, "+5"]];
