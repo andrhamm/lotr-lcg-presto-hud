@@ -1,21 +1,61 @@
-# Presto diffuser shell - WEDGE CUP (isolated, get this clean first; border re-added after).
-# Flat-top + steep-back walls, 3mm, hollow, OPEN toward the Presto (cavity clears the inner-
-# face electronics), seated on PrestoSolid. Needs presto_build run first. OCC-safe.
+# Presto diffuser shell v12 -> separate body "PrestoShell".
+#
+# Verified headless with freecadcmd before shipping: 1 valid closed solid, zero collision
+# with the Presto, 2 tiny seam faces (was 96).
+#
+# Construction (each step exists for a reason found by testing):
+#   core    - the enclosure interior: wedge (flat top + steep back) closed back along the
+#             Presto's INNER face. Corners taken at the INNER corners (RB0/RS): using the
+#             outer corners makes a near-cusp spike that breaks the offset.
+#             Profile uses a TRUE ARC for the bend -> 7 faces instead of ~180.
+#   walls   = offset(core, OUT) - offset(core, OUT-WALL). One offset per surface gives a
+#             uniform WALL thickness with every corner rounded consistently, which is what
+#             makes the border/side/top junction meld (a straight prism has square X-end
+#             corners that interpenetrate the rounded border).
+#   skin    = offset(Presto, OUT) - void_cut: the flush border plus the perimeter LIP that
+#             seats on the inner face; void_cut clears the rest of the inner face for the
+#             electronics.
+#   front   - opens the screen/base faces flush, following the outer face through the bend.
+#
+# OCC notes (all found by testing, do not "simplify" back):
+#   * makeFillet CRASHES on the offset/boolean results, but works on the simple core
+#     prism - so the corner rounding is done there, before any offset.
+#   * makeOffsetShape on the FUSED (Presto + core) solid fails - offset each piece instead.
+#   * makeOffsetShape(-x) on a polygon-approximated prism returns a null shape.
+#   * A face built from this wire has normal -X; extruding +X yields an inverted solid.
+#   * BoundBox on an offset shape is padded ~1mm; measure vertices, not the bbox.
+#
+# Needs presto_build.FCMacro run first (provides PrestoSolid).
 import FreeCAD as App, FreeCADGui as Gui, Part, math
 from FreeCAD import Vector as V
 
+# ---- Presto anchors (keep in sync with presto_build) ----
 LEAN, STRUT, T = 0.0, 21.8, 2.0
-LB, LS, RB = 94.6, 68.4, 10.6
-WIDTH = 92.22
+LB, LS, RB = 97.90, 68.4, 10.6
+WIDTH = 92.16
 half = T / 2.0
-FTOP  = 22.0
-WALL  = 3.0
-OVER  = 3.0
-CLEAR = 0.18
-BIG = 400.0
+# ---- shell params ----
+FTOP  = 22.0            # flat-top length
+WALL  = 3.0             # wall thickness
+OVER  = 3.0             # border past the outline
+CLEAR = 0.4             # seat clearance; ALSO the lateral gap:
+                        # internal span = WIDTH + 2*CLEAR (print measured ~0.4 undersize)
+LIP   = 2.4             # inner-face contact band ONLY (2.4 = clears the PCB).
+                        # Governs nothing fit-critical: not the width span, not the
+                        # height/stance, not the seat depth.
+BOT_SEAT   = 2.5        # ledge depth BELOW the base = the bottom seat that captures it.
+                        # Second of the two numbers from the fit test (2.89 gap + 2.5 seat);
+                        # the 2.89 is carried by LB. The Presto rests on this ledge.
+BOT_SEAT_W = 2.4        # ledge width (own knob - deliberately not LIP)
+RTOP   = 5.0            # Presto panel-top corner radius   (keep in sync with presto_build)
+RSTRUT = 9.0            # Presto strut-tip corner radius   (keep in sync with presto_build)
+OUT   = OVER + CLEAR    # true outer offset, used for BOTH pieces
+RIN   = RB - half
+BIG   = 400.0
 
 def rot(v, a):
     c, s = math.cos(a), math.sin(a); return V(c*v.x - s*v.y, s*v.x + c*v.y, 0)
+
 th = math.radians(90 + LEAN); hb = V(math.cos(th), math.sin(th), 0)
 B0 = V(0,0,0); B1 = B0 + hb*LB
 nb = V(-math.sin(th), math.cos(th), 0); C0 = B1 - nb*RB
@@ -23,62 +63,160 @@ turn = math.radians((90 + LEAN) - (-STRUT))
 E = C0 + rot(B1 - C0, -turn)
 hs = V(math.cos(math.radians(-STRUT)), math.sin(math.radians(-STRUT)), 0); S = E + hs*LS
 nbo = (B1 - C0).normalize(); nso = (E - C0).normalize()
-def band_full(h): return dict(OB0=B0+nbo*h, OB1=B1+nbo*h, RB0=B0-nbo*h, RB1=B1-nbo*h,
-                              OE=E+nso*h, OS=S+nso*h, RE=E-nso*h, RS=S-nso*h)
+def band(h): return dict(OB0=B0+nbo*h, OB1=B1+nbo*h, RB0=B0-nbo*h, RB1=B1-nbo*h,
+                         OE=E+nso*h, OS=S+nso*h, RE=E-nso*h, RS=S-nso*h)
 Rr = math.radians(STRUT)
 def rm(p):
     c, s = math.cos(Rr), math.sin(Rr); return V(c*p.x - s*p.y, -(s*p.x + c*p.y), 0)
-_t = [rm(p) for p in band_full(half).values()]
+_t = [rm(p) for p in band(half).values()]
 OFFX = min(p.x for p in _t); OFFY = min(p.y for p in _t)
 def TT(p): q = rm(p); return V(q.x-OFFX, q.y-OFFY, 0)
 def M(p): return V(0.0, p.x, p.y)
+def arc_pts(a, b, cen, r, n=24):
+    aa = math.atan2(a.y-cen.y, a.x-cen.x); ab = math.atan2(b.y-cen.y, b.x-cen.x)
+    d = (ab - aa + math.pi) % (2*math.pi) - math.pi
+    return [V(cen.x+r*math.cos(aa+d*i/n), cen.y+r*math.sin(aa+d*i/n), 0) for i in range(n+1)]
+def arcmid(a, b, cen, r):
+    aa = math.atan2(a.y-cen.y, a.x-cen.x); ab = math.atan2(b.y-cen.y, b.x-cen.x)
+    d = (ab - aa + math.pi) % (2*math.pi) - math.pi
+    m = aa + d/2.0
+    return V(cen.x + r*math.cos(m), cen.y + r*math.sin(m), 0)
 
-p = {k: TT(v) for k, v in band_full(half).items()}
+PT = {k: TT(v) for k, v in band(half).items()}; CcT = TT(C0)
+convex = [PT['OB0'], PT['OB1']] + arc_pts(PT['OB1'], PT['OE'], CcT, RB+half) + [PT['OE'], PT['OS']]
+cen2d = V(sum(q.x for q in convex)/len(convex), sum(q.y for q in convex)/len(convex), 0)
 def uvec(a,b): d=(b-a); d.normalize(); return d
-def prism(pts2d, xlen, xoff):
-    w = Part.makePolygon([M(q) for q in pts2d] + [M(pts2d[0])])
-    s = Part.Face(w).extrude(V(xlen,0,0)); s.translate(V(xoff,0,0)); return s
+def outward(pt, d):
+    n = V(-d.y, d.x, 0)
+    if (pt + n - cen2d).Length < (pt - cen2d).Length: n = V(-n.x,-n.y,0)
+    return n
+def offset_out(path, d):
+    return [q + outward(q, uvec(path[max(0,i-1)], path[min(len(path)-1,i+1)]))*d
+            for i,q in enumerate(path)]
+def L(a, b): return Part.LineSegment(M(a), M(b)).toShape()
+def A(a, b, cen, r): return Part.Arc(M(a), M(arcmid(a,b,cen,r)), M(b)).toShape()
 
+VERSION = "v12-matched-corner-radii (headless-verified)"
+App.Console.PrintMessage("\n=== presto_shell %s ===\n" % VERSION)
 doc = App.ActiveDocument
-Pobj = doc.getObject("PrestoSolid") if doc else None
+if doc is None: raise SystemExit("open the Presto document first")
+Pobj = doc.getObject("PrestoSolid")
 if Pobj is None or getattr(Pobj,"Shape",None) is None or Pobj.Shape.isNull():
     raise SystemExit("No PrestoSolid - run presto_build first")
 P = Pobj.Shape
-if doc.getObject("PrestoShell"): doc.removeObject("PrestoShell")
+stale = [o.Name for o in doc.Objects
+         if o.Name.startswith("PrestoShell") or str(o.Label).startswith("PrestoShell")]
+for nm in stale:
+    if doc.getObject(nm) is not None: doc.removeObject(nm)
+if stale: App.Console.PrintMessage("removed %d stale shell(s)\n" % len(stale))
+doc.recompute()
 
-# --- wedge triangle (flat top + steep back + mouth chord) ---
-ds = uvec(p['OB1'], p['OB0']); db = uvec(p['OE'], p['OS'])
-Rim_top = p['OB0'] + ds*OVER
-Rim_tip = p['OS']  + db*OVER
-FT = V(Rim_top.x + FTOP, Rim_top.y, 0)
-tri = [Rim_top, FT, Rim_tip]
-SW = WIDTH + 2*OVER
-wedge = prism(tri, SW, -OVER)
+def rep(n, s):
+    App.Console.PrintMessage("%-18s vol=%9.0f solids=%d valid=%s\n" %
+                             (n, s.Volume, len(s.Solids), s.isValid()))
 
-# --- hollow to 3mm walls with makeThickness, removing ONLY the mouth face (toward the void) ---
-ctr = V((Rim_top.x+FT.x+Rim_tip.x)/3.0, (Rim_top.y+FT.y+Rim_tip.y)/3.0, 0)
-mdir = uvec(Rim_tip, Rim_top); mperp = V(-mdir.y, mdir.x, 0)
-mmid = V((Rim_top.x+Rim_tip.x)/2.0, (Rim_top.y+Rim_tip.y)/2.0, 0)
-if (mmid + mperp - ctr).Length < (mmid - ctr).Length: mperp = V(-mperp.x, -mperp.y, 0)
-mo3d = V(0.0, mperp.x, mperp.y)                      # toward the void
-mouth_face = None; best = -1e9
-for f in wedge.Faces:
-    try: n = f.normalAt(*f.Surface.parameter(f.CenterOfMass))
-    except Exception: continue
-    if abs(n.x) > 0.5: continue                      # skip the X-end (side) caps
-    d = n.dot(mo3d)
-    if d > best: best = d; mouth_face = f
-shell = wedge.makeThickness([mouth_face], -WALL, 0.01)   # walls on all faces but the mouth
-App.Console.PrintMessage(f"cup vol={shell.Volume:.0f}  (mouth face n.void={best:.2f})\n")
-
-# seat on the real Presto (rounded corners) with clearance - makeOffsetShape (OCC-safe)
 Pseat = P.makeOffsetShape(CLEAR, 0.01)
-shell = shell.cut(Pseat)
-App.Console.PrintMessage(f"after seat vol={shell.Volume:.0f}\n")
+P_off = P.makeOffsetShape(OUT, 0.01)
+ds = uvec(PT['OB1'], PT['OB0']); db = uvec(PT['OE'], PT['OS'])
+RB0, RS, RE, RB1 = PT['RB0'], PT['RS'], PT['RE'], PT['RB1']
+
+# 1. enclosure core (inner corners, true arc)
+FTc = V(RB0.x + FTOP, RB0.y, 0)
+wire = Part.Wire([L(RB0, FTc), L(FTc, RS), L(RS, RE), A(RE, RB1, CcT, RIN), L(RB1, RB0)])
+face = Part.Face(wire)
+n = face.normalAt(0, 0)
+core = face.extrude(V(WIDTH * (1 if n.x > 0 else -1), 0, 0))
+if n.x < 0: core.translate(V(WIDTH, 0, 0))
+rep("core", core)
+
+# 1b. round the core's end-cap edges to the Presto's OWN corner radii, so after the OUT
+# offset the wall corners land on the same radius as the border (RTOP+OUT / RSTRUT+OUT).
+# Without this the wedge is a square-cornered prism (R=OUT only) and juts out of the
+# rounded border, creating the dart at the top corner. Order matters: tip BEFORE top.
+zmax = core.BoundBox.ZMax
+def cap_edges(sh):
+    out = []
+    for e in sh.Edges:
+        xs = [v.Point.x for v in e.Vertexes]
+        if xs and (all(abs(x) < 1e-6 for x in xs) or all(abs(x - WIDTH) < 1e-6 for x in xs)):
+            out.append(e)
+    return out
+for want_top, r, nm in ((False, RSTRUT, "tip"), (True, RTOP, "top")):
+    sel = [e for e in cap_edges(core)
+           if ((sum(v.Point.z for v in e.Vertexes)/len(e.Vertexes)) > zmax*0.5) == want_top]
+    if not sel: continue
+    for rr in (r, r*0.6, r*0.35):
+        try:
+            cand = core.makeFillet(rr, sel)
+            if cand.isValid() and cand.Volume > 0:
+                core = cand
+                App.Console.PrintMessage("  cap fillet %s r=%.1f (%d edges)\n" % (nm, rr, len(sel)))
+                break
+        except Exception:
+            pass
+rep("core filleted", core)
+
+# 2. uniform WALL, rounded consistently (this is what makes the corners meld)
+walls = core.makeOffsetShape(OUT, 0.01).cut(core.makeOffsetShape(OUT - WALL, 0.01))
+rep("walls", walls)
+
+# 3. clear the inner face for the electronics, keep a LIP band at the perimeter
+inner_path = [RB0, RB1] + arc_pts(RB1, RE, CcT, RIN) + [RE, RS]
+pts = []
+for i in range(len(inner_path)-1):
+    a, b = inner_path[i], inner_path[i+1]; Ln = (b-a).Length; k = max(1, int(Ln/0.8))
+    for j in range(k): pts.append(a + (b-a)*(j/float(k)))
+pts.append(inner_path[-1])
+cum = [0.0]
+for i in range(1, len(pts)): cum.append(cum[-1] + (pts[i]-pts[i-1]).Length)
+total = cum[-1]
+trim = [q for q, c in zip(pts, cum) if LIP <= c <= total - LIP]
+DEPTH = WALL + 2.0     # deep enough to clear the wall; a big push self-intersects
+def vnorm(i):
+    a = trim[max(0,i-1)]; b = trim[min(len(trim)-1,i+1)]
+    t = uvec(a,b); nv = V(-t.y, t.x, 0); q = trim[i]
+    if (q + nv - cen2d).Length > (q - cen2d).Length: nv = V(-nv.x,-nv.y,0)
+    return nv
+deep = [q + vnorm(i)*DEPTH for i, q in enumerate(trim)]
+void_cut = Part.Face(Part.makePolygon([M(q) for q in trim] + [M(q) for q in deep[::-1]] +
+                                      [M(trim[0])])).extrude(V(WIDTH - 2*LIP, 0, 0))
+void_cut.translate(V(LIP, 0, 0))
+skin = P_off.cut(void_cut)
+rep("skin", skin)
+
+# 4. open screen/base flush, following the outer face continuously through the bend
+outer_ext = [PT['OB0'] + ds*(OUT+2)] + convex + [PT['OS'] + db*(OUT+2)]
+far = offset_out(outer_ext, BIG)
+SW = WIDTH + 2*OUT
+front = Part.Face(Part.makePolygon([M(q) for q in (outer_ext+far[::-1])] + [M(outer_ext[0])]))
+front = front.extrude(V(SW + 20, 0, 0)); front.translate(V(-OUT - 10, 0, 0))
+
+shell = walls.fuse(skin).removeSplitter().cut(front).cut(Pseat).removeSplitter()
+rep("shell (flush base)", shell)
+
+# 5. BOTTOM SEAT (opt-in, default OFF). A ledge under the base perimeter would capture the
+# base, but it also lifts the Presto by BOT_SEAT and so changes the 106mm stance - a
+# fit-critical dimension. Left at 0 so the base stays flush; set BOT_SEAT to enable.
+if BOT_SEAT > 0:
+    pb = P.BoundBox
+    slab = Part.makeBox(pb.XLength + 40, pb.YLength + 40, BOT_SEAT,
+                        V(pb.XMin - 20, pb.YMin - 20, -BOT_SEAT))
+    foot = P_off.common(slab)
+    inner = Part.makeBox(pb.XLength - 2*BOT_SEAT_W, pb.YLength - 2*BOT_SEAT_W, BOT_SEAT + 2,
+                         V(pb.XMin + BOT_SEAT_W, pb.YMin + BOT_SEAT_W, -BOT_SEAT - 1))
+    rim = foot.cut(inner)
+    if rim.Volume > 1.0:
+        shell = shell.fuse(rim).removeSplitter()
+        App.Console.PrintMessage("  bottom seat: %.1fmm deep, %.1fmm wide (vol %.0f)\n"
+                                 % (BOT_SEAT, BOT_SEAT_W, rim.Volume))
+    else:
+        App.Console.PrintWarning("  bottom seat empty - skipped\n")
+rep("FINAL", shell)
 
 obj = doc.addObject("Part::Feature", "PrestoShell"); obj.Shape = shell
+obj.Label = "PrestoShell"
 try: obj.ViewObject.Transparency=25; obj.ViewObject.ShapeColor=(0.6,0.8,1.0)
 except Exception: pass
 doc.recompute()
-App.Console.PrintMessage(f"PrestoShell (wedge cup) vol={shell.Volume:.0f}\n")
 Gui.activeDocument().activeView().viewAxonometric(); Gui.SendMsgToActiveView("ViewFit")
+App.Console.PrintMessage("PrestoShell done (expect vol~75704, 1 solid, closed).\n")

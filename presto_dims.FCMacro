@@ -1,0 +1,165 @@
+# Critical-fit dimensions as a real TechDraw drawing page (not floating 3D annotations).
+#
+# Every value is MEASURED off the actual solids by intersecting a ray with them, then a
+# cosmetic vertex is planted at each measured point and a proper TechDraw dimension is drawn
+# between the two. So the dimensions are attached to the real faces and each label names the
+# parameter that drives it - a genuine check, not a restatement of the inputs.
+#
+# Run after presto_build + presto_shell, then open the "Presto_Dims" page in the tree.
+import FreeCAD as App, Part, math
+from FreeCAD import Vector as V
+import TechDraw
+try:
+    import FreeCADGui as Gui
+except Exception:
+    Gui = None
+
+doc = App.ActiveDocument
+if doc is None: raise SystemExit("open the Presto document first")
+Pobj = doc.getObject("PrestoSolid"); Sobj = doc.getObject("PrestoShell")
+if Pobj is None or Sobj is None: raise SystemExit("need PrestoSolid and PrestoShell")
+P, SH = Pobj.Shape, Sobj.Shape
+
+# purge previous run (page, views, dims, and the old floating Draft dimensions)
+for nm in [o.Name for o in doc.Objects
+           if any(str(x).startswith(("Presto_Dims", "DIM_", "PDView", "PDDim", "PDTemplate"))
+                  for x in (o.Name, o.Label))]:
+    if doc.getObject(nm) is not None:
+        try: doc.removeObject(nm)
+        except Exception: pass
+doc.recompute()
+
+# ---------------- measure (exact ray vs solid) ----------------
+def hits(sh, p0, p1):
+    d = p1 - p0
+    if d.Length < 1e-9: return []
+    u = V(d); u.normalize()
+    e = Part.LineSegment(p0, p1).toShape()
+    pts = []
+    for op in ("section", "common"):
+        try:
+            r = getattr(sh, op)(e)
+            pts = [v.Point for ed in r.Edges for v in ed.Vertexes] + [v.Point for v in r.Vertexes]
+            if pts: break
+        except Exception: pass
+    ts = sorted({round((p - p0).dot(u), 5) for p in pts})
+    return [p0 + u * t for t in ts if -1e-4 <= t <= d.Length + 1e-4]
+
+def fnormal(f):
+    try: return f.normalAt(*f.Surface.parameter(f.CenterOfMass))
+    except Exception: return None
+
+pb = P.BoundBox
+XL, XR, xm = pb.XMin, pb.XMax, (pb.XMin + pb.XMax) / 2
+zmid = pb.ZMin + pb.ZLength * 0.55
+ys = hits(P, V(xm, pb.YMin - 5, zmid), V(xm, pb.YMax + 5, zmid))
+y_sheet = (ys[0].y + ys[1].y) / 2 if len(ys) >= 2 else (pb.YMin + pb.YMax) / 2
+svz = [v.Point.z for v in SH.Vertexes]
+sh_top, sh_bot = max(svz), min(svz)
+
+lat = [p.x for p in hits(SH, V(XL - 8, y_sheet, zmid), V(XR + 8, y_sheet, zmid))]
+wL = max([x for x in lat if x < XL + 1e-3], default=None)
+wR = min([x for x in lat if x > XR - 1e-3], default=None)
+
+# flat top wall thickness
+wall_pts = None
+up = [(f.Area, f) for f in SH.Faces
+      if fnormal(f) is not None and fnormal(f).z > 0.9 and f.CenterOfMass.z > pb.ZMax * 0.7]
+if up:
+    c = max(up)[1].CenterOfMass
+    t = hits(SH, V(c.x, c.y, c.z + 5), V(c.x, c.y, c.z - 15))
+    if len(t) >= 2: wall_pts = (t[0], t[1])
+
+# inner-face lip at the panel top
+lip_pts = None
+vc = pb.Center
+cand = [(f.Area, f, fnormal(f)) for f in P.Faces
+        if fnormal(f) is not None and f.Area > 500
+        and f.CenterOfMass.z > pb.ZLength * 0.3
+        and fnormal(f).dot(vc - f.CenterOfMass) > 0]
+if cand:
+    _, fin, nin = max(cand, key=lambda a: a[0])
+    dwn = V(0, 0, -1) - nin * V(0, 0, -1).dot(nin); dwn.normalize()
+    tv = max((v.Point for v in fin.Vertexes), key=lambda p: p.z)
+    start = V(xm, tv.y, tv.z) + nin * 1.5
+    r = hits(SH, start + dwn * 0.15, start + dwn * 16)
+    if r: lip_pts = (start, r[-1])
+
+# ---------------- drawing page ----------------
+page = doc.addObject("TechDraw::DrawPage", "Presto_Dims")
+page.Label = "Presto_Dims"
+tmpl = doc.addObject("TechDraw::DrawSVGTemplate", "PDTemplate")
+import os
+for cand_t in ("A3_Landscape_blank.svg", "A3_Landscape_TD.svg", "A4_LandscapeTD.svg"):
+    fp = os.path.join(App.getResourceDir(), "Mod", "TechDraw", "Templates", cand_t)
+    if os.path.exists(fp):
+        tmpl.Template = fp; break
+page.Template = tmpl
+
+def mkview(name, direction, xdir, pos, label):
+    v = doc.addObject("TechDraw::DrawViewPart", name)
+    page.addView(v)
+    v.Source = [Pobj, Sobj]
+    v.Direction = direction; v.XDirection = xdir
+    v.Scale = 1.0; v.X, v.Y = pos
+    v.Label = label
+    return v
+
+vF = mkview("PDViewFront", V(0, -1, 0), V(1, 0, 0), (110, 150), "FRONT (width / height)")
+vR = mkview("PDViewRight", V(1, 0, 0), V(0, 1, 0), (300, 150), "RIGHT (profile / lip / wall)")
+doc.recompute()
+ngeom = {vF.Name: len(vF.getVisibleVertexes()), vR.Name: len(vR.getVisibleVertexes())}
+
+specs = []   # (view, label, knob, p1, p2, dimtype)
+if wL is not None:
+    specs.append((vF, "fit-gap-LEFT", "CLEAR", V(wL, y_sheet, zmid), V(XL, y_sheet, zmid), "DistanceX"))
+if wR is not None:
+    specs.append((vF, "fit-gap-RIGHT", "CLEAR", V(XR, y_sheet, zmid), V(wR, y_sheet, zmid), "DistanceX"))
+if wL is not None and wR is not None:
+    specs.append((vF, "fit-span-INTERNAL", "WIDTH+2*CLEAR", V(wL, y_sheet, zmid), V(wR, y_sheet, zmid), "DistanceX"))
+specs.append((vF, "presto-WIDTH", "WIDTH", V(XL, y_sheet, zmid), V(XR, y_sheet, zmid), "DistanceX"))
+specs.append((vF, "presto-HEIGHT", "LB", V(xm, y_sheet, pb.ZMin), V(xm, y_sheet, pb.ZMax), "DistanceY"))
+specs.append((vR, "presto-HEIGHT", "LB", V(xm, y_sheet, pb.ZMin), V(xm, y_sheet, pb.ZMax), "DistanceY"))
+specs.append((vR, "base-DEPTH", "LS", V(xm, pb.YMin, pb.ZMin), V(xm, pb.YMax, pb.ZMin), "DistanceX"))
+specs.append((vR, "border-TOP-proud", "OVER+CLEAR", V(xm, y_sheet, pb.ZMax), V(xm, y_sheet, sh_top), "DistanceY"))
+specs.append((vR, "shell-TOTAL-height", "LB+OVER+CLEAR", V(xm, y_sheet, sh_bot), V(xm, y_sheet, sh_top), "DistanceY"))
+if abs(pb.ZMin - sh_bot) > 0.01:
+    specs.append((vR, "bottom-SEAT-depth", "BOT_SEAT", V(xm, y_sheet, sh_bot), V(xm, y_sheet, pb.ZMin), "DistanceY"))
+if wall_pts: specs.append((vR, "wall-FLAT-TOP", "WALL", wall_pts[0], wall_pts[1], "Distance"))
+if lip_pts:  specs.append((vR, "lip-INNER-FACE", "LIP", lip_pts[0], lip_pts[1], "Distance"))
+
+# plant cosmetic vertices at the measured points, then dimension between them
+idx = {vF.Name: 0, vR.Name: 0}
+refs = []
+for vw, label, knob, p1, p2, ty in specs:
+    vw.makeCosmeticVertex3d(p1); vw.makeCosmeticVertex3d(p2)
+    i = idx[vw.Name]
+    refs.append((vw, ngeom[vw.Name] + i, ngeom[vw.Name] + i + 1))
+    idx[vw.Name] = i + 2
+doc.recompute()
+
+rows = []
+for (vw, label, knob, p1, p2, ty), (vw2, i1, i2) in zip(specs, refs):
+    try:
+        d = doc.addObject("TechDraw::DrawViewDimension", "PDDim")
+        page.addView(d)
+        d.Type = ty
+        d.References2D = (vw, ["Vertex%d" % i1, "Vertex%d" % i2])
+        d.FormatSpec = "%s %%.2w  (%s)" % (label, knob)
+        d.Label = "PDDim_" + label
+        doc.recompute()
+        try: val = d.getRawValue()
+        except Exception: val = (p2 - p1).Length
+        rows.append((label, val, (p2 - p1).Length, knob, vw.Label.split()[0]))
+    except Exception as e:
+        App.Console.PrintWarning("dim %s failed: %s\n" % (label, str(e)[:60]))
+doc.recompute()
+
+App.Console.PrintMessage("\n=== measured critical fit dimensions (TechDraw page 'Presto_Dims') ===\n")
+App.Console.PrintMessage("  %-22s %9s %9s   %-16s %s\n" % ("dimension", "drawn", "measured", "knob", "view"))
+for label, val, meas, knob, view in rows:
+    App.Console.PrintMessage("  %-22s %9.2f %9.2f   %-16s %s\n" % (label, val, meas, knob, view))
+App.Console.PrintMessage("(%d dimensions on the page)\n" % len(rows))
+if Gui is not None:
+    try: Gui.activeDocument().setEdit(page.Name)
+    except Exception: pass

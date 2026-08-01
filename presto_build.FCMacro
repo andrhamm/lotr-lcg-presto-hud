@@ -7,15 +7,17 @@ from FreeCAD import Vector as V
 # ---- parameters (mm / deg), from trace at true scale ----
 LEAN   = 0.0      # back-panel lean from vertical (trace ~0 -> vertical)
 STRUT  = 21.8     # strut (kickstand) angle below horizontal
-LB     = 94.6     # back-panel straight length
+LB     = 97.90    # back-panel straight length. Anchored to the FIT TEST, not the
+                  # caliper: a shell whose cavity was 103.92 long left a 2.89mm gap
+                  # with the top registered => real height 106.81 (caliper read 106.0).
 LS     = 68.4     # strut straight length (anchored: bend-front to strut-tip = 80mm caliper)
 RB     = 10.6     # bend radius (centerline)
 T      = 2.0      # sheet thickness (measured)
-WIDTH  = 92.22    # body width (measured) -> extrude depth
+WIDTH  = 92.16    # body width (caliper, 2026-07-30) -> extrude depth
 RSTRUT = 9.0      # strut-tip (base) corner radius  (test-print match)
 RTOP   = 5.0      # panel-top (front) corner radius  (narrower - PLACEHOLDER, give real #)
 half   = T / 2.0
-# strut-flat pose: ground-to-top ~104mm (caliper 106, ~2% trace error). Front=panel face.
+# strut-flat pose: ground-to-top = 106.81mm (LB anchored to the fit test). Front=panel.
 
 def rot(v, a):
     c, s = math.cos(a), math.sin(a)
@@ -63,11 +65,19 @@ App.Console.PrintMessage(f"closed={wire.isClosed()} edges={len(wire.Edges)} "
                          f"height={wire.BoundBox.ZLength:.1f}mm depth={wire.BoundBox.YLength:.1f}mm\n")
 
 doc = App.ActiveDocument or App.newDocument("Presto")
+# Match by PREFIX, not exact name: FreeCAD auto-names duplicates (PrestoSolid001, ...) and
+# an exact-name sweep left them behind, so stale Presto bodies piled up and the visible one
+# was no longer the object named "PrestoSolid". "OffsetTest" is the leftover from the
+# one-off offset probe. Note none of these prefixes match "PrestoShell".
 CLEAN = ("PrestoSolid","PrestoExtrude","PrestoProfile","PrestoEdges",
-         "GroundPlane","TopPlane","HeightDim","WallPlane","BaseDepthDim")
-to_remove = [o.Name for o in doc.Objects if o.Name in CLEAN or o.Label in CLEAN]
+         "GroundPlane","TopPlane","HeightDim","WallPlane","BaseDepthDim","OffsetTest")
+to_remove = [o.Name for o in doc.Objects
+             if any(o.Name.startswith(c) or str(o.Label).startswith(c) for c in CLEAN)]
 for nm in to_remove:
     if doc.getObject(nm) is not None: doc.removeObject(nm)
+if to_remove:
+    App.Console.PrintMessage("purged %d stale object(s): %s\n"
+                             % (len(to_remove), ", ".join(to_remove)))
 feat = doc.addObject("Part::Feature","PrestoEdges"); feat.Shape = wire; doc.recompute()
 sk = Draft.make_sketch([feat], autoconstraints=True, name="PrestoProfile")
 doc.removeObject(feat.Name); doc.recompute()
@@ -122,10 +132,12 @@ try:
                               V(WIDTH + 20, (bb.YMin + bb.YMax)/2, 0.2))
     bd.Label = "BaseDepthDim"
     doc.recompute()
-    App.Console.PrintMessage(f"ground-to-top = {bb.ZLength:.2f} mm  (caliper 106)\n")
+    App.Console.PrintMessage(f"ground-to-top = {bb.ZLength:.2f} mm  (fit-derived 106.81)\n")
     App.Console.PrintMessage(f"bend-front to strut-tip = {bb.YLength:.2f} mm  (caliper 80)\n")
 except Exception as e:
     App.Console.PrintWarning(f"annotation skipped: {e}\n")
 
 Gui.activeDocument().activeView().viewAxonometric(); Gui.SendMsgToActiveView("ViewFit")
+vis = [o.Name for o in doc.Objects if getattr(getattr(o, "ViewObject", None), "Visibility", False)]
+App.Console.PrintMessage("visible objects now: %s\n" % (", ".join(vis) if vis else "(none)"))
 App.Console.PrintMessage("Done.\n")
