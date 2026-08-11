@@ -303,10 +303,30 @@ STAGING = {
     # The deck-empty reshuffle (RR 3.3) was cut from this band, not forgotten:
     # a third sentence pushed the staging view's content past the nav rule.
     # Saying less is the design system's answer to running out of room.
-    "framework": "1 encounter card per player, one at a time. Resolve keywords "
+    #
+    # This line has to START with "Reveal". The Rules Reference defines Staging
+    # as a three-step procedure whose first step is "Reveal the encounter card
+    # by turning it faceup" (RR "Staging"), and makes the verb the hook for the
+    # whole procedure: "When a player is instructed to reveal an encounter
+    # card, the player takes the top card of the encounter deck, turns it
+    # faceup, and resolves the staging of that card, including any keywords and
+    # 'when revealed' effects." Dropping the verb drops the rule.
+    #
+    # It also used to read "one at a time", which is a SAGA rule stated as the
+    # general one. Every saga box prints, in its Component Overview: "When
+    # playing the scenarios in The Lord of the Rings saga expansions, players
+    # reveal encounter cards individually in player order during the staging
+    # step of the quest phase. Beginning with the first player, each player
+    # reveals 1 encounter card and resolves its staging before the next player
+    # reveals a card." It is printed there precisely BECAUSE it differs from
+    # standard play, where Learn to Play says only "each player reveals a card
+    # from the encounter deck; this is called staging" and RR 3.3 mandates no
+    # per-player sequencing. Reported from a real playtest; verified against
+    # the Rules Reference, Learn to Play, and four saga Component Overviews.
+    "framework": "Reveal 1 encounter card per player. Resolve keywords "
                  "and When Revealed effects.",
     "window": "Responses to the reveal.",
-    "short": "one at a time / resolve each When Revealed",
+    "short": "reveal per player / resolve each When Revealed",
     # The caption under the staging stepper. It used to read "+3 reveal
     # estimate", where the 3 was STAGING_HIGH_PER_PLAYER - a constant, so every
     # scenario ever published showed the same number. It is now the worst
