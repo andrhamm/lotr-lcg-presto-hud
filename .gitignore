@@ -43,6 +43,13 @@ research/votp/
 # write ourselves from reading it reaches tools/data/tips_distilled.json.
 tools/data/wotw_cache/
 research/wotw/
+# Raw upstream font headers fetched by tools/build_fonts.py. The DERIVED
+# output, tools/data/fonts.json, IS committed (glyph masks + widths, MIT via
+# pimoroni/pimoroni-pico — see NOTICE): it is small, its licence permits
+# redistribution, and the alternative is a network fetch in CI, which the
+# data policy calls a smell. The .hpp sources themselves are just build
+# input and are re-fetchable from the pin.
+tools/data/fonts_cache/
 # Official FFG rulebooks parsed to markdown by tools/build_rules_corpus.py,
 # and indexed by qmd for semantic search (collection `lotr-lcg-rules`). Same
 # posture and the same reason as research/votp/ above: this is verbatim FFG

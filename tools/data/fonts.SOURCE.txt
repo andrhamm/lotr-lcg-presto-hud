@@ -1,0 +1,8 @@
+# Upstream source for the device bitmap fonts.
+# pimoroni/pimoroni-pico, MIT (Copyright (c) 2021 Pimoroni Ltd) - see NOTICE.
+# Refresh with: python3 tools/build_fonts.py --refresh
+repo: pimoroni/pimoroni-pico
+sha: 4ec431cd4ae1a956e12da98d60f8752fa53feab6
+file: libraries/bitmap_fonts/font6_data.hpp
+file: libraries/bitmap_fonts/font8_data.hpp
+file: libraries/bitmap_fonts/font14_outline_data.hpp

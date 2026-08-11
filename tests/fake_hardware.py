@@ -8,18 +8,33 @@ per-glyph widths plus 1px inter-character spacing, all scaled linearly
 (verified: measure("AB",1)=9=4+4+1; measure(s,2)=2*measure(s,1)).
 """
 
-# Glyph widths at scale 1, probed on the Presto (PicoGraphics bitmap8).
+# Glyph widths at scale 1 for PicoGraphics bitmap8, for ALL 95 printable
+# ASCII characters.
+#
+# This table was originally probed by hand on the device and covered 82 of
+# them. Every probed value turned out to be correct -- but the 13 it omitted
+# fell through to a 4px fallback, so `|` measured 4 where it is 1, `[` and `]`
+# measured 4 where they are 2, and `#` measured 4 where it is 5. Only `#`
+# errs in the dangerous direction (measuring narrower than reality, which is
+# how text overflows a linter that passed), and `#` is never drawn. The rest
+# over-reserved, which is why nothing visibly broke.
+#
+# It is now GENERATED from the upstream font data rather than probed --
+# tools/build_fonts.py compiles libraries/bitmap_fonts/font8_data.hpp into
+# tools/data/fonts.json, and tests/test_font_metrics.py asserts this table
+# still matches it. Do not hand-edit; regenerate.
 BITMAP8_W = {
-    'a': 4, 'b': 4, 'c': 4, 'd': 4, 'e': 4, 'f': 4, 'g': 4, 'h': 4, 'i': 3,
-    'j': 4, 'k': 4, 'l': 3, 'm': 5, 'n': 4, 'o': 4, 'p': 4, 'q': 4, 'r': 4,
-    's': 4, 't': 4, 'u': 4, 'v': 4, 'w': 5, 'x': 4, 'y': 4, 'z': 4,
-    'A': 4, 'B': 4, 'C': 4, 'D': 4, 'E': 4, 'F': 4, 'G': 4, 'H': 4, 'I': 3,
-    'J': 4, 'K': 4, 'L': 4, 'M': 5, 'N': 4, 'O': 4, 'P': 4, 'Q': 4, 'R': 4,
-    'S': 4, 'T': 5, 'U': 4, 'V': 4, 'W': 5, 'X': 4, 'Y': 4, 'Z': 4,
-    '0': 4, '1': 3, '2': 4, '3': 4, '4': 4, '5': 4, '6': 4, '7': 4, '8': 4,
-    '9': 4, ' ': 3, '.': 2, ',': 2, ':': 1, ';': 2, '!': 1, '?': 4, '(': 3,
-    ')': 3, '+': 3, '-': 3, '/': 4, '*': 3, '<': 3, '>': 3, '=': 3, '%': 4,
-    '&': 4, "'": 1, '"': 3,
+    ' ': 3, '!': 1, '"': 3, '#': 5, '$': 4, '%': 4, '&': 4, "'": 1, '(': 3,
+    ')': 3, '*': 3, '+': 3, ',': 2, '-': 3, '.': 2, '/': 4, '0': 4, '1': 3,
+    '2': 4, '3': 4, '4': 4, '5': 4, '6': 4, '7': 4, '8': 4, '9': 4, ':': 1,
+    ';': 2, '<': 3, '=': 3, '>': 3, '?': 4, '@': 4, 'A': 4, 'B': 4, 'C': 4,
+    'D': 4, 'E': 4, 'F': 4, 'G': 4, 'H': 4, 'I': 3, 'J': 4, 'K': 4, 'L': 4,
+    'M': 5, 'N': 4, 'O': 4, 'P': 4, 'Q': 4, 'R': 4, 'S': 4, 'T': 5, 'U': 4,
+    'V': 4, 'W': 5, 'X': 4, 'Y': 4, 'Z': 4, '[': 2, '\\': 4, ']': 2,
+    '^': 3, '_': 3, '`': 4, 'a': 4, 'b': 4, 'c': 4, 'd': 4, 'e': 4, 'f': 4,
+    'g': 4, 'h': 4, 'i': 3, 'j': 4, 'k': 4, 'l': 3, 'm': 5, 'n': 4, 'o': 4,
+    'p': 4, 'q': 4, 'r': 4, 's': 4, 't': 4, 'u': 4, 'v': 4, 'w': 5, 'x': 4,
+    'y': 4, 'z': 4, '{': 3, '|': 1, '}': 3, '~': 4,
 }
 
 
