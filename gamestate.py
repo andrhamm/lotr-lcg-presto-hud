@@ -58,6 +58,72 @@ def window_after(v):
     w = WINDOW_PREFIX + v
     return w if w in VIEW_STEP else None
 
+
+def is_action_window(v):
+    """True if this view's STEP is an action window.
+
+    NOT the same as is_window_view(). The `aw_` screens are the interstitial
+    windows, but Combat's two windows ARE its phase views: phases.STEPS marks
+    6.E (enemy attacks) and 6.P (player attacks) as action_window, and neither
+    has an `aw_` screen. Asking the naming convention instead of the turn
+    sequence would miss both - which are exactly the windows a combat skip
+    passes over.
+    """
+    import phases as _phases
+    st = VIEW_STEP.get(v)
+    return bool(st and _phases.step(st)["action_window"])
+
+
+def last_window_before(target):
+    """The last action-window view strictly before `target`, or None.
+
+    This is the whole safety rule for skipping. An action window is a player's
+    opportunity to act, and phase-locked abilities can ONLY be initiated in a
+    window of their own phase (RR). Jumping a player past the final window of
+    a phase silently removes an opportunity they may have been holding a card
+    for - and the compiled catalog says that is not hypothetical: 34 distinct
+    cards print "Combat Action:", 35 "Planning Action:", 32 "Quest Action:".
+
+    So a skip never lands on its nominal destination. It lands here.
+    """
+    if target not in VIEW_ORDER:
+        return None
+    for v in reversed(VIEW_ORDER[:VIEW_ORDER.index(target)]):
+        if is_action_window(v):
+            return v
+    return None
+
+
+# Contextual skips. Each is something the PLAYER asserts about the table, not
+# something the app infers: nothing here tracks enemies, and a tracker that
+# guessed would eventually guess wrong in the direction of skipping a phase
+# that mattered.
+#
+# `to` is the nominal destination; the skip actually lands on
+# last_window_before(to), so the last window of the skipped span is preserved.
+SKIPS = (
+    {
+        "id": "combat_empty",
+        # Offered ONLY from the encounter window, never from enc_checks
+        # itself. From the phase view, taking the skip would jump the player
+        # over aw_enc_checks - the encounter phase's OWN window, which they
+        # have not had yet. A skip may pass windows on the way to its landing,
+        # but it must never eat the window of the phase the player is standing
+        # in.
+        "from": ("aw_enc_checks",),
+        "to": "refresh",
+        "label": "No enemies. Skip combat.",
+        # Shown on the confirm, so the player is agreeing to a specific claim
+        # about their table rather than to a shortcut.
+        "claim": "No enemies are engaged and none are in staging.",
+    },
+)
+
+
+def skips_from(view):
+    """The contextual skips offered on `view` - usually none."""
+    return tuple(s for s in SKIPS if view in s["from"])
+
 # view -> representative step id (for the phases screen / log tags / LEDs)
 VIEW_STEP = {
     "quest_setup": "0.0",
@@ -829,6 +895,40 @@ class GameState:
                 v = "travel"
             seen += 1
         return v
+
+    def skip_to(self, skip_id):
+        """Take a contextual skip, landing on the last window before its target.
+
+        Three things this deliberately is NOT:
+
+        - It is not automatic. The app does not track enemies, so it cannot
+          know combat is empty; the player asserts it. A tracker that inferred
+          this would eventually infer it wrong, in the direction of removing a
+          phase that mattered.
+        - It is not silent. The skipped span is named in the log, so a player
+          reading back can see what was passed over and why.
+        - It is not a one-way door. This goes through enter_view like every
+          other transition, so it sits inside the same delta bracket and undo
+          restores it exactly as it restores an ordinary advance.
+
+        Returns the view landed on, or None if the skip is not offered here.
+        """
+        skip = next((s for s in skips_from(self.view) if s["id"] == skip_id),
+                    None)
+        if skip is None:
+            return None
+        landing = last_window_before(skip["to"])
+        if landing is None or landing == self.view:
+            return None
+
+        i, j = VIEW_ORDER.index(self.view), VIEW_ORDER.index(landing)
+        if j <= i:
+            return None
+        passed = [v for v in VIEW_ORDER[i + 1:j]]
+        self.log_event("Skipped %s - %s" % (
+            ", ".join(passed) if passed else "nothing", skip["claim"]))
+        self.enter_view(landing)
+        return landing
 
     def advance_view(self):
         """Move to the next view; staging skips resolution (that view is only

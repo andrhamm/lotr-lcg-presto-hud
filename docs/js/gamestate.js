@@ -34,6 +34,56 @@ export const phaseViewOf = v =>
 export const windowAfter = v =>
   (WINDOW_PREFIX + v) in VIEW_STEP ? WINDOW_PREFIX + v : null;
 
+// NOT the same as isWindowView. The aw_ screens are the interstitial windows,
+// but Combat's two windows ARE its phase views: phases.js marks 6.E (enemy
+// attacks) and 6.P (player attacks) as action windows and neither has an aw_
+// screen. Asking the naming convention instead of the turn sequence would miss
+// both - exactly the windows a combat skip passes over.
+export const isActionWindow = v => {
+  const st = VIEW_STEP[v];
+  return !!(st && phaseStep(st).action_window);
+};
+
+// The whole safety rule for skipping. An action window is a player's
+// opportunity to act, and a phase-locked ability can ONLY be initiated during
+// a window of its own phase (RR). Jumping past the final window of a phase
+// silently removes an opportunity someone may have been holding a card for,
+// and the compiled catalog says that is not hypothetical: 34 distinct cards
+// print "Combat Action:", 35 "Planning Action:", 32 "Quest Action:".
+//
+// So a skip never lands on its nominal destination. It lands here.
+export function lastWindowBefore(target) {
+  const i = VIEW_ORDER.indexOf(target);
+  if (i < 0) return null;
+  for (let j = i - 1; j >= 0; j--) {
+    if (isActionWindow(VIEW_ORDER[j])) return VIEW_ORDER[j];
+  }
+  return null;
+}
+
+// Contextual skips. Each is something the PLAYER asserts about the table, not
+// something the app infers: nothing here tracks enemies, and a tracker that
+// guessed would eventually guess wrong in the direction of skipping a phase
+// that mattered.
+//
+// `to` is the nominal destination; the skip lands on lastWindowBefore(to).
+export const SKIPS = [
+  {
+    id: "combat_empty",
+    // Offered ONLY from the encounter window, never from enc_checks itself:
+    // from the phase view this would jump the player over aw_enc_checks, the
+    // encounter phase's OWN window, which they have not had yet. A skip may
+    // pass windows on the way to its landing; it must never eat the window of
+    // the phase the player is standing in.
+    from: ["aw_enc_checks"],
+    to: "refresh",
+    label: "No enemies. Skip combat.",
+    claim: "No enemies are engaged and none are in staging.",
+  },
+];
+
+export const skipsFrom = view => SKIPS.filter(s => s.from.includes(view));
+
 export const VIEW_STEP = {
   quest_setup: "0.0", resource: "1.R", planning: "2.P", quest_sailing: "3.1",
   quest_commit: "3.2",
@@ -692,6 +742,28 @@ export class GameState {
       seen++;
     }
     return v;
+  }
+
+  // Take a contextual skip, landing on the last window before its target.
+  //
+  // Three things this deliberately is NOT: automatic (the app does not track
+  // enemies, so the player asserts it); silent (the skipped span is named in
+  // the log); or a one-way door (it goes through enterView like every other
+  // transition, so it sits in the same delta bracket and undo restores it).
+  //
+  // Returns the view landed on, or null if the skip is not offered here.
+  skipTo(skipId) {
+    const skip = skipsFrom(this.view).find(s => s.id === skipId);
+    if (!skip) return null;
+    const landing = lastWindowBefore(skip.to);
+    if (!landing || landing === this.view) return null;
+
+    const i = VIEW_ORDER.indexOf(this.view), j = VIEW_ORDER.indexOf(landing);
+    if (j <= i) return null;
+    const passed = VIEW_ORDER.slice(i + 1, j);
+    this.logEvent(`Skipped ${passed.length ? passed.join(", ") : "nothing"} - ${skip.claim}`);
+    this.enterView(landing);
+    return landing;
   }
 
   advanceView() {

@@ -129,3 +129,70 @@ def test_screen_play_twins_expose_the_same_methods():
     assert not missing, (
         "the web twin's ScreenPlay is missing: %s"
         % [(m, _camel(m)) for m in missing])
+
+
+_SKIP_PROBE = """\
+import { skipsFrom, lastWindowBefore, isActionWindow, VIEW_ORDER, SKIPS,
+         GameState } from "./gamestate.js";
+const g = new GameState();
+g.enterView("aw_enc_checks");
+const landed = g.skipTo("combat_empty");
+console.log(JSON.stringify({
+  offeredOn: VIEW_ORDER.filter(v => skipsFrom(v).length).sort(),
+  landing: lastWindowBefore("refresh"),
+  landingIsWindow: isActionWindow(lastWindowBefore("refresh")),
+  skipIds: SKIPS.map(s => s.id).sort(),
+  landedOn: landed,
+  view: g.view,
+  step: g.step,
+  logMentionsSkip: g.log.some(e => String(e.text || "").includes("Skipped")),
+}));
+"""
+
+
+def _js_skip_facts():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node not installed")
+    with tempfile.TemporaryDirectory() as tmp:
+        for f in os.listdir(os.path.join(ROOT, "docs", "js")):
+            if f.endswith(".js"):
+                shutil.copy(os.path.join(ROOT, "docs", "js", f),
+                            os.path.join(tmp, f))
+        with open(os.path.join(tmp, "package.json"), "w") as f:
+            f.write('{"type":"module"}')
+        probe = os.path.join(tmp, "probe.mjs")
+        with open(probe, "w") as f:
+            f.write(_SKIP_PROBE)
+        r = subprocess.run([node, probe], cwd=tmp, capture_output=True,
+                           text=True)
+        assert r.returncode == 0, "web twin failed to load:\n%s" % r.stderr
+        return json.loads(r.stdout)
+
+
+def test_phase_skip_behaves_identically_in_both_twins():
+    """The skip's safety rule has to hold on the web too.
+
+    Landing on the last action window before the destination is what keeps a
+    skip from silently eating a phase-locked opportunity (34 distinct cards
+    print "Combat Action:"). A twin that landed somewhere else would be a
+    different game, so this compares the actual values rather than trusting
+    that the port looked right.
+    """
+    from gamestate import (GameState, VIEW_ORDER, SKIPS, is_action_window,
+                           last_window_before, skips_from)
+
+    js = _js_skip_facts()
+
+    assert js["offeredOn"] == sorted(v for v in VIEW_ORDER if skips_from(v))
+    assert js["skipIds"] == sorted(s["id"] for s in SKIPS)
+    assert js["landing"] == last_window_before("refresh")
+    assert js["landingIsWindow"] is is_action_window(last_window_before("refresh"))
+
+    g = GameState()
+    g.enter_view("aw_enc_checks")
+    landed = g.skip_to("combat_empty")
+    assert js["landedOn"] == landed
+    assert js["view"] == g.view
+    assert js["step"] == g.step
+    assert js["logMentionsSkip"] is True
