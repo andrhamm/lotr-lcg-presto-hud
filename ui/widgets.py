@@ -27,19 +27,34 @@ class Button:
 
 
 def panel(d, pal, x, y, w, h, fill=None, border=None):
-    """Filled rect with a 1px inner border (PicoGraphics has no outline)."""
+    """Filled rect with an inner border (PicoGraphics has no outline).
+
+    Border thickness comes from the skin: `panel_border`. 0 draws a borderless
+    flat panel, which is a whole visual direction on its own.
+    """
+    b = pal.panel_border
     d.set_pen(border if border is not None else pal.border)
     d.rectangle(x, y, w, h)
     d.set_pen(fill if fill is not None else pal.card)
-    d.rectangle(x + 1, y + 1, w - 2, h - 2)
+    d.rectangle(x + b, y + b, w - 2 * b, h - 2 * b)
 
 
-def bevel(d, pal, x, y, w, h, fill, pressed=False, t=2):
+def bevel(d, pal, x, y, w, h, fill, pressed=False, t=None):
     """Video-game chrome: raised face (light top-left, dark bottom-right);
-    pressed inverts the bevel."""
-    lo, hi = (pal.bevel_l, pal.bevel_d) if pressed else (pal.bevel_d, pal.bevel_l)
+    pressed inverts the bevel.
+
+    Thickness comes from the skin (`bevel_t`) unless a call site overrides it.
+    `bevel_t = 0` renders a flat face with no edges at all - the honest
+    critique called the current bevels dated, and that is the direction which
+    answers it.
+    """
+    if t is None:
+        t = pal.bevel_t
     d.set_pen(fill)
     d.rectangle(x, y, w, h)
+    if not t:
+        return
+    lo, hi = (pal.bevel_l, pal.bevel_d) if pressed else (pal.bevel_d, pal.bevel_l)
     d.set_pen(hi)
     d.rectangle(x, y, w, t)
     d.rectangle(x, y, t, h)

@@ -48,7 +48,17 @@ TYPE_VARIANTS = [
      {1: ("font6", 1), 2: ("font6", 2), 3: ("font6", 3)}),
 ]
 
-VARIANT_SETS = {"type": TYPE_VARIANTS}
+def _look_variants():
+    """Round 2: one variant per candidate skin, type held at the round-1 result.
+
+    Colour and chrome vary; the font does not, because round 1 measured the
+    alternatives and kept bitmap8.
+    """
+    from tools.skins_round2 import ROUND2
+    return [(s.name, s.note, s) for s in ROUND2]
+
+
+VARIANT_SETS = {"type": TYPE_VARIANTS, "look": _look_variants}
 
 PROBES = [
     ("play_quest_staging", "Play", "Densest phase view: header, stat strip, guidance band, meter, counters, nav"),
@@ -60,24 +70,58 @@ PROBES = [
 ]
 
 
-def _render(scene, binding, font_default="font8"):
-    """A scene rendered under one binding, as PNG bytes."""
-    from PIL import Image
+def all_scenes():
+    """Every scene, grouped for the pane by the area its name implies."""
+    import tests.scenes
+    known = {s[0]: (s[1], s[2]) for s in PROBES}
+    prefixes = (
+        ("play_", "Play"), ("resolution_", "Progress"),
+        ("questing_progress", "Progress"), ("location_", "Progress"),
+        ("quest_", "Quest"), ("side_quest", "Quest"), ("sailing", "Quest"),
+        ("choose_scenario", "Setup"), ("pick_cycle", "Setup"),
+        ("scenario_", "Setup"), ("setup", "Setup"), ("firstrun", "Setup"),
+        ("catalog_", "Setup"), ("phases_", "System"), ("log", "System"),
+        ("settings", "System"), ("about", "System"), ("boot", "System"),
+        ("gameover", "System"), ("legend", "System"), ("counter", "System"),
+        ("led_", "System"), ("elim_", "Modals"), ("players_", "Modals"),
+    )
+    out = []
+    for name in sorted(tests.scenes.SCENES):
+        if name in known:
+            out.append((name, known[name][0], known[name][1]))
+            continue
+        group = next((g for p, g in prefixes if name.startswith(p)), "Other")
+        out.append((name, group, ""))
+    return out
+
+
+def _render(scene, variant, font_default="font8"):
+    """A scene rendered under one variant, as PNG bytes.
+
+    A variant is either a type binding (round 1) or a Skin (round 2). Both go
+    through the same path, because the whole point of the apparatus is that a
+    look is a value the renderer takes as input.
+    """
     import importlib
+    import tempfile
     import tests.scenes
     from tools.preview import render
 
+    is_skin = hasattr(variant, "colors")
+    binding = variant.type_binding if is_skin else variant
+
     fh.set_type_binding(binding)
+    if is_skin:
+        tests.scenes.SKIN = variant
     try:
         importlib.reload(tests.scenes)
+        if is_skin:
+            tests.scenes.SKIN = variant
         hw, _ = tests.scenes.SCENES[scene]()
-        tmp = io.BytesIO()
-        # preview.render writes to a path; go through a temp file rather than
-        # duplicating its call-dispatch loop, which is the thing that must
-        # stay identical to the device.
-        import tempfile
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
             path = f.name
+        # preview.render owns the call-dispatch loop, which is the thing that
+        # must stay identical to the device. Never duplicate it here.
         render(hw.display.calls, path, font=font_default)
         with open(path, "rb") as f:
             data = f.read()
@@ -85,6 +129,7 @@ def _render(scene, binding, font_default="font8"):
         return data
     finally:
         fh.set_type_binding(None)
+        tests.scenes.SKIN = None
         importlib.reload(tests.scenes)
 
 
@@ -131,14 +176,16 @@ def card_html(scene, blurb, group, variants):
         % (group, scene, CARD_CSS, scene, blurb, "\n".join(figs)))
 
 
-def build(variant_set, out_dir):
+def build(variant_set, out_dir, scenes=None):
     variants = VARIANT_SETS[variant_set]
+    if callable(variants):
+        variants = variants()
     if os.path.isdir(out_dir):
         shutil.rmtree(out_dir)
     os.makedirs(out_dir, exist_ok=True)
 
     written = []
-    for scene, group, blurb in PROBES:
+    for scene, group, blurb in (scenes or PROBES):
         rendered = []
         for label, note, binding in variants:
             rendered.append((label, note, _render(scene, binding)))
@@ -155,8 +202,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--variants", default="type", choices=sorted(VARIANT_SETS))
     ap.add_argument("--out", default="build/pane")
+    ap.add_argument("--all-scenes", action="store_true",
+                    help="every scene in tests/scenes.py, not just the probes")
     args = ap.parse_args()
-    files = build(args.variants, args.out)
+    scenes = None
+    if args.all_scenes:
+        scenes = all_scenes()
+    files = build(args.variants, args.out, scenes)
     print("\n%d cards in %s" % (len(files), args.out))
 
 

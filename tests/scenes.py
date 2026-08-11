@@ -9,7 +9,19 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tests.fake_hardware import FakeHardware
-from ui.theme import Palette
+from ui.theme import Palette as _Palette
+
+# The skin every scene in this module builds its palette from.
+#
+# None means the shipped default. tools/build_design_pane.py sets it to a
+# candidate skin and reloads this module, which is how one scene renders under
+# several looks without a branch per direction. Tests never set it, so the
+# layout, typography and identity gates all run against the default.
+SKIN = None
+
+
+def Palette(display, skin=None):
+    return _Palette(display, skin if skin is not None else SKIN)
 from gamestate import GameState, VIEW_STEP
 
 

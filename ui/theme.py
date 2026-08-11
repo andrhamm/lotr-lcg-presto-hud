@@ -27,85 +27,50 @@ LABEL = 1     # ALL-CAPS section labels + dense tabular metadata ONLY
 # site, and a sentence may never use them.
 
 
-# Source RGB for the pens something needs to SHADE, plus the one new pen.
-# A pen is an opaque handle - it cannot be dimmed, only replaced - so anything
-# wanting "the same colour, turned down" has to start from the numbers. These
-# are the single source for the pens built from them below; see
-# Palette.shaded().
-RGB = {
-    "bg":     (16, 12, 9),
-    "card":   (36, 32, 21),
-    "well":   (24, 20, 12),
-    "border": (60, 54, 35),
-    "gold":   (214, 180, 110),
-    "red":    (247, 101, 62),
-    "tan":    (200, 186, 144),
-    "slate":  (124, 138, 152),
-}
+# Colour now lives in ui/skin.py, so a look is a value rather than a diff
+# against these modules. RGB stays as the module-level view of the ACTIVE
+# skin's colours - a pen is an opaque handle, it cannot be dimmed, only
+# replaced, so anything wanting "the same colour, turned down" has to start
+# from the numbers (see Palette.shaded()).
+from ui.skin import DEFAULT as DEFAULT_SKIN
+
+RGB = DEFAULT_SKIN.colors
 SLATE = RGB["slate"]
 DIM_FACTOR = 0.55      # an eliminated stat pill: low enough to recede, high
                        # enough to still read what the player finished on
 
 
 class Palette:
-    def __init__(self, d):
-        # ground
-        self.bg = d.create_pen(*RGB["bg"])
-        self.card = d.create_pen(*RGB["card"])
-        self.card_hi = d.create_pen(48, 44, 29)
-        self.border = d.create_pen(*RGB["border"])
-        self.border_gold = d.create_pen(150, 118, 48)
-        # ink
-        self.gold = d.create_pen(*RGB["gold"])
-        self.tan = d.create_pen(*RGB["tan"])
-        self.muted = d.create_pen(180, 162, 118)
-        # stat-value ink (threat / willpower / progress) - one constant colour
-        self.value = self.gold
-        self.dim = d.create_pen(162, 146, 100)
-        # semantics
-        self.green = d.create_pen(136, 168, 92)
-        self.amber = d.create_pen(214, 164, 70)
-        self.red = d.create_pen(*RGB["red"])
-        # weather (heading facing glyphs)
-        self.cloud = d.create_pen(185, 188, 198)
-        self.sky = d.create_pen(95, 168, 230)
-        # progress-token brown (dropshadow behind the green ranger/trail icon)
-        self.brown = d.create_pen(104, 70, 34)
-        # controls
-        self.btn = d.create_pen(52, 42, 26)
-        self.btn_ok = d.create_pen(40, 50, 26)
-        self.ok_fg = d.create_pen(158, 196, 104)
-        self.btn_no = d.create_pen(56, 26, 18)
-        self.no_fg = d.create_pen(224, 112, 80)
-        self.tab_active = d.create_pen(30, 24, 15)
-        # bevels (video-game chrome: light top-left, dark bottom-right)
-        self.bevel_l = d.create_pen(96, 86, 54)
-        self.bevel_d = d.create_pen(7, 5, 3)
-        self.shadow = d.create_pen(34, 30, 24)
-        # leadership purple
-        self.purple = d.create_pen(166, 122, 196)
-        # true black-ish ink (staging threat value/icon, shadows)
-        self.outline = d.create_pen(0, 0, 0)
-        # inset value well
-        self.well = d.create_pen(*RGB["well"])
-        # lighter row-stripe background (by-round chart: makes black ink read)
-        self.row_stripe = d.create_pen(66, 60, 42)
-        # placeholder fill for undrawn scenario/set icons (Scenario Options -
-        # real icons land in a later sub-project)
-        self.iconslot = d.create_pen(44, 40, 28)
-        # parchment fill for the Quest Setup scroll-style tip (deliberately
-        # distinct from the standard note-panel card_hi background)
-        self.scroll = d.create_pen(30, 26, 17)
-        # Chrome labels. Every other ink here is the same warm hue at a
-        # different lightness, so a label beside a gold stat value could only
-        # ever differ from it by brightness - and at BODY on a dark ground
-        # that reads as the same colour. This is the one deliberately COOL
-        # entry, and it is reserved for labels that name a value rather than
-        # being one (the stat pills' header segments).
-        self.slate = d.create_pen(*SLATE)
+    """Pens for one skin.
 
+    Every pen is built from the skin's colour map, so the pen NAMES - which
+    are the design system's documented vocabulary (ink / semantic / ground /
+    controls) - stay fixed while the colours behind them vary. A draw site
+    asks for `pal.gold` and never learns which skin it got.
+    """
+
+    def __init__(self, d, skin=None):
+        self.skin = skin or DEFAULT_SKIN
         self._d = d
         self._shaded = {}
+
+        for name, rgb in self.skin.colors.items():
+            setattr(self, name, d.create_pen(*rgb))
+        for alias, target in self.skin.aliases.items():
+            setattr(self, alias, getattr(self, target))
+
+    # -- chrome ------------------------------------------------------------
+    def __getattr__(self, key):
+        """Chrome parameters read through the palette: `pal.bevel_t`.
+
+        Widgets already receive `pal` everywhere they draw, so routing chrome
+        through it avoids threading a second argument through every call
+        site. Only reached when normal lookup fails.
+        """
+        try:
+            return self.__dict__["skin"].chrome[key]
+        except KeyError:
+            raise AttributeError("palette has no attribute %r" % (key,))
 
     # -- shading -----------------------------------------------------------
     def shaded(self, name, factor=DIM_FACTOR):
@@ -119,14 +84,17 @@ class Palette:
         """
         key = (name, factor)
         if key not in self._shaded:
-            r, g, b = RGB[name]
+            r, g, b = self.skin.colors[name]
             self._shaded[key] = self._d.create_pen(
                 int(r * factor), int(g * factor), int(b * factor))
         return self._shaded[key]
 
     def threat_pen(self, threat):
-        if threat >= 35:
-            return self.red
-        if threat >= 20:
-            return self.amber
+        """Where threat turns amber then red - a skin decision, not a rule.
+
+        Elimination is at 50 regardless of how the ramp is coloured.
+        """
+        for floor, pen in self.skin.threat_bands:
+            if threat >= floor:
+                return getattr(self, pen)
         return self.green
