@@ -46,12 +46,48 @@ def measure_bitmap8(s, scale=1):
     return w * scale
 
 
+# -- type binding ----------------------------------------------------------
+# A binding maps each type-scale tier to a concrete (font, scale). The app
+# asks for LABEL/BODY/DISPLAY (1/2/3); which font renders them, and at what
+# multiplier, is a visual decision that belongs to a skin.
+#
+# It exists because the alternatives are not drop-in replacements. font8 is
+# 8px tall, so 1/2/3 gives an 8/16/24px ladder. font14_outline is 14px tall
+# at scale 1 and has NO smaller size, so it cannot supply a LABEL tier that
+# reads as smaller than its own BODY -- a font14 direction is necessarily a
+# HYBRID that falls back to font8 for chrome. Discovering that is the whole
+# point of measuring a font rather than looking at a picture of one.
+#
+# Scales outside the tiers (4-9, the numerals and wordmarks) always render in
+# the binding's display font at the requested multiplier.
+BITMAP8_BINDING = {1: ("font8", 1), 2: ("font8", 2), 3: ("font8", 3)}
+
+_binding = BITMAP8_BINDING
+
+
+def set_type_binding(binding=None):
+    """Install a tier -> (font, scale) map for newly built displays.
+
+    Module-level on purpose: the 118 scene builders each construct their own
+    FakeHardware internally, so a probe has no other seam to reach them
+    through. Always restore the default when done.
+    """
+    global _binding
+    _binding = binding or BITMAP8_BINDING
+    return _binding
+
+
+def current_binding():
+    return _binding
+
+
 class FakeDisplay:
-    def __init__(self, w=480, h=480):
+    def __init__(self, w=480, h=480, binding=None):
         self.w = w
         self.h = h
         self._pen = 0
         self.calls = []
+        self.binding = binding or current_binding()
 
     def get_bounds(self):
         return (self.w, self.h)
@@ -71,13 +107,25 @@ class FakeDisplay:
     def triangle(self, x1, y1, x2, y2, x3, y3):
         self.calls.append(("tri", x1, y1, x2, y2, x3, y3, self._pen))
 
+    def _resolve(self, scale):
+        """Tier -> (font, effective scale). Untiered sizes keep their number."""
+        return self.binding.get(scale, (self.binding[3][0], scale))
+
     def text(self, s, x, y, wrap=0, scale=1):
         # wrap is recorded because the REAL PicoGraphics wraps words at the
         # wrap width (wrap=0 stacks every word vertically!) — lint checks it.
-        self.calls.append(("text", s, x, y, scale, self._pen, wrap))
+        # The font and effective scale are appended so a previewer can draw
+        # the right glyphs; every existing consumer indexes positionally and
+        # is unaffected.
+        font, eff = self._resolve(scale)
+        self.calls.append(("text", s, x, y, eff, self._pen, wrap, font))
 
     def measure_text(self, s, scale=1):
-        return measure_bitmap8(s, scale)
+        font, eff = self._resolve(scale)
+        if font == "font8":
+            return measure_bitmap8(s, eff)
+        from tools import hostfont
+        return hostfont.measure(s, eff, font)
 
     def set_font(self, name):
         self.calls.append(("font", name))

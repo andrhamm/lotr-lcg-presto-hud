@@ -56,3 +56,7 @@ tools/data/fonts_cache/
 # rules text, so it is a local research corpus only. Only summaries we write
 # ourselves — rules/*.md — are committed. See rules/README.md.
 research/rules/
+
+# Design-pane render output (tools/build_design_pane.py). Build artifact:
+# every image in it is regenerated from tests/scenes.py.
+build/

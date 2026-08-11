@@ -56,11 +56,15 @@ def render(calls, path, font="font8", substitute=False):
             dr.polygon([(x1, y1), (x2, y2), (x3, y3)], fill=pen)
         elif c[0] == "text":
             s, x, y, scale, pen = c[1], c[2], c[3], c[4], c[5]
+            # The scene records which font each string resolved to, so a
+            # mixed binding (font14 body over a font8 label, say) renders
+            # correctly without the previewer guessing.
+            glyphs = c[7] if len(c) > 7 else font
             if real:
                 hostfont.draw(
                     lambda rx, ry, rw, rh: dr.rectangle(
                         [rx, ry, rx + rw - 1, ry + rh - 1], fill=pen),
-                    s, x, y, scale, font)
+                    s, x, y, scale, glyphs)
             else:
                 _draw_substituted(dr, s, x, y, scale, pen)
     img.save(path)
