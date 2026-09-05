@@ -87,16 +87,23 @@ def test_every_store_path_is_declared_in_one_place(name):
 
 
 def test_the_web_twin_keeps_localstorage_in_its_client_too():
-    """Same rule, same reason - the twin had three keys spread across main.js."""
-    js = os.path.join(ROOT, "docs", "js")
+    """Same rule, same reason - the twin had three keys spread across main.js.
+    The tablet client (docs/tablet/) is under the same rule from its first
+    file; the directory may not exist yet."""
     offenders = []
-    for fn in sorted(os.listdir(js)):
-        if not fn.endswith(".js") or fn == "db.js":
+    for sub in ("js", "tablet"):
+        top = os.path.join(ROOT, "docs", sub)
+        if not os.path.isdir(top):
             continue
-        with open(os.path.join(js, fn)) as f:
-            for i, line in enumerate(f, 1):
-                if "localStorage" in line and not line.strip().startswith("//"):
-                    offenders.append("%s:%d" % (fn, i))
+        for dirpath, _dirs, files in os.walk(top):
+            for fn in sorted(files):
+                if not fn.endswith(".js") or fn == "db.js":
+                    continue
+                path = os.path.join(dirpath, fn)
+                with open(path) as f:
+                    for i, line in enumerate(f, 1):
+                        if "localStorage" in line and not line.strip().startswith("//"):
+                            offenders.append("%s:%d" % (os.path.relpath(path, ROOT), i))
     assert not offenders, (
         "localStorage outside docs/js/db.js at %s - route it through the client"
         % offenders)

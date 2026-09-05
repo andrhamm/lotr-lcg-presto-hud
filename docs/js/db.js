@@ -11,13 +11,26 @@ import { foldLog, foldReplay } from "./gamestate.js";
 import { loadIndex, loadScenario, loadIcons, loadTips, loadLocations,
          loadPlayerSideQuests } from "./quest_catalog.js";
 
-export const STATE_KEY = "lotr-hud-state";
-export const PREFS_KEY = "lotr-hud-prefs";
-export const LOG_KEY = "lotr-hud-log";
-export const REPLAY_KEY = "lotr-hud-replay";                 // legacy
-export const REPLAY_JOURNAL_KEY = "lotr-hud-replay-journal";
-export const HISTORY_KEY = "lotr-hud-history";
-export const ROLLUP_KEY = "lotr-hud-stats";
+// Two clients share this origin (docs/ and docs/tablet/), so every key is
+// prefixed. The default is the web twin's historical prefix, so its saves
+// keep loading; the tablet passes "lotr-tablet-".
+export const DEFAULT_PREFIX = "lotr-hud-";
+export function storageKeys(prefix = DEFAULT_PREFIX) {
+  return {
+    state: prefix + "state", prefs: prefix + "prefs", log: prefix + "log",
+    replay: prefix + "replay",                   // legacy
+    replayJournal: prefix + "replay-journal",
+    history: prefix + "history", rollup: prefix + "stats",
+  };
+}
+const _K = storageKeys();
+export const STATE_KEY = _K.state;
+export const PREFS_KEY = _K.prefs;
+export const LOG_KEY = _K.log;
+export const REPLAY_KEY = _K.replay;
+export const REPLAY_JOURNAL_KEY = _K.replayJournal;
+export const HISTORY_KEY = _K.history;
+export const ROLLUP_KEY = _K.rollup;
 
 const DEFAULT_PREFS = { brightness: 100, scene: "phase" };
 
@@ -47,7 +60,8 @@ export class Session {
   // Presto), so there the idle path IS the background. The browser could use a
   // Worker, but the same queue keeps the two twins reading identically - and
   // the work is small enough that it does not need one.
-  constructor() {
+  constructor({ prefix = DEFAULT_PREFIX } = {}) {
+    this.keys = storageKeys(prefix);
     this._queue = [];
     this._owner = null;      // the game the queue describes
     this._stateDirty = false;
@@ -69,8 +83,8 @@ export class Session {
     if (this._owner !== game) return false;
     if (this._queue.length) {
       const batch = this._queue.splice(0, Session.BATCH);
-      appendAll(LOG_KEY, batch.filter(([k]) => k === "l").map(([, r]) => r));
-      appendAll(REPLAY_JOURNAL_KEY, batch.filter(([k]) => k === "r").map(([, r]) => r));
+      appendAll(this.keys.log, batch.filter(([k]) => k === "l").map(([, r]) => r));
+      appendAll(this.keys.replayJournal, batch.filter(([k]) => k === "r").map(([, r]) => r));
       this._idle = 0;
       return true;
     }
@@ -104,25 +118,25 @@ export class Session {
 
   saveState(game) {
     try {
-      localStorage.setItem(STATE_KEY,
+      localStorage.setItem(this.keys.state,
         JSON.stringify({ saved_at: Date.now(), state: game.toDict() }));
     } catch { /* quota */ }
   }
 
-  saveLog(game) { appendAll(LOG_KEY, game.takeLogAppends()); }
+  saveLog(game) { appendAll(this.keys.log, game.takeLogAppends()); }
 
-  saveReplay(game) { appendAll(REPLAY_JOURNAL_KEY, game.takeReplayAppends()); }
+  saveReplay(game) { appendAll(this.keys.replayJournal, game.takeReplayAppends()); }
 
   // What a tap does: queue, and return. The work happens in tick().
   commit(game) { this.record(game); }
 
   loadState() {
-    try { return JSON.parse(localStorage.getItem(STATE_KEY)); }
+    try { return JSON.parse(localStorage.getItem(this.keys.state)); }
     catch { return null; }
   }
 
   loadLog(game) {
-    const recs = readArray(LOG_KEY);
+    const recs = readArray(this.keys.log);
     if (!recs.length) return;
     game.log = foldLog(recs);
     game._seq = Math.max(game._seq, ...game.log.map(e => e.seq ?? 0));
@@ -131,25 +145,25 @@ export class Session {
   // Prefer the journal; fall back to the pre-journal store and seed it so the
   // next tap appends rather than rewriting.
   loadReplay(game) {
-    const ops = readArray(REPLAY_JOURNAL_KEY);
+    const ops = readArray(this.keys.replayJournal);
     if (ops.length) {
       const [deltas, step] = foldReplay(ops);
       game.replayFromDict({ deltas, replay_step: step });
       return;
     }
     try {
-      game.replayFromDict(JSON.parse(localStorage.getItem(REPLAY_KEY)));
+      game.replayFromDict(JSON.parse(localStorage.getItem(this.keys.replay)));
       if (game.deltas.length) {
-        localStorage.setItem(REPLAY_JOURNAL_KEY,
+        localStorage.setItem(this.keys.replayJournal,
                              JSON.stringify(game.seedReplayJournal()));
       }
     } catch { game.replayFromDict(null); }
   }
 
-  exists() { return localStorage.getItem(STATE_KEY) !== null; }
+  exists() { return localStorage.getItem(this.keys.state) !== null; }
 
   clear() {
-    for (const k of [STATE_KEY, LOG_KEY, REPLAY_KEY, REPLAY_JOURNAL_KEY]) {
+    for (const k of [this.keys.state, this.keys.log, this.keys.replay, this.keys.replayJournal]) {
       localStorage.removeItem(k);
     }
   }
@@ -158,13 +172,17 @@ Session.BATCH = 16;              // journal records drained per tick
 Session.IDLE_BEFORE_STATE = 3;   // quiet ticks before the state checkpoint
 
 export class History {
-  append(record) { appendAll(HISTORY_KEY, [record]); this._bumpRollup(record); }
+  constructor({ prefix = DEFAULT_PREFIX } = {}) {
+    this.keys = storageKeys(prefix);
+  }
 
-  scan() { return readArray(HISTORY_KEY); }
+  append(record) { appendAll(this.keys.history, [record]); this._bumpRollup(record); }
+
+  scan() { return readArray(this.keys.history); }
 
   rollup() {
     try {
-      return JSON.parse(localStorage.getItem(ROLLUP_KEY))
+      return JSON.parse(localStorage.getItem(this.keys.rollup))
         ?? { games: 0, wins: 0, rounds: 0, by_scenario: {}, best: null };
     } catch {
       return { games: 0, wins: 0, rounds: 0, by_scenario: {}, best: null };
@@ -187,24 +205,25 @@ export class History {
     if (rec.won && (r.best === null || (rec.rounds ?? 0) < (r.best.rounds ?? Infinity))) {
       r.best = { scn: slug, rounds: rec.rounds, players: rec.players };
     }
-    try { localStorage.setItem(ROLLUP_KEY, JSON.stringify(r)); } catch { /* quota */ }
+    try { localStorage.setItem(this.keys.rollup, JSON.stringify(r)); } catch { /* quota */ }
   }
 
   clear() {
-    localStorage.removeItem(HISTORY_KEY);
-    localStorage.removeItem(ROLLUP_KEY);
+    localStorage.removeItem(this.keys.history);
+    localStorage.removeItem(this.keys.rollup);
   }
 }
 
 export class DataClient {
-  constructor() {
+  constructor({ prefix = DEFAULT_PREFIX } = {}) {
     this._index = null;
     this._icons = null;
     this._tips = null;
     this._sideQuests = null;
     this._bundles = {};
-    this.session = new Session();
-    this.history = new History();
+    this.keys = storageKeys(prefix);
+    this.session = new Session({ prefix });
+    this.history = new History({ prefix });
   }
 
   // PROPAGATES on failure, deliberately — main.js surfaces it as
@@ -264,13 +283,13 @@ export class DataClient {
 
   loadPrefs() {
     try {
-      const d = JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {};
+      const d = JSON.parse(localStorage.getItem(this.keys.prefs)) ?? {};
       return { brightness: d.brightness ?? 100, scene: d.scene ?? "phase" };
     } catch { return { ...DEFAULT_PREFS }; }
   }
 
   savePrefs(prefs) {
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }
+    try { localStorage.setItem(this.keys.prefs, JSON.stringify(prefs)); }
     catch { /* quota */ }
   }
 }
