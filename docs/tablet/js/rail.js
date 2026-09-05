@@ -11,19 +11,10 @@ import { zone } from "./primitives.js";
 import { fmtMs } from "../../js/gamestate.js";
 import { VIEW_LABELS } from "../../js/viewcopy.js";
 import { icon } from "../../js/icons_svg.js";
-
-// Stat icon colours, from design/stat-system.md (cited in the task-4 brief):
-// player threat red with a charcoal shadow, enemy/staging threat black with
-// a light edge, willpower gold, progress green with a brown shadow. Literal
-// rgb() strings, not CSS custom properties - an SVG fill="" attribute in a
-// string builder can't read var(--x).
-const THREAT_RED = "rgb(247,101,62)";
-const THREAT_RED_SHADOW = "rgb(7,5,3)";
-const THREAT_BLACK = "rgb(0,0,0)";
-const THREAT_BLACK_EDGE = "rgb(96,86,54)";
-const WILLPOWER_GOLD = "rgb(214,180,110)";
-const TRAIL_GREEN = "rgb(136,168,92)";
-const TRAIL_BROWN = "rgb(104,70,34)";
+import {
+  THREAT_RED, THREAT_SHADOW, THREAT_BLACK, THREAT_BLACK_EDGE,
+  WILLPOWER_GOLD, TRAIL_GREEN, TRAIL_BROWN,
+} from "./palette.js";
 
 // One PLAYERS cell: label (gold + flag glyph for the first player), threat,
 // a 3px bar that turns bar-danger inside 10 of elimination, then a row with
@@ -39,7 +30,7 @@ function renderPlayerCell(game, p, i) {
   const elim = p.eliminated ? h`<div class="player-elim">${CHROME.eliminated}</div>` : "";
   return h`<div class="${cx("player-cell", p.eliminated && "is-eliminated")}">
 <div class="${cx("player-label", isFirst && "is-first")}">${raw(label)}</div>
-<div class="player-threat"><span class="num num-36">${p.threat}</span>${raw(icon("THREAT", 28, THREAT_RED, THREAT_RED_SHADOW))}</div>
+<div class="player-threat"><span class="num num-36">${p.threat}</span>${raw(icon("THREAT", 28, THREAT_RED, THREAT_SHADOW))}</div>
 <div class="${cx("bar", danger && "bar-danger")}"></div>
 <div class="player-stats">
 <span class="stat">${raw(icon("WILLPOWER", 20, WILLPOWER_GOLD))}<span class="num num-26">${p.commit}</span></span>
@@ -51,7 +42,7 @@ function renderPlayersZone(game) {
   const cells = game.players.map((p, i) => renderPlayerCell(game, p, i)).join("");
   return zone({
     name: CHROME.players,
-    icon: icon("THREAT", 22, THREAT_RED, THREAT_RED_SHADOW),
+    icon: icon("THREAT", 22, THREAT_RED, THREAT_SHADOW),
     edge: "gold",
     ground: "card",
     body: h`<div class="player-grid">${raw(cells)}</div>`,

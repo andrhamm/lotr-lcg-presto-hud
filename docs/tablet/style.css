@@ -95,6 +95,10 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .pane { flex: 1 1 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 18px 16px; min-width: 0; overflow-y: auto; }
 .cta-row { display: flex; gap: 12px; margin-top: auto; }
 .pane.gameover { align-items: center; justify-content: center; text-align: center; gap: 16px; }
+/* .cta-row's margin-top: auto pins it to the pane's bottom edge, which
+   overrides .pane.gameover's own justify-content: center above it - zero it
+   out here so the game-over CTA centres with the rest of the pane. */
+.pane.gameover .cta-row { margin-top: 0; }
 .center { text-align: center; }
 
 /* The loop diagram (loops.js): numbered gold-circle rungs joined by a 2px
@@ -106,10 +110,19 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .loop-rung:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 28px; bottom: 0; width: 2px; background: var(--border-gold); }
 .loop-num { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; background: var(--gold); color: var(--bg); display: flex; align-items: center; justify-content: center; font: 700 15px/1 var(--sans); }
 .loop-rung-body { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 3px; }
-.loop-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--green); margin-top: 4px; }
+/* First text line + its window dot share a row; the sub-clause (if any)
+   sits below, per loop-rung-body's own column stack. */
+.loop-rung-line { display: flex; align-items: center; gap: 8px; }
+.loop-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--green); flex: 0 0 auto; }
 .loop-exit { padding-left: 42px; }
 .loop-legend { display: flex; align-items: center; gap: 8px; }
-.loop-legend .loop-dot { margin-top: 0; }
+
+/* An icons_svg.js glyph inlined mid-sentence (quest_resolution's fail line):
+   the glyph's own style="display:block" would otherwise break the paragraph
+   flow, so wrap it in an inline-flex box - flex items are blockified
+   regardless of their own display, so display:block causes no line break
+   once it is one. */
+.icon-inline { display: inline-flex; align-items: center; vertical-align: -4px; }
 
 /* A quoted/computed preview block: printed card text (Quest Setup) or a
    computed preview (the staging "without actions" line, the enc_checks

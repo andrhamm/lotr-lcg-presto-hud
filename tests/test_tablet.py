@@ -262,7 +262,8 @@ for (const v of flowViews()) {
   const g = new GameState(4, 25); g.advanceView(); g.enterView(v);
   if (v === "quest_resolution") { g.setWillpower(9); g.setStaging(2); g.resolveQuest(9, 2); g.pending_budget = 7; }
   const html = layout(g, newUi());
-  out[v] = { len: html.length, next: html.includes('data-act="advance"') || html.includes('data-act="endround"'),
+  out[v] = { len: html.length, next: html.includes('data-act="advance"') || html.includes('data-act="endround"')
+               || html.includes('data-act="resolve"'),
              bad: /undefined|NaN|\\[object Object\\]/.test(html), title: html.includes('class="display"') };
 }
 console.log(JSON.stringify(out));
@@ -296,6 +297,50 @@ console.log(JSON.stringify({ allocator: before.includes('data-act="apply_alloc"'
   progress: g.quest.progress }));
 """)
     assert js["allocator"] and js["placed"] and js["progress"] == 7
+
+
+def test_resolution_pane_reports_how_much_threat_rose_on_a_fail():
+    """A failed resolve never places progress (no allocator), and the
+    outcome line must say how much threat rose - not just that the quest
+    failed. setWillpower(2)/setStaging(5) -> resolveQuest's shortfall is 3,
+    so "rose by 3." (OUTCOME.fail_line2_pre + the icon + fail_line2_post)
+    must be in the pane."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { dispatch, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); g.enterView("quest_staging");
+g.setWillpower(2); g.setStaging(5);
+const ui = newUi();
+dispatch(g, ui, "resolve", "");
+const html = renderPane(g, ui);
+console.log(JSON.stringify({
+  roseByThree: html.includes("rose by 3."),
+  noAlloc: !html.includes('data-act="apply_alloc"'),
+}));
+""")
+    assert js["roseByThree"]
+    assert js["noAlloc"]
+
+
+def test_resolution_pane_names_a_tie_by_its_own_copy():
+    """A 4-4 tie must show OUTCOME.tie_line2's own text (not just
+    OUTCOME.card_tie), the same two-part composition the twin uses."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { dispatch, newUi } from "./actions.js";
+import { OUTCOME } from "../../js/viewcopy.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); g.enterView("quest_staging");
+g.setWillpower(4); g.setStaging(4);
+const ui = newUi();
+dispatch(g, ui, "resolve", "");
+const html = renderPane(g, ui);
+console.log(JSON.stringify({ tieLine: html.includes(OUTCOME.tie_line2) }));
+""")
+    assert js["tieLine"]
 
 
 def test_enc_checks_pane_carries_the_skip_cta_promoted_or_demoted():

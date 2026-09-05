@@ -14,7 +14,10 @@ function renderGameOver(game) {
   const won = over.result === "victory";
   const title = won ? CHROME.victory : CHROME.defeat;
   const round = over.round ?? game.round;
-  const duration = game.gameDuration();
+  // over.duration was frozen by setGameOver() the moment the game ended;
+  // gameDuration() itself keeps ticking off the live log/clock, so it is
+  // only a fallback for an over object that somehow lacks one.
+  const duration = over.duration ?? game.gameDuration();
   const label = duration ? h`${CHROME.round} ${round} · ${duration}` : h`${CHROME.round} ${round}`;
   return h`<div class="app"><main class="pane gameover">
 <h1 class="display center">${title}</h1>

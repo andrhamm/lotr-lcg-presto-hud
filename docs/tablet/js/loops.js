@@ -9,14 +9,15 @@ import { LOOP_LEGEND } from "../../js/viewcopy.js";
 // One rung: a numbered gold circle (joined to its neighbours by a 2px
 // connector - see .loop-rung::before in style.css), its label and optional
 // sub-clause, and - only when this rung is the one that opens an action
-// window (rung[1]) - a green 9px dot. The canvas twin marks the same rungs
-// with a purple square inline with the text; the tablet's dot sits with the
-// rung body instead, since the loop here reads top-to-bottom rather than
-// wrapping against a fixed-width column.
+// window (rung[1]) - a green 9px dot inline with that first text line (the
+// sub-clause, if any, stays on its own line below - see .loop-rung-line in
+// style.css). The canvas twin marks the same rungs with a purple square
+// inline with the text; this is the same placement, just in a flex row
+// instead of an absolute canvas offset.
 function renderRung(n, label, opens, sub) {
   const subLine = sub ? h`<p class="body secondary loop-sub">${sub}</p>` : "";
   const dot = opens ? '<span class="loop-dot"></span>' : "";
-  return h`<div class="loop-rung"><span class="loop-num">${n}</span><div class="loop-rung-body"><p class="body">${label}</p>${raw(subLine)}${raw(dot)}</div></div>`;
+  return h`<div class="loop-rung"><span class="loop-num">${n}</span><div class="loop-rung-body"><div class="loop-rung-line"><p class="body">${label}</p>${raw(dot)}</div>${raw(subLine)}</div></div>`;
 }
 
 // A LOOP_FLOW entry -> the framing band (banded like every other phase

@@ -8,20 +8,16 @@ import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta, counter, band } from "./primitives.js";
 import { renderLoop } from "./loops.js";
-import { phaseViewOf } from "../../js/gamestate.js";
+import { phaseViewOf, HEADINGS } from "../../js/gamestate.js";
 import {
   VIEW_LABELS, ACTION_WINDOW_TIPS, COMBAT_LAST_CHANCE, LOOP_FLOW, OUTCOME,
-  PHASE_FRAMEWORK, PHASE_WINDOW, PROGRESS_PLACEMENT, QUEST_SETUP, SAILING,
+  PHASE_FRAMEWORK, PHASE_WINDOW, PROGRESS_PLACEMENT, QUEST_SETUP,
   SETUP_TIP, STAGING, TOTALS, TRAVEL,
 } from "../../js/viewcopy.js";
 import { icon } from "../../js/icons_svg.js";
-
-// Icon colours (rgb() literals, not CSS custom properties - an SVG fill=""
-// attribute in a string builder can't read var(--x); same convention as
-// rail.js's THREAT_RED/THREAT_BLACK constants).
-const GOLD = "rgb(214,180,110)";
-const THREAT_BLACK = "rgb(0,0,0)";
-const THREAT_BLACK_EDGE = "rgb(96,86,54)";
+import {
+  THREAT_RED, THREAT_SHADOW, THREAT_BLACK, THREAT_BLACK_EDGE, WILLPOWER_GOLD,
+} from "./palette.js";
 
 // %s/%d template fill, in order - same helper as screen_play.js's _pendingLine.
 const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); };
@@ -150,39 +146,42 @@ function renderViewParts(view, game, ui) {
     case "planning":
       return { parts: renderLoop(LOOP_FLOW.planning), cta: null };
 
-    case "quest_sailing":
+    // Entered only with game.sailing on (gamestate.nextView: planning &&
+    // sailing -> quest_sailing) - so there is no "no keyword" state to report
+    // here; that copy belongs to the sail_toggle affordance the twin shows
+    // from *planning* when sailing is off, not this view. Show the heading
+    // (headingDesc()'s "term (facing)") plus its degree phrase from the same
+    // HEADINGS row, so a player sees how far on/off course without a claim
+    // that could be false.
+    case "quest_sailing": {
+      const [, , facing, degree] = HEADINGS[game.heading];
       return {
         parts: h`<p class="display">${game.headingDesc()}</p>`
-          + band({ kind: "window", text: SAILING.no_keyword, sub: SAILING.enable_hint }),
+          + band({ kind: "window", text: facing, sub: degree }),
         cta: null,
       };
+    }
 
     case "quest_commit":
       return {
         parts: band({ kind: "window", text: PHASE_WINDOW.quest_commit, sub: ACTION_WINDOW_TIPS.quest_commit.join(" ") })
-          + counter({ label: TOTALS.willpower, icon: icon("WILLPOWER", 40, GOLD), value: game.willpower, act: "wp" }),
+          + counter({ label: TOTALS.willpower, icon: icon("WILLPOWER", 40, WILLPOWER_GOLD), value: game.willpower, act: "wp" }),
         cta: null,
       };
 
     case "quest_staging": {
       const line = questPreviewLine(game);
-      const counters = h`<div class="two-col">${raw(counter({ label: TOTALS.willpower, icon: icon("WILLPOWER", 40, GOLD), value: game.willpower, act: "wp" }))}${raw(counter({ label: TOTALS.staging, icon: icon("THREAT", 40, THREAT_BLACK, THREAT_BLACK_EDGE), value: game.staging, act: "stg" }))}</div>`;
+      const counters = h`<div class="two-col">${raw(counter({ label: TOTALS.willpower, icon: icon("WILLPOWER", 40, WILLPOWER_GOLD), value: game.willpower, act: "wp" }))}${raw(counter({ label: TOTALS.staging, icon: icon("THREAT", 40, THREAT_BLACK, THREAT_BLACK_EDGE), value: game.staging, act: "stg" }))}</div>`;
       const parts = band({ kind: "framework", text: STAGING.framework })
         + band({ kind: "window", text: STAGING.window, sub: ACTION_WINDOW_TIPS.quest_staging.join(" ") })
         + counters + renderWithoutActions(line);
-      // "Resolve Quest..." is the guided path (runs resolveQuest via the
-      // "resolve" act, not "advance" - advanceView() from quest_staging
-      // hands straight to travel without resolving, see gamestate.nextView's
-      // "Resolution is entered only by a successful resolve" comment). The
-      // tracker never blocks a player who resolved off-app, though, so the
-      // plain Next stays too, small and secondary - "it's a tracker, not a
-      // referee."
-      const nxt = game.nextPhaseView();
-      const fallback = cta({
-        act: "advance", label: nxt ? `Next: ${VIEW_LABELS[nxt]}` : CHROME.next,
-        tone: "plain", grow: false,
-      });
-      return { parts, cta: fallback + cta({ act: "resolve", label: h`Resolve Quest. ${line}` }) };
+      // "Resolve Quest..." is the ONLY forward CTA here - it is what runs
+      // resolveQuest() (the "resolve" act). advanceView() from quest_staging
+      // hands straight to travel without resolving (gamestate.nextView's
+      // "Resolution is entered only by a successful resolve" comment), so a
+      // plain Next alongside it would silently skip the fail threat raise /
+      // success progress placement. No fallback CTA.
+      return { parts, cta: cta({ act: "resolve", label: h`Resolve Quest. ${line}` }) };
     }
 
     case "quest_resolution": {
@@ -193,11 +192,26 @@ function renderViewParts(view, game, ui) {
           cta: cta({ act: "apply_alloc", label: CHROME.placeProgress }),
         };
       }
-      const failOrTie = game.quest_outcome === "fail" || game.quest_outcome === "tie";
-      const line = game.quest_outcome === "fail" ? OUTCOME.card_fail
-        : game.quest_outcome === "tie" ? OUTCOME.card_tie
-        : OUTCOME.toast_success.replace("%d", String(game.quest_outcome_n));
-      const parts = band({ kind: failOrTie ? "framework" : "window", text: line })
+      // Compose exactly as the twin's _drawResolution does (screen_play.js):
+      // fail is card_fail + fail_line2_pre + the red player-threat icon +
+      // fail_line2_post (%d -> quest_outcome_n); tie is card_tie + tie_line2;
+      // success names quest_outcome_n progress via toast_success. Always
+      // "framework": this reports what resolveQuest() already did to the
+      // table (threat raised, progress banked, or nothing), never a "window"
+      // hint about something still open to act on.
+      let text;
+      if (game.quest_outcome === "fail") {
+        text = [
+          OUTCOME.card_fail, OUTCOME.fail_line2_pre,
+          raw(`<span class="icon-inline">${icon("THREAT", 22, THREAT_RED, THREAT_SHADOW)}</span>`),
+          OUTCOME.fail_line2_post.replace("%d", String(game.quest_outcome_n)),
+        ];
+      } else if (game.quest_outcome === "tie") {
+        text = [OUTCOME.card_tie, OUTCOME.tie_line2];
+      } else {
+        text = OUTCOME.toast_success.replace("%d", String(game.quest_outcome_n));
+      }
+      const parts = band({ kind: "framework", text })
         + band({ kind: "window", text: ACTION_WINDOW_TIPS.quest_resolution[0] });
       return { parts, cta: null };
     }
@@ -274,10 +288,10 @@ export function renderPane(game, ui) {
   const titleLine = h`${CHROME.round} ${game.round} · ${CHROME.step} ${game.step} · ${CHROME.firstPlayer} P${game.first_player + 1}`;
 
   const ctaButtons = [];
-  // quest_setup's Back leaves the game (there is nothing behind it - see
-  // gamestate.prevView), which canGoBack() already reports as false; named
-  // here too, matching the table's explicit "no Back".
-  if (view !== "quest_setup" && game.canGoBack()) {
+  // quest_setup's Back leaves the game (there is nothing behind it), so
+  // gamestate.prevView() already returns null there and canGoBack() is
+  // false - no separate view check needed.
+  if (game.canGoBack()) {
     ctaButtons.push(cta({ act: "back", label: "‹ " + CHROME.back, tone: "plain", grow: false }));
   }
   const offer = game.skipOffer();
