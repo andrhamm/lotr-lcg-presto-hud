@@ -250,3 +250,64 @@ console.log(JSON.stringify({ zones: (html.match(/class="zone /g) || []).length,
     assert js["buttons"] is False      # status, not controls, in this milestone
     assert js["log"] and js["prompt"] and js["staging"]
     assert js["captions"]
+
+
+_ALL_VIEWS = """
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, flowViews } from "../../js/gamestate.js";
+import { layout } from "./layout.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const out = {};
+for (const v of flowViews()) {
+  const g = new GameState(4, 25); g.advanceView(); g.enterView(v);
+  if (v === "quest_resolution") { g.setWillpower(9); g.setStaging(2); g.resolveQuest(9, 2); g.pending_budget = 7; }
+  const html = layout(g, newUi());
+  out[v] = { len: html.length, next: html.includes('data-act="advance"') || html.includes('data-act="endround"'),
+             bad: /undefined|NaN|\\[object Object\\]/.test(html), title: html.includes('class="display"') };
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def test_every_flow_view_renders_a_pane_with_a_way_forward():
+    js = node(_ALL_VIEWS)
+    for v, r in js.items():
+        assert r["len"] > 2000, v
+        assert r["title"], v
+        assert not r["bad"], v
+        assert r["next"] or v == "quest_resolution", v
+
+
+def test_resolution_pane_offers_the_allocator_then_the_window():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { dispatch, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); g.enterView("quest_staging");
+g.setWillpower(9); g.setStaging(2); g.quest.points = 20;
+const ui = newUi();
+dispatch(g, ui, "resolve", "");
+const before = renderPane(g, ui);
+dispatch(g, ui, "apply_alloc", "");
+const after = renderPane(g, ui);
+console.log(JSON.stringify({ allocator: before.includes('data-act="apply_alloc"'),
+  placed: after.includes('data-act="advance"') && !after.includes('data-act="apply_alloc"'),
+  progress: g.quest.progress }));
+""")
+    assert js["allocator"] and js["placed"] and js["progress"] == 7
+
+
+def test_enc_checks_pane_carries_the_skip_cta_promoted_or_demoted():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); g.enterView("enc_checks");
+const a = renderPane(g, newUi()); g.setEngaged(1, 2); const b = renderPane(g, newUi());
+console.log(JSON.stringify({ a: /data-act="skip"[^>]*/.exec(a)?.[0] ?? "", b: /class="cta cta-(\\w+)[^>]*data-act="skip"/.exec(b)?.[1] ?? "",
+  aTone: /class="cta cta-(\\w+)[^>]*data-act="skip"/.exec(a)?.[1] ?? "", counts: b.includes("2 engaged") }));
+""")
+    assert 'data-arg="combat_empty"' in js["a"]
+    assert js["aTone"] == "skip" and js["b"] == "plain" and js["counts"]
