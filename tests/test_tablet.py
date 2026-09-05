@@ -314,14 +314,16 @@ g.logEvent("P1 threat 25 -> 26");
 const html = renderRail(g, newUi());
 console.log(JSON.stringify({ zones: (html.match(/class="zone /g) || []).length,
   cells: (html.match(/player-cell/g) || []).length, danger: html.includes("bar-danger"),
-  buttons: html.includes("<button"), log: html.includes("P1 threat 25 -&gt; 26"),
+  buttons: (html.match(/<button/g) || []).length, log: html.includes("P1 threat 25 -&gt; 26"),
   prompt: html.includes("Resource"), staging: />5</.test(html) && />2</.test(html),
   captions: html.includes("Enemies") && html.includes("Locations"),
   grid: html.includes("staging-grid") }));
 """)
     assert js["zones"] == 3 and js["cells"] == 3
     assert js["danger"]                # P3 at 41 is within 10 of elimination
-    assert js["buttons"] is False      # status, not controls, in this milestone
+    # The rail's only controls are the three zones' own "Edit ›" chips
+    # (milestone 3) - the player cells/pills underneath stay pure status.
+    assert js["buttons"] == 3
     assert js["log"] and js["prompt"] and js["staging"]
     assert js["captions"]
     assert js["grid"]                  # the three staging pills are a grid, not a row
@@ -599,3 +601,47 @@ console.log(JSON.stringify({ changed, result, deltaHasGameOver, gameOverAfterUnd
     assert js["result"] == "defeat"
     assert js["deltaHasGameOver"]
     assert js["gameOverAfterUndo"] is None
+
+
+def test_players_sheet_edits_every_player_and_logs_like_the_twin():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(3, 25); g.advanceView(); const ui = newUi();
+perform(g, ui, "open_players", "");
+const html = layout(g, ui);
+perform(g, ui, "thr", "2:5"); perform(g, ui, "thr", "2:-1");
+perform(g, ui, "commit", "0:1"); perform(g, ui, "commit", "0:1");
+perform(g, ui, "eng+", "1");
+perform(g, ui, "all_thr", "1");
+const texts = g.log.slice(-6).map(e => e.text);
+perform(g, ui, "sheet_close", "");
+console.log(JSON.stringify({ sheet: html.includes('class="sheet sheet-players"'), rows: (html.match(/class="psheet-row/g) || []).length,
+  threats: g.players.map(p => p.threat), commits: g.players.map(p => p.commit), eng: g.players[1].engaged,
+  texts, closed: ui.sheet === null, deltas: g.deltas.length }));
+""")
+    assert js["sheet"] and js["rows"] == 3
+    assert js["threats"] == [26, 26, 30]
+    assert js["commits"] == [2, 0, 0] and js["eng"] == 1
+    assert js["texts"][0] == "P3 threat 25 -> 30"
+    assert js["texts"][1] == "P3 threat 30 -> 29"
+    assert "P1 committed 2 willpower" in js["texts"]
+    assert js["texts"][-1].startswith("All players threat +1 (P1 26, P2 26, P3 30)")
+    assert js["closed"] and js["deltas"] == 6   # sheet open/close change ui only: no delta
+
+
+def test_scrim_closes_and_the_sheet_body_does_not():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); const ui = newUi();
+perform(g, ui, "open_staging", "");
+const html = layout(g, ui);
+console.log(JSON.stringify({ scrim: /class="scrim"[^>]*data-act="sheet_close"/.test(html), stop: html.includes("data-stop"),
+  rows: html.includes('data-act="stg5"') && html.includes('data-act="stgen+"') && html.includes('data-act="stgloc+"') }));
+""")
+    assert js["scrim"] and js["stop"] and js["rows"]

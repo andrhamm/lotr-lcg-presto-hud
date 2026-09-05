@@ -17,8 +17,11 @@ export function counter({ label, icon, value, act, arg = "" }) {
 <button type="button" class="step" data-act="${act}+" data-arg="${arg}">+</button></div></div>`;
 }
 
-export function zone({ name, icon, edge, ground, body }) {
-  return h`<section class="${cx("zone", "zone-" + edge, "ground-" + ground)}"><header class="zone-head">${raw(icon)}<span class="label">${name}</span></header><div class="zone-body">${raw(body)}</div></section>`;
+// `chip` is an already-rendered chip() button (raw html), pushed to the far
+// right of the header by CSS (.zone-head .chip) - the milestone-3 rail's one
+// tap target per zone, "Edit ›" (design spec, "The left column").
+export function zone({ name, icon, edge, ground, body, chip = "" }) {
+  return h`<section class="${cx("zone", "zone-" + edge, "ground-" + ground)}"><header class="zone-head">${raw(icon)}<span class="label">${name}</span>${chip ? raw(chip) : ""}</header><div class="zone-body">${raw(body)}</div></section>`;
 }
 
 export function cta({ act, arg = "", label, tone = "ok", grow = true }) {

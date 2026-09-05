@@ -404,3 +404,39 @@ def test_xtargets_resolve_behaves_identically_in_both_twins():
                  in zip(_XRESOLVE_CASES, expected, js) if py != got]
     assert not mismatches, mismatches
     assert js == expected
+
+
+_ALL_THREAT_PROBE = """\
+import { GameState } from "./gamestate.js";
+const g = new GameState(3, 25);
+g.advanceView();
+g.players[2].threat = 49;
+const threats = g.adjustAllThreat(2);
+console.log(JSON.stringify({
+  threats,
+  text: g.log[g.log.length - 1].text,
+  pendingElim: g.pending_elim,
+  eliminated: g.players.map(p => p.eliminated),
+}));
+"""
+
+
+def test_adjust_all_threat_matches_the_twin():
+    """The tablet players sheet's "All -1/+1/+2" chips (milestone 3, Task 2):
+    adjust_all_threat/adjustAllThreat must bump every LIVING player's threat
+    and log one line naming every player's resulting value identically on
+    both twins - including the case where the batch pushes exactly one
+    player over their elimination level (pending_elim)."""
+    from gamestate import GameState
+
+    js = _js_facts(_ALL_THREAT_PROBE)
+
+    g = GameState(3, 25)
+    g.advance_view()
+    g.players[2].threat = 49
+    threats = g.adjust_all_threat(2)
+
+    assert js["threats"] == threats == [27, 27, 51]
+    assert js["text"] == g.log[-1]["text"]
+    assert js["pendingElim"] == g.pending_elim == 2
+    assert js["eliminated"] == [p.eliminated for p in g.players] == [False, False, True]

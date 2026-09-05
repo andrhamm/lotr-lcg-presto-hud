@@ -3,7 +3,13 @@
 // and count the taps.
 import { VIEW_ORDER } from "../../js/gamestate.js";
 
-export const newUi = () => ({ screen: "play", alloc: null, placed: false, picker: null });
+export const newUi = () => ({
+  screen: "play", alloc: null, placed: false, picker: null,
+  // Milestone 3: the one modal-overlay slot (null or {kind, ...}), plus the
+  // catalog lists two sheets need lazily (locations for the location picker,
+  // side quests for its picker) - loaded by app.js, read here only.
+  sheet: null, locations: [], sideQuests: [],
+});
 
 // Lazily seat ui.alloc the first time an alloc act runs against a resolved
 // budget - the resolution pane (Task 5) does the same on its first render,
@@ -141,9 +147,60 @@ export function dispatch(game, ui, act, arg) {
   if (act === "stgen+") { const before = game.staging_enemies; return game.setStagingEnemies(game.staging_enemies + 1) !== before; }
   if (act === "stgloc-") { const before = game.staging_locations; return game.setStagingLocations(game.staging_locations - 1) !== before; }
   if (act === "stgloc+") { const before = game.staging_locations; return game.setStagingLocations(game.staging_locations + 1) !== before; }
+  if (act === "stg5") {
+    // The staging editor's ±5 step - stg+/stg- above already cover ±1.
+    const before = game.staging;
+    return game.setStaging(game.staging + Number(arg)) !== before;
+  }
   if (act === "skip") { return game.skipTo(arg) !== null; }
   if (act === "endround") { game.endRound(); return true; }
+
+  // Sheets (milestone 3): a modal overlay is UI state, not game state - see
+  // sheets.js. open_quest is Task 4's own act (its chip already renders in
+  // the rail, per the task-2 brief - it opens nothing until sheet_quest.js
+  // lands, so it deliberately has no case here yet).
+  if (act === "open_players") { ui.sheet = { kind: "players" }; return true; }
+  if (act === "open_staging") { ui.sheet = { kind: "staging" }; return true; }
+  if (act === "open_menu") { ui.sheet = { kind: "menu" }; return true; }
+  if (act === "sheet_close") { ui.sheet = null; return true; }
+
+  // Players sheet edits - PlayersDetailModal's onButton (docs/js/screens.js),
+  // folded from its "edit"-pad steps (-5/-1/+1/+5) into one stepper row per
+  // the players-sheet brief. Log lines are verbatim the twin's.
+  if (act === "thr") {
+    const [i, n] = arg.split(":").map(Number);
+    const p = game.players[i];
+    const before = p.threat;
+    game.adjustThreat(i, n);
+    const after = p.threat;
+    if (after !== before) game.logEvent(`P${i + 1} threat ${before} -> ${after}`);
+    return after !== before;
+  }
+  if (act === "commit") {
+    const [i, n] = arg.split(":").map(Number);
+    const before = game.players[i].commit;
+    const next = Math.max(0, before + n);
+    if (next !== before) {
+      game.setCommit(i, next);
+      game.logEvent(`P${i + 1} committed ${next} willpower`);
+    }
+    return next !== before;
+  }
+  if (act === "all_thr") { game.adjustAllThreat(Number(arg)); return true; }
+
   return false;
+}
+
+// The elimination sheet (Task 3) and the resolution sheet (Task 7) both open
+// themselves rather than being tapped open - after ANY tap changes the game,
+// app.js calls this so the right one appears without every act above having
+// to know about it. `!ui.sheet` means an already-open sheet (e.g. the
+// players sheet mid-edit) is never yanked away by an elimination that
+// happens to land in the same tap.
+export function afterTap(game, ui) {
+  if (game.pending_elim !== null && !ui.sheet) {
+    ui.sheet = { kind: "elim", i: game.pending_elim, level: game.players[game.pending_elim].elimination };
+  }
 }
 
 // One tap, bracketed the way main.js brackets it: snapshot before, delta

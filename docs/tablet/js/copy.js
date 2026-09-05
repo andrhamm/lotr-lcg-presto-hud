@@ -35,4 +35,12 @@ export const CHROME = {
   nextPrefix: "Next: ",
   endOfRound: "End of Round ",
   back: "‹ Back",
+  edit: "Edit",
+  menu: "Menu",
+  all: "All",
+  elimAt: "elimination at",
+  done: "Done",
+  cancel: "Cancel",
+  playersSheetFooter: "Every change is logged as it happens. Done just closes the sheet.",
+  newGameWarning: "The current game is saved until you start a new one.",
 };

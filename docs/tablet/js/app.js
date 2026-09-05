@@ -16,7 +16,7 @@ import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, setBoardTracking } fro
 import { DataClient } from "../../js/db.js";
 import { CATALOG_UNAVAILABLE } from "../../js/viewcopy.js";
 import { layout } from "./layout.js";
-import { perform, newUi } from "./actions.js";
+import { perform, newUi, afterTap } from "./actions.js";
 
 // A finished game is appended to history once. Reset wherever `game` is
 // rebound (new game / a fresh scenario pick) - mirrors main.js's own
@@ -79,9 +79,12 @@ async function boot() {
 }
 
 async function handleAct(act, arg) {
-  if (act === "new_game") {
+  // "new_game_confirm" is the Menu sheet's confirmed choice (sheet_menu.js) -
+  // handled exactly like the game-over screen's "new_game" (task-2 brief).
+  if (act === "new_game" || act === "new_game_confirm") {
     db.session.clear();
     recordedGameOver = false;
+    ui.sheet = null;
     ui.screen = "newgame";
     ui.picker = await buildPicker();
     render();
@@ -132,6 +135,7 @@ async function handleAct(act, arg) {
     game.logEvent(`New game: ${players} players, threat ${threats.join("/")}, first P1`);
     game.preloadScenario(scenarioMeta, b.stages);
     game.view = "quest_setup";
+    ui.sheet = null;
     ui.screen = "play";
     db.session.saveState(game);
     render();
@@ -139,6 +143,9 @@ async function handleAct(act, arg) {
   }
   const changed = perform(game, ui, act, arg);
   if (!changed) return;
+  // Auto-opens the elimination sheet (Task 3) / resolution sheet (Task 7)
+  // when the tap that just changed the game triggered one - see actions.js.
+  afterTap(game, ui);
   if (game.game_over) {
     ui.screen = "gameover";
     // Record the finished game once, on the transition into the game-over
@@ -154,7 +161,15 @@ async function handleAct(act, arg) {
 }
 
 root.addEventListener("click", ev => {
+  // A sheet's body carries [data-stop] (sheets.js) so a tap that lands on
+  // it - anywhere but a real [data-act] button inside it - never bubbles to
+  // the scrim's own data-act="sheet_close" and closes the sheet under the
+  // player's finger. A tap outside the sheet altogether (on the scrim, or
+  // anywhere on the normal play screen, where there is no [data-stop]
+  // ancestor at all) is unaffected.
+  const stop = ev.target.closest("[data-stop]");
   const btn = ev.target.closest("[data-act]");
+  if (stop && (!btn || !stop.contains(btn))) return;
   if (!btn) return;
   handleAct(btn.dataset.act, btn.dataset.arg ?? "");
 });

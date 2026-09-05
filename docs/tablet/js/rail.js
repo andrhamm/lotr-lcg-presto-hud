@@ -1,13 +1,14 @@
 // The left column: three read-only status zones (PLAYERS / QUEST / STAGING)
 // plus the log block pinned to the bottom. Pure string builder like every
 // other tablet render function - no document/window, so tests/test_tablet.py
-// can drive it under node. No chips or buttons in this milestone: every
-// value here is status (design spec, "The left column") - the "Edit >"
-// chips arrive with the sheets in milestone 3, "Open >" with the log screen
-// in milestone 4.
+// can drive it under node. Every value here is status (design spec, "The
+// left column") - the one tap target per zone is its header's "Edit ›" chip
+// (milestone 3), opening the players/quest/staging sheet; "Open ›" arrives
+// with the log screen in milestone 4. The QUEST zone's chip renders now but
+// dispatches nothing until Task 4 lands sheet_quest.js - see actions.js.
 import { h, raw, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { zone } from "./primitives.js";
+import { chip, zone } from "./primitives.js";
 import { faceOf } from "./cards.js";
 import { fmtMs } from "../../js/gamestate.js";
 import { VIEW_LABELS } from "../../js/viewcopy.js";
@@ -39,6 +40,12 @@ function renderPlayerCell(game, p, i) {
 </div>${raw(elim)}</div>`;
 }
 
+// Every zone's header chip: same act/label pair shape, just the act differs
+// (open_players/open_quest/open_staging) - task-2 brief's Rail interface
+// line. height:30 (not the usual 44) because this is a header nav chip
+// inside the strip-height-constrained rail, not a sheet's own tap target.
+const editChip = act => chip({ act, label: `${CHROME.edit} ›`, tone: "tan", height: 30 });
+
 function renderPlayersZone(game) {
   const cells = game.players.map((p, i) => renderPlayerCell(game, p, i)).join("");
   return zone({
@@ -47,6 +54,7 @@ function renderPlayersZone(game) {
     edge: "gold",
     ground: "card",
     body: h`<div class="player-grid">${raw(cells)}</div>`,
+    chip: editChip("open_players"),
   });
 }
 
@@ -92,6 +100,7 @@ function renderQuestZone(game) {
     edge: "green",
     ground: "card",
     body,
+    chip: editChip("open_quest"),
   });
 }
 
@@ -121,6 +130,7 @@ function renderStagingZone(game) {
     edge: "outline",
     ground: "well",
     body: h`<div class="staging-grid">${raw(body)}</div>`,
+    chip: editChip("open_staging"),
   });
 }
 

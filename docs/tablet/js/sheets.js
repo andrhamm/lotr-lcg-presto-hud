@@ -1,0 +1,29 @@
+// The modal-overlay framework (milestone 3): one scrim + one sheet, drawn
+// whenever ui.sheet is set. Pure string builder like every other tablet
+// render function - no document/window, so tests/test_tablet.py can drive it
+// under node. app.js's click delegation stops a click that lands inside
+// `[data-stop]` (the sheet body) from bubbling to the scrim's own
+// data-act="sheet_close" - only a tap that lands OUTSIDE the sheet, on the
+// scrim itself, or on a `[data-act]` button inside the sheet, does anything.
+import { h, raw, cx } from "./dom.js";
+import { renderPlayersSheet } from "./sheet_players.js";
+import { renderStagingSheet } from "./sheet_staging.js";
+import { renderMenuSheet } from "./sheet_menu.js";
+
+// Unknown kinds render nothing (not an error) - Task 3 adds "elim" (opened by
+// actions.js's afterTap before this file knows how to draw it), Task 7 adds
+// "resolve", and so on through the milestone. A sheet kind not yet wired up
+// here is a no-op overlay, never a crash.
+const RENDERERS = {
+  players: renderPlayersSheet,
+  staging: renderStagingSheet,
+  menu: renderMenuSheet,
+};
+
+export function renderSheet(game, ui) {
+  if (!ui.sheet) return "";
+  const render = RENDERERS[ui.sheet.kind];
+  if (!render) return "";
+  const body = render(game, ui);
+  return h`<div class="scrim" data-act="sheet_close"><section class="${cx("sheet", "sheet-" + ui.sheet.kind)}" data-stop>${raw(body)}</section></div>`;
+}

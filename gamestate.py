@@ -712,6 +712,24 @@ class GameState:
             self.pending_elim = index
         return p.threat
 
+    def adjust_all_threat(self, delta):
+        """The players sheet's "All -1/+1/+2" chips (tablet milestone 3): every
+        LIVING player gets adjust_threat(delta) - elimination and pending_elim
+        follow exactly as a single-player edit would, since this just loops
+        adjust_threat. One log line names every player's RESULTING threat, not
+        just the living ones, so the row stays legible even after an
+        elimination. Deliberately NOT a keyed tally (unlike set_staging/
+        set_engaged): "each press is an event" per the players-sheet brief, so
+        a run of taps stays visible as a run rather than coalescing into one
+        row."""
+        for i, p in enumerate(self.players):
+            if not p.eliminated:
+                self.adjust_threat(i, delta)
+        sign = "+" if delta > 0 else ""
+        parts = ", ".join("P%d %d" % (i + 1, p.threat) for i, p in enumerate(self.players))
+        self.log_event("All players threat %s%d (%s)" % (sign, delta, parts))
+        return [p.threat for p in self.players]
+
     def avert_elimination(self, index):
         """Card effect (e.g. Favor of the Valar): threat -> level - 5,
         the player is not eliminated."""

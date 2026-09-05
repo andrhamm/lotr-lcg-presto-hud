@@ -8,6 +8,7 @@ import { renderStrip } from "./strip.js";
 import { renderRail } from "./rail.js";
 import { renderPane } from "./pane.js";
 import { renderNewGame } from "./newgame.js";
+import { renderSheet } from "./sheets.js";
 
 function renderGameOver(game) {
   const over = game.game_over ?? {};
@@ -29,5 +30,5 @@ function renderGameOver(game) {
 export function layout(game, ui) {
   if (ui.screen === "gameover") return renderGameOver(game);
   if (ui.screen === "newgame") return h`<div class="app">${raw(renderNewGame(ui))}</div>`;
-  return h`<div class="app">${raw(renderStrip(game, ui))}<div class="body-row">${raw(renderRail(game, ui))}${raw(renderPane(game, ui))}</div></div>`;
+  return h`<div class="app">${raw(renderStrip(game, ui))}<div class="body-row">${raw(renderRail(game, ui))}${raw(renderPane(game, ui))}</div>${raw(renderSheet(game, ui))}</div>`;
 }

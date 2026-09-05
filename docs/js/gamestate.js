@@ -573,6 +573,22 @@ export class GameState {
     return p.threat;
   }
 
+  // The players sheet's "All -1/+1/+2" chips (tablet milestone 3): every
+  // LIVING player gets adjustThreat(delta) - elimination and pending_elim
+  // follow exactly as a single-player edit would, since this just loops
+  // adjustThreat. One log line names every player's RESULTING threat, not
+  // just the living ones, so the row stays legible even after an
+  // elimination. Deliberately NOT a keyed tally (unlike setStaging/
+  // setEngaged): "each press is an event" per the players-sheet brief, so a
+  // run of taps stays visible as a run rather than coalescing into one row.
+  adjustAllThreat(delta) {
+    this.players.forEach((p, i) => { if (!p.eliminated) this.adjustThreat(i, delta); });
+    const sign = delta > 0 ? "+" : "";
+    const list = this.players.map((p, i) => `P${i + 1} ${p.threat}`).join(", ");
+    this.logEvent(`All players threat ${sign}${delta} (${list})`);
+    return this.players.map(p => p.threat);
+  }
+
   avertElimination(index) {
     const p = this.players[index];
     p.threat = Math.max(0, p.elimination - 5);
