@@ -7,14 +7,16 @@
 //
 // Boot, the click-to-dispatch loop, and background persistence. Mirrors
 // docs/js/main.js's main() for the pieces this milestone needs: resume vs.
-// new game, one dispatch() call per tap, and Session's queue-then-drain
-// persistence - not the canvas draw loop or the modal router, neither of
-// which exist here (the rail is read-only this milestone; see rail.js).
+// new game, one perform() call per tap (actions.js's dispatch(), bracketed
+// with beginAction()/addDelta() the way main.js's beginAction/commitAction
+// bracket onButton), and Session's queue-then-drain persistence - not the
+// canvas draw loop or the modal router, neither of which exist here (the
+// rail is read-only this milestone; see rail.js).
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, setBoardTracking } from "../../js/gamestate.js";
 import { DataClient } from "../../js/db.js";
 import { CATALOG_UNAVAILABLE } from "../../js/viewcopy.js";
 import { layout } from "./layout.js";
-import { dispatch, newUi } from "./actions.js";
+import { perform, newUi } from "./actions.js";
 
 setWindowPolicy(WINDOW_POLICY_BANDS);
 setBoardTracking(true);
@@ -114,7 +116,7 @@ async function handleAct(act, arg) {
     render();
     return;
   }
-  const changed = dispatch(game, ui, act, arg);
+  const changed = perform(game, ui, act, arg);
   if (!changed) return;
   if (!game.game_over && game.players.length && game.allEliminated()) {
     game.setGameOver("defeat");
@@ -130,7 +132,7 @@ root.addEventListener("click", ev => {
   handleAct(btn.dataset.act, btn.dataset.arg ?? "");
 });
 
-// Gameplay touches RAM only (dispatch(), above); tick() drains the queue in
+// Gameplay touches RAM only (perform(), above); tick() drains the queue in
 // the background - see db.js's Session doc comment. flush() on pagehide so a
 // tab close/reload never loses the last few taps' journal entries.
 setInterval(() => db.session.tick(game), 250);

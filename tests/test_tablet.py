@@ -440,3 +440,24 @@ console.log(JSON.stringify({ u: dataUrl("index.json"), s: dataUrl("scenarios/x.j
     assert js["u"].endswith("/js/../data/index.json") or js["u"].endswith("/data/index.json")
     assert "/tablet/" not in js["u"] and "/js/data/" not in js["u"]
     assert js["s"].endswith("/data/scenarios/x.json")
+
+
+def test_perform_records_a_delta_per_changing_tap_so_undo_works():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); const ui = newUi();
+const before = g.deltas.length;
+const a = perform(g, ui, "stg+", "");
+const b = perform(g, ui, "stg-", "");
+const c = perform(g, ui, "stg-", "");          // at the floor: no change, no delta
+const n = g.deltas.length - before;
+const canUndo = g.canUndo();
+g.undo();
+console.log(JSON.stringify({ a, b, c, n, canUndo, stagingAfterUndo: g.staging, replay: g.takeReplayAppends().length > 0 }));
+""")
+    assert js["a"] and js["b"] and js["c"] is False
+    assert js["n"] == 2 and js["canUndo"]
+    assert js["stagingAfterUndo"] == 1
+    assert js["replay"]

@@ -127,3 +127,14 @@ export function dispatch(game, ui, act, arg) {
   if (act === "endround") { game.endRound(); return true; }
   return false;
 }
+
+// One tap, bracketed the way main.js brackets it: snapshot before, delta
+// after. addDelta() returns false for a no-op action (nothing changed) and
+// for a window that held a replay cursor move; either way the caller still
+// decides whether to persist from `changed`.
+export function perform(game, ui, act, arg) {
+  const snap = game.beginAction();
+  const changed = dispatch(game, ui, act, arg);
+  if (changed) game.addDelta(snap);
+  return changed;
+}
