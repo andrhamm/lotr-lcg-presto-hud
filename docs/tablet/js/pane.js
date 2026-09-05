@@ -249,7 +249,20 @@ function renderViewParts(view, game, ui) {
       const fw = blocked
         ? band({ kind: "framework", text: TRAVEL.blocked })
         : band({ kind: "window", text: TRAVEL.open });
-      return { parts: fw + band({ kind: "window", text: ACTION_WINDOW_TIPS.travel.join(" ") }), cta: null };
+      // Travel is optional (TRAVEL.open says so) - its own chip opens the
+      // location picker (Task 5) alongside the bands rather than replacing
+      // the pane's one shared forward CTA, so a table that chooses not to
+      // travel still has a plain Next. arg encodes mode/idx/back for
+      // actions.js's open_locpick (idx only matters for "change"; empty
+      // reads as 0) - "new::play" when nothing is active yet, "change:0:
+      // play" to replace the one seat the rail's own Location pill shows.
+      const travelChip = blocked
+        ? chip({ act: "open_locpick", arg: "change:0:play", label: TRAVEL.btn_replace, tone: "tan" })
+        : chip({ act: "open_locpick", arg: "new::play", label: TRAVEL.btn_travel, tone: "tan" });
+      return {
+        parts: fw + band({ kind: "window", text: ACTION_WINDOW_TIPS.travel.join(" ") }) + travelChip,
+        cta: null,
+      };
     }
 
     case "enc_optional":

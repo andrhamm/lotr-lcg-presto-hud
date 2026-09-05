@@ -11,16 +11,18 @@ import { renderStagingSheet } from "./sheet_staging.js";
 import { renderMenuSheet } from "./sheet_menu.js";
 import { renderElimSheet } from "./sheet_elim.js";
 import { renderQuestSheet } from "./sheet_quest.js";
+import { renderLocPickSheet } from "./sheet_locpick.js";
 
-// Unknown kinds render nothing (not an error) - Tasks 5-7 add "locpick"/
-// "sqpick"/"resolve", and so on through the milestone. A sheet kind not yet
-// wired up here is a no-op overlay, never a crash.
+// Unknown kinds render nothing (not an error) - Tasks 6-7 add "sqpick"/
+// "resolve", and so on through the milestone. A sheet kind not yet wired up
+// here is a no-op overlay, never a crash.
 const RENDERERS = {
   players: renderPlayersSheet,
   staging: renderStagingSheet,
   menu: renderMenuSheet,
   elim: renderElimSheet,
   quest: renderQuestSheet,
+  locpick: renderLocPickSheet,
 };
 
 export function renderSheet(game, ui) {

@@ -259,3 +259,17 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .qsheet-controls { display: flex; align-items: center; gap: 8px; }
 .qsheet-val { display: flex; align-items: center; gap: 6px; min-width: 56px; justify-content: center; }
 .qsheet-actions, .qsheet-add { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* The location picker (Task 5): rows grouped by encounter set, bevelled
+   like .scenario-row (a name a player reads, plus its threat/quest-points
+   pair) rather than a chip glued to a label - see sheet_locpick.js's locRow
+   comment. .is-selected swaps the bevel for the same card_hi/gold treatment
+   .seg.is-skippable and .locpick-row's own selected state share elsewhere. */
+.locpick-list { display: flex; flex-direction: column; gap: 14px; }
+.locpick-group { display: flex; flex-direction: column; gap: 8px; }
+.locpick-row { display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; width: 100%; min-height: 56px; padding: 8px 16px; text-align: left;
+  background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
+  border-radius: 6px; }
+.locpick-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
+.locpick-manual { display: flex; flex-direction: column; gap: 10px; }

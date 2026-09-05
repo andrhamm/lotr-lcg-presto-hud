@@ -68,4 +68,24 @@ export const CHROME = {
   // Verbatim QuestingProgressModal's own fallback (docs/js/screens.js) for a
   // condition stage with no card-supplied advance sentence.
   questConditionFallback: "This stage advances on a condition, not on progress.",
+  // The location picker (Task 5) - LocationPickModal is its canvas-modal
+  // reference (docs/js/screens.js), minus pagination (the sheet scrolls)
+  // and the "how it arrived" toggle (inferred from ui.sheet.back instead -
+  // see sheet_locpick.js).
+  locpickTitleNew: "Travel",
+  locpickTitleChange: "Change Location",
+  locpickPrompt: "Pick the location - or enter it manually.",
+  locpickReplacing: "Replaces the current location (%s/%s discarded).",
+  manualEntry: "Manual entry",
+  travelHere: "Travel",
+  // The confirm CTA's label when back is not "play" - the location arrives
+  // by card effect (the quest sheet's "+ Add location"), not a travel the
+  // players paid for, so the button should not claim one either. Mirrors
+  // LocationPickModal's own footer/travel-button label switch verbatim
+  // ("Travel"/"Add" on `this.back !== "progress"`).
+  addHere: "Add",
+  pickPoints: "Quest points",
+  pickContribution: "Threat contribution",
+  contributionNote: "Its threat leaves the staging area while it is active.",
+  locpickStats: "threat %s · %s quest points",
 };

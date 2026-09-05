@@ -62,6 +62,13 @@ async function boot() {
     db.session.loadLog(game);
     const b = game.scenario?.slug ? await db.bundle(game.scenario.slug) : null;
     if (b) game.rehydrateStages(b.stages);
+    // The location picker (Task 5) reads ui.locations, never fetches its
+    // own - db.bundle() already carries loadLocations()'s list (~10 KB,
+    // pinned for the game per its own comment), so a resume just needs to
+    // seat it. `b` is null for a bare/manual game with no scenario at all,
+    // and loadLocations degrades to [] on any catalog failure - either way
+    // the picker still opens, straight to its manual entry.
+    ui.locations = b?.locations ?? [];
     // A save can land exactly between a successful "resolve" and
     // "apply_alloc" (pending_budget > 0, nothing placed yet). ui.alloc is
     // never part of the save (it is UI state, not game state), and pane.js
@@ -135,6 +142,7 @@ async function handleAct(act, arg) {
     game.logEvent(`New game: ${players} players, threat ${threats.join("/")}, first P1`);
     game.preloadScenario(scenarioMeta, b.stages);
     game.view = "quest_setup";
+    ui.locations = b.locations ?? [];
     ui.sheet = null;
     ui.screen = "play";
     db.session.saveState(game);

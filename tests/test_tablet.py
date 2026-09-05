@@ -855,6 +855,69 @@ console.log(JSON.stringify({
     assert not js["hasStepper"]
 
 
+def test_location_picker_travel_then_manual_entry_appends_a_second_seat():
+    """From the task-5 brief: the Travel pane's own CTA opens the location
+    picker in mode "new"/back "play" (pane.js); picking the one catalog row
+    and confirming commits exactly like the twin's LocationPickModal._commit
+    - GameState.travelTo with the catalog row's own points/threat/name, the
+    "Traveled to ..." log line (arrival "travel" because back is "play"),
+    and the staging reduction travelTo already applies - then the sheet
+    closes (back "play" has no sheet to reopen). A second pass through the
+    manual steppers (mode "new" again) APPENDS rather than replacing the
+    first seat, and the manual seat's threat is pinned to the contribution
+    stepper per LocationPickModal._commit's own rule."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView(); g.enterView("travel");
+g.setStaging(4);
+const ui = newUi();
+ui.locations = [{ id: "a", name: "Old Forest Road", points: 3, threat: 1, set: "Passage Through Mirkwood" }];
+const beforeHtml = layout(g, ui);
+perform(g, ui, "open_locpick", "new::play");
+const listHtml = layout(g, ui);
+perform(g, ui, "locpick_row", "a");
+perform(g, ui, "locpick_travel", "");
+const seat0 = g.active_locations[0];
+const afterTravel = {
+  name: seat0.name, points: seat0.points, threat: seat0.threat,
+  staging: g.staging, closed: ui.sheet === null,
+  logged: g.log.some(e => e.text === "Traveled to Old Forest Road (3 quest points)"),
+};
+// A second seat, entered manually - reopening from the play pane again
+// (mode "new" - it appends, it never replaces the seat travelTo just
+// placed).
+perform(g, ui, "open_locpick", "new::play");
+perform(g, ui, "locpick_manual", "");
+perform(g, ui, "locpick_pts", "1");
+const manualPts = ui.sheet.manual.points;
+const manualContrib = ui.sheet.manual.contrib;
+perform(g, ui, "locpick_save", "");
+console.log(JSON.stringify({
+  travelChip: beforeHtml.includes('data-act="open_locpick"') && beforeHtml.includes('data-arg="new::play"'),
+  rowRendered: listHtml.includes("Old Forest Road") && listHtml.includes('data-act="locpick_row"'),
+  ...afterTravel,
+  manualPts,
+  seats: g.active_locations.length,
+  secondThreat: g.active_locations[1].threat,
+  manualContrib,
+  manualClosed: ui.sheet === null,
+}));
+""")
+    assert js["travelChip"], "the Travel pane must offer its own CTA when no location is active"
+    assert js["rowRendered"]
+    assert js["name"] == "Old Forest Road" and js["points"] == 3 and js["threat"] == 1
+    assert js["staging"] == 3            # setStaging(4), then -1 (travelTo's own contribution)
+    assert js["logged"]
+    assert js["closed"], "back \"play\" has no sheet to reopen"
+    assert js["manualPts"] == 4
+    assert js["seats"] == 2, "mode \"new\" appends a second seat, it never replaces the first"
+    assert js["secondThreat"] == js["manualContrib"]
+    assert js["manualClosed"]
+
+
 def test_chip_labels_are_composed_with_h():
     """chip()/cta() in primitives.js insert `label` via raw() (see
     test_h_escapes_interpolations_but_not_raw above), so a label built from
