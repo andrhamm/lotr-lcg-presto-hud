@@ -1,3 +1,4 @@
+*, *::before, *::after { box-sizing: border-box; }
 :root {
   --bg: rgb(16,12,9); --card: rgb(36,32,21); --card-hi: rgb(48,44,29); --well: rgb(24,20,12);
   --border: rgb(60,54,35); --border-gold: rgb(150,118,48);
@@ -9,7 +10,13 @@
   --sans: 'Alegreya Sans', 'Gill Sans', 'Trebuchet MS', system-ui, sans-serif;
 }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tan); font: 20px/1.35 var(--sans); }
-#app, .app { width: 100vw; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+/* 100vh first as the fallback for a browser with no dvh support; 100dvh
+   after it wins wherever it is supported, so the app shrinks with the
+   on-screen chrome (Safari's URL bar) instead of being covered by it. The
+   safe-area padding then reserves the home-indicator strip - .cta-row's own
+   margin-top: auto (.pane) keeps it pinned just above that padding, not
+   past it. */
+#app, .app { width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
 .body-row { flex: 1 1 0; min-height: 0; display: flex; overflow: hidden; }
 .display { font: 600 34px/1.1 var(--serif); color: var(--gold); }
 .body { font: 20px/1.35 var(--sans); color: var(--tan); margin: 0; text-wrap: pretty; }
@@ -17,7 +24,16 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tan); 
 .label { font: 700 13px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--dim); }
 .num { font-family: var(--sans); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--gold); }
 .num-26 { font-size: 26px } .num-34 { font-size: 34px } .num-36 { font-size: 36px } .num-40 { font-size: 40px } .num-48 { font-size: 48px } .num-56 { font-size: 56px } .num-64 { font-size: 64px } .num-84 { font-size: 84px }
-button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent; user-select: none; }
+/* Press feedback: every button here is beveled light-top/left, dark-bottom/
+   right at rest (see .chip/.cta/.step below) - invert that on press so the
+   surface reads as pushed in, plus a 1px nudge toward the surface. Generic
+   on the element, not a per-component class, so it covers every button
+   (chip, cta, step, the new-game scenario-row) for free. */
+button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel-d);
+  border-bottom-color: var(--bevel-l); border-right-color: var(--bevel-l);
+  transform: translateY(1px); }
 .chip { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; background: var(--btn);
   border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
   border-radius: 6px; font: 700 13px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
@@ -29,6 +45,11 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .cta-plain { background: var(--btn); color: var(--tan); border-color: var(--bevel-l) }
 .step { width: 64px; height: 52px; background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d); border-radius: 6px; font-size: 30px; color: var(--tan); }
 .step-sm { width: 44px; height: 44px; font-size: 22px; }
+/* A stepper that cannot act (allocator +/- at its cap, docs/tablet/js/pane.js's
+   allocStep()) renders as this instead of .step: same footprint, no bevel,
+   no background, dim glyph - and it is a <span>, never a <button>, so it is
+   not a tap target at all. */
+.step-off { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; color: var(--dim); }
 .band { display: flex; gap: 16px; align-items: center; padding: 10px 12px 10px 18px; background: var(--card); border: 1px solid var(--border); border-left: 6px solid; border-radius: 6px; }
 .band-framework { border-left-color: var(--red) } .band-window { border-left-color: var(--green) } .band-tip { border-left-color: var(--gold) }
 .band-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 0 }
@@ -41,7 +62,7 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .ground-card { background: var(--card) } .ground-well { background: var(--well) }
 
 /* Transport strip (Task 3): one segment per phase, one tick per flow view. */
-.strip { box-sizing: border-box; height: 96px; display: flex; align-items: stretch; gap: 8px; padding: 12px 18px; background: var(--well); border-bottom: 1px solid var(--border); overflow: hidden; }
+.strip { height: 96px; display: flex; align-items: stretch; gap: 8px; padding: 12px 18px; background: var(--well); border-bottom: 1px solid var(--border); overflow: hidden; }
 .round { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; padding: 0 14px 0 0; }
 .seg { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 8px; flex: 1 1 0; min-width: 0; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .seg.is-skippable { background: var(--card-hi); border-color: var(--amber); }
@@ -50,8 +71,8 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .seg:has(.tick.is-current) .phase-name { color: var(--gold); }
 .seg.is-skippable .phase-name { color: var(--amber); }
 .tick-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
-.skip-note { position: absolute; top: 4px; right: 8px; font: 700 11px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--amber); }
-.log-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--btn); color: var(--tan); font: 700 11px/1 var(--sans); font-variant-numeric: tabular-nums; }
+.skip-note { position: absolute; top: 4px; right: 8px; font: 700 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--amber); }
+.log-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--btn); color: var(--tan); font: 700 13px/1 var(--sans); font-variant-numeric: tabular-nums; }
 .tick { position: relative; display: inline-block; flex: 0 0 auto; }
 .tick-framework { width: 22px; height: 22px; border-radius: 2px; background: var(--dim); }
 .tick-framework.is-done, .tick-framework.is-current { background: var(--red); }
@@ -66,14 +87,14 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .player-cell.is-eliminated { opacity: .6; }
 .player-label { display: flex; align-items: center; gap: 4px; }
 .player-label.is-first { color: var(--gold); }
-.flag { font-size: 11px; color: var(--gold); }
+.flag { font-size: 13px; color: var(--gold); }
 .player-threat { display: flex; align-items: center; gap: 6px; }
 .bar { height: 3px; border-radius: 2px; background: var(--gold); }
 .bar.bar-danger { background: var(--red); }
 .player-stats { display: flex; align-items: center; gap: 12px; }
 .stat { display: flex; align-items: center; gap: 4px; }
 .stat.is-dim { opacity: .45; }
-.player-elim { font: 700 11px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--red); }
+.player-elim { font: 700 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--red); }
 
 .pill { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
 .pill-dashed { border-style: dashed; background: transparent; }
@@ -89,9 +110,9 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 
 .log-block { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border); }
 .log-row { display: flex; gap: 8px; align-items: baseline; }
-.log-time { flex: 0 0 auto; width: 44px; font: 600 12px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--dim); }
-.log-text { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; color: var(--muted); }
-.log-prompt { font: 600 15px/1.2 var(--serif); color: var(--gold); }
+.log-time { flex: 0 0 auto; width: 44px; font: 600 13px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--dim); }
+.log-text { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; color: var(--muted); }
+.log-prompt { font: 600 18px/1.2 var(--serif); color: var(--gold); }
 
 /* The phase panes (Task 5): one view per <main class="pane">, a common
    title row, and a bottom-pinned cta-row shared by every view. */
@@ -157,9 +178,18 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .newgame-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .newgame-section { display: flex; flex-direction: column; gap: 10px; }
 .player-chips { display: flex; gap: 10px; }
+/* Player-count chips are single digits in an otherwise ALL-CAPS chip row -
+   without a floor they pinch down to the glyph's own width and read as a
+   different, smaller control than every other chip on the screen. */
+.chip-square { min-width: 56px; }
 .threat-row { display: flex; gap: 12px; flex-wrap: wrap; }
 .scenario-group { display: flex; flex-direction: column; gap: 8px; }
 .scenario-list { display: flex; flex-direction: column; gap: 8px; }
-.scenario-row { display: flex; align-items: center; gap: 12px; }
-.scenario-row .chip { flex: 1 1 0; justify-content: flex-start; }
-.scenario-pack { flex: 0 0 auto; }
+/* A scenario name is BODY (a name a player reads), not a chip's ALL-CAPS
+   LABEL - so the row is its own beveled, full-width button (same raised
+   look as .chip, just left-aligned and roomy enough for a two-line name +
+   pack) rather than a chip glued to a separate label span. */
+.scenario-row { display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  gap: 2px; width: 100%; min-height: 56px; padding: 8px 16px; text-align: left;
+  background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
+  border-radius: 6px; }

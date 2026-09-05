@@ -54,14 +54,18 @@ function scenarioGroups(index) {
     .map(cycle => ({ cycle, scenarios: [...groups.get(cycle)].sort(byOrderThenName) }));
 }
 
-// One row: a chip that starts the game (data-act="pick_scenario", arg the
-// slug app.js hands to db.bundle()), with the pack name as a secondary
-// label. Scenario names and pack names are catalog text, not ours - h``
-// escapes them before they reach chip()'s raw() label (scenario names can
-// carry an apostrophe, e.g. "The Steward's Fear").
+// One row: a button that starts the game (data-act="pick_scenario", arg the
+// slug app.js hands to db.bundle()). A scenario name is a name a player
+// reads - BODY (scale 2), sentence case as printed, never the chip's
+// ALL-CAPS LABEL treatment - with the pack line under it at the body
+// secondary tier. Scenario names and pack names are catalog text, not
+// ours - h`` escapes both (names can carry an apostrophe, e.g. "The
+// Steward's Fear").
 function scenarioRow(scn) {
-  const nameChip = chip({ act: "pick_scenario", arg: scn.slug, label: h`${scn.name ?? ""}` });
-  return h`<div class="scenario-row">${raw(nameChip)}<span class="label scenario-pack">${scn.pack ?? ""}</span></div>`;
+  return h`<button type="button" class="scenario-row" data-act="pick_scenario" data-arg="${scn.slug}">
+<span class="body">${scn.name ?? ""}</span>
+<span class="body secondary">${scn.pack ?? ""}</span>
+</button>`;
 }
 
 function scenarioGroup(g) {
@@ -72,6 +76,7 @@ function scenarioGroup(g) {
 function playerChips(count) {
   const chips = [1, 2, 3, 4].map(n => chip({
     act: "ng_players", arg: n, label: String(n), tone: n === count ? "gold" : "tan",
+    extraClass: "chip-square",
   })).join("");
   return h`<div class="player-chips">${raw(chips)}</div>`;
 }

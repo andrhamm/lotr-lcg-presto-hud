@@ -2,8 +2,8 @@ import { h, raw, cx } from "./dom.js";
 
 // Bevelled = tappable: the HUD's one chrome rule, kept. Every button is a
 // real <button> with a data-act; app.js delegates on it.
-export function chip({ act, arg = "", label, tone = "gold", height = 44 }) {
-  return h`<button type="button" class="${cx("chip", "chip-" + tone)}" style="height:${height}px" data-act="${act}" data-arg="${arg}">${raw(label)}</button>`;
+export function chip({ act, arg = "", label, tone = "gold", height = 44, extraClass = "" }) {
+  return h`<button type="button" class="${cx("chip", "chip-" + tone, extraClass)}" style="height:${height}px" data-act="${act}" data-arg="${arg}">${raw(label)}</button>`;
 }
 
 export function band({ kind, text, sub = null }) {

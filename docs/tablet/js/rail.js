@@ -60,7 +60,7 @@ function renderStagePill(game) {
   const name = faceOf(card, game.quest.side)?.name;
   const nameRow = name ? h`<p class="body pill-name">${name}</p>` : "";
   return h`<div class="pill">
-<div class="pill-head"><span class="label">Stage ${game.questLabel()}</span></div>
+<div class="pill-head"><span class="label">${CHROME.stage} ${game.questLabel()}</span></div>
 <div class="pill-stat">${raw(icon("TRAIL", 18, TRAIL_GREEN, TRAIL_BROWN))}<span class="num num-26">${game.quest.progress}</span><span class="pill-sep">/</span><span class="num num-26">${game.quest.points}</span></div>
 ${raw(nameRow)}</div>`;
 }
@@ -73,7 +73,7 @@ function renderLocationPill(game) {
   const loc = game.active_locations[0];
   if (!loc) return h`<div class="pill pill-dashed"><p class="body secondary">${CHROME.noLocation}</p></div>`;
   return h`<div class="pill">
-<p class="body pill-name">${loc.name ?? "Location"}</p>
+<p class="body pill-name">${loc.name ?? CHROME.location}</p>
 <div class="pill-stat">${raw(icon("TRAIL", 18, TRAIL_GREEN, TRAIL_BROWN))}<span class="num num-26">${loc.progress}</span><span class="pill-sep">/</span><span class="num num-26">${loc.points}</span></div>
 </div>`;
 }
@@ -124,11 +124,13 @@ function renderStagingZone(game) {
   });
 }
 
-// Last five log entries, then a prompt row naming the current view. `t` is
+// Last four log entries, then a prompt row naming the current view. `t` is
 // null in tests (no clock wired up) - render an empty time cell then rather
-// than fmtMs(null).
+// than fmtMs(null). Four, not five: bumping .log-text/.log-time off the
+// 13px floor (finding 5) grew each row, and the rail's fixed-height zones
+// above leave no room in the 1024px-tall viewport for a fifth.
 function renderLogBlock(game) {
-  const rows = game.log.slice(-5).map(e => {
+  const rows = game.log.slice(-4).map(e => {
     const time = typeof e.t === "number" ? fmtMs(e.t) : "";
     return h`<div class="log-row"><span class="log-time">${time}</span><span class="log-text">${e.text}</span></div>`;
   }).join("");

@@ -31,4 +31,9 @@ export const CHROME = {
   trackerCounts: "The tracker shows %d engaged and %d in staging.",
   location: "Location",
   sideQuestLabel: "Side Quest",
+  stage: "Stage",
+  resolveQuestCta: "Resolve Quest. ",
+  nextPrefix: "Next: ",
+  endOfRound: "End of Round ",
+  back: "‹ Back",
 };

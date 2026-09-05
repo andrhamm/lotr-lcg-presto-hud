@@ -159,6 +159,43 @@ console.log(JSON.stringify({ stgFloor: dispatch(g, ui, "stg-", ""), stgUp: dispa
                   "stglocFloor": False, "stglocUp": True}
 
 
+def test_alloc_steppers_report_whether_they_changed_anything():
+    """alloc+/alloc-/alloc_reset used to return true unconditionally (every
+    branch either mutated ui.alloc or fell through to a bare `return true`),
+    so a budget-spent "+" or a zeroed "-"/"reset" recorded a no-op delta and
+    still re-rendered. budget=2, quest room=20, no active locations - resolve
+    seeds ui.alloc via autoSplit, which (being the only sink) immediately
+    places the whole budget on the quest, so alloc_reset's own change-
+    reporting is exercised first to get back to a clean zero: two "+" taps
+    then refill it, a third has nowhere to go (budget spent), and a second
+    reset/a "-" at zero both report no change."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { dispatch, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); g.enterView("quest_staging");
+g.setWillpower(2); g.setStaging(0); g.quest.points = 20;
+const ui = newUi();
+dispatch(g, ui, "resolve", "");                           // autoSplit: quest = 2 already
+const resetChanged1 = dispatch(g, ui, "alloc_reset", "");  // 2 -> 0
+const plus1 = dispatch(g, ui, "alloc+", "quest");          // 0 -> 1
+const plus2 = dispatch(g, ui, "alloc+", "quest");          // 1 -> 2
+const plus3 = dispatch(g, ui, "alloc+", "quest");          // budget spent
+const resetChanged2 = dispatch(g, ui, "alloc_reset", "");  // 2 -> 0
+const resetNoop = dispatch(g, ui, "alloc_reset", "");      // already 0
+const minusAtZero = dispatch(g, ui, "alloc-", "quest");    // already 0
+console.log(JSON.stringify({ budget: g.pending_budget, resetChanged1, plus1, plus2, plus3,
+  resetChanged2, resetNoop, minusAtZero }));
+""")
+    assert js["budget"] == 2
+    assert js["resetChanged1"]
+    assert js["plus1"] and js["plus2"]
+    assert js["plus3"] is False           # budget spent
+    assert js["resetChanged2"]            # 2 -> 0
+    assert js["resetNoop"] is False       # already 0
+    assert js["minusAtZero"] is False
+
+
 def test_strip_has_a_segment_per_phase_and_a_playhead_on_the_current_view():
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
@@ -227,6 +264,42 @@ console.log(JSON.stringify({
     assert js["encounterSkippable"]
     assert js["landing53"]
     assert js["combatSkippable"] is False
+
+
+def test_strip_marks_the_current_phase_when_the_view_is_off_flow():
+    """quest_sailing and quest_setup sit off VIEW_ORDER entirely (they are
+    bands, not flow views, under WINDOW_POLICY_BANDS), so
+    flowViews().indexOf(game.view) is always -1 for them and every tick used
+    to render is-future - no playhead anywhere. renderStrip now resolves the
+    view's PHASE (step(VIEW_STEP[game.view]).phase) and marks THAT segment
+    current instead: quest_sailing is step 3.1, phase Quest, so the Quest
+    segment's first tick (quest_commit) should carry the sole is-current and
+    its playhead. quest_setup is phase Beginning, which has no segment at
+    all (round 1 hasn't started) - nothing should light up there."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderStrip } from "./strip.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView();
+g.sailing = true;
+g.enterView("quest_sailing");
+const html = renderStrip(g, newUi());
+const start = html.indexOf('data-phase="Quest"');
+const next = html.indexOf('data-phase="', start + 1);
+const questSeg = next === -1 ? html.slice(start) : html.slice(start, next);
+const setupHtml = renderStrip(new GameState(2, 25), newUi());   // fresh: view is quest_setup
+console.log(JSON.stringify({
+  totalCurrent: (html.match(/is-current/g) || []).length,
+  questCurrent: (questSeg.match(/is-current/g) || []).length,
+  questPlayhead: questSeg.includes('class="playhead"'),
+  setupCurrent: (setupHtml.match(/is-current/g) || []).length,
+}));
+""")
+    assert js["totalCurrent"] == 1
+    assert js["questCurrent"] == 1
+    assert js["questPlayhead"]
+    assert js["setupCurrent"] == 0
 
 
 def test_rail_shows_every_player_and_the_three_zones():
@@ -304,8 +377,13 @@ import { layout } from "./layout.js";
 import { newUi } from "./actions.js";
 setWindowPolicy(WINDOW_POLICY_BANDS);
 const out = {};
-for (const v of flowViews()) {
-  const g = new GameState(4, 25); g.advanceView(); g.enterView(v);
+// quest_sailing is off flowViews() entirely (a band, not a flow view - see
+// strip.js's off-flow handling), so it is appended by hand alongside the
+// gate that reaches it (g.sailing = true) rather than turning up on its own.
+for (const v of [...flowViews(), "quest_sailing"]) {
+  const g = new GameState(4, 25); g.advanceView();
+  if (v === "quest_sailing") g.sailing = true;
+  g.enterView(v);
   if (v === "quest_resolution") { g.setWillpower(9); g.setStaging(2); g.resolveQuest(9, 2); g.pending_budget = 7; }
   const html = layout(g, newUi());
   out[v] = { len: html.length, next: html.includes('data-act="advance"') || html.includes('data-act="endround"')
@@ -323,6 +401,39 @@ def test_every_flow_view_renders_a_pane_with_a_way_forward():
         assert r["title"], v
         assert not r["bad"], v
         assert r["next"] or v == "quest_resolution", v
+
+
+def test_gameover_layout_shows_the_result_round_and_new_game_cta():
+    """layout()'s gameover branch (layout.js's renderGameOver): victory
+    shows the frozen duration setGameOver() captured, a defeat with no clock
+    wired up (duration: null, and gameDuration() also returns null with no
+    log/clock) falls back to just the round - either way the title, the
+    round and the new_game CTA must be there."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { layout } from "./layout.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const gv = new GameState(2, 25);
+gv.game_over = { result: "victory", round: 3, duration: "12m34s" };
+const ui1 = newUi(); ui1.screen = "gameover";
+const victoryHtml = layout(gv, ui1);
+const gd = new GameState(2, 25);
+gd.game_over = { result: "defeat", round: 5, duration: null };
+const ui2 = newUi(); ui2.screen = "gameover";
+const defeatHtml = layout(gd, ui2);
+console.log(JSON.stringify({
+  victoryTitle: victoryHtml.includes(">Victory!<"),
+  victoryRound: victoryHtml.includes("Round 3"),
+  victoryDuration: victoryHtml.includes("12m34s"),
+  victoryCta: victoryHtml.includes('data-act="new_game"'),
+  defeatTitle: defeatHtml.includes(">Defeat<"),
+  defeatRound: defeatHtml.includes("Round 5"),
+  defeatCta: defeatHtml.includes('data-act="new_game"'),
+}));
+""")
+    assert js["victoryTitle"] and js["victoryRound"] and js["victoryDuration"] and js["victoryCta"]
+    assert js["defeatTitle"] and js["defeatRound"] and js["defeatCta"]
 
 
 def test_resolution_pane_offers_the_allocator_then_the_window():
@@ -461,3 +572,30 @@ console.log(JSON.stringify({ a, b, c, n, canUndo, stagingAfterUndo: g.staging, r
     assert js["n"] == 2 and js["canUndo"]
     assert js["stagingAfterUndo"] == 1
     assert js["replay"]
+
+
+def test_defeat_lands_inside_the_same_delta_so_undo_reverts_it():
+    """app.js used to check allEliminated()/setGameOver() AFTER perform()
+    had already closed its delta window (dispatch, then addDelta), so the
+    game_over transition rode along on no delta at all and undo could never
+    touch it - a rewound tap left the board un-eliminated but the screen
+    still on gameover. perform() now runs the defeat check BETWEEN dispatch
+    and addDelta, so it is part of the same snapshot diff as the tap that
+    caused it."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); const ui = newUi();
+g.players.forEach(p => { p.elimination = 1; });
+g.adjustThreat(0, 5); g.adjustThreat(1, 5);   // both at threat 5 >= elimination 1
+const changed = perform(g, ui, "stg+", "");
+const result = g.game_over?.result;
+const deltaHasGameOver = "game_over" in g.deltas.at(-1);
+g.undo();
+console.log(JSON.stringify({ changed, result, deltaHasGameOver, gameOverAfterUndo: g.game_over }));
+""")
+    assert js["changed"]
+    assert js["result"] == "defeat"
+    assert js["deltaHasGameOver"]
+    assert js["gameOverAfterUndo"] is None

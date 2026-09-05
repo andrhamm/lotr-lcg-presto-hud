@@ -18,6 +18,11 @@ import { CATALOG_UNAVAILABLE } from "../../js/viewcopy.js";
 import { layout } from "./layout.js";
 import { perform, newUi } from "./actions.js";
 
+// A finished game is appended to history once. Reset wherever `game` is
+// rebound (new game / a fresh scenario pick) - mirrors main.js's own
+// `recordedGameOver` (main.js ~127, ~338, ~433).
+let recordedGameOver = false;
+
 setWindowPolicy(WINDOW_POLICY_BANDS);
 setBoardTracking(true);
 
@@ -57,7 +62,15 @@ async function boot() {
     db.session.loadLog(game);
     const b = game.scenario?.slug ? await db.bundle(game.scenario.slug) : null;
     if (b) game.rehydrateStages(b.stages);
+    // A save can land exactly between a successful "resolve" and
+    // "apply_alloc" (pending_budget > 0, nothing placed yet). ui.alloc is
+    // never part of the save (it is UI state, not game state), and pane.js
+    // no longer seeds it lazily on render (finding 13) - so without this,
+    // resuming into that window would skip straight to the outcome pane and
+    // strand the pending progress. Reseed it the same way "resolve" does.
+    if (game.pending_budget > 0) ui.alloc = game.autoSplit(game.pending_budget);
     ui.screen = game.game_over ? "gameover" : "play";
+    if (game.game_over) recordedGameOver = true;
   } else {
     ui.screen = "newgame";
     ui.picker = await buildPicker();
@@ -68,6 +81,7 @@ async function boot() {
 async function handleAct(act, arg) {
   if (act === "new_game") {
     db.session.clear();
+    recordedGameOver = false;
     ui.screen = "newgame";
     ui.picker = await buildPicker();
     render();
@@ -92,7 +106,13 @@ async function handleAct(act, arg) {
     const slug = arg;
     const b = await db.bundle(slug);
     const entry = ui.picker.index?.scenarios?.find(s => s.slug === slug);
-    if (!b || !entry) return;   // catalog changed under us mid-pick; stay put
+    if (!b || !entry) {
+      // The catalog changed under us mid-pick (or the bundle fetch failed) -
+      // surface it rather than leaving the tap looking like it did nothing.
+      ui.picker.error = CATALOG_UNAVAILABLE;
+      render();
+      return;
+    }
     const scenarioMeta = {
       slug: entry.slug, name: entry.name, pack: entry.pack, cycle: entry.cycle,
       source: entry.source, kind: entry.kind,
@@ -102,6 +122,7 @@ async function handleAct(act, arg) {
     const players = ui.picker.players;
     const threats = ui.picker.threats;
     db.session.clear();
+    recordedGameOver = false;
     game = new GameState(players);
     game.clock = clock;
     threats.forEach((t, i) => {
@@ -118,10 +139,16 @@ async function handleAct(act, arg) {
   }
   const changed = perform(game, ui, act, arg);
   if (!changed) return;
-  if (!game.game_over && game.players.length && game.allEliminated()) {
-    game.setGameOver("defeat");
+  if (game.game_over) {
+    ui.screen = "gameover";
+    // Record the finished game once, on the transition into the game-over
+    // screen, then make it durable - mirrors main.js ~586-592.
+    if (!recordedGameOver) {
+      recordedGameOver = true;
+      db.history.append(game.historyRecord());
+      db.session.flush(game);
+    }
   }
-  if (game.game_over) ui.screen = "gameover";
   db.session.record(game);
   render();
 }

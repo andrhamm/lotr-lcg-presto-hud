@@ -61,13 +61,31 @@ function renderQuestSetup(game) {
   return { parts: tips + instr + well, cta: cta({ act: "flip_to_b", label: QUEST_SETUP.begin }) };
 }
 
+// One allocator step: a live bevelled <button> when it can still do
+// something, or - the twin's own convention for a stepper that cannot act
+// (docs/js/screen_play.js ~766-780: "must not look like one... no bevel, dim
+// glyph, and NOT registered as a target") - a dim, unbevelled <span> with no
+// data-act so app.js's click delegation never sees it.
+function allocStep(glyph, act, arg, live) {
+  return live
+    ? h`<button type="button" class="step step-sm" data-act="${act}" data-arg="${arg}">${glyph}</button>`
+    : h`<span class="step step-sm step-off">${glyph}</span>`;
+}
+
 // One allocator row: label, "was + place / goal", and (unless locked, for an
 // active location that fills by the cascade rather than its own stepper) a
-// +/- pair targeting the arg allocKey() (actions.js) reads.
-function allocRow(label, was, add, pts, arg) {
+// +/- pair targeting the arg allocKey() (actions.js) reads. `used`/`budget`
+// gate liveness exactly as the twin's own rows do: "-" is live whenever
+// anything is placed anywhere, "+" whenever the shared budget still has
+// room - the same global check actions.js's cascade honors, not a per-row
+// room check (a row's own cap can still swallow a live-looking tap, same as
+// the twin - see docs/js/screen_play.js's "used > 0" / "used < budget").
+function allocRow(label, was, add, pts, arg, used, budget) {
+  const minus = allocStep("&minus;", "alloc-", arg, used > 0);
+  const plus = allocStep("+", "alloc+", arg, used < budget);
   return h`<div class="alloc-row">
 <span class="body alloc-label">${label}</span>
-<div class="alloc-value"><button type="button" class="step step-sm" data-act="alloc-" data-arg="${arg}">&minus;</button><span class="num num-34">${was} + ${add} / ${pts}</span><button type="button" class="step step-sm" data-act="alloc+" data-arg="${arg}">+</button></div>
+<div class="alloc-value">${raw(minus)}<span class="num num-34">${was} + ${add} / ${pts}</span>${raw(plus)}</div>
 </div>`;
 }
 
@@ -88,9 +106,9 @@ function renderAllocator(game, ui) {
     loc.name ?? (i === 0 ? CHROME.location : `${CHROME.location} ${i + 1}`),
     loc.progress, a.locations[i] ?? 0, loc.points,
   )).join("");
-  const questRow = allocRow(`${CHROME.quest} ${game.questLabel()}`, game.quest.progress, a.quest, game.quest.points, "quest");
+  const questRow = allocRow(`${CHROME.quest} ${game.questLabel()}`, game.quest.progress, a.quest, game.quest.points, "quest", used, game.pending_budget);
   const sideRows = game.side_quests.map((sq, i) => allocRow(
-    `${CHROME.sideQuestLabel} ${i + 1}`, sq.progress, a.side_quests[i] ?? 0, sq.points, `side:${i}`,
+    `${CHROME.sideQuestLabel} ${i + 1}`, sq.progress, a.side_quests[i] ?? 0, sq.points, `side:${i}`, used, game.pending_budget,
   )).join("");
   const unplaced = discard > 0
     ? h`<p class="body secondary">${OUTCOME.alloc_unplaced}: ${discard}</p>`
@@ -156,14 +174,15 @@ function renderViewParts(view, game, ui) {
     // sailing -> quest_sailing) - so there is no "no keyword" state to report
     // here; that copy belongs to the sail_toggle affordance the twin shows
     // from *planning* when sailing is off, not this view. Show the heading
-    // (headingDesc()'s "term (facing)") plus its degree phrase from the same
-    // HEADINGS row, so a player sees how far on/off course without a claim
-    // that could be false.
+    // (headingDesc()'s "term (facing)") as the DISPLAY line, then its degree
+    // phrase from the same HEADINGS row in a plain .well underneath - not a
+    // green "window" band (there is no action window here to point at) and
+    // not the facing word again (headingDesc() already names it: "Off-course
+    // (Cloudy)" followed by a well repeating "Cloudy" would just be noise).
     case "quest_sailing": {
-      const [, , facing, degree] = HEADINGS[game.heading];
+      const [, , , degree] = HEADINGS[game.heading];
       return {
-        parts: h`<p class="display">${game.headingDesc()}</p>`
-          + band({ kind: "window", text: facing, sub: degree }),
+        parts: h`<p class="display">${game.headingDesc()}</p><div class="well"><p class="body">${degree}</p></div>`,
         cta: null,
       };
     }
@@ -187,12 +206,15 @@ function renderViewParts(view, game, ui) {
       // "Resolution is entered only by a successful resolve" comment), so a
       // plain Next alongside it would silently skip the fail threat raise /
       // success progress placement. No fallback CTA.
-      return { parts, cta: cta({ act: "resolve", label: h`Resolve Quest. ${line}` }) };
+      return { parts, cta: cta({ act: "resolve", label: h`${CHROME.resolveQuestCta}${line}` }) };
     }
 
     case "quest_resolution": {
-      if (game.pending_budget > 0 && !ui.placed) {
-        ui.alloc ??= game.autoSplit(game.pending_budget);
+      // ui.alloc is seeded by actions.js the moment "resolve" succeeds (and
+      // reseeded by app.js on a resume caught mid-allocation) - this render
+      // function only ever reads it, never creates it, so the pane stays
+      // pure (finding 13).
+      if (ui.alloc && !ui.placed) {
         return {
           parts: renderAllocator(game, ui),
           cta: cta({ act: "apply_alloc", label: CHROME.placeProgress }),
@@ -273,7 +295,7 @@ function renderViewParts(view, game, ui) {
     case "round_end":
       return {
         parts: band({ kind: "framework", text: PHASE_FRAMEWORK.round_end }),
-        cta: cta({ act: "endround", label: `Next: ${VIEW_LABELS.resource} (Round ${game.round + 1})` }),
+        cta: cta({ act: "endround", label: `${CHROME.nextPrefix}${VIEW_LABELS.resource} (Round ${game.round + 1})` }),
       };
 
     default:
@@ -288,7 +310,7 @@ export function renderPane(game, ui) {
   // the tablet the window is a band drawn on that view, not a screen of its
   // own.
   const view = phaseViewOf(game.view);
-  const title = view === "round_end" ? `End of Round ${game.round}` : (VIEW_LABELS[view] ?? view);
+  const title = view === "round_end" ? `${CHROME.endOfRound}${game.round}` : (VIEW_LABELS[view] ?? view);
   const { parts, cta: customCta } = renderViewParts(view, game, ui);
 
   const titleLine = h`${CHROME.round} ${game.round} · ${CHROME.step} ${game.step} · ${CHROME.firstPlayer} P${game.first_player + 1}`;
@@ -298,7 +320,7 @@ export function renderPane(game, ui) {
   // gamestate.prevView() already returns null there and canGoBack() is
   // false - no separate view check needed.
   if (game.canGoBack()) {
-    ctaButtons.push(cta({ act: "back", label: "‹ " + CHROME.back, tone: "plain", grow: false }));
+    ctaButtons.push(cta({ act: "back", label: CHROME.back, tone: "plain", grow: false }));
   }
   const offer = game.skipOffer();
   if (offer) {
@@ -311,7 +333,7 @@ export function renderPane(game, ui) {
     ctaButtons.push(customCta);
   } else {
     const nxt = game.nextPhaseView();
-    ctaButtons.push(cta({ act: "advance", label: nxt ? `Next: ${VIEW_LABELS[nxt]}` : CHROME.next }));
+    ctaButtons.push(cta({ act: "advance", label: nxt ? `${CHROME.nextPrefix}${VIEW_LABELS[nxt]}` : CHROME.next }));
   }
 
   return h`<main class="pane">

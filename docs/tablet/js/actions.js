@@ -51,7 +51,16 @@ export function dispatch(game, ui, act, arg) {
     if (!game.quest_resolved) {
       const r = game.resolveQuest(game.willpower, game.staging);
       ui.alloc = null;
-      if (r.outcome === "success") game.pending_budget = r.budget;
+      if (r.outcome === "success") {
+        game.pending_budget = r.budget;
+        // Seed the allocator preview the moment a resolve succeeds - pane.js
+        // (Task 5 / finding 13) only READS ui.alloc now, it never creates it,
+        // so something upstream of the first render has to. ensureAlloc()
+        // below stays as the alloc acts' own lazy fallback (a resumed save
+        // caught between "resolve" and "apply_alloc" reaches alloc+/-/reset
+        // with ui.alloc already null).
+        ui.alloc = game.autoSplit(r.budget);
+      }
     }
     return true;
   }
@@ -59,6 +68,7 @@ export function dispatch(game, ui, act, arg) {
     // Cascade ported from screen_play.js's onButton ("ap"/"am"): this.alloc
     // -> ui.alloc, btn.id's [key, idx] -> allocKey(arg).
     const a = ensureAlloc(game, ui);
+    const before = JSON.stringify(a);
     const used = a.locations.reduce((x, y) => x + y, 0) + a.quest
       + a.side_quests.reduce((x, y) => x + y, 0);
     const locRoom = game.active_locations.map(l => Math.max(0, l.points - l.progress));
@@ -69,30 +79,38 @@ export function dispatch(game, ui, act, arg) {
     const nowQ = key === "side" ? a.side_quests[idx] : a.quest;
     const bumpQ = d => key === "side" ? (a.side_quests[idx] += d) : (a.quest += d);
     if (act === "alloc+") {                 // + : active locations fill first
-      if (used >= game.pending_budget) return true;   // budget spent
-      for (let i = 0; i < locRoom.length; i++) {
-        if (a.locations[i] < locRoom[i]) { a.locations[i] += 1; return true; }
+      if (used < game.pending_budget) {     // budget spent -> no mutation at all
+        let filled = false;
+        for (let i = 0; i < locRoom.length; i++) {
+          if (a.locations[i] < locRoom[i]) { a.locations[i] += 1; filled = true; break; }
+        }
+        if (!filled && nowQ < qRoom) bumpQ(1);   // locations full -> the quest itself
       }
-      if (nowQ < qRoom) bumpQ(1);            // locations full -> the quest itself
-      return true;
-    }
-    // - : pull back the quest first, then unwind the location fill - last
-    // seat first, the reverse of the order '+' filled them in.
-    if (nowQ > 0) { bumpQ(-1); return true; }
-    const overflow = a.quest + a.side_quests.reduce((x, y) => x + y, 0);
-    if (overflow === 0) {
-      for (let i = a.locations.length - 1; i >= 0; i--) {
-        if (a.locations[i] > 0) { a.locations[i] -= 1; break; }
+    } else if (nowQ > 0) {
+      // - : pull back the quest first, then unwind the location fill - last
+      // seat first, the reverse of the order '+' filled them in.
+      bumpQ(-1);
+    } else {
+      const overflow = a.quest + a.side_quests.reduce((x, y) => x + y, 0);
+      if (overflow === 0) {
+        for (let i = a.locations.length - 1; i >= 0; i--) {
+          if (a.locations[i] > 0) { a.locations[i] -= 1; break; }
+        }
       }
     }
-    return true;
+    // Every branch above can fall through without touching `a` (budget
+    // spent, nothing placed yet, or overflow blocking the location pull-
+    // back) - compare the snapshot rather than trusting which branch ran,
+    // so a no-op tap reports false and skips the delta/re-render.
+    return JSON.stringify(a) !== before;
   }
   if (act === "alloc_reset") {
     const a = ensureAlloc(game, ui);
+    const before = JSON.stringify(a);
     a.locations = a.locations.map(() => 0);
     a.quest = 0;
     a.side_quests = a.side_quests.map(() => 0);
-    return true;
+    return JSON.stringify(a) !== before;
   }
   if (act === "apply_alloc") {
     const a = ensureAlloc(game, ui);
@@ -132,9 +150,18 @@ export function dispatch(game, ui, act, arg) {
 // after. addDelta() returns false for a no-op action (nothing changed) and
 // for a window that held a replay cursor move; either way the caller still
 // decides whether to persist from `changed`.
+//
+// The defeat check runs BETWEEN dispatch and addDelta, not after both (as
+// app.js used to do it) - main.js's own tick loop brackets its equivalent
+// check with its own beginAction/addDelta pair (see main.js ~581-585), and
+// doing it any other way here would leave the game_over transition outside
+// this tap's delta, so undo() could rewind the tap but never the defeat.
 export function perform(game, ui, act, arg) {
   const snap = game.beginAction();
   const changed = dispatch(game, ui, act, arg);
+  if (changed && !game.game_over && game.players.length && game.allEliminated()) {
+    game.setGameOver("defeat");
+  }
   if (changed) game.addDelta(snap);
   return changed;
 }

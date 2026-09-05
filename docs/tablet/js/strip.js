@@ -55,10 +55,18 @@ function renderTick(v, idx, curIdx) {
 
 // One phase segment: its name, its ticks, a log-count badge, and (when a
 // promoted skip passes every one of its views) the skippable note.
-function renderSeg(game, views, seg, curIdx, skipRange) {
+//
+// `offPhase` is the phase of an off-flow view (quest_setup, quest_sailing -
+// see renderStrip) standing outside flowViews() entirely, so curIdx is -1 and
+// every tick would otherwise render is-future. When this segment IS that
+// phase, treat its first tick's index as the current one: is-current picks
+// up its playhead and the .seg:has(.tick.is-current) CSS rule golds the
+// phase name for free - no separate "current segment" styling needed.
+function renderSeg(game, views, seg, curIdx, skipRange, offPhase) {
   const idxs = seg.views.map(v => views.indexOf(v));
   const skippable = !!skipRange && idxs.every(i => i > skipRange.ci && i <= skipRange.li);
-  const ticks = seg.views.map((v, k) => renderTick(v, idxs[k], curIdx)).join("");
+  const effectiveCur = (offPhase !== null && seg.phase === offPhase) ? idxs[0] : curIdx;
+  const ticks = seg.views.map((v, k) => renderTick(v, idxs[k], effectiveCur)).join("");
 
   const stepIds = new Set(seg.views.map(v => VIEW_STEP[v]));
   const count = game.log.filter(e => e.round === game.round && stepIds.has(e.step)).length;
@@ -88,6 +96,16 @@ export function renderStrip(game, ui) {
   const views = flowViews();
   const curIdx = views.indexOf(game.view);
 
+  // quest_setup and quest_sailing are off VIEW_ORDER entirely (pre-round
+  // setup, and the sailing test - a band drawn instead of a flow view under
+  // this client's window policy), so indexOf above is always -1 for them and
+  // every tick would render is-future with no playhead at all. Resolve the
+  // view's PHASE instead and let renderSeg mark that phase's segment
+  // current. quest_setup's phase (Beginning) has no segment before round 1 -
+  // offPhase matches nothing, so nothing lights up, which is correct: there
+  // is no "current" yet.
+  const offPhase = curIdx < 0 ? (step(VIEW_STEP[game.view])?.phase ?? null) : null;
+
   // A promoted skip highlights every segment made up entirely of views it
   // passes: strictly after the current view, up to and including the
   // landing (lastWindowBefore(skip.to)) - the landing is the view the skip
@@ -107,7 +125,7 @@ export function renderStrip(game, ui) {
   }
 
   const body = segments(views)
-    .map(seg => renderSeg(game, views, seg, curIdx, skipRange))
+    .map(seg => renderSeg(game, views, seg, curIdx, skipRange, offPhase))
     .join("");
 
   return h`<header class="strip"><div class="round"><span class="label">${CHROME.round}</span><span class="num num-40">${game.round}</span></div>${raw(body)}</header>`;
