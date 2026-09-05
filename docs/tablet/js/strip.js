@@ -1,0 +1,110 @@
+// The transport strip: one segment per phase, one tick per flow view, the
+// round's action-window ticks, and the current playhead. Pure string
+// builder like every other tablet render function - no document/window, so
+// tests/test_tablet.py can drive it under node the way it drives the model.
+import { h, raw, cx } from "./dom.js";
+import { CHROME } from "./copy.js";
+import {
+  flowViews, VIEW_STEP, windowAfter, isActionWindow, lastWindowBefore,
+} from "../../js/gamestate.js";
+import { VIEW_LABELS } from "../../js/viewcopy.js";
+import { PHASES, step } from "../../js/phases.js";
+
+// Two views ARE their own action window with no separate aw_ pairing:
+// Combat's 6.E (enemy attacks) and 6.P (player attacks) - phases.js marks
+// both action_window, and gamestate.js's windowAfter() has no "aw_" key for
+// either. Planning's 2.P fits the same isActionWindow-with-no-aw_ shape (the
+// whole phase IS its window, one view, nothing to pair it against), but the
+// brief's verified facts name only the two combat views for this "own tick
+// becomes the window tick" treatment, so it is carved out here rather than
+// derived purely from the predicate.
+const isOwnWindowView = v => v !== "planning" && isActionWindow(v) && !windowAfter(v);
+
+const phaseLabel = id => {
+  const p = PHASES.find(ph => ph.id === id);
+  return p ? p.label : id;
+};
+
+// done / current / future for a view at position `idx` in flowViews(),
+// relative to the view at `curIdx`.
+const stateOf = (idx, curIdx) => {
+  if (idx < 0 || curIdx < 0) return "is-future";
+  if (idx < curIdx) return "is-done";
+  if (idx === curIdx) return "is-current";
+  return "is-future";
+};
+
+// One flow view's tick, plus (when it has one) the round window that
+// follows it. Under "bands" the window is drawn on the view itself, but the
+// strip still shows it as a tick of its own - just never named "aw_...":
+// only the plain view id ever reaches data-view/title.
+function renderTick(v, idx, curIdx) {
+  const state = stateOf(idx, curIdx);
+  const own = isOwnWindowView(v);
+  const cls = cx("tick", own ? "tick-window" : "tick-framework", state);
+  const label = VIEW_LABELS[v] ?? v;
+  const playhead = state === "is-current" ? raw('<i class="playhead"></i>') : "";
+  let out = h`<span class="${cls}" data-view="${v}" title="${label}">${playhead}</span>`;
+  const aw = windowAfter(v);
+  if (aw) {
+    const wstate = idx <= curIdx ? "is-done" : "is-future";
+    const wlabel = VIEW_LABELS[aw] ?? label;
+    out += h`<span class="${cx("tick", "tick-window", wstate)}" title="${wlabel}"></span>`;
+  }
+  return out;
+}
+
+// One phase segment: its name, its ticks, a log-count badge, and (when a
+// promoted skip passes every one of its views) the skippable note.
+function renderSeg(game, views, seg, curIdx, skipRange) {
+  const idxs = seg.views.map(v => views.indexOf(v));
+  const skippable = !!skipRange && idxs.every(i => i > skipRange.ci && i <= skipRange.li);
+  const ticks = seg.views.map((v, k) => renderTick(v, idxs[k], curIdx)).join("");
+
+  const stepIds = new Set(seg.views.map(v => VIEW_STEP[v]));
+  const count = game.log.filter(e => e.round === game.round && stepIds.has(e.step)).length;
+  const badge = count > 0 ? h`<span class="log-badge">${count}</span>` : "";
+  const note = skippable
+    ? h`<div class="skip-note">${VIEW_STEP[skipRange.landing]}</div>`
+    : "";
+
+  return h`<div data-phase="${seg.phase}" class="${cx("seg", skippable && "is-skippable")}"><div class="phase-name">${phaseLabel(seg.phase)}</div><div class="tick-row">${raw(ticks)}${raw(badge)}</div>${raw(note)}</div>`;
+}
+
+// Group flowViews() by step(VIEW_STEP[v]).phase. The views arrive already in
+// round order and a phase is never revisited, so consecutive grouping is
+// enough - no need to walk PHASES separately to find each one's views.
+function segments(views) {
+  const segs = [];
+  for (const v of views) {
+    const phase = step(VIEW_STEP[v]).phase;
+    const last = segs[segs.length - 1];
+    if (last && last.phase === phase) last.views.push(v);
+    else segs.push({ phase, views: [v] });
+  }
+  return segs;
+}
+
+export function renderStrip(game, ui) {
+  const views = flowViews();
+  const curIdx = views.indexOf(game.view);
+
+  // A promoted skip highlights every segment made up entirely of views it
+  // passes: strictly after the current view, up to and including the
+  // landing (lastWindowBefore(skip.to)) - the landing is the view the skip
+  // actually lands on, so its segment is skippable too even though the
+  // landing itself isn't "passed" in the log-message sense.
+  const offer = game.skipOffer();
+  let skipRange = null;
+  if (offer && offer.promoted) {
+    const landing = lastWindowBefore(offer.skip.to);
+    const li = views.indexOf(landing);
+    if (curIdx >= 0 && li > curIdx) skipRange = { ci: curIdx, li, landing };
+  }
+
+  const body = segments(views)
+    .map(seg => renderSeg(game, views, seg, curIdx, skipRange))
+    .join("");
+
+  return h`<header class="strip"><div class="round"><span class="label">${CHROME.round}</span><span class="num num-40">${game.round}</span></div>${raw(body)}</header>`;
+}

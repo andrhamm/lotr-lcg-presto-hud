@@ -140,3 +140,41 @@ const changed = dispatch(g, ui, "endround", "");
 console.log(JSON.stringify({ changed, view: g.view, round: g.round }));
 """)
     assert js == {"changed": True, "view": "resource", "round": 2}
+
+
+def test_strip_has_a_segment_per_phase_and_a_playhead_on_the_current_view():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderStrip } from "./strip.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); g.enterView("quest_staging");
+const html = renderStrip(g, newUi());
+console.log(JSON.stringify({ segs: (html.match(/class="seg/g) || []).length,
+  current: (html.match(/is-current/g) || []).length,
+  currentView: /data-view="quest_staging"[^>]*is-current|is-current[^>]*data-view="quest_staging"/.test(html),
+  windows: (html.match(/tick-window/g) || []).length, aw: html.includes("aw_"),
+  round: html.includes(">1<") }));
+""")
+    assert js["segs"] == 8
+    assert js["current"] == 1 and js["currentView"]
+    assert js["windows"] >= 8          # every aw_ window plus the two combat windows
+    assert js["aw"] is False           # window views are ticks, never named
+    assert js["round"]
+
+
+def test_strip_marks_the_combat_segment_skippable_when_the_offer_is_promoted():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderStrip } from "./strip.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); g.enterView("enc_checks");
+const a = renderStrip(g, newUi());
+g.setEngaged(0, 1);
+const b = renderStrip(g, newUi());
+console.log(JSON.stringify({ promoted: /data-phase="Combat"[^>]*is-skippable/.test(a),
+  demoted: /data-phase="Combat"[^>]*is-skippable/.test(b), landing: a.includes("6.P") }));
+""")
+    assert js["promoted"] and js["landing"]
+    assert js["demoted"] is False
