@@ -42,10 +42,10 @@ export function dispatch(game, ui, act, arg) {
     game._snapshotRound();
     return true;
   }
-  if (act === "wp-") { game.setWillpower(game.willpower - 1); return true; }
-  if (act === "wp+") { game.setWillpower(game.willpower + 1); return true; }
-  if (act === "stg-") { game.setStaging(game.staging - 1); return true; }
-  if (act === "stg+") { game.setStaging(game.staging + 1); return true; }
+  if (act === "wp-") { const before = game.willpower; return game.setWillpower(game.willpower - 1) !== before; }
+  if (act === "wp+") { const before = game.willpower; return game.setWillpower(game.willpower + 1) !== before; }
+  if (act === "stg-") { const before = game.staging; return game.setStaging(game.staging - 1) !== before; }
+  if (act === "stg+") { const before = game.staging; return game.setStaging(game.staging + 1) !== before; }
   if (act === "resolve") {
     game.enterView("quest_resolution");
     if (!game.quest_resolved) {
@@ -116,13 +116,13 @@ export function dispatch(game, ui, act, arg) {
   if (act === "eng-" || act === "eng+") {
     const i = Number(arg);
     const d = act === "eng-" ? -1 : 1;
-    game.setEngaged(i, game.players[i].engaged + d);
-    return true;
+    const before = game.players[i].engaged;
+    return game.setEngaged(i, game.players[i].engaged + d) !== before;
   }
-  if (act === "stgen-") { game.setStagingEnemies(game.staging_enemies - 1); return true; }
-  if (act === "stgen+") { game.setStagingEnemies(game.staging_enemies + 1); return true; }
-  if (act === "stgloc-") { game.setStagingLocations(game.staging_locations - 1); return true; }
-  if (act === "stgloc+") { game.setStagingLocations(game.staging_locations + 1); return true; }
+  if (act === "stgen-") { const before = game.staging_enemies; return game.setStagingEnemies(game.staging_enemies - 1) !== before; }
+  if (act === "stgen+") { const before = game.staging_enemies; return game.setStagingEnemies(game.staging_enemies + 1) !== before; }
+  if (act === "stgloc-") { const before = game.staging_locations; return game.setStagingLocations(game.staging_locations - 1) !== before; }
+  if (act === "stgloc+") { const before = game.staging_locations; return game.setStagingLocations(game.staging_locations + 1) !== before; }
   if (act === "skip") { return game.skipTo(arg) !== null; }
   if (act === "endround") { game.endRound(); return true; }
   return false;

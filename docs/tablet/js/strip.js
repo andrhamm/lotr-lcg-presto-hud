@@ -10,15 +10,13 @@ import {
 import { VIEW_LABELS } from "../../js/viewcopy.js";
 import { PHASES, step } from "../../js/phases.js";
 
-// Two views ARE their own action window with no separate aw_ pairing:
-// Combat's 6.E (enemy attacks) and 6.P (player attacks) - phases.js marks
-// both action_window, and gamestate.js's windowAfter() has no "aw_" key for
-// either. Planning's 2.P fits the same isActionWindow-with-no-aw_ shape (the
-// whole phase IS its window, one view, nothing to pair it against), but the
-// brief's verified facts name only the two combat views for this "own tick
-// becomes the window tick" treatment, so it is carved out here rather than
-// derived purely from the predicate.
-const isOwnWindowView = v => v !== "planning" && isActionWindow(v) && !windowAfter(v);
+// A flow view that IS its own action window, with no separate aw_ pairing:
+// Planning's 2.P (player actions throughout), and Combat's 6.E (enemy
+// attacks) and 6.P (player attacks) - phases.js marks all three
+// action_window, and gamestate.js's windowAfter() has no "aw_" key for any
+// of them, so each draws its own tick as the round's window tick rather than
+// pairing with a separate one.
+const isOwnWindowView = v => isActionWindow(v) && !windowAfter(v);
 
 const phaseLabel = id => {
   const p = PHASES.find(ph => ph.id === id);

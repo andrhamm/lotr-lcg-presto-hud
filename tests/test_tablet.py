@@ -142,6 +142,20 @@ console.log(JSON.stringify({ changed, view: g.view, round: g.round }));
     assert js == {"changed": True, "view": "resource", "round": 2}
 
 
+def test_a_stepper_at_its_floor_reports_no_change():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { dispatch, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); const ui = newUi();
+console.log(JSON.stringify({ stgFloor: dispatch(g, ui, "stg-", ""), stgUp: dispatch(g, ui, "stg+", ""),
+  engFloor: dispatch(g, ui, "eng-", "1"), engUp: dispatch(g, ui, "eng+", "1"),
+  wpFloor: dispatch(g, ui, "wp-", ""), stgenFloor: dispatch(g, ui, "stgen-", ""), stglocUp: dispatch(g, ui, "stgloc+", "") }));
+""")
+    assert js == {"stgFloor": False, "stgUp": True, "engFloor": False, "engUp": True,
+                  "wpFloor": False, "stgenFloor": False, "stglocUp": True}
+
+
 def test_strip_has_a_segment_per_phase_and_a_playhead_on_the_current_view():
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
@@ -154,12 +168,14 @@ console.log(JSON.stringify({ segs: (html.match(/class="seg/g) || []).length,
   current: (html.match(/is-current/g) || []).length,
   currentView: /data-view="quest_staging"[^>]*is-current|is-current[^>]*data-view="quest_staging"/.test(html),
   windows: (html.match(/tick-window/g) || []).length, aw: html.includes("aw_"),
+  planningWindow: /data-phase="Planning"[\\s\\S]*?tick-window/.test(html),
   round: html.includes(">1<") }));
 """)
     assert js["segs"] == 8
     assert js["current"] == 1 and js["currentView"]
-    assert js["windows"] >= 8          # every aw_ window plus the two combat windows
+    assert js["windows"] == 11         # 8 aw_ windows + planning + the two combat windows
     assert js["aw"] is False           # window views are ticks, never named
+    assert js["planningWindow"]        # Planning's own tick IS the round's window tick
     assert js["round"]
 
 
