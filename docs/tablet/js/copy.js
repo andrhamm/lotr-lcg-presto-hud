@@ -50,7 +50,7 @@ export const CHROME = {
   // "Elimination" (7.4); nothing here invents a card example beyond that.
   elimTitle: "P%d reaches %d",
   elimEliminate: "Eliminated",
-  elimEliminateBody: "Threat at or above the elimination level - out for the rest of the game.",
+  elimEliminateBody: "Threat at or above the elimination level eliminates the player.",
   elimAvert: "Averted by card effect",
   elimAvertBody: "Threat drops to %d, player stays in.",
   elimLevelQuestion: "Elimination level changed?",
