@@ -765,6 +765,96 @@ console.log(JSON.stringify({
     assert js["avertBody"], "avert preview must still read Math.max(0, committed - 5), not the draft"
 
 
+def test_quest_sheet_location_progress_steps_and_done_flags_resolution():
+    """(a) from the task-4 brief: open the quest sheet on a bare game with one
+    active location, step its progress up to its own quest points with lP+,
+    then quest_done - mirroring the twin's close-time
+    "if (g.needsResolution()) g.pending_resolution = 'auto'" (QuestingProgress-
+    Modal.onButton's "close" case, docs/js/screens.js), left set for Task 7's
+    own sheet to consume."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+g.active_locations.push({ points: 4, progress: 1, name: "Forest Gate", threat: 2 });
+const ui = newUi();
+perform(g, ui, "open_quest", "");
+const html = layout(g, ui);
+perform(g, ui, "lP+", "0"); perform(g, ui, "lP+", "0"); perform(g, ui, "lP+", "0");
+const progress = g.active_locations[0].progress;
+perform(g, ui, "quest_done", "");
+console.log(JSON.stringify({
+  sheet: html.includes('class="sheet sheet-quest"'), name: html.includes("Forest Gate"),
+  stepper: html.includes('data-act="lP+"'), progress, closed: ui.sheet === null,
+  pending: g.pending_resolution,
+}));
+""")
+    assert js["sheet"] and js["name"] and js["stepper"]
+    assert js["progress"] == 4
+    assert js["closed"]
+    assert js["pending"] == "auto"
+
+
+def test_quest_sheet_printed_x_count_stepper_resolves_the_threat():
+    """(b) from the task-4 brief: a location whose printed X is not one of
+    the tracked auto targets (xtargets.autoFor returns null for
+    "damaged_characters") gets a labelled count stepper (xtargets.labelFor)
+    instead of a read-only value - lX+ steps the count, and the row's own
+    displayed value re-resolves through xtargets.resolve (mul=1 default,
+    add=1) exactly like LocationConfigModal's "count" branch."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+g.active_locations.push({ points: 3, progress: 0, name: "Sarn Ford",
+  threatKind: "x", threatX: { target: "damaged_characters", add: 1 }, threatCount: null });
+const ui = newUi();
+perform(g, ui, "open_quest", "");
+const before = layout(g, ui);
+perform(g, ui, "lX+", "0"); perform(g, ui, "lX+", "0");
+const after = layout(g, ui);
+console.log(JSON.stringify({
+  label: before.includes("Damaged characters"), stepper: before.includes('data-act="lX+"'),
+  threat: g.active_locations[0].threat, count: g.active_locations[0].threatCount,
+  shows3: after.includes(">3<"),
+}));
+""")
+    assert js["label"]
+    assert js["stepper"]
+    assert js["threat"] == 3 and js["count"] == 2
+    assert js["shows3"]
+
+
+def test_quest_sheet_tracked_x_shows_the_value_with_no_stepper():
+    """(c) from the task-4 brief: "enemies_in_play" is a tracker-backed auto
+    target (xtargets.AUTO_ENEMIES) - under setBoardTracking(true) the sheet
+    shows the resolved value read-only, with no lX+/lX- stepper at all,
+    mirroring LocationConfigModal's threatShape === "auto" branch."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, setBoardTracking } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS); setBoardTracking(true);
+const g = new GameState(1, 25); g.advanceView();
+g.active_locations.push({ points: 3, progress: 0, name: "Goblin Camp",
+  threatKind: "x", threatX: { target: "enemies_in_play" }, threatCount: null });
+const ui = newUi();
+perform(g, ui, "open_quest", "");
+const html = layout(g, ui);
+console.log(JSON.stringify({
+  sheet: html.includes('class="sheet sheet-quest"'), name: html.includes("Goblin Camp"),
+  hasStepper: html.includes('data-act="lX+"') || html.includes('data-act="lX-"'),
+}));
+""")
+    assert js["sheet"]
+    assert js["name"]
+    assert not js["hasStepper"]
+
+
 def test_chip_labels_are_composed_with_h():
     """chip()/cta() in primitives.js insert `label` via raw() (see
     test_h_escapes_interpolations_but_not_raw above), so a label built from

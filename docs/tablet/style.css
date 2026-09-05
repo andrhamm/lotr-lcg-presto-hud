@@ -246,3 +246,16 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .esheet-choice > .cta { align-self: flex-start; }
 .esheet-lvl { display: flex; align-items: center; gap: 8px; }
 .esheet-lvl-val { display: flex; align-items: center; justify-content: center; min-width: 64px; }
+
+/* The quest sheet (Task 4): one card per entity (the quest, each active
+   location, each side quest) - a name line, a stack of labelled stepper
+   rows (progress/points/threat, plus a location's printed-X count when it
+   has one), and, for a location, its three ways to leave. */
+.qsheet-list { display: flex; flex-direction: column; gap: 14px; }
+.qsheet-section { margin-top: 2px; }
+.qsheet-group { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+.qsheet-name { display: flex; flex-direction: column; gap: 2px; }
+.qsheet-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.qsheet-controls { display: flex; align-items: center; gap: 8px; }
+.qsheet-val { display: flex; align-items: center; gap: 6px; min-width: 56px; justify-content: center; }
+.qsheet-actions, .qsheet-add { display: flex; gap: 10px; flex-wrap: wrap; }

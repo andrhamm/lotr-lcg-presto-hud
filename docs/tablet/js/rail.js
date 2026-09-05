@@ -4,8 +4,7 @@
 // can drive it under node. Every value here is status (design spec, "The
 // left column") - the one tap target per zone is its header's "Edit ›" chip
 // (milestone 3), opening the players/quest/staging sheet; "Open ›" arrives
-// with the log screen in milestone 4. The QUEST zone's chip renders now but
-// dispatches nothing until Task 4 lands sheet_quest.js - see actions.js.
+// with the log screen in milestone 4.
 import { h, raw, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, zone } from "./primitives.js";

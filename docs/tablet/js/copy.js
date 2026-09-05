@@ -55,4 +55,17 @@ export const CHROME = {
   elimAvertBody: "Threat drops to %d, player stays in.",
   elimLevelQuestion: "Elimination level changed?",
   elimSet: "Set",
+  // The quest sheet (Task 4).
+  progress: "Progress",
+  questPoints: "Quest points",
+  activeLocations: "Active locations",
+  sideQuestsHeader: "Side quests",
+  explored: "Explored",
+  toStaging: "Back to staging",
+  replace: "Replace",
+  remove: "Remove",
+  addLocation: "+ Add location",
+  // Verbatim QuestingProgressModal's own fallback (docs/js/screens.js) for a
+  // condition stage with no card-supplied advance sentence.
+  questConditionFallback: "This stage advances on a condition, not on progress.",
 };

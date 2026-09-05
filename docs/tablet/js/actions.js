@@ -2,6 +2,17 @@
 // the DOM: that is what lets tests/test_tablet.py walk a round under node
 // and count the taps.
 import { VIEW_ORDER } from "../../js/gamestate.js";
+import { resolve as resolveX } from "../../js/xtargets.js";
+import { xIsAuto, questShowsPointsStepper } from "./sheet_quest.js";
+
+// Clamp a stepped value the way every progress/points editor in the twin
+// does (QuestingProgressModal._clampAdj, docs/js/screens.js): floor 0,
+// ceiling `cap` unless cap is null/0, which means "no printed target" and
+// falls back to a generous 0..99 rather than pinning the value at zero.
+function clampAdj(cur, delta, cap = null) {
+  const hi = !cap || cap <= 0 ? 99 : cap;
+  return Math.max(0, Math.min(hi, cur + delta));
+}
 
 export const newUi = () => ({
   screen: "play", alloc: null, placed: false, picker: null,
@@ -156,13 +167,158 @@ export function dispatch(game, ui, act, arg) {
   if (act === "endround") { game.endRound(); return true; }
 
   // Sheets (milestone 3): a modal overlay is UI state, not game state - see
-  // sheets.js. open_quest is Task 4's own act (its chip already renders in
-  // the rail, per the task-2 brief - it opens nothing until sheet_quest.js
-  // lands, so it deliberately has no case here yet).
+  // sheets.js. open_locpick/open_sqpick are Tasks 5/6's own acts (their
+  // chips already render in sheet_quest.js, per the task-4 brief - they open
+  // nothing until those land, so they deliberately have no case here yet).
   if (act === "open_players") { ui.sheet = { kind: "players" }; return true; }
   if (act === "open_staging") { ui.sheet = { kind: "staging" }; return true; }
   if (act === "open_menu") { ui.sheet = { kind: "menu" }; return true; }
+  if (act === "open_quest") { ui.sheet = { kind: "quest" }; return true; }
   if (act === "sheet_close") { ui.sheet = null; return true; }
+
+  // The quest sheet (Task 4) - folds QuestingProgressModal, LocationConfig-
+  // Modal and QuestConfigModal (docs/js/screens.js) into one sheet. Every
+  // stepper here is a KEYED tally (a run of taps rewrites one log row, same
+  // as thr/commit above) rather than the twin's "one summary line on close"
+  // pattern - see sheet_quest.js for the render side and the controller
+  // notes this was briefed from for the exact log/key strings.
+  if (act === "quest_done") {
+    ui.sheet = null;
+    // Left for Task 7's own sheet to consume - it opens on this flag exactly
+    // the way the elimination sheet opens on pending_elim (afterTap, below).
+    if (game.needsResolution()) game.pending_resolution = "auto";
+    return true;
+  }
+  if (act === "qP-" || act === "qP+") {
+    // A condition stage (docs/js/screens.js's "cond" row) has no printed
+    // target - flipToB never gives one - so nothing here claims one either.
+    if (game.quest.mode === "condition") return false;
+    const before = game.quest.progress;
+    const next = clampAdj(before, act === "qP+" ? 1 : -1, game.quest.points);
+    if (next === before) return false;
+    game.quest.progress = next;
+    game.logEvent(`Quest progress ${next}`, "tally", "qp");
+    return true;
+  }
+  if (act === "qPts-" || act === "qPts+") {
+    if (!questShowsPointsStepper(game)) return false;
+    const before = game.quest.points;
+    const next = Math.max(0, Math.min(30, before + (act === "qPts+" ? 1 : -1)));
+    if (next === before) return false;
+    game.quest.points = next;
+    game.logEvent(`Quest points ${next}`, "tally", "qpts");
+    return true;
+  }
+  if (act === "lP-" || act === "lP+") {
+    const i = Number(arg);
+    if (i >= game.active_locations.length) return false;
+    const loc = game.active_locations[i];
+    const before = loc.progress;
+    const next = clampAdj(before, act === "lP+" ? 1 : -1, loc.points);
+    if (next === before) return false;
+    loc.progress = next;
+    game.logEvent(`Location ${i + 1} progress ${next}`, "tally", `lp${i}`);
+    return true;
+  }
+  if (act === "lPts-" || act === "lPts+") {
+    const i = Number(arg);
+    if (i >= game.active_locations.length) return false;
+    const loc = game.active_locations[i];
+    const before = loc.points;
+    const next = Math.max(1, Math.min(30, before + (act === "lPts+" ? 1 : -1)));
+    if (next === before) return false;
+    loc.points = next;
+    game.logEvent(`Location ${i + 1} points ${next}`, "tally", `lpts${i}`);
+    return true;
+  }
+  if (act === "lThr-" || act === "lThr+") {
+    const i = Number(arg);
+    if (i >= game.active_locations.length) return false;
+    const loc = game.active_locations[i];
+    if (loc.threatKind === "x") return false;   // lX± owns this location's threat instead
+    const before = loc.threat ?? 0;
+    const next = Math.max(0, Math.min(30, before + (act === "lThr+" ? 1 : -1)));
+    if (next === before) return false;
+    loc.threat = next;
+    game.logEvent(`Location ${i + 1} threat ${next}`, "tally", `lthr${i}`);
+    return true;
+  }
+  if (act === "lX-" || act === "lX+") {
+    // The printed-X count stepper: the player supplies the count (how many
+    // damaged characters, etc.), this recomputes the threat it resolves to -
+    // LocationConfigModal's "count" branch and its _save, mirrored exactly
+    // (store the count, not just the result, so it survives a board change).
+    const i = Number(arg);
+    if (i >= game.active_locations.length) return false;
+    const loc = game.active_locations[i];
+    if (loc.threatKind !== "x" || !loc.threatX || xIsAuto(loc.threatX)) return false;
+    const before = loc.threatCount ?? 0;
+    const next = Math.max(0, Math.min(60, before + (act === "lX+" ? 1 : -1)));
+    if (next === before) return false;
+    loc.threatCount = next;
+    loc.threat = resolveX(loc.threatX, { count: next, ...game.xContext() }) ?? 0;
+    game.logEvent(`Location ${i + 1} count ${next}`, "tally", `lx${i}`);
+    return true;
+  }
+  if (act === "lExplored") {
+    // LocationConfigModal's "explored" branch, verbatim string included -
+    // any seat can leave this way regardless of its own progress, unlike the
+    // auto-explore exploreLocationIfDone() does elsewhere.
+    const i = Number(arg);
+    if (i >= game.active_locations.length) return false;
+    game.active_locations.splice(i, 1);
+    game.logEvent("Active location Explored");
+    return true;
+  }
+  if (act === "lToStaging") {
+    // LocationConfigModal's "tostaging" branch: the record carries the
+    // card's own threat, so staging gets the right number back rather than a
+    // guess, and progress is never zeroed (RR: it is not lost by returning).
+    const i = Number(arg);
+    if (i >= game.active_locations.length) return false;
+    const [loc] = game.active_locations.splice(i, 1);
+    const back = loc.threat ?? 0;
+    game.staging += back;
+    game.logEvent(`Active location to staging (+${back} threat, ${loc.progress ?? 0} progress kept)`);
+    return true;
+  }
+  if (act === "lReplace") {
+    // LocationConfigModal's "replaced" branch opens the picker rather than
+    // logging itself - Task 5's own sheet does that when a new one lands.
+    const idx = Number(arg);
+    ui.sheet = { kind: "locpick", mode: "change", idx, back: "quest" };
+    return true;
+  }
+  if (act === "sP-" || act === "sP+") {
+    const i = Number(arg);
+    if (i >= game.side_quests.length) return false;
+    const sq = game.side_quests[i];
+    const before = sq.progress;
+    const next = clampAdj(before, act === "sP+" ? 1 : -1, sq.points);
+    if (next === before) return false;
+    sq.progress = next;
+    game.logEvent(`Side quest ${i + 1} progress ${next}`, "tally", `sp${i}`);
+    return true;
+  }
+  if (act === "sPts-" || act === "sPts+") {
+    const i = Number(arg);
+    if (i >= game.side_quests.length) return false;
+    const sq = game.side_quests[i];
+    const before = sq.points;
+    const next = Math.max(1, Math.min(30, before + (act === "sPts+" ? 1 : -1)));
+    if (next === before) return false;
+    sq.points = next;
+    game.logEvent(`Side quest ${i + 1} points ${next}`, "tally", `spts${i}`);
+    return true;
+  }
+  if (act === "sRemove") {
+    // SideQuestsModal's "rm" branch, verbatim string.
+    const i = Number(arg);
+    if (i >= game.side_quests.length) return false;
+    game.side_quests.splice(i, 1);
+    game.logEvent(`Side quest ${i + 1} removed`);
+    return true;
+  }
 
   // Players sheet edits - PlayersDetailModal's onButton (docs/js/screens.js),
   // folded from its "edit"-pad steps (-5/-1/+1/+5) into one stepper row per
