@@ -6,6 +6,12 @@
 // the host tests live on the Python twin per project convention). loadIndex/
 // loadScenario are thin fetch wrappers and are NOT host-tested.
 
+// The compiled card data lives beside this module's directory (docs/data/),
+// not beside the page: the web twin's page is docs/index.html but the
+// tablet's is docs/tablet/index.html. Resolving against import.meta.url
+// makes both clients fetch docs/data/ regardless of the page they load from.
+export const dataUrl = path => new URL("../data/" + path, import.meta.url).href;
+
 // Verified product/cycle order (see docs/superpowers/plans/
 // 2026-07-24-quest-picker-bcore.md Task-2 findings — includes the "Ered
 // Mithrin" cycle the original brief omitted). Cycle names not in this list
@@ -132,12 +138,12 @@ export function resumePickerState(index, scenario) {
 
 // Read the whole catalog index. Thin wrapper, not host-tested.
 export async function loadIndex() {
-  return (await fetch("data/index.json")).json();
+  return (await fetch(dataUrl("index.json"))).json();
 }
 
 // Read one scenario's full stage/card data. Thin wrapper, not host-tested.
 export async function loadScenario(slug) {
-  return (await fetch("data/scenarios/" + slug + ".json")).json();
+  return (await fetch(dataUrl("scenarios/" + slug + ".json"))).json();
 }
 
 // Flatten every pack's cards.sideQuest into a name-sorted list of
@@ -184,12 +190,12 @@ export async function loadPlayerSideQuests() {
   // only for a data/ deploy predating that file - it fetches all 105 packs,
   // which on the firmware twin's flash meant 1.6 MB and 6.4 SECONDS per tap.
   try {
-    return await (await fetch("data/players/side_quests.json")).json();
+    return await (await fetch(dataUrl("players/side_quests.json"))).json();
   } catch (e) { /* fall through to the scan */ }
   try {
-    const index = await (await fetch("data/players/index.json")).json();
+    const index = await (await fetch(dataUrl("players/index.json"))).json();
     const packs = await Promise.all(
-      index.map(entry => fetch("data/players/" + entry.slug + ".json").then(r => r.json())));
+      index.map(entry => fetch(dataUrl("players/" + entry.slug + ".json")).then(r => r.json())));
     return sideQuests(packs);
   } catch (e) {
     console.error("quest catalog: loadPlayerSideQuests failed - falling back to manual entry", e);
@@ -286,7 +292,7 @@ export async function loadLocations(slug) {
     const scenario = await loadScenario(slug);
     const packs = {};
     await Promise.all(locationSetSlugs(scenario).map(setSlug =>
-      fetch("data/scenarios/" + setSlug + ".json")
+      fetch(dataUrl("scenarios/" + setSlug + ".json"))
         .then(r => r.ok ? r.json() : null)
         .then(pack => { if (pack) packs[setSlug] = pack; })
         .catch(() => {})));
@@ -372,7 +378,7 @@ export function iconFor(slug, icons) {
 // optional at runtime).
 export async function loadIcons() {
   try {
-    const data = await (await fetch("data/icons.json")).json();
+    const data = await (await fetch(dataUrl("icons.json"))).json();
     return data.icons ?? {};
   } catch (e) {
     console.error("quest catalog: loadIcons failed - icon slots stay placeholders", e);
@@ -416,7 +422,7 @@ export function tipsFor(slug, stage, tips) {
 // runtime).
 export async function loadTips() {
   try {
-    const data = await (await fetch("data/tips.json")).json();
+    const data = await (await fetch(dataUrl("tips.json"))).json();
     return data.scenarios ?? {};
   } catch (e) {
     console.error("quest catalog: loadTips failed - Tips button stays disabled", e);

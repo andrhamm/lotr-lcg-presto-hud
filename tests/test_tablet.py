@@ -384,3 +384,13 @@ console.log(JSON.stringify({
     assert js["hasA"] and not js["hasN"]
     assert not js["hasANightmare"]
     assert js["resume"]
+
+
+def test_catalog_paths_resolve_beside_the_module_not_the_page():
+    js = node("""
+import { dataUrl } from "../../js/quest_catalog.js";
+console.log(JSON.stringify({ u: dataUrl("index.json"), s: dataUrl("scenarios/x.json") }));
+""")
+    assert js["u"].endswith("/js/../data/index.json") or js["u"].endswith("/data/index.json")
+    assert "/tablet/" not in js["u"] and "/js/data/" not in js["u"]
+    assert js["s"].endswith("/data/scenarios/x.json")
