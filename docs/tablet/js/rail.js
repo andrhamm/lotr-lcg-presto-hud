@@ -8,6 +8,7 @@
 import { h, raw, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { zone } from "./primitives.js";
+import { faceOf } from "./cards.js";
 import { fmtMs } from "../../js/gamestate.js";
 import { VIEW_LABELS } from "../../js/viewcopy.js";
 import { icon } from "../../js/icons_svg.js";
@@ -49,11 +50,14 @@ function renderPlayersZone(game) {
   });
 }
 
-// The stage pill: "Stage {questLabel}", progress/points, and the stage's
-// own name when the preloaded catalog data has one (a bare game in tests
-// does not, so this line is omitted rather than shown blank).
+// The stage pill: "Stage {questLabel}", progress/points, and the name of
+// whichever face the quest is currently showing (A or B - see cards.js) when
+// the preloaded catalog data has one (a bare game in tests does not, so this
+// line is omitted rather than shown blank). Catalog cards are
+// `{ faces: [...] }`, not `{ name }` at the top level.
 function renderStagePill(game) {
-  const name = game.stages[game.stage_idx]?.cards?.[game.card_idx]?.name;
+  const card = game.stages[game.stage_idx]?.cards?.[game.card_idx];
+  const name = faceOf(card, game.quest.side)?.name;
   const nameRow = name ? h`<p class="body pill-name">${name}</p>` : "";
   return h`<div class="pill">
 <div class="pill-head"><span class="label">Stage ${game.questLabel()}</span></div>
@@ -91,16 +95,20 @@ function renderQuestZone(game) {
   });
 }
 
-// A compact staging pill: a label caption over icon + one number - "each
-// num-34 with the black helm" per the brief, plus the caption a controller
-// ruling added so the three pills (Threat/Enemies/Locations) are named
-// rather than left to a shared icon to disambiguate. threat/enemies/
+// A compact staging pill: a label caption stacked over a row of icon + one
+// number - "each num-34 with the black helm" per the brief, plus the caption
+// a controller ruling added so the three pills (Threat/Enemies/Locations) are
+// named rather than left to a shared icon to disambiguate. threat/enemies/
 // locations share the one icon; there is no separate mask for enemy- or
-// location-count, and the caption is what tells them apart now.
+// location-count, and the caption is what tells them apart now. Stacked
+// (caption on top, icon+number below) rather than one row, so the caption
+// never collides with the icon in the 324px column - see .pill-compact and
+// .staging-grid in style.css.
 function renderStagingPill(caption, value) {
   return h`<div class="pill pill-compact">
-<div class="pill-head"><span class="label">${caption}</span></div>
-${raw(icon("THREAT", 26, THREAT_BLACK, THREAT_BLACK_EDGE))}<span class="num num-34">${value}</span></div>`;
+<span class="label">${caption}</span>
+<div class="pill-stat">${raw(icon("THREAT", 20, THREAT_BLACK, THREAT_BLACK_EDGE))}<span class="num num-34">${value}</span></div>
+</div>`;
 }
 
 function renderStagingZone(game) {
@@ -112,7 +120,7 @@ function renderStagingZone(game) {
     icon: icon("THREAT", 22, THREAT_BLACK, THREAT_BLACK_EDGE),
     edge: "outline",
     ground: "well",
-    body: h`<div class="staging-row">${raw(body)}</div>`,
+    body: h`<div class="staging-grid">${raw(body)}</div>`,
   });
 }
 

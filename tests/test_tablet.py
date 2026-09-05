@@ -243,13 +243,59 @@ console.log(JSON.stringify({ zones: (html.match(/class="zone /g) || []).length,
   cells: (html.match(/player-cell/g) || []).length, danger: html.includes("bar-danger"),
   buttons: html.includes("<button"), log: html.includes("P1 threat 25 -&gt; 26"),
   prompt: html.includes("Resource"), staging: />5</.test(html) && />2</.test(html),
-  captions: html.includes("Enemies") && html.includes("Locations") }));
+  captions: html.includes("Enemies") && html.includes("Locations"),
+  grid: html.includes("staging-grid") }));
 """)
     assert js["zones"] == 3 and js["cells"] == 3
     assert js["danger"]                # P3 at 41 is within 10 of elimination
     assert js["buttons"] is False      # status, not controls, in this milestone
     assert js["log"] and js["prompt"] and js["staging"]
     assert js["captions"]
+    assert js["grid"]                  # the three staging pills are a grid, not a row
+
+
+def test_quest_setup_reads_the_a_face_of_a_catalog_card():
+    """The compiled catalog's stage cards are `{ faces: [...] }`, not
+    `{ name, text }` at the top level - pane.js's quest_setup branch and
+    rail.js's stage pill both used to read the top-level fields directly and
+    so always fell to the "no card"/nameless branch, even for a card (like
+    Passage Through Mirkwood's 1A) that prints real Setup text. cards.js's
+    frontFace()/faceOf() fix that; this drives both renderPane (before the
+    flip, side A) and renderRail (after it, side B) off one preloaded card."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { renderRail } from "./rail.js";
+import { dispatch, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25);
+g.preloadScenario({ slug: "x", name: "X" }, [{ stage: 1, cards: [{
+  faces: [
+    { name: "Flies and Spiders", side: "A", text: "Setup: search the encounter deck." },
+    { name: "Flies and Spiders", side: "B", text: "" },
+  ],
+  questPoints: 8,
+}] }]);
+g.view = "quest_setup";
+const ui = newUi();
+const before = renderPane(g, ui);
+const changed = dispatch(g, ui, "flip_to_b", "");
+const after = renderRail(g, ui);
+console.log(JSON.stringify({
+  beforeName: before.includes("Flies and Spiders"),
+  beforeText: before.includes("Setup: search the encounter deck."),
+  beforeCta: before.includes('data-act="flip_to_b"'),
+  changed,
+  afterName: after.includes("Flies and Spiders"),
+  afterProgress: />0<[/]span><span class="pill-sep">[/]<[/]span><span class="num num-26">8</.test(after),
+}));
+""")
+    assert js["beforeName"]
+    assert js["beforeText"]
+    assert js["beforeCta"]
+    assert js["changed"]
+    assert js["afterName"]
+    assert js["afterProgress"]         # 0 / 8, the stage pill's progress-over-points
 
 
 _ALL_VIEWS = """

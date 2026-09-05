@@ -77,12 +77,15 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 
 .pill { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
 .pill-dashed { border-style: dashed; background: transparent; }
-.pill-compact { flex: 1 1 0; flex-direction: row; align-items: center; justify-content: center; gap: 8px; }
+.pill-compact { flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px; min-width: 0; }
 .pill-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pill-stat { display: flex; align-items: center; gap: 6px; }
 .pill-sep { color: var(--dim); }
 .pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.staging-row { display: flex; gap: 8px; }
+/* Three stacked pills (caption over icon+number) side by side - a grid, not
+   a row, so a long caption ("Locations") never pushes into its neighbor's
+   icon at the rail's 324px width. */
+.staging-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 
 .log-block { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border); }
 .log-row { display: flex; gap: 8px; align-items: baseline; }

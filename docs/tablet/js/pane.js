@@ -8,6 +8,7 @@ import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta, counter, band } from "./primitives.js";
 import { renderLoop } from "./loops.js";
+import { frontFace } from "./cards.js";
 import { phaseViewOf, HEADINGS } from "../../js/gamestate.js";
 import {
   VIEW_LABELS, ACTION_WINDOW_TIPS, COMBAT_LAST_CHANCE, LOOP_FLOW, OUTCOME,
@@ -38,20 +39,25 @@ function renderWithoutActions(line) {
 
 // R0 pre-round-1 phase: stage 1A's setup text to resolve, then the flip that
 // begins round 1. A bare game (no scenario, as in the tests) has no
-// `stages`, so aFace is undefined and the "none" branch renders - same
-// optional-chained lookup rail.js's renderStagePill already uses.
+// `stages`, so the card is undefined, frontFace() returns null, and the
+// "none" branch renders - same optional-chained lookup rail.js's
+// renderStagePill already uses. Catalog cards are `{ faces: [...] }`, not
+// `{ name, text }` at the top level, so frontFace(card) (cards.js) is what
+// reads the actual A-side name/text - see cards.js for why that is
+// positional (faces[0]) rather than a `side === "A"` match.
 function renderQuestSetup(game) {
   const tips = SETUP_TIP.map(t => band({ kind: "framework", text: t })).join("");
   const stageN = `${game.quest.stage_n}${game.quest.side}`;
-  const aFace = game.stages[game.stage_idx]?.cards?.[game.card_idx];
-  const lead = aFace?.text
-    ? QUEST_SETUP.resolve.replace("%s", stageN).replace("%s", aFace.name || "")
+  const card = game.stages[game.stage_idx]?.cards?.[game.card_idx];
+  const face = frontFace(card);
+  const lead = face?.text
+    ? QUEST_SETUP.resolve.replace("%s", stageN).replace("%s", face.name || "")
     : QUEST_SETUP.none.replace("%s", stageN);
   const instr = band({
     kind: "framework", text: lead,
     sub: QUEST_SETUP.then_flip.replace("%s", String(game.quest.stage_n)),
   });
-  const well = aFace?.text ? h`<div class="well"><p class="body">${aFace.text}</p></div>` : "";
+  const well = face?.text ? h`<div class="well"><p class="body">${face.text}</p></div>` : "";
   return { parts: tips + instr + well, cta: cta({ act: "flip_to_b", label: QUEST_SETUP.begin }) };
 }
 
