@@ -295,7 +295,7 @@ function renderViewParts(view, game, ui) {
     case "round_end":
       return {
         parts: band({ kind: "framework", text: PHASE_FRAMEWORK.round_end }),
-        cta: cta({ act: "endround", label: `${CHROME.nextPrefix}${VIEW_LABELS.resource} (Round ${game.round + 1})` }),
+        cta: cta({ act: "endround", label: h`${CHROME.nextPrefix}${VIEW_LABELS.resource} (Round ${game.round + 1})` }),
       };
 
     default:
@@ -333,7 +333,7 @@ export function renderPane(game, ui) {
     ctaButtons.push(customCta);
   } else {
     const nxt = game.nextPhaseView();
-    ctaButtons.push(cta({ act: "advance", label: nxt ? `${CHROME.nextPrefix}${VIEW_LABELS[nxt]}` : CHROME.next }));
+    ctaButtons.push(cta({ act: "advance", label: nxt ? h`${CHROME.nextPrefix}${VIEW_LABELS[nxt]}` : CHROME.next }));
   }
 
   return h`<main class="pane">

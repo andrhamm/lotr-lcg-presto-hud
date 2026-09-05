@@ -87,7 +87,7 @@ function threatCounters(threats) {
   // CHROME.threat carry nothing that needs escaping anyway, but the two
   // escaping layers must stay each other's job, not stacked.
   const cells = threats.map((t, i) => counter({
-    label: `P${i + 1} ${CHROME.threat}`,
+    label: h`P${i + 1} ${CHROME.threat}`,
     icon: icon("THREAT", 34, THREAT_RED, THREAT_SHADOW),
     value: t, act: "ng_threat", arg: i,
   })).join("");

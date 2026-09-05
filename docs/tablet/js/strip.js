@@ -132,6 +132,6 @@ export function renderStrip(game, ui) {
   // The Menu sheet's one entry point (milestone 3): new game mid-play. Same
   // header-nav chip shape as the rail's "Edit ›" (rail.js), height:30 so it
   // sits beside the round number instead of stacking past the strip's 96px.
-  const menuChip = chip({ act: "open_menu", label: `${CHROME.menu} ›`, tone: "tan", height: 30 });
+  const menuChip = chip({ act: "open_menu", label: h`${CHROME.menu} ›`, tone: "tan", height: 30 });
   return h`<header class="strip"><div class="round"><span class="label">${CHROME.round}</span><div class="round-row"><span class="num num-40">${game.round}</span>${raw(menuChip)}</div></div>${raw(body)}</header>`;
 }

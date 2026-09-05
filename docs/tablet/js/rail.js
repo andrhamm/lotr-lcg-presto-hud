@@ -44,7 +44,7 @@ function renderPlayerCell(game, p, i) {
 // (open_players/open_quest/open_staging) - task-2 brief's Rail interface
 // line. height:30 (not the usual 44) because this is a header nav chip
 // inside the strip-height-constrained rail, not a sheet's own tap target.
-const editChip = act => chip({ act, label: `${CHROME.edit} ›`, tone: "tan", height: 30 });
+const editChip = act => chip({ act, label: h`${CHROME.edit} ›`, tone: "tan", height: 30 });
 
 function renderPlayersZone(game) {
   const cells = game.players.map((p, i) => renderPlayerCell(game, p, i)).join("");

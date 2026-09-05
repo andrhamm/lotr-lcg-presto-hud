@@ -20,7 +20,7 @@ function step(act, arg, label) {
 // header, and the tablet's answer to a Doomed keyword (raise every living
 // player's threat with one tap instead of one per player).
 function renderEveryoneRow() {
-  const c = (arg, label) => chip({ act: "all_thr", arg, label: `${CHROME.all} ${label}`, tone: "tan" });
+  const c = (arg, label) => chip({ act: "all_thr", arg, label: h`${CHROME.all} ${label}`, tone: "tan" });
   return h`<div class="psheet-everyone">${raw(c("-1", "−1"))}${raw(c("1", "+1"))}${raw(c("2", "+2"))}</div>`;
 }
 

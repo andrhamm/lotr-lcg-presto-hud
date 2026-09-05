@@ -763,3 +763,30 @@ console.log(JSON.stringify({
     assert js["draftLevel"] == 55 and js["committedLevel"] == 50
     assert js["title"], "title must still read the committed level, not the stepper's draft"
     assert js["avertBody"], "avert preview must still read Math.max(0, committed - 5), not the draft"
+
+
+def test_chip_labels_are_composed_with_h():
+    """chip()/cta() in primitives.js insert `label` via raw() (see
+    test_h_escapes_interpolations_but_not_raw above), so a label built from
+    interpolated content must be composed with the escaping h`` tag from
+    dom.js - a bare JS template literal skips escaping entirely once raw()
+    unwraps it. A static scan under node is awkward for this one (it is a
+    source-shape check, not a runtime behavior), so just grep the files
+    directly for the offending shape."""
+    import re
+
+    tablet_js_dir = os.path.join(ROOT, "docs", "tablet", "js")
+    bad_pattern = re.compile(r"label:\s*`")
+    allowed = re.compile(r"label:\s*(h`|CHROME\.|raw\()")
+    violations = []
+    for fname in sorted(os.listdir(tablet_js_dir)):
+        if not fname.endswith(".js"):
+            continue
+        with open(os.path.join(tablet_js_dir, fname)) as f:
+            for lineno, line in enumerate(f, 1):
+                if bad_pattern.search(line) and not allowed.search(line):
+                    violations.append("%s:%d: %s" % (fname, lineno, line.strip()))
+    assert not violations, (
+        "label built from a plain template literal, bypassing h`` escaping "
+        "before raw() unwraps it:\n" + "\n".join(violations)
+    )
