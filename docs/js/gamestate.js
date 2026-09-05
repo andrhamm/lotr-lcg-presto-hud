@@ -650,6 +650,19 @@ export class GameState {
   // still in staging.
   enemiesInPlay() { return this.engagedTotal() + this.staging_enemies; }
 
+  // Every tracked value a printed X can resolve from, by the option names
+  // xtargets.resolve takes. One place, so a new auto target is a change here
+  // and in xtargets, never at a call site.
+  xContext() {
+    return {
+      players: this.players.length,
+      stage: this.quest.stage_n ?? 1,
+      highestThreat: Math.max(0, ...this.players.map((p) => p.threat)),
+      enemies: this.enemiesInPlay(),
+      stagingLocations: this.staging_locations,
+    };
+  }
+
   // Adopt the per-player breakdown as the total, but ONLY when the two already
   // agree.
   //
@@ -1016,11 +1029,7 @@ export class GameState {
     // number of players" has no control to wait for - there is nothing to ask
     // - so without this the location would sit at no threat at all and
     // under-report the staging total.
-    const auto = resolveX(loc.threatX, {
-      players: this.players.length,
-      stage: this.quest.stage_n ?? 1,
-      highestThreat: Math.max(0, ...this.players.map((p) => p.threat)),
-    });
+    const auto = resolveX(loc.threatX, this.xContext());
     if (auto !== null && autoFor(loc.threatX?.target)) loc.threat = auto;
     return loc;
   }

@@ -1369,12 +1369,7 @@ export class QuestingProgressModal {
   _questTarget() {
     const g = this.game;
     if (g.quest.mode !== "formula") return g.quest.points;
-    return xtargets.resolve(g.quest.x, {
-      count: g.quest.xCount ?? null,
-      players: g.players.length,
-      stage: g.quest.stage_n ?? 1,
-      highestThreat: Math.max(0, ...g.players.map(p => p.threat)),
-    });
+    return xtargets.resolve(g.quest.x, { count: g.quest.xCount ?? null, ...g.xContext() });
   }
 
   _clampAdj(cur, d, cap = null) {
@@ -1991,12 +1986,7 @@ export class LocationConfigModal {
   }
 
   _resolved() {
-    return xtargets.resolve(this.threatX, {
-      count: this.threatCount,
-      players: this.game.players.length,
-      stage: this.game.quest.stage_n ?? 1,
-      highestThreat: Math.max(0, ...this.game.players.map(p => p.threat)),
-    });
+    return xtargets.resolve(this.threatX, { count: this.threatCount, ...this.game.xContext() });
   }
 
   // The threat row, in whichever shape the card calls for. Returns the y to

@@ -22,11 +22,12 @@ which covers every observed shape - a bare count (1,0), "1 more than" (1,1),
 "twice" (2,0), "N per player" (N,0) and "2, plus 2 for each" (2,2).
 
 `auto` names the tracked value that answers the question without asking the
-player. Only three of the 26 have one, and they are the three the HUD already
-models: how many players there are, which stage the main quest is on, and the
-highest player threat. The other 23 are board state the HUD does not see, so
-the player supplies the count and the app does the arithmetic - they never do
-it in their head, and the count survives to next round when it changes by one.
+player. Only five of the 26 have one: how many players there are, which stage
+the main quest is on, the highest player threat, and - since the tablet
+started tracking them - enemies in play and locations in staging. The other
+21 are board state the HUD does not see, so the player supplies the count and
+the app does the arithmetic - they never do it in their head, and the count
+survives to next round when it changes by one.
 
 Pure data, no imports: runs under MicroPython on the device and CPython for
 host tests, same posture as phases.py / viewcopy.py.
@@ -36,6 +37,12 @@ host tests, same posture as phases.py / viewcopy.py.
 AUTO_PLAYERS = "players"
 AUTO_STAGE = "stage"
 AUTO_HIGHEST_THREAT = "highest_threat"
+# Two more since the tablet's tracker: enemies engaged with anyone plus enemies
+# in staging, and locations in staging. The Presto never sets them, so on the
+# device these resolve from zero - the same as before, where the player
+# supplied the count; the sheet's stepper still lets them.
+AUTO_ENEMIES = "enemies"
+AUTO_STAGING_LOCATIONS = "staging_locations"
 
 # enum -> {label: the stepper's label, auto: tracked source or None}
 #
@@ -50,7 +57,7 @@ TARGETS = {
                        "auto": AUTO_HIGHEST_THREAT},
 
     # -- in play -----------------------------------------------------------
-    "enemies_in_play": {"label": "Enemies in play", "auto": None},
+    "enemies_in_play": {"label": "Enemies in play", "auto": AUTO_ENEMIES},
     # ASCII, not "Nazgul" with a circumflex: these labels are drawn with
     # bitmap8, whose glyph table has no accented characters, and an unknown
     # glyph measures 4px - so a diacritic passes every layout test and only
@@ -63,7 +70,8 @@ TARGETS = {
     "damaged_characters": {"label": "Damaged characters", "auto": None},
 
     # -- staging area ------------------------------------------------------
-    "locations_in_staging": {"label": "Locations in staging", "auto": None},
+    "locations_in_staging": {"label": "Locations in staging",
+                             "auto": AUTO_STAGING_LOCATIONS},
     "snow_in_staging": {"label": "Snow cards in staging", "auto": None},
     "ally_cost_in_staging": {"label": "Total ally cost in staging",
                              "auto": None},
@@ -122,14 +130,16 @@ def value_of(count, mul=1, add=0):
     return max(0, mul * count + add)
 
 
-def resolve(spec, count=None, players=1, stage=1, highest_threat=0):
+def resolve(spec, count=None, players=1, stage=1, highest_threat=0,
+            enemies=0, staging_locations=0):
     """The number to put on screen, or None when the player has not supplied a
     count yet.
 
     `spec` is a card's coded X: {"target", "mul", "add"}. An auto target
     ignores `count` entirely and recomputes from the tracked value, which is
-    the whole point of tagging those three separately - "X is 4 per player"
-    must follow the player count without anyone touching a stepper.
+    the whole point of tagging those separately - "X is 4 per player" must
+    follow the player count without anyone touching a stepper. GameState's
+    x_context() supplies every tracked value by these keyword names.
     """
     if not spec:
         return None
@@ -143,6 +153,10 @@ def resolve(spec, count=None, players=1, stage=1, highest_threat=0):
         return value_of(stage, mul, add)
     if auto == AUTO_HIGHEST_THREAT:
         return value_of(highest_threat, mul, add)
+    if auto == AUTO_ENEMIES:
+        return value_of(enemies, mul, add)
+    if auto == AUTO_STAGING_LOCATIONS:
+        return value_of(staging_locations, mul, add)
     if count is None:
         return None
     return value_of(count, mul, add)

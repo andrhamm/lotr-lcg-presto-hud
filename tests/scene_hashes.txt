@@ -12,7 +12,7 @@ gameover_defeat e94321a0fe26362c
 gameover_victory b01103590cf13ad5
 led_modal 1b70baab8d46d49c
 legend d8497d33650d48b9
-location_config_modal_count_control 45ab2dad3a43d130
+location_config_modal_count_control aa51d0c4d3d2c267
 location_config_modal_formula 321b2c1171c7d860
 location_config_modal_unknown_x 042efb2954c34e1e
 location_pick 3e70086c70a1ab4b

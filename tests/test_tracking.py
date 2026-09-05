@@ -120,3 +120,17 @@ def test_undo_restores_the_counts():
     assert g.players[0].engaged == 0
     assert g.staging_enemies == 0
     assert g.staging_locations == 0
+
+
+def test_x_context_feeds_resolve_with_the_tracked_values():
+    import xtargets
+    g = _live()
+    g.set_engaged(0, 2)
+    g.set_staging_enemies(1)
+    g.set_staging_locations(2)
+    ctx = g.x_context()
+    assert ctx == {"players": 2, "stage": g.quest["stage_n"],
+                   "highest_threat": max(p.threat for p in g.players),
+                   "enemies": 3, "staging_locations": 2}
+    assert xtargets.resolve({"target": "enemies_in_play"}, **ctx) == 3
+    assert xtargets.resolve({"target": "players", "mul": 4}, count=None, **ctx) == 8

@@ -776,6 +776,18 @@ class GameState:
         plus still in staging."""
         return self.engaged_total() + self.staging_enemies
 
+    def x_context(self):
+        """Every tracked value a printed X can resolve from, by the keyword
+        names xtargets.resolve takes. One place, so a new auto target is a
+        change here and in xtargets, never at a call site."""
+        return {
+            "players": len(self.players),
+            "stage": self.quest.get("stage_n", 1),
+            "highest_threat": max([p.threat for p in self.players] or [0]),
+            "enemies": self.enemies_in_play(),
+            "staging_locations": self.staging_locations,
+        }
+
     def resync_willpower(self):
         """Adopt the per-player breakdown as the total, but ONLY when the two
         already agree.
@@ -1210,10 +1222,7 @@ class GameState:
         # "X is the number of players" has no control to wait for - there is
         # nothing to ask - so without this the location would sit at no threat
         # at all and under-report the staging total.
-        auto = xtargets.resolve(
-            loc.get("threatX"), players=len(self.players),
-            stage=self.quest.get("stage_n", 1),
-            highest_threat=max([p.threat for p in self.players] or [0]))
+        auto = xtargets.resolve(loc.get("threatX"), **self.x_context())
         if auto is not None and xtargets.auto_for(loc["threatX"].get("target")):
             loc["threat"] = auto
         return loc

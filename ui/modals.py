@@ -461,11 +461,8 @@ class LocationConfigModal:
 
     def _resolved(self):
         g = self.game
-        return xtargets.resolve(
-            self.threat_x, count=self.threat_count,
-            players=len(g.players),
-            stage=g.quest.get("stage_n", 1),
-            highest_threat=max([p.threat for p in g.players] or [0]))
+        return xtargets.resolve(self.threat_x, count=self.threat_count,
+                                **g.x_context())
 
     def on_button(self, btn):
         k = btn.id[0]
@@ -2031,11 +2028,8 @@ class QuestingProgressModal:
         g = self.game
         if g.quest.get("mode") != "formula":
             return g.quest["points"]
-        return xtargets.resolve(
-            g.quest.get("x"), count=g.quest.get("xCount"),
-            players=len(g.players),
-            stage=g.quest.get("stage_n", 1),
-            highest_threat=max([p.threat for p in g.players] or [0]))
+        return xtargets.resolve(g.quest.get("x"), count=g.quest.get("xCount"),
+                                **g.x_context())
 
     def _clamp_adj(self, cur, delta, cap=None):
         """Step a value, clamped. `cap` is the row's own target: progress
