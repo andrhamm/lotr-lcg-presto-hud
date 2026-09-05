@@ -9,15 +9,16 @@ import { h, raw, cx } from "./dom.js";
 import { renderPlayersSheet } from "./sheet_players.js";
 import { renderStagingSheet } from "./sheet_staging.js";
 import { renderMenuSheet } from "./sheet_menu.js";
+import { renderElimSheet } from "./sheet_elim.js";
 
-// Unknown kinds render nothing (not an error) - Task 3 adds "elim" (opened by
-// actions.js's afterTap before this file knows how to draw it), Task 7 adds
-// "resolve", and so on through the milestone. A sheet kind not yet wired up
-// here is a no-op overlay, never a crash.
+// Unknown kinds render nothing (not an error) - Task 7 adds "resolve", and so
+// on through the milestone. A sheet kind not yet wired up here is a no-op
+// overlay, never a crash.
 const RENDERERS = {
   players: renderPlayersSheet,
   staging: renderStagingSheet,
   menu: renderMenuSheet,
+  elim: renderElimSheet,
 };
 
 export function renderSheet(game, ui) {

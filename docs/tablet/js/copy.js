@@ -43,4 +43,16 @@ export const CHROME = {
   cancel: "Cancel",
   playersSheetFooter: "Every change is logged as it happens. Done just closes the sheet.",
   newGameWarning: "The current game is saved until you start a new one.",
+  // The elimination sheet (Task 3). "%d" is the fmt() placeholder used the
+  // same way OUTCOME's templates are (docs/js/viewcopy.js) - see
+  // sheet_elim.js. The only rules claim in elimEliminateBody is "threat at
+  // or above the elimination level eliminates the player" - Rules Reference,
+  // "Elimination" (7.4); nothing here invents a card example beyond that.
+  elimTitle: "P%d reaches %d",
+  elimEliminate: "Eliminated",
+  elimEliminateBody: "Threat at or above the elimination level - out for the rest of the game.",
+  elimAvert: "Averted by card effect",
+  elimAvertBody: "Threat drops to %d, player stays in.",
+  elimLevelQuestion: "Elimination level changed?",
+  elimSet: "Set",
 };

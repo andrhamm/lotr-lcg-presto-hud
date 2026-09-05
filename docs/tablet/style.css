@@ -232,3 +232,17 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .ssheet-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .ssheet-controls { display: flex; align-items: center; gap: 8px; }
 .ssheet-val { display: flex; align-items: center; gap: 6px; min-width: 56px; justify-content: center; }
+
+/* The elimination sheet (Task 3): three choices, each its own card - confirm,
+   avert, or correct the level via a stepper cluster + Set. */
+.esheet-choices { display: flex; flex-direction: column; gap: 14px; }
+.esheet-choice { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+/* Direct-child combinator, not a bare descendant one: this must land on the
+   confirm/avert choices' own top-level cta (so it doesn't stretch full-width
+   in a column flex), and must NOT reach into the third choice's nested Set
+   button - that one is a flex item of .esheet-lvl (a row), and align-self
+   set there would fight that row's own align-items:center and knock Set out
+   of line with the stepper buttons beside it. */
+.esheet-choice > .cta { align-self: flex-start; }
+.esheet-lvl { display: flex; align-items: center; gap: 8px; }
+.esheet-lvl-val { display: flex; align-items: center; justify-content: center; min-width: 64px; }

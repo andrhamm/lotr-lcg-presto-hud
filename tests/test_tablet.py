@@ -645,3 +645,121 @@ console.log(JSON.stringify({ scrim: /class="scrim"[^>]*data-act="sheet_close"/.t
   rows: html.includes('data-act="stg5"') && html.includes('data-act="stgen+"') && html.includes('data-act="stgloc+"') }));
 """)
     assert js["scrim"] and js["stop"] and js["rows"]
+
+
+def test_elim_sheet_opens_on_threat_crossing_and_avert_reverts_it():
+    """afterTap() is the auto-open app.js also calls after every perform() -
+    this replicates that per-tap loop under node so the sheet's own opening
+    is testable without a DOM. avertElimination()'s log line is the model's
+    own (gamestate.js), asserted here byte-identical - see EliminationModal's
+    "avert" case (docs/js/screens.js) for the twin's matching act."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, afterTap, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); const ui = newUi();
+let opened = null;
+for (let n = 0; n < 5; n++) {
+  perform(g, ui, "thr", "1:5");
+  afterTap(g, ui);
+  if (ui.sheet && opened === null) opened = { kind: ui.sheet.kind, i: ui.sheet.i, level: ui.sheet.level, tapsSoFar: n + 1 };
+}
+perform(g, ui, "elim_avert", "");
+console.log(JSON.stringify({ opened, threat: g.players[1].threat, pendingElim: g.pending_elim,
+  sheet: ui.sheet, log: g.log.at(-1).text }));
+""")
+    assert js["opened"] == {"kind": "elim", "i": 1, "level": 50, "tapsSoFar": 5}
+    assert js["threat"] == 45
+    assert js["pendingElim"] is None
+    assert js["sheet"] is None
+    assert js["log"] == "P2 avoided elimination (card effect) - threat set to 45"
+
+
+def test_elim_sheet_renders_and_confirm_lvl_setlvl_match_the_twin():
+    """Covers the three acts test_elim_sheet_opens_... doesn't: elim_confirm
+    (log line + pending_elim clear, player already eliminated so eliminated
+    stays true), elim_lvl's clamp at both ends (20..99, per
+    EliminationModal.onButton), and elim_setlvl's two branches - still
+    eliminated at the recalibrated level (both log lines, matching the
+    twin's "if (p.eliminated) {...}" branch) vs. no longer eliminated (one
+    log line, matching its "else" branch)."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, afterTap, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(3, 45); g.advanceView(); const ui = newUi();
+
+perform(g, ui, "thr", "0:5"); afterTap(g, ui);            // P1: 45 -> 50, crosses
+const opened = { kind: ui.sheet.kind, i: ui.sheet.i, level: ui.sheet.level };
+const html = layout(g, ui);
+perform(g, ui, "elim_confirm", "");
+const confirmed = { pendingElim: g.pending_elim, sheet: ui.sheet, eliminated: g.players[0].eliminated,
+  log: g.log.at(-1).text };
+
+perform(g, ui, "thr", "1:5"); afterTap(g, ui);            // P2: 45 -> 50, crosses
+perform(g, ui, "elim_lvl", "5");                          // 50 -> 55
+perform(g, ui, "elim_lvl", "-100");                       // clamps down to 20
+const clampedLow = ui.sheet.level;
+perform(g, ui, "elim_lvl", "500");                        // clamps up to 99
+const clampedHigh = ui.sheet.level;
+perform(g, ui, "elim_lvl", "-49");                        // 99 -> 50, back where it crossed
+perform(g, ui, "elim_setlvl", "");                        // still >= 50: stays eliminated
+const stillElim = { level: g.players[1].elimination, eliminated: g.players[1].eliminated,
+  pendingElim: g.pending_elim, sheet: ui.sheet, log: g.log.slice(-2).map(e => e.text) };
+
+perform(g, ui, "thr", "2:5"); afterTap(g, ui);            // P3: 45 -> 50, crosses
+perform(g, ui, "elim_lvl", "5"); perform(g, ui, "elim_lvl", "5");   // 50 -> 60, above the threat
+perform(g, ui, "elim_setlvl", "");                        // no longer eliminated
+const revived = { level: g.players[2].elimination, eliminated: g.players[2].eliminated,
+  pendingElim: g.pending_elim, sheet: ui.sheet, log: g.log.at(-1).text };
+
+console.log(JSON.stringify({ opened, sheet: html.includes('class="sheet sheet-elim"'),
+  buttons: ["elim_confirm", "elim_avert", "elim_lvl", "elim_setlvl"].every(a => html.includes(`data-act="${a}"`)),
+  title: html.includes("P1") && html.includes("50"),
+  confirmed, clampedLow, clampedHigh, stillElim, revived }));
+""")
+    assert js["opened"] == {"kind": "elim", "i": 0, "level": 50}
+    assert js["sheet"] and js["buttons"] and js["title"]
+    assert js["confirmed"] == {
+        "pendingElim": None, "sheet": None, "eliminated": True,
+        "log": "P1 eliminated (threat 50 >= level 50)",
+    }
+    assert js["clampedLow"] == 20
+    assert js["clampedHigh"] == 99
+    assert js["stillElim"] == {
+        "level": 50, "eliminated": True, "pendingElim": None, "sheet": None,
+        "log": ["P2 elimination level set to 50", "P2 eliminated (threat 50 >= level 50)"],
+    }
+    assert js["revived"] == {
+        "level": 60, "eliminated": False, "pendingElim": None, "sheet": None,
+        "log": "P3 elimination level set to 60",
+    }
+
+
+def test_elim_sheet_avert_preview_tracks_the_committed_level_not_the_draft():
+    """Nudging the +/- stepper only edits ui.sheet.level (a draft, per
+    elim_lvl above) - it does not touch p.elimination until elim_setlvl
+    commits it. The title and the avert-button's preview text must read
+    p.elimination throughout, exactly like EliminationModal.draw() reads it
+    (docs/js/screens.js) for its own equivalent line, never the stepper's own
+    draft number - otherwise nudging the stepper without tapping Set would
+    make the preview lie about what tapping elim_avert is about to do."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, afterTap, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 45); g.advanceView(); const ui = newUi();
+perform(g, ui, "thr", "0:5"); afterTap(g, ui);   // P1: 45 -> 50, crosses (elimination 50)
+perform(g, ui, "elim_lvl", "5");                 // draft only: ui.sheet.level -> 55
+const html = layout(g, ui);
+console.log(JSON.stringify({
+  draftLevel: ui.sheet.level, committedLevel: g.players[0].elimination,
+  title: html.includes("P1") && html.includes(" 50<") && !html.includes(" 55<"),
+  avertBody: html.includes("Threat drops to 45,") && !html.includes("Threat drops to 50,"),
+}));
+""")
+    assert js["draftLevel"] == 55 and js["committedLevel"] == 50
+    assert js["title"], "title must still read the committed level, not the stepper's draft"
+    assert js["avertBody"], "avert preview must still read Math.max(0, committed - 5), not the draft"
