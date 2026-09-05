@@ -1063,6 +1063,23 @@ class GameState:
         self.enter_view(landing)
         return landing
 
+    def skip_offer(self):
+        """The skip this view offers, with the tracker's opinion of it, or None.
+
+        `promoted` means the tracked counts say the claim holds. The player
+        decides either way - a tracker, not a referee - so the counts inform
+        the button and never remove it: the tablet draws a promoted offer in
+        amber and a demoted one plain, and the confirm names the counts.
+        """
+        offered = skips_from(self.view)
+        if not offered:
+            return None
+        engaged = self.engaged_total()
+        return {"skip": offered[0],
+                "promoted": engaged == 0 and self.staging_enemies == 0,
+                "engaged": engaged,
+                "staging_enemies": self.staging_enemies}
+
     def advance_view(self):
         """Move to the next view; staging skips resolution (that view is only
         entered by a successful resolve). The one-time setup phase leads into

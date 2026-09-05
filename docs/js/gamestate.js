@@ -883,6 +883,20 @@ export class GameState {
     return landing;
   }
 
+  // The skip this view offers, with the tracker's opinion of it, or null.
+  // `promoted` means the tracked counts say the claim holds. The player
+  // decides either way - a tracker, not a referee - so the counts inform the
+  // button and never remove it: the tablet draws a promoted offer in amber
+  // and a demoted one plain, and the confirm names the counts.
+  skipOffer() {
+    const offered = skipsFrom(this.view);
+    if (!offered.length) return null;
+    const engaged = this.engagedTotal();
+    return { skip: offered[0],
+             promoted: engaged === 0 && this.staging_enemies === 0,
+             engaged, staging_enemies: this.staging_enemies };
+  }
+
   advanceView() {
     if (this.view === "quest_setup") {
       // The one-time setup view leads into round 1 and is never revisited. A

@@ -124,3 +124,38 @@ def test_flow_views_is_a_copy_under_both_policies():
     fv = flow_views()
     fv.append("nope")
     assert "nope" not in flow_views()
+
+
+def test_no_offer_where_no_skip_is_declared():
+    g = _round1()
+    assert g.skip_offer() is None
+
+
+def test_offer_is_promoted_when_the_tracker_agrees_with_the_claim():
+    set_window_policy(WINDOW_POLICY_BANDS)
+    g = _round1()
+    g.enter_view("enc_checks")
+    o = g.skip_offer()
+    assert o["skip"]["id"] == "combat_empty"
+    assert o["promoted"] is True
+    assert (o["engaged"], o["staging_enemies"]) == (0, 0)
+
+
+def test_offer_is_demoted_but_still_there_when_enemies_are_tracked():
+    """A tracker, not a referee: the counts inform the button, they never
+    remove it. The player may know something the tracker does not."""
+    set_window_policy(WINDOW_POLICY_BANDS)
+    g = _round1()
+    g.enter_view("enc_checks")
+    g.set_engaged(1, 2)
+    g.set_staging_enemies(1)
+    o = g.skip_offer()
+    assert o["promoted"] is False
+    assert (o["engaged"], o["staging_enemies"]) == (2, 1)
+    assert g.skip_to("combat_empty") == "combat_player"
+
+
+def test_offer_works_under_the_views_policy_too():
+    g = _round1()
+    g.enter_view("aw_enc_checks")
+    assert g.skip_offer()["promoted"] is True

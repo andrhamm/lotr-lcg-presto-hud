@@ -151,6 +151,8 @@ console.log(JSON.stringify({
   view: g.view,
   step: g.step,
   skipText: g.log.filter(e => String(e.text || "").includes("Skipped")).map(e => e.text),
+  offer: (() => { const o = g.skipOffer(); return o && { id: o.skip.id, promoted: o.promoted, engaged: o.engaged, staging_enemies: o.staging_enemies }; })(),
+  offerBeforeSkip: (() => { const h = new GameState(); h.advanceView(); h.enterView(%(origin)r); h.setEngaged(0, 1); const o = h.skipOffer(); return o && { promoted: o.promoted, engaged: o.engaged }; })(),
   walk: seen,
   offFlow: (() => { const h = new GameState(); h.advanceView(); h.enterView("aw_quest_resolution"); return [h.nextView(), h.prevView()]; })(),
 }));
@@ -191,6 +193,13 @@ def test_phase_skip_behaves_identically_in_both_twins(policy, origin):
     assert js["view"] == g.view
     assert js["step"] == g.step
     assert js["skipText"] == [e["text"] for e in g.log if "Skipped" in str(e.get("text", ""))]
+    assert js["offer"] is None                 # the skip was already taken
+    h = GameState()
+    h.advance_view()
+    h.enter_view(origin)
+    h.set_engaged(0, 1)
+    o = h.skip_offer()
+    assert js["offerBeforeSkip"] == {"promoted": o["promoted"], "engaged": o["engaged"]}
 
     walk = GameState()
     walk.advance_view()
