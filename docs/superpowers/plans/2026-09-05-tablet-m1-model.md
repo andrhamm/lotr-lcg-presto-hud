@@ -927,8 +927,10 @@ In `prev_view`, replace the final two lines:
         prev = order[i - 1]
         # Under "bands" the resolution view sits between staging and travel in
         # the flow, but it is only entered by a resolve; going back from travel
-        # without one lands on staging.
-        if prev == "quest_resolution" and not self.quest_resolved:
+        # without one lands on staging. Bands only: under "views" Back from
+        # travel reaches the resolution window first, exactly as before.
+        if (_window_policy[0] == WINDOW_POLICY_BANDS
+                and prev == "quest_resolution" and not self.quest_resolved):
             return "quest_staging"
         return prev
 ```
@@ -1017,8 +1019,10 @@ export const skipsFrom = view => {
     const prev = order[i - 1];
     // Under "bands" the resolution view sits between staging and travel in the
     // flow, but it is only entered by a resolve; going back from travel
-    // without one lands on staging.
-    if (prev === "quest_resolution" && !this.quest_resolved) return "quest_staging";
+    // without one lands on staging. Bands only: under "views" Back from travel
+    // reaches the resolution window first, exactly as before.
+    if (_windowPolicy === WINDOW_POLICY_BANDS
+        && prev === "quest_resolution" && !this.quest_resolved) return "quest_staging";
     return prev;
 ```
 
