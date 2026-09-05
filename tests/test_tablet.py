@@ -82,3 +82,61 @@ console.log(JSON.stringify({ names: Object.keys(ICONS).sort().slice(0, 4),
     assert "THREAT" in js["names"] or "ARCHERY" in js["names"]
     assert js["threat"].startswith("<svg") and 'viewBox="0 0 20 20"' in js["threat"]
     assert js["threat"].count("<path") == 2      # shadow first, then the fill
+
+
+_WALK = """
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, setBoardTracking } from "../../js/gamestate.js";
+import { dispatch, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS); setBoardTracking(true);
+const g = new GameState(4, 25);
+g.advanceView();                       // setup -> round 1 (no catalog: a bare game)
+[3, 4, 2, 2].forEach((c, i) => g.setCommit(i, c));
+g.quest.points = 20;                   // room enough that the walk never clears the stage
+const ui = newUi();
+const taps = [];
+const tap = (act, arg) => { taps.push(act); return dispatch(g, ui, act, arg ?? ""); };
+tap("advance");                        // resource -> planning
+tap("advance");                        // planning -> quest_commit
+tap("wp-");                            // 11 -> 10, detached total
+tap("advance");                        // -> quest_staging
+tap("stg+"); tap("stg+"); tap("stg+");
+tap("resolve");                        // -> quest_resolution, resolved
+const budget = g.pending_budget;
+tap("apply_alloc");
+const placed = g.quest.progress;
+tap("advance");                        // -> travel
+tap("advance");                        // -> enc_optional
+tap("advance");                        // -> enc_checks
+tap("advance");                        // -> combat_shadow
+tap("advance");                        // -> combat_enemy
+tap("advance");                        // -> combat_player
+tap("advance");                        // -> refresh
+tap("advance");                        // -> round_end
+"""
+# _WALK prints nothing; each test appends the one console.log it wants.
+
+
+def test_the_m2_walk_reaches_round_end_in_17_taps():
+    """The HUD's tap-budget walk minus the shadow-effect threat edits (those
+    need the players sheet, milestone 3). 31 taps on the HUD for the whole
+    walk; 17 here for this part of it, and the count is the gate."""
+    js = node(_WALK + """
+console.log(JSON.stringify({ taps: taps.length, view: g.view, round: g.round,
+  willpower: g.willpower, staging: g.staging, budget, placed,
+  unknown: dispatch(g, ui, "nope", ""), first: g.first_player }));
+""")
+    assert js["view"] == "round_end"
+    assert js["round"] == 1
+    assert js["taps"] <= 17
+    assert js["willpower"] == 10 and js["staging"] == 3
+    assert js["budget"] == 7 and js["placed"] == 7
+    assert js["first"] == 1              # the token passed on arrival at refresh
+    assert js["unknown"] is False
+
+
+def test_endround_starts_the_next_round():
+    js = node(_WALK + """
+const changed = dispatch(g, ui, "endround", "");
+console.log(JSON.stringify({ changed, view: g.view, round: g.round }));
+""")
+    assert js == {"changed": True, "view": "resource", "round": 2}
