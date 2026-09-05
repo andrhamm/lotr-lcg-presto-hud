@@ -132,7 +132,7 @@ def test_screen_play_twins_expose_the_same_methods():
 
 
 _SKIP_PROBE = """\
-import { skipsFrom, lastWindowBefore, isActionWindow, VIEW_ORDER, SKIPS,
+import { skipsFrom, lastWindowBefore, isActionWindow, SKIPS,
          GameState, setWindowPolicy, flowViews } from "./gamestate.js";
 setWindowPolicy(%(policy)r);
 const g = new GameState();
@@ -152,7 +152,7 @@ console.log(JSON.stringify({
   step: g.step,
   skipText: g.log.filter(e => String(e.text || "").includes("Skipped")).map(e => e.text),
   offer: (() => { const o = g.skipOffer(); return o && { id: o.skip.id, promoted: o.promoted, engaged: o.engaged, staging_enemies: o.staging_enemies }; })(),
-  offerBeforeSkip: (() => { const h = new GameState(); h.advanceView(); h.enterView(%(origin)r); h.setEngaged(0, 1); const o = h.skipOffer(); return o && { promoted: o.promoted, engaged: o.engaged }; })(),
+  offerBeforeSkip: (() => { const h = new GameState(); h.advanceView(); h.enterView(%(origin)r); h.setEngaged(0, 1); h.setStagingEnemies(1); const o = h.skipOffer(); return o && { promoted: o.promoted, engaged: o.engaged, staging_enemies: o.staging_enemies }; })(),
   walk: seen,
   offFlow: (() => { const h = new GameState(); h.advanceView(); h.enterView("aw_quest_resolution"); return [h.nextView(), h.prevView()]; })(),
 }));
@@ -193,13 +193,15 @@ def test_phase_skip_behaves_identically_in_both_twins(policy, origin):
     assert js["view"] == g.view
     assert js["step"] == g.step
     assert js["skipText"] == [e["text"] for e in g.log if "Skipped" in str(e.get("text", ""))]
-    assert js["offer"] is None                 # the skip was already taken
+    assert js["offer"] == g.skip_offer()        # the skip was already taken - None on both
     h = GameState()
     h.advance_view()
     h.enter_view(origin)
     h.set_engaged(0, 1)
+    h.set_staging_enemies(1)
     o = h.skip_offer()
-    assert js["offerBeforeSkip"] == {"promoted": o["promoted"], "engaged": o["engaged"]}
+    assert js["offerBeforeSkip"] == {"promoted": o["promoted"], "engaged": o["engaged"],
+                                     "staging_enemies": o["staging_enemies"]}
 
     walk = GameState()
     walk.advance_view()
@@ -316,3 +318,80 @@ def test_tracked_counts_behave_identically_in_both_twins():
     assert js["xctxOff"] == sorted(_XCTX_JS_KEY[k] for k in g.x_context())
     gamestate.set_board_tracking(True)
     assert js["xctxOn"] == {_XCTX_JS_KEY[k]: v for k, v in g.x_context().items()}
+
+
+# xtargets.resolve()'s Python kwarg names, in docs/js/xtargets.js resolve()'s
+# option-object spelling.
+_RESOLVE_JS_KEY = {"count": "count", "players": "players", "stage": "stage",
+                   "highest_threat": "highestThreat", "enemies": "enemies",
+                   "staging_locations": "stagingLocations"}
+
+# (description, spec, kwargs) - kwargs are xtargets.resolve()'s Python
+# keyword names; unset ones take that function's own defaults on both twins.
+_XRESOLVE_CASES = [
+    ("players auto ignores a stale count",
+     {"target": "players"}, {"count": 99, "players": 3}),
+    ("stage auto ignores a stale count",
+     {"target": "stage_number"}, {"count": 99, "stage": 4}),
+    ("highest_threat auto ignores a stale count",
+     {"target": "highest_threat"}, {"count": 99, "highest_threat": 37}),
+    ("enemies auto, tracker present, ignores a stale count",
+     {"target": "enemies_in_play"}, {"count": 99, "enemies": 6}),
+    ("staging_locations auto, tracker present, ignores a stale count",
+     {"target": "locations_in_staging"}, {"count": 99, "staging_locations": 2}),
+    ("enemies tracker absent falls back to the count",
+     {"target": "enemies_in_play"}, {"count": 8}),
+    ("enemies tracker and count both absent resolves to nothing",
+     {"target": "enemies_in_play"}, {}),
+    ("staging_locations tracker absent falls back to the count",
+     {"target": "locations_in_staging"}, {"count": 8}),
+    ("staging_locations tracker and count both absent resolves to nothing",
+     {"target": "locations_in_staging"}, {}),
+    # The deferred "enemies == 0" gap: a tracked zero must resolve to 0, not
+    # fall back to the stale count as if the tracker had nothing to say.
+    ("enemies tracker present and zero resolves to zero, not the stale count",
+     {"target": "enemies_in_play"}, {"count": 5, "enemies": 0}),
+    ("staging_locations tracker present and zero resolves to zero, not the stale count",
+     {"target": "locations_in_staging"}, {"count": 5, "staging_locations": 0}),
+    ("a non-auto target with a count",
+     {"target": "nazgul_in_play"}, {"count": 3}),
+    ("a non-auto target without a count resolves to nothing",
+     {"target": "nazgul_in_play"}, {}),
+    ("mul/add arithmetic on the count path",
+     {"target": "nazgul_in_play", "mul": 2, "add": 3}, {"count": 4}),
+    ("mul/add arithmetic on an auto path",
+     {"target": "players", "mul": 2, "add": 1}, {"players": 3}),
+    ("value never goes below zero",
+     {"target": "nazgul_in_play", "add": -100}, {"count": 1}),
+    ("an empty spec resolves to nothing, same as a missing one",
+     {}, {"count": 5}),
+    ("a None/null spec resolves to nothing",
+     None, {"count": 5}),
+]
+
+_XTARGETS_RESOLVE_PROBE = """\
+import { resolve } from "./xtargets.js";
+const cases = %s;
+console.log(JSON.stringify(cases.map(([spec, opts]) => resolve(spec, opts))));
+"""
+
+
+def test_xtargets_resolve_behaves_identically_in_both_twins():
+    """docs/js/xtargets.js's resolve() is hand-mirrored - tools/gen_web_data.py
+    embeds it as a fixed string rather than deriving it from xtargets.py's
+    source, so nothing but an executed probe catches the two disagreeing.
+    One already did: an empty spec ({}) used to resolve through the JS twin
+    instead of returning null, because `{}` is truthy in JS where an empty
+    dict is falsy in Python - fixed alongside this probe.
+    """
+    import xtargets
+
+    js_cases = [[spec, {_RESOLVE_JS_KEY[k]: v for k, v in kwargs.items()}]
+               for _, spec, kwargs in _XRESOLVE_CASES]
+    js = _js_facts(_XTARGETS_RESOLVE_PROBE % json.dumps(js_cases))
+
+    expected = [xtargets.resolve(spec, **kwargs) for _, spec, kwargs in _XRESOLVE_CASES]
+    mismatches = [(desc, py, got) for (desc, _, _), py, got
+                 in zip(_XRESOLVE_CASES, expected, js) if py != got]
+    assert not mismatches, mismatches
+    assert js == expected

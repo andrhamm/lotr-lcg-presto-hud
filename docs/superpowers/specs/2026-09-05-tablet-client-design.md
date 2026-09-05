@@ -286,19 +286,22 @@ together, with parity tests. The Presto UI draws none of them.
   lists fields explicitly (`threat`, `eliminated`, `commit`), so `engaged`
   is added there or the delta engine will not see it.
 - **`staging_enemies`, `staging_locations`** (ints, default 0) on the game:
-  `toDict`/`fromDict`/`snapshot`, log lines "Staging enemies 1 -> 2",
-  keyed tallies like `staging`.
-- **`xtargets`:** `enemies_in_play` gains an auto source (engaged total +
-  enemies in staging) and `locations_in_staging` gains one (staging
-  locations). `xtargets.py` + regenerated `docs/js/xtargets.js`; the
-  hand-mirrored `resolve()` gains the two cases.
+  `toDict`/`fromDict`/`snapshot`, log lines with state phrasing like
+  "Staging enemies 2" (not a delta), for the same reason `set_staging`
+  does, keyed tallies like `staging`.
+- **`xtargets`:** `enemies_in_play` and `locations_in_staging` gain
+  tracker-backed auto sources - `resolve()` takes `enemies`/
+  `staging_locations` and falls back to the supplied count when they are
+  absent, and the game supplies them only when `set_board_tracking(True)`
+  is on (default off; the Presto never sets it). `xtargets.py` + regenerated
+  `docs/js/xtargets.js`; the hand-mirrored `resolve()` gains the two cases.
 - **Window policy:** a module-level `WINDOW_POLICY` (`"views"` | `"bands"`),
   default `"views"`, set once by the client at boot. With `"bands"`,
   `nextView()`/`prevView()` step over `aw_` entries and `SKIPS` `from`
   resolves to the phase view. `lastWindowBefore`, `isActionWindow`,
   `enterView`'s window handling and every test under `"views"` are
-  unchanged. `tests/test_phase_skip.py` and `test_twin_parity.py` run the
-  skip landing and the offering set under both policies.
+  unchanged. `tests/test_window_policy.py` and `test_twin_parity.py` run
+  the skip landing and the offering set under both policies.
 - **Skip offer state:** `skipOffer(game)` → `{skip, promoted: bool,
   counts}` in both twins (the Presto may ignore it).
 
@@ -441,3 +444,9 @@ Sequence, not the plan. Each is a PR that leaves both twins green.
 - **Same-origin storage:** without the key prefix, opening the tablet and
   the web twin in the same browser would clobber saves. The prefix lands
   in milestone 1's `db.js` change, before any tablet code persists.
+- **A tracker-backed auto threat is frozen at placement.** `_seat_location`
+  writes the resolved threat once, but with board tracking on,
+  `locations_in_staging` changes live; the location modal recomputes it and
+  shows no stepper. Milestone 2 must either re-resolve the seat's threat
+  when the count changes or keep the stepper. Unreachable until a client
+  enables tracking.

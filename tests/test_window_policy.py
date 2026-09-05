@@ -15,8 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import gamestate
 from gamestate import (GameState, VIEW_ORDER, WINDOW_POLICY_BANDS,
-                       WINDOW_POLICY_VIEWS, flow_views, is_action_window,
-                       is_window_view, set_window_policy, skips_from,
+                       WINDOW_POLICY_VIEWS, flow_views, is_window_view,
+                       phase_view_of, set_window_policy, skips_from,
                        window_policy)
 
 
@@ -79,9 +79,15 @@ def test_the_skip_moves_to_the_phase_view_under_bands():
     set_window_policy(WINDOW_POLICY_BANDS)
     offering = [v for v in flow_views() if skips_from(v)]
     assert offering == ["enc_checks"]
-    # and that view IS an action window: the player stands on the window the
-    # skip would otherwise have eaten
-    assert is_action_window("enc_checks")
+    # Under bands the origin's own window is the origin itself: enc_checks IS
+    # aw_enc_checks's phase view, and aw_enc_checks itself has been dropped
+    # from the flow - so the player stands on the window the skip would
+    # otherwise have eaten, rather than merely on some action-window view
+    # (almost every phase view is one, since a window view shares its phase
+    # view's step id - is_action_window("enc_checks") alone would not prove
+    # this).
+    assert phase_view_of("aw_enc_checks") == "enc_checks"
+    assert "aw_enc_checks" not in flow_views()
 
 
 def test_the_skip_lands_and_logs_the_same_under_bands():
@@ -113,6 +119,21 @@ def test_bands_navigation_is_total_from_a_window_entered_directly():
     assert g.prev_view() == "quest_staging"
     g.advance_view()
     assert g.view == "travel"
+
+
+@pytest.mark.parametrize("policy", [WINDOW_POLICY_VIEWS, WINDOW_POLICY_BANDS])
+def test_navigation_is_total_over_an_unknown_view(policy):
+    """A save written by a future build (or one that has otherwise drifted)
+    can carry a view id neither twin recognises - from_dict accepts
+    d["view"] verbatim, and can_go_back() runs on the Presto's play-screen
+    draw path every frame. Navigation must resolve to nothing there, never
+    raise."""
+    set_window_policy(policy)
+    g = _round1()
+    g.view = "some_legacy_view"
+    assert g.next_view() is None
+    assert g.prev_view() is None
+    assert g.can_go_back() is False
 
 
 def test_flow_views_is_a_copy_under_both_policies():

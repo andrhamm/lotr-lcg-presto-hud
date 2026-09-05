@@ -97,9 +97,15 @@ def test_the_web_twin_keeps_localstorage_in_its_client_too():
             continue
         for dirpath, _dirs, files in os.walk(top):
             for fn in sorted(files):
-                if not fn.endswith(".js") or fn == "db.js":
+                if not fn.endswith(".js"):
                     continue
                 path = os.path.join(dirpath, fn)
+                # Only docs/js/db.js is the exempt client - not any file
+                # named db.js at any depth (a future docs/tablet/db.js would
+                # need its own exemption, and localStorage anywhere else
+                # under either directory is still a violation).
+                if os.path.relpath(path, ROOT) == os.path.join("docs", "js", "db.js"):
+                    continue
                 with open(path) as f:
                     for i, line in enumerate(f, 1):
                         if "localStorage" in line and not line.strip().startswith("//"):

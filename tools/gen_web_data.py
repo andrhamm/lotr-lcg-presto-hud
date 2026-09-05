@@ -110,7 +110,9 @@ export function valueOf(count, mul = 1, add = 0) {
 export function resolve(spec, { count = null, players = 1, stage = 1,
                                 highestThreat = 0, enemies = null,
                                 stagingLocations = null } = {}) {
-  if (!spec) return null;
+  // Python's `if not spec` is falsy on an empty dict too, not just None -
+  // matched here explicitly, since {} is truthy in JS.
+  if (!spec || Object.keys(spec).length === 0) return null;
   const mul = spec.mul ?? 1, add = spec.add ?? 0;
   switch (autoFor(spec.target)) {
     case AUTO_PLAYERS: return valueOf(players, mul, add);

@@ -155,11 +155,14 @@ SKIPS = (
     {
         "id": "combat_empty",
         # Offered ONLY from the encounter window, never from enc_checks
-        # itself. From the phase view, taking the skip would jump the player
-        # over aw_enc_checks - the encounter phase's OWN window, which they
-        # have not had yet. A skip may pass windows on the way to its landing,
-        # but it must never eat the window of the phase the player is standing
-        # in.
+        # itself - true under "views". From the phase view, taking the skip
+        # would jump the player over aw_enc_checks - the encounter phase's OWN
+        # window, which they have not had yet. A skip may pass windows on the
+        # way to its landing, but it must never eat the window of the phase
+        # the player is standing in. Under "bands" skips_from() offers it ON
+        # enc_checks instead: the window is drawn on its step's own view under
+        # that policy, so enc_checks IS the window, and the player is already
+        # standing on it.
         "from": ("aw_enc_checks",),
         "to": "refresh",
         "label": "No enemies. Skip combat.",
@@ -993,6 +996,11 @@ class GameState:
         # view instead of raising. Under "views" every view is already in
         # order, so this is a no-op there.
         v = self.view if self.view in order else phase_view_of(self.view)
+        if v not in order:
+            # An unrecognised view id (a save from a future build, say) has
+            # no forward step. Total, like the JS twin - null there is None
+            # here, not a ValueError from order.index().
+            return None
         i = order.index(v)
         nxt = order[(i + 1) % len(order)]
         # Resolution is entered only by a successful resolve, so whichever
@@ -1054,7 +1062,11 @@ class GameState:
         # total). Index its phase view instead; a landing whose phase view IS
         # the current view is still refused, via the j <= i guard below.
         landing = landing if landing in order else phase_view_of(landing)
-        i, j = order.index(self.view), order.index(landing)
+        # Same off-flow mapping for the origin as for the landing above - an
+        # off-flow window entered directly (see next_view/prev_view) must not
+        # refuse to index just because it is the one standing off the flow.
+        origin = self.view if self.view in order else phase_view_of(self.view)
+        i, j = order.index(origin), order.index(landing)
         if j <= i:
             return None
         passed = order[i + 1:j]
@@ -1098,6 +1110,8 @@ class GameState:
             self.enter_view("quest_commit")
             return
         nxt = self.next_view()
+        if nxt is None:
+            return  # an unrecognised view has no next step; a no-op, not enter_view(None)
         self.enter_view(nxt)
         # A Sailing test begins by shifting one step off-course (rulebook p.6).
         # That is an ARRIVAL effect, once per round - backing out to Planning
@@ -1137,6 +1151,10 @@ class GameState:
         # rather than refusing to navigate. Under "views" every view is
         # already in order, so this is a no-op there.
         v = v if v in order else phase_view_of(v)
+        if v not in order:
+            # An unrecognised view id has no view behind it either - total,
+            # like the JS twin - null there is None here.
+            return None
         i = order.index(v)
         # A closed round is a hard floor: end_round() has already banked its
         # stats, bumped the counter and re-derived the willpower total.

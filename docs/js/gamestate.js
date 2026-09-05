@@ -102,11 +102,14 @@ export function lastWindowBefore(target) {
 export const SKIPS = [
   {
     id: "combat_empty",
-    // Offered ONLY from the encounter window, never from enc_checks itself:
-    // from the phase view this would jump the player over aw_enc_checks, the
-    // encounter phase's OWN window, which they have not had yet. A skip may
-    // pass windows on the way to its landing; it must never eat the window of
-    // the phase the player is standing in.
+    // Offered ONLY from the encounter window, never from enc_checks itself -
+    // true under "views". From the phase view this would jump the player
+    // over aw_enc_checks, the encounter phase's OWN window, which they have
+    // not had yet. A skip may pass windows on the way to its landing; it
+    // must never eat the window of the phase the player is standing in.
+    // Under "bands" skipsFrom() offers it ON enc_checks instead: the window
+    // is drawn on its step's own view under that policy, so enc_checks IS
+    // the window, and the player is already standing on it.
     from: ["aw_enc_checks"],
     to: "refresh",
     label: "No enemies. Skip combat.",
@@ -830,6 +833,11 @@ export class GameState {
     // instead of raising. Under "views" every view is already in order, so
     // this is a no-op there.
     const v = order.includes(this.view) ? this.view : phaseViewOf(this.view);
+    if (!order.includes(v)) {
+      // An unrecognised view id has no next step. Explicit, not the -1
+      // indexOf() would otherwise wrap into order[0] on the next line.
+      return null;
+    }
     const i = order.indexOf(v);
     let nxt = order[(i + 1) % order.length];
     // Resolution is entered only by a successful resolve, so whichever view
@@ -875,7 +883,11 @@ export class GameState {
     // phase view instead; a landing whose phase view IS the current view is
     // still refused, via the j <= i guard below.
     landing = order.includes(landing) ? landing : phaseViewOf(landing);
-    const i = order.indexOf(this.view), j = order.indexOf(landing);
+    // Same off-flow mapping for the origin as for the landing above - an
+    // off-flow window entered directly (see nextView/prevView) must not
+    // refuse to index just because it is the one standing off the flow.
+    const origin = order.includes(this.view) ? this.view : phaseViewOf(this.view);
+    const i = order.indexOf(origin), j = order.indexOf(landing);
     if (j <= i) return null;
     const passed = order.slice(i + 1, j);
     this.logEvent(`Skipped ${passed.length ? passed.join(", ") : "nothing"} - ${skip.claim}`);
@@ -910,6 +922,7 @@ export class GameState {
     }
     if (this.view === "quest_sailing") { this.enterView("quest_commit"); return; }
     const nxt = this.nextView();
+    if (nxt === null) return;  // an unrecognised view has no next step; a no-op, not enterView(null)
     this.enterView(nxt);
     // A Sailing test begins by shifting one step off-course (rulebook p.6).
     // That is an ARRIVAL effect, once per round - backing out to Planning and
@@ -946,6 +959,11 @@ export class GameState {
     // than refusing to navigate. Under "views" every view is already in
     // order, so this is a no-op there.
     v = order.includes(v) ? v : phaseViewOf(v);
+    if (!order.includes(v)) {
+      // An unrecognised view id has no view behind it either - explicit,
+      // not the indexOf() === -1 this would otherwise fall through to.
+      return null;
+    }
     const i = order.indexOf(v);
     // A closed round is a hard floor: endRound() has already banked its stats,
     // bumped the counter and re-derived the willpower total.

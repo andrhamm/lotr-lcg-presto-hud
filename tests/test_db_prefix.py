@@ -6,13 +6,11 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
 
 _PROBE = """\
 const store = new Map();
@@ -68,8 +66,14 @@ def _run():
         return json.loads(r.stdout)
 
 
-def test_two_prefixes_keep_two_games_apart():
-    js = _run()
+@pytest.fixture(scope="module")
+def js():
+    """The probe is one node process producing every fact these tests check;
+    run it once per module rather than once per test."""
+    return _run()
+
+
+def test_two_prefixes_keep_two_games_apart(js):
     assert "lotr-hud-state" in js["keys"]
     assert "lotr-tablet-state" in js["keys"]
     assert js["hudPlayers"] == 2
@@ -77,24 +81,21 @@ def test_two_prefixes_keep_two_games_apart():
     assert js["hudExists"] and js["tabExists"]
 
 
-def test_the_default_prefix_is_the_web_twins_existing_keys():
-    js = _run()
+def test_the_default_prefix_is_the_web_twins_existing_keys(js):
     assert js["defaults"]["state"] == "lotr-hud-state"
     assert js["defaults"]["replayJournal"] == "lotr-hud-replay-journal"
     assert js["defaults"]["rollup"] == "lotr-hud-stats"
     assert js["legacyState"] == "lotr-hud-state"
 
 
-def test_history_and_prefs_take_the_prefix_too():
-    js = _run()
+def test_history_and_prefs_take_the_prefix_too(js):
     assert "lotr-tablet-history" in js["keys"]
     assert "lotr-tablet-stats" in js["keys"]
     assert "lotr-tablet-prefs" in js["keys"]
     assert js["prefs"] == 50
 
 
-def test_clearing_one_client_leaves_the_other():
-    js = _run()
+def test_clearing_one_client_leaves_the_other(js):
     assert "lotr-hud-state" in js["cleared"]
     assert "lotr-tablet-state" not in js["cleared"]
     assert "lotr-tablet-log" not in js["cleared"]
