@@ -3,7 +3,6 @@
 // design-system copy rules have one place to hold the line.
 export const CHROME = {
   next: "Next",
-  back: "Back",
   players: "Players",
   quest: "Quest",
   staging: "Staging",

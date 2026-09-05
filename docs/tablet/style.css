@@ -132,7 +132,7 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .loop-rung { position: relative; display: flex; gap: 14px; padding-bottom: 16px; }
 .loop-rung:last-child { padding-bottom: 0; }
 .loop-rung:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 28px; bottom: 0; width: 2px; background: var(--border-gold); }
-.loop-num { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; background: var(--gold); color: var(--bg); display: flex; align-items: center; justify-content: center; font: 700 15px/1 var(--sans); }
+.loop-num { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; background: var(--gold); color: var(--bg); display: flex; align-items: center; justify-content: center; font: 700 13px/1 var(--sans); }
 .loop-rung-body { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 3px; }
 /* First text line + its window dot share a row; the sub-clause (if any)
    sits below, per loop-rung-body's own column stack. */
