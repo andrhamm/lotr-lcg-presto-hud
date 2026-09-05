@@ -95,21 +95,33 @@ export function valueOf(count, mul = 1, add = 0) {
 }
 
 // The number to put on screen, or null when the player has not supplied a
-// count yet. An auto target ignores `count` and recomputes from the tracked
-// value - that is the whole point of tagging those separately: "X is 4 per
-// player" must follow the player count without anyone touching a stepper.
-// GameState.xContext() supplies every tracked value by these option names.
+// count yet. AUTO_PLAYERS, AUTO_STAGE and AUTO_HIGHEST_THREAT ignore `count`
+// and recompute from the tracked value - that is the whole point of tagging
+// those separately: "X is 4 per player" must follow the player count without
+// anyone touching a stepper.
+//
+// AUTO_ENEMIES and AUTO_STAGING_LOCATIONS are tracker-backed, not
+// unconditionally auto: when the client tracks the board they behave the
+// same way - followed, and a stale supplied count cannot override them.
+// Otherwise `enemies`/`stagingLocations` are null and this falls back to the
+// count path exactly as before, so the player supplies the count.
+// GameState.xContext() supplies every tracked value by these option names,
+// omitting the two tracker-only keys until the client tracks the board.
 export function resolve(spec, { count = null, players = 1, stage = 1,
-                                highestThreat = 0, enemies = 0,
-                                stagingLocations = 0 } = {}) {
+                                highestThreat = 0, enemies = null,
+                                stagingLocations = null } = {}) {
   if (!spec) return null;
   const mul = spec.mul ?? 1, add = spec.add ?? 0;
   switch (autoFor(spec.target)) {
     case AUTO_PLAYERS: return valueOf(players, mul, add);
     case AUTO_STAGE: return valueOf(stage, mul, add);
     case AUTO_HIGHEST_THREAT: return valueOf(highestThreat, mul, add);
-    case AUTO_ENEMIES: return valueOf(enemies, mul, add);
-    case AUTO_STAGING_LOCATIONS: return valueOf(stagingLocations, mul, add);
+    case AUTO_ENEMIES:
+      if (enemies !== null) return valueOf(enemies, mul, add);
+      break;
+    case AUTO_STAGING_LOCATIONS:
+      if (stagingLocations !== null) return valueOf(stagingLocations, mul, add);
+      break;
   }
   if (count === null) return null;
   return valueOf(count, mul, add);

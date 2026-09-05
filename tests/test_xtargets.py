@@ -62,9 +62,9 @@ def test_auto_targets_ignore_the_supplied_count():
 
 
 def test_a_player_target_needs_a_count_first():
-    # nazgul_in_play is a subset of enemies_in_play the tracker doesn't
-    # break out, so it stays player-supplied.
-    spec = {"target": "nazgul_in_play", "add": 1}
+    # enemies_in_play is tracker-backed, not unconditionally auto: with no
+    # `enemies` supplied (the untracked/Presto case) it still needs a count.
+    spec = {"target": "enemies_in_play", "add": 1}
     assert X.resolve(spec) is None          # nothing on screen yet
     assert X.resolve(spec, count=3) == 4
 
@@ -91,7 +91,8 @@ def test_only_tracked_values_are_auto():
 
 def test_enemies_and_staging_locations_are_answered_by_the_tracker():
     # The two counts the tablet tracks. Like the other auto targets, a stale
-    # supplied count must not override the tracked value.
+    # supplied count must not override the tracked value - when it is
+    # supplied at all.
     assert X.auto_for("enemies_in_play") == X.AUTO_ENEMIES
     assert X.auto_for("locations_in_staging") == X.AUTO_STAGING_LOCATIONS
     assert X.resolve({"target": "enemies_in_play"}, count=99, enemies=3) == 3
@@ -99,6 +100,12 @@ def test_enemies_and_staging_locations_are_answered_by_the_tracker():
                      count=99, enemies=3) == 7
     assert X.resolve({"target": "locations_in_staging"}, count=99,
                      staging_locations=2) == 2
+    # Tracker-backed, not unconditionally auto: with no tracked value supplied
+    # (the untracked/Presto case) these fall back to the count path exactly
+    # like any other target.
+    assert X.resolve({"target": "enemies_in_play"}, count=3) == 3
+    assert X.resolve({"target": "enemies_in_play"}) is None
+    assert X.resolve({"target": "locations_in_staging"}, count=2) == 2
 
 
 def test_the_auto_set_is_exactly_the_five_tracked_values():

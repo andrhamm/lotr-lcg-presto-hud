@@ -21,7 +21,7 @@ from viewcopy import PROGRESS_PLACEMENT, NO_CARD_TEXT, QUEST_SETUP
 MARGIN = 8
 import xtargets
 from ui import icons
-from gamestate import HEADINGS
+from gamestate import HEADINGS, board_tracking
 from ui.theme import DISPLAY, BODY, LABEL
 from quest_catalog import tips_for
 
@@ -270,7 +270,15 @@ class LocationConfigModal:
         self.threat_shape = None
         if self.threat_x:
             target = self.threat_x.get("target")
-            if xtargets.auto_for(target):
+            auto = xtargets.auto_for(target)
+            # AUTO_ENEMIES/AUTO_STAGING_LOCATIONS are tracker-backed: only
+            # skip the stepper when this client actually tracks the board -
+            # the same call xtargets.resolve makes via x_context(). The three
+            # always-on auto targets (players/stage/highest_threat) never
+            # need the guard.
+            tracker_backed = auto in (xtargets.AUTO_ENEMIES,
+                                      xtargets.AUTO_STAGING_LOCATIONS)
+            if auto and (not tracker_backed or board_tracking()):
                 self.threat_shape = "auto"
             elif (self.threat_x.get("mul", 1) == 1
                   and not self.threat_x.get("add")):
@@ -1307,9 +1315,9 @@ class LocationPickModal:
             # the staging area") read as the SAFEST location in the list - the
             # one whose threat scales with the board. locations_for already
             # hands the picker threatKind/pointsKind; only the pill threw them
-            # away. The tracker cannot resolve the count itself (xtargets marks
-            # locations_in_staging auto=None), so it shows X rather than
-            # inventing a number.
+            # away. The picker never resolves a live value here - the location
+            # is not placed yet, so it shows X rather than inventing a number,
+            # even for locations_in_staging now that it is tracker-backed.
             e_threat = "X" if e.get("threatKind") == "x" else (e.get("threat") or 0)
             e_points = "X" if e.get("pointsKind") == "x" else (e.get("points") or 0)
             pw = stat_pill(d, pal, 0, 0, e_threat, e_points, measure_only=True)

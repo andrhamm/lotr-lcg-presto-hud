@@ -199,7 +199,7 @@ def test_phase_skip_behaves_identically_in_both_twins():
 
 
 _TRACK_PROBE = """\
-import { GameState } from "./gamestate.js";
+import { GameState, setBoardTracking } from "./gamestate.js";
 const g = new GameState(2, 25);
 g.advanceView();
 const n0 = g.log.length;
@@ -213,6 +213,9 @@ const before = g.beginAction();
 g.setEngaged(1, 5);
 g.addDelta(before);
 g.undo();
+const xctxOff = Object.keys(g.xContext()).sort();
+setBoardTracking(true);
+const xctxOn = g.xContext();
 console.log(JSON.stringify({
   engaged: g.players.map(p => p.engaged),
   rowsAdded: g.log.length - n0,
@@ -224,8 +227,15 @@ console.log(JSON.stringify({
   snapStaging: [snap.staging_enemies, snap.staging_locations],
   totals: [g.engagedTotal(), g.enemiesInPlay()],
   undone: g.players[1].engaged,
+  xctxOff,
+  xctxOn,
 }));
 """
+
+# gamestate.py's x_context() keys, in gamestate.js's xContext() spelling.
+_XCTX_JS_KEY = {"players": "players", "stage": "stage",
+                "highest_threat": "highestThreat", "enemies": "enemies",
+                "staging_locations": "stagingLocations"}
 
 
 def _js_facts(probe):
@@ -249,6 +259,7 @@ def _js_facts(probe):
 
 
 def test_tracked_counts_behave_identically_in_both_twins():
+    import gamestate
     from gamestate import GameState
 
     js = _js_facts(_TRACK_PROBE)
@@ -277,3 +288,9 @@ def test_tracked_counts_behave_identically_in_both_twins():
     assert js["snapStaging"] == [snap["staging_enemies"], snap["staging_locations"]]
     assert js["totals"] == [g.engaged_total(), g.enemies_in_play()]
     assert js["undone"] == g.players[1].engaged
+
+    # x_context()/xContext() omit the tracker-only keys until the client says
+    # it tracks the board, and carry the same values as the other once it does.
+    assert js["xctxOff"] == sorted(_XCTX_JS_KEY[k] for k in g.x_context())
+    gamestate.set_board_tracking(True)
+    assert js["xctxOn"] == {_XCTX_JS_KEY[k]: v for k, v in g.x_context().items()}

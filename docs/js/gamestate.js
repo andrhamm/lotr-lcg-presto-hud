@@ -34,6 +34,14 @@ export const phaseViewOf = v =>
 export const windowAfter = v =>
   (WINDOW_PREFIX + v) in VIEW_STEP ? WINDOW_PREFIX + v : null;
 
+// Whether this client tracks the board (engaged enemies, staging cards) well
+// enough to answer printed-X questions itself. The tablet sets this at boot;
+// the Presto never does, so its printed-X rows keep asking the player - see
+// xtargets.resolve and GameState.xContext.
+let _boardTracking = false;
+export function setBoardTracking(on) { _boardTracking = !!on; }
+export const boardTracking = () => _boardTracking;
+
 // NOT the same as isWindowView. The aw_ screens are the interstitial windows,
 // but Combat's two windows ARE its phase views: phases.js marks 6.E (enemy
 // attacks) and 6.P (player attacks) as action windows and neither has an aw_
@@ -653,14 +661,22 @@ export class GameState {
   // Every tracked value a printed X can resolve from, by the option names
   // xtargets.resolve takes. One place, so a new auto target is a change here
   // and in xtargets, never at a call site.
+  //
+  // `enemies` and `stagingLocations` are included only when this client
+  // tracks the board (boardTracking()) - the Presto never does, so those two
+  // keys are absent and xtargets.resolve falls back to its `count` option
+  // exactly as it did before either target existed.
   xContext() {
-    return {
+    const ctx = {
       players: this.players.length,
       stage: this.quest.stage_n ?? 1,
       highestThreat: Math.max(0, ...this.players.map((p) => p.threat)),
-      enemies: this.enemiesInPlay(),
-      stagingLocations: this.staging_locations,
     };
+    if (boardTracking()) {
+      ctx.enemies = this.enemiesInPlay();
+      ctx.stagingLocations = this.staging_locations;
+    }
+    return ctx;
   }
 
   // Adopt the per-player breakdown as the total, but ONLY when the two already

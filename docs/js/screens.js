@@ -13,7 +13,8 @@ import { measureText } from "./metrics.js";
 import * as xtargets from "./xtargets.js";
 import * as icons from "./icons.js";
 import { GameState, VIEW_ORDER, VIEW_LABELS, SETUP_TIP, HEADINGS,
-         DEFAULT_START_THREAT, MAX_PLAYERS, viewForStep, fmtMs } from "./gamestate.js";
+         DEFAULT_START_THREAT, MAX_PLAYERS, viewForStep, fmtMs,
+         boardTracking } from "./gamestate.js";
 import { PHASES, STEPS, step as phaseStep } from "./phases.js";
 import { tipsFor } from "./quest_catalog.js";
 
@@ -474,9 +475,10 @@ export class LocationPickModal {
       // 0 made Tangled Grove ("X is the number of locations in the staging
       // area") read as the SAFEST location in the list - the one whose threat
       // scales with the board. locationsFor already hands the picker
-      // threatKind/pointsKind; only the pill threw them away. The tracker
-      // cannot resolve the count itself (xtargets marks locations_in_staging
-      // auto=null), so it shows X rather than inventing a number.
+      // threatKind/pointsKind; only the pill threw them away. The picker
+      // never resolves a live value here - the location is not placed yet,
+      // so it shows X rather than inventing a number, even for
+      // locations_in_staging now that it is tracker-backed.
       const eThreat = e.threatKind === "x" ? "X" : (e.threat ?? 0);
       const ePoints = e.pointsKind === "x" ? "X" : (e.points ?? 0);
       const pw = statPill(ctx, 0, 0, eThreat, ePoints, { measure: true });
@@ -1955,7 +1957,14 @@ export class LocationConfigModal {
     this.threatShape = null;
     if (this.threatX) {
       const t = this.threatX.target;
-      if (xtargets.autoFor(t)) this.threatShape = "auto";
+      const auto = xtargets.autoFor(t);
+      // AUTO_ENEMIES/AUTO_STAGING_LOCATIONS are tracker-backed: only skip the
+      // stepper when this client actually tracks the board - the same call
+      // xtargets.resolve makes via xContext(). The three always-on auto
+      // targets (players/stage/highestThreat) never need the guard.
+      const trackerBacked = auto === xtargets.AUTO_ENEMIES ||
+                            auto === xtargets.AUTO_STAGING_LOCATIONS;
+      if (auto && (!trackerBacked || boardTracking())) this.threatShape = "auto";
       else if ((this.threatX.mul ?? 1) === 1 && !this.threatX.add) this.threatShape = "bare";
       else this.threatShape = "count";
       this.threatLabel = xtargets.labelFor(t);

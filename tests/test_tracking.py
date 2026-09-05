@@ -123,7 +123,9 @@ def test_undo_restores_the_counts():
 
 
 def test_x_context_feeds_resolve_with_the_tracked_values():
+    import gamestate
     import xtargets
+    gamestate.set_board_tracking(True)
     g = _live()
     g.set_engaged(0, 2)
     g.set_staging_enemies(1)
@@ -134,3 +136,14 @@ def test_x_context_feeds_resolve_with_the_tracked_values():
                    "enemies": 3, "staging_locations": 2}
     assert xtargets.resolve({"target": "enemies_in_play"}, **ctx) == 3
     assert xtargets.resolve({"target": "players", "mul": 4}, count=None, **ctx) == 8
+
+
+def test_x_context_omits_the_counts_until_the_client_tracks_them():
+    # The Presto never calls set_board_tracking, so its x_context must not
+    # carry a tracked value a device that doesn't track the board can't
+    # actually answer for - the player supplies the count as before.
+    import xtargets
+    g = _live()
+    ctx = g.x_context()
+    assert set(ctx) == {"players", "stage", "highest_threat"}
+    assert xtargets.resolve({"target": "enemies_in_play"}, count=3, **ctx) == 3

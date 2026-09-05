@@ -727,9 +727,7 @@ def _location_config_modal_unknown_x():
 def _location_config_modal_count_control():
     # The variable-height threat block at its tallest: a computed value, two
     # wrapped formula lines AND a count stepper. This is the one that walked
-    # into the footer's Cancel/Save before the clamp. damaged_characters,
-    # not enemies_in_play - the tablet's tracker made that one auto (no
-    # stepper), so this scene needs a target that still asks the player.
+    # into the footer's Cancel/Save before the clamp.
     from ui.modals import LocationConfigModal
     hw = FakeHardware()
     pal = Palette(hw.display)
@@ -737,8 +735,8 @@ def _location_config_modal_count_control():
     g.active_locations = [{
         "points": 3, "progress": 0, "name": "Gate of Annuminas",
         "threatKind": "x", "threatCount": 3,
-        "threatX": {"text": "1 more than the number of damaged characters",
-                    "target": "damaged_characters", "add": 1}}]
+        "threatX": {"text": "1 more than the number of enemies in play",
+                    "target": "enemies_in_play", "add": 1}}]
     m = LocationConfigModal(g)
     m.draw(hw, g, pal)
     return hw, m

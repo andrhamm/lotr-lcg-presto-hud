@@ -59,6 +59,21 @@ def window_after(v):
     return w if w in VIEW_STEP else None
 
 
+# Whether this client tracks the board (engaged enemies, staging cards) well
+# enough to answer printed-X questions itself. The tablet sets this at boot;
+# the Presto never does, so its printed-X rows keep asking the player - see
+# xtargets.resolve and GameState.x_context.
+_board_tracking = [False]
+
+
+def set_board_tracking(on):
+    _board_tracking[0] = bool(on)
+
+
+def board_tracking():
+    return _board_tracking[0]
+
+
 def is_action_window(v):
     """True if this view's STEP is an action window.
 
@@ -779,14 +794,22 @@ class GameState:
     def x_context(self):
         """Every tracked value a printed X can resolve from, by the keyword
         names xtargets.resolve takes. One place, so a new auto target is a
-        change here and in xtargets, never at a call site."""
-        return {
+        change here and in xtargets, never at a call site.
+
+        `enemies` and `staging_locations` are included only when this client
+        tracks the board (board_tracking()) - the Presto never does, so those
+        two keys are absent and xtargets.resolve falls back to its `count`
+        argument exactly as it did before either target existed.
+        """
+        ctx = {
             "players": len(self.players),
             "stage": self.quest.get("stage_n", 1),
             "highest_threat": max([p.threat for p in self.players] or [0]),
-            "enemies": self.enemies_in_play(),
-            "staging_locations": self.staging_locations,
         }
+        if board_tracking():
+            ctx["enemies"] = self.enemies_in_play()
+            ctx["staging_locations"] = self.staging_locations
+        return ctx
 
     def resync_willpower(self):
         """Adopt the per-player breakdown as the total, but ONLY when the two

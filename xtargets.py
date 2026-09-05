@@ -38,9 +38,12 @@ AUTO_PLAYERS = "players"
 AUTO_STAGE = "stage"
 AUTO_HIGHEST_THREAT = "highest_threat"
 # Two more since the tablet's tracker: enemies engaged with anyone plus enemies
-# in staging, and locations in staging. The Presto never sets them, so on the
-# device these resolve from zero - the same as before, where the player
-# supplied the count; the sheet's stepper still lets them.
+# in staging, and locations in staging. Tracker-backed, not unconditionally
+# auto: when the client tracks the board (the tablet) these follow the tracked
+# count and a stale supplied count cannot override them. The Presto never
+# tracks the board, so on the device these fall back to the count path exactly
+# like the other 21 targets - the player supplies the count and the stepper
+# still lets them.
 AUTO_ENEMIES = "enemies"
 AUTO_STAGING_LOCATIONS = "staging_locations"
 
@@ -131,15 +134,25 @@ def value_of(count, mul=1, add=0):
 
 
 def resolve(spec, count=None, players=1, stage=1, highest_threat=0,
-            enemies=0, staging_locations=0):
+            enemies=None, staging_locations=None):
     """The number to put on screen, or None when the player has not supplied a
     count yet.
 
-    `spec` is a card's coded X: {"target", "mul", "add"}. An auto target
-    ignores `count` entirely and recomputes from the tracked value, which is
-    the whole point of tagging those separately - "X is 4 per player" must
-    follow the player count without anyone touching a stepper. GameState's
-    x_context() supplies every tracked value by these keyword names.
+    `spec` is a card's coded X: {"target", "mul", "add"}. AUTO_PLAYERS,
+    AUTO_STAGE and AUTO_HIGHEST_THREAT ignore `count` entirely and recompute
+    from the tracked value, which is the whole point of tagging those
+    separately - "X is 4 per player" must follow the player count without
+    anyone touching a stepper.
+
+    AUTO_ENEMIES and AUTO_STAGING_LOCATIONS are tracker-backed, not
+    unconditionally auto: when the client tracks the board (the tablet) they
+    behave the same way - followed, and a stale supplied count cannot
+    override them. When it does not (the Presto), `enemies`/
+    `staging_locations` are None and resolve falls back to the count path
+    exactly as before, so the player supplies the count and the app does the
+    arithmetic. GameState.x_context() supplies every tracked value by these
+    keyword names, omitting the two tracker-only keys until the client says
+    it tracks the board.
     """
     if not spec:
         return None
@@ -153,9 +166,9 @@ def resolve(spec, count=None, players=1, stage=1, highest_threat=0,
         return value_of(stage, mul, add)
     if auto == AUTO_HIGHEST_THREAT:
         return value_of(highest_threat, mul, add)
-    if auto == AUTO_ENEMIES:
+    if auto == AUTO_ENEMIES and enemies is not None:
         return value_of(enemies, mul, add)
-    if auto == AUTO_STAGING_LOCATIONS:
+    if auto == AUTO_STAGING_LOCATIONS and staging_locations is not None:
         return value_of(staging_locations, mul, add)
     if count is None:
         return None
