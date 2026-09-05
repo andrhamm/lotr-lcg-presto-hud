@@ -11,11 +11,7 @@ import { CHROME } from "./copy.js";
 import { chip, counter } from "./primitives.js";
 import { CYCLE_ORDER } from "../../js/quest_catalog.js";
 import { icon } from "../../js/icons_svg.js";
-
-// Player-threat red, same as rail.js's per-player threat stat - a starting
-// threat IS a player threat, just before round 1.
-const THREAT_RED = "rgb(247,101,62)";
-const THREAT_RED_SHADOW = "rgb(7,5,3)";
+import { THREAT_RED, THREAT_SHADOW } from "./palette.js";
 
 // Mirrors quest_catalog.js's own (unexported) cycleRank: a cycle absent from
 // CYCLE_ORDER sorts just before "Other" rather than falling off the end.
@@ -45,7 +41,8 @@ function byOrderThenName(a, b) {
 // rows instead.
 function scenarioGroups(index) {
   const scenarios = (index?.scenarios ?? [])
-    .filter(s => s.kind === "quest" && (s.source ?? "official") === "official");
+    .filter(s => s.kind === "quest" && (s.source ?? "official") === "official"
+      && !(s.name ?? "").endsWith(" - Nightmare"));
   const groups = new Map();
   for (const scn of scenarios) {
     const cycle = scn.cycle ?? "Other";
@@ -86,7 +83,7 @@ function threatCounters(threats) {
   // escaping layers must stay each other's job, not stacked.
   const cells = threats.map((t, i) => counter({
     label: `P${i + 1} ${CHROME.threat}`,
-    icon: icon("THREAT", 34, THREAT_RED, THREAT_RED_SHADOW),
+    icon: icon("THREAT", 34, THREAT_RED, THREAT_SHADOW),
     value: t, act: "ng_threat", arg: i,
   })).join("");
   return h`<div class="threat-row">${raw(cells)}</div>`;

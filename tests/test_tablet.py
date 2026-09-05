@@ -362,20 +362,25 @@ def test_new_game_screen_lists_scenarios_and_players():
     """renderNewGame(ui) is a pure string builder (Task 6): player-count
     chips, a starting-threat counter per player, and the official quest
     catalog (kind=="quest" only - "n" here is kind "nightmare" and must not
-    surface), plus a resume chip whenever the caller says there is a save."""
+    surface, and a "quest"-kind row named "<Scenario> - Nightmare" - a
+    Nightmare deck's replacement quest card - must not surface either),
+    plus a resume chip whenever the caller says there is a save."""
     js = node("""
 import { renderNewGame } from "./newgame.js";
 const html = renderNewGame({ picker: { index: { scenarios: [
   { slug: "a", name: "A", pack: "P", cycle: "C", kind: "quest", order: 1, source: "official" },
   { slug: "n", name: "N", pack: "P", cycle: "C", kind: "nightmare", order: 2, source: "official" },
+  { slug: "a-nm", name: "A - Nightmare", pack: "P", cycle: "C", kind: "quest", order: 3, source: "official" },
 ] }, players: 3, threats: [25, 25, 30], hasSave: true } });
 console.log(JSON.stringify({
   counters: (html.match(/class="counter"/g) || []).length,
   hasA: html.includes(">A<"),
   hasN: html.includes(">N<"),
+  hasANightmare: html.includes('data-arg="a-nm"'),
   resume: html.includes('data-act="resume"'),
 }));
 """)
     assert js["counters"] == 3
     assert js["hasA"] and not js["hasN"]
+    assert not js["hasANightmare"]
     assert js["resume"]
