@@ -150,10 +150,13 @@ setWindowPolicy(WINDOW_POLICY_BANDS);
 const g = new GameState(2, 25); g.advanceView(); const ui = newUi();
 console.log(JSON.stringify({ stgFloor: dispatch(g, ui, "stg-", ""), stgUp: dispatch(g, ui, "stg+", ""),
   engFloor: dispatch(g, ui, "eng-", "1"), engUp: dispatch(g, ui, "eng+", "1"),
-  wpFloor: dispatch(g, ui, "wp-", ""), stgenFloor: dispatch(g, ui, "stgen-", ""), stglocUp: dispatch(g, ui, "stgloc+", "") }));
+  wpFloor: dispatch(g, ui, "wp-", ""), wpUp: dispatch(g, ui, "wp+", ""),
+  stgenFloor: dispatch(g, ui, "stgen-", ""), stgenUp: dispatch(g, ui, "stgen+", ""),
+  stglocFloor: dispatch(g, ui, "stgloc-", ""), stglocUp: dispatch(g, ui, "stgloc+", "") }));
 """)
     assert js == {"stgFloor": False, "stgUp": True, "engFloor": False, "engUp": True,
-                  "wpFloor": False, "stgenFloor": False, "stglocUp": True}
+                  "wpFloor": False, "wpUp": True, "stgenFloor": False, "stgenUp": True,
+                  "stglocFloor": False, "stglocUp": True}
 
 
 def test_strip_has_a_segment_per_phase_and_a_playhead_on_the_current_view():
@@ -168,7 +171,7 @@ console.log(JSON.stringify({ segs: (html.match(/class="seg/g) || []).length,
   current: (html.match(/is-current/g) || []).length,
   currentView: /data-view="quest_staging"[^>]*is-current|is-current[^>]*data-view="quest_staging"/.test(html),
   windows: (html.match(/tick-window/g) || []).length, aw: html.includes("aw_"),
-  planningWindow: /data-phase="Planning"[\\s\\S]*?tick-window/.test(html),
+  planningWindow: /data-view="planning"[^>]*tick-window|tick-window[^>]*data-view="planning"/.test(html),
   round: html.includes(">1<") }));
 """)
     assert js["segs"] == 8
@@ -196,6 +199,36 @@ console.log(JSON.stringify({ promoted: /data-phase="Combat"[^>]*is-skippable/.te
     assert js["demoted"] is False
 
 
+def test_strip_skip_landing_off_flow_still_finds_its_segment():
+    """lastWindowBefore walks the raw VIEW_ORDER, so under "bands" it can
+    return an aw_ view flowViews() has filtered out - not reachable via the
+    one shipped skip (its landing is combat_player, on-flow), so this pushes
+    a second skip onto SKIPS (an exported mutable array; this probe runs in
+    its own node process, so nothing leaks) whose landing lands off-flow, on
+    aw_enc_checks -> phase view enc_checks, step 5.3 - the last view of the
+    Encounter segment, so the fix (mapping through phaseViewOf instead of
+    indexOf'ing the raw aw_ id) is what lets that whole segment - not just
+    the landing tick - light up is-skippable. Before the fix, indexOf(-1)
+    on the un-mapped aw_ id sinks the range check and NOTHING lights up."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, SKIPS } from "../../js/gamestate.js";
+import { renderStrip } from "./strip.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+SKIPS.push({ id: "t", from: ["travel"], to: "combat_shadow", label: "x", claim: "y" });
+const g = new GameState(2, 25); g.advanceView(); g.enterView("travel");
+const html = renderStrip(g, newUi());
+console.log(JSON.stringify({
+  encounterSkippable: /data-phase="Encounter"[^>]*is-skippable/.test(html),
+  combatSkippable: /data-phase="Combat"[^>]*is-skippable/.test(html),
+  landing53: html.includes(">5.3<"),
+}));
+""")
+    assert js["encounterSkippable"]
+    assert js["landing53"]
+    assert js["combatSkippable"] is False
+
+
 def test_rail_shows_every_player_and_the_three_zones():
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
@@ -209,9 +242,11 @@ const html = renderRail(g, newUi());
 console.log(JSON.stringify({ zones: (html.match(/class="zone /g) || []).length,
   cells: (html.match(/player-cell/g) || []).length, danger: html.includes("bar-danger"),
   buttons: html.includes("<button"), log: html.includes("P1 threat 25 -&gt; 26"),
-  prompt: html.includes("Resource"), staging: />5</.test(html) && />2</.test(html) }));
+  prompt: html.includes("Resource"), staging: />5</.test(html) && />2</.test(html),
+  captions: html.includes("Enemies") && html.includes("Locations") }));
 """)
     assert js["zones"] == 3 and js["cells"] == 3
     assert js["danger"]                # P3 at 41 is within 10 of elimination
     assert js["buttons"] is False      # status, not controls, in this milestone
     assert js["log"] and js["prompt"] and js["staging"]
+    assert js["captions"]

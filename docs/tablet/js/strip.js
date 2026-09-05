@@ -6,6 +6,7 @@ import { h, raw, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
 import {
   flowViews, VIEW_STEP, windowAfter, isActionWindow, lastWindowBefore,
+  phaseViewOf,
 } from "../../js/gamestate.js";
 import { VIEW_LABELS } from "../../js/viewcopy.js";
 import { PHASES, step } from "../../js/phases.js";
@@ -95,7 +96,12 @@ export function renderStrip(game, ui) {
   const offer = game.skipOffer();
   let skipRange = null;
   if (offer && offer.promoted) {
-    const landing = lastWindowBefore(offer.skip.to);
+    // lastWindowBefore walks the raw VIEW_ORDER, so under "bands" it can hand
+    // back an aw_ landing that flowViews() has filtered out. Index its phase
+    // view instead - same idiom as GameState.skipTo (gamestate.js, "stay
+    // total") - so the highlight never silently disappears via indexOf(-1).
+    const landing0 = lastWindowBefore(offer.skip.to);
+    const landing = views.includes(landing0) ? landing0 : phaseViewOf(landing0);
     const li = views.indexOf(landing);
     if (curIdx >= 0 && li > curIdx) skipRange = { ci: curIdx, li, landing };
   }

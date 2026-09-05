@@ -100,16 +100,22 @@ function renderQuestZone(game) {
   });
 }
 
-// A compact staging pill: icon + one number, no caption - "each num-34 with
-// the black helm" per the brief. threat/enemies/locations share the one
-// icon; there is no separate mask for enemy- or location-count, and the
-// zone header already says what section this is.
-function renderStagingPill(value) {
-  return h`<div class="pill pill-compact">${raw(icon("THREAT", 26, THREAT_BLACK, THREAT_BLACK_EDGE))}<span class="num num-34">${value}</span></div>`;
+// A compact staging pill: a label caption over icon + one number - "each
+// num-34 with the black helm" per the brief, plus the caption a controller
+// ruling added so the three pills (Threat/Enemies/Locations) are named
+// rather than left to a shared icon to disambiguate. threat/enemies/
+// locations share the one icon; there is no separate mask for enemy- or
+// location-count, and the caption is what tells them apart now.
+function renderStagingPill(caption, value) {
+  return h`<div class="pill pill-compact">
+<div class="pill-head"><span class="label">${caption}</span></div>
+${raw(icon("THREAT", 26, THREAT_BLACK, THREAT_BLACK_EDGE))}<span class="num num-34">${value}</span></div>`;
 }
 
 function renderStagingZone(game) {
-  const body = renderStagingPill(game.staging) + renderStagingPill(game.staging_enemies) + renderStagingPill(game.staging_locations);
+  const body = renderStagingPill(CHROME.threat, game.staging)
+    + renderStagingPill(CHROME.enemies, game.staging_enemies)
+    + renderStagingPill(CHROME.locations, game.staging_locations);
   return zone({
     name: CHROME.staging,
     icon: icon("THREAT", 22, THREAT_BLACK, THREAT_BLACK_EDGE),

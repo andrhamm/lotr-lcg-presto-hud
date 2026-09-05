@@ -15,4 +15,7 @@ export const CHROME = {
   eliminated: "Eliminated",
   noLocation: "no active location",
   sideQuest: "+ side quest",
+  threat: "Threat",
+  enemies: "Enemies",
+  locations: "Locations",
 };
