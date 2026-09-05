@@ -15,21 +15,28 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSS = os.path.join(ROOT, "docs", "tablet", "style.css")
 SCALE = {34, 26, 20, 18, 13}            # DISPLAY, small numerals, BODY, secondary, LABEL
-NUMERAL_ALLOW = {84, 64, 56, 48, 40, 36, 30, 26, 24, 22}   # widget-owned numerals and glyph sizes
+NUMERAL_ALLOW = {84, 64, 56, 48, 40, 36, 30, 26, 22}   # widget-owned numerals and glyph sizes
+
+
+def _strip_comments(css):
+    return re.sub(r"/\*.*?\*/", "", css, flags=re.S)
 
 
 def _css():
-    with open(CSS) as f:
-        return f.read()
+    return _strip_comments(open(CSS).read())
 
 
-def _font_sizes():
-    css = _css()
+def _font_sizes_of(css):
+    css = _strip_comments(css)
     out = []
-    for m in re.finditer(r"font(?:-size)?\s*:\s*([^;]+);", css):
+    for m in re.finditer(r"font(?:-size)?\s*:\s*([^;{}]+)[;}]", css):
         for px in re.findall(r"(\d+(?:\.\d+)?)px", m.group(1)):
             out.append(float(px))
     return out
+
+
+def _font_sizes():
+    return _font_sizes_of(_css())
 
 
 def test_no_text_smaller_than_label():
@@ -42,14 +49,29 @@ def test_every_font_size_is_on_the_scale_or_a_numeral():
     assert not off, "font sizes off the scale: %s (add to the scale or justify in NUMERAL_ALLOW)" % off
 
 
-def test_buttons_are_at_least_44px():
-    css = _css()
-    # every rule that sets a height on a button-ish class must be >= 44
-    for m in re.finditer(r"\.(chip|cta|step|scenario-row|step-sm)[^{]*\{([^}]*)\}", css):
-        body = m.group(2)
-        hm = re.search(r"(?:min-)?height\s*:\s*(\d+)px", body)
+def _button_heights_of(css):
+    css = _strip_comments(css)
+    out = []
+    for m in re.finditer(r"\.(chip|cta|step|scenario-row|step-sm)(?![\w-])[^{]*\{([^}]*)\}", css):
+        hm = re.search(r"(?:min-)?height\s*:\s*(\d+)px", m.group(2))
         if hm:
-            assert int(hm.group(1)) >= 44, "%s is %spx tall" % (m.group(1), hm.group(1))
+            out.append((m.group(1), int(hm.group(1))))
+    return out
+
+
+def test_buttons_are_at_least_44px():
+    # every rule that sets a height on a button-ish class must be >= 44
+    for cls, px in _button_heights_of(_css()):
+        assert px >= 44, "%s is %spx tall" % (cls, px)
+
+
+def test_font_regex_does_not_cross_braces():
+    assert _font_sizes_of(".a { font-size: 13px } .b { width: 7px }") == [13.0]
+
+
+def test_button_regex_ignores_comments():
+    css = "/* like .chip */ .other { height: 20px } .chip { height: 44px }"
+    assert _button_heights_of(css) == [("chip", 44)]
 
 
 def _contrast(fg, bg):
