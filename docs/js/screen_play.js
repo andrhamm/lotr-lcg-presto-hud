@@ -315,7 +315,8 @@ export class ScreenPlay {
     notePanel(ctx, MARGIN, bandTop, w, lines, BODY, 0, false, pal.green, pal.tan);
     // The window hands off to the NEXT step, so the CTA names it - the same
     // "Next: X" every phase view uses.
-    this._cta(ctx, game, `Next: ${VIEW_LABELS[game.nextPhaseView()]}`, ["advance"]);
+    const nxt = game.nextPhaseView();
+    this._cta(ctx, game, nxt ? `Next: ${VIEW_LABELS[nxt]}` : "Next", ["advance"]);
   }
 
   _cta(ctx, game, label, id, fill = pal.btn_ok, fg = pal.gold) {
@@ -466,7 +467,7 @@ export class ScreenPlay {
       this._loopFlow(ctx, game, this.contentY);
       const nxt = (view === "planning" && game.sailing)
         ? "quest_sailing" : game.nextPhaseView();
-      this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt]}`, ["advance"]);
+      this._cta(ctx, game, nxt ? `Next: ${VIEW_LABELS[nxt]}` : "Next", ["advance"]);
     } else if (view === "quest_commit") {
       this._statZone(ctx, game);
       const bh = phaseBlock(ctx, MARGIN, this.contentY, 480 - 2 * MARGIN,
@@ -537,7 +538,8 @@ export class ScreenPlay {
         { kind: "framework", text: PHASE_FRAMEWORK["refresh"] },
         { kind: "window", text: PHASE_WINDOW["refresh"] },
       ]);
-      this._cta(ctx, game, `Next: ${VIEW_LABELS[game.nextPhaseView()]}`, ["advance"]);
+      const nxt = game.nextPhaseView();
+      this._cta(ctx, game, nxt ? `Next: ${VIEW_LABELS[nxt]}` : "Next", ["advance"]);
     } else if (view === "round_end") {
       // 0.1. Not an action window - RR's chart puts the last one after 7.4 -
       // so no purple treatment: this is a resolution checklist.
@@ -577,7 +579,7 @@ export class ScreenPlay {
       // nextPhaseView(), not raw VIEW_ORDER indexing: the very next view is
       // this phase's action window, and a CTA must announce the next PHASE.
       const nxt = game.nextPhaseView();
-      this._cta(ctx, game, `Next: ${VIEW_LABELS[nxt] ?? nxt}`, ["advance"]);
+      this._cta(ctx, game, nxt ? `Next: ${VIEW_LABELS[nxt]}` : "Next", ["advance"]);
     }
 
     if (this.banner && this.banner[2] === view) {

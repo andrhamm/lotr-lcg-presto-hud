@@ -155,6 +155,7 @@ console.log(JSON.stringify({
   offerBeforeSkip: (() => { const h = new GameState(); h.advanceView(); h.enterView(%(origin)r); h.setEngaged(0, 1); h.setStagingEnemies(1); const o = h.skipOffer(); return o && { promoted: o.promoted, engaged: o.engaged, staging_enemies: o.staging_enemies }; })(),
   walk: seen,
   offFlow: (() => { const h = new GameState(); h.advanceView(); h.enterView("aw_quest_resolution"); return [h.nextView(), h.prevView()]; })(),
+  unknownView: (() => { const h = new GameState(); h.advanceView(); h.view = "some_legacy_view"; return { nextPhase: h.nextPhaseView() }; })(),
 }));
 """
 
@@ -220,6 +221,14 @@ def test_phase_skip_behaves_identically_in_both_twins(policy, origin):
     h.advance_view()
     h.enter_view("aw_quest_resolution")
     assert js["offFlow"] == [h.next_view(), h.prev_view()]
+
+    # An unrecognised view id has no next phase either - the same total-
+    # navigation guarantee next_view()/prev_view() give above, extended to
+    # the CTA-label helper.
+    h = GameState()
+    h.advance_view()
+    h.view = "some_legacy_view"
+    assert js["unknownView"]["nextPhase"] == h.next_phase_view()
 
 
 _TRACK_PROBE = """\

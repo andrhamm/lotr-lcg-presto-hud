@@ -134,6 +134,7 @@ def test_navigation_is_total_over_an_unknown_view(policy):
     assert g.next_view() is None
     assert g.prev_view() is None
     assert g.can_go_back() is False
+    assert g.next_phase_view() is None
 
 
 def test_flow_views_is_a_copy_under_both_policies():

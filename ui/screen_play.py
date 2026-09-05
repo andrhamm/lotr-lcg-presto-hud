@@ -225,7 +225,9 @@ class ScreenPlay:
         # The window hands off to the NEXT step, so the CTA names it - the same
         # "Next: X" every phase view uses, which the nav bar renders as the
         # NEXT PHASE kicker over the destination.
-        self._cta(d, pal, game, "Next: %s" % VIEW_LABELS[game.next_phase_view()],
+        nxt = game.next_phase_view()
+        self._cta(d, pal, game,
+                  "Next: %s" % VIEW_LABELS[nxt] if nxt else "Next",
                   ("advance",))
 
     # Combat substeps, in resolution order. Both halves of the combat phase
@@ -535,8 +537,9 @@ class ScreenPlay:
                 ("framework", PHASE_FRAMEWORK["refresh"]),
                 ("window", PHASE_WINDOW["refresh"]),
             ])
+            nxt = game.next_phase_view()
             self._cta(d, pal, game,
-                      "Next: %s" % VIEW_LABELS[game.next_phase_view()],
+                      "Next: %s" % VIEW_LABELS[nxt] if nxt else "Next",
                       ("advance",))
         elif view == "round_end":
             # 0.1. Not an action window - RR's chart puts the last one after
@@ -555,8 +558,9 @@ class ScreenPlay:
             # repetition, and the windows sit INSIDE the loop.
             self._stat_zone(d, pal, game)
             self._loop_flow(d, pal, game, self.content_y)
+            nxt = game.next_phase_view()
             self._cta(d, pal, game,
-                      "Next: %s" % VIEW_LABELS[game.next_phase_view()],
+                      "Next: %s" % VIEW_LABELS[nxt] if nxt else "Next",
                       ("advance",))
         else:
             self._stat_zone(d, pal, game)
@@ -587,7 +591,9 @@ class ScreenPlay:
             # Opt. Engage" in the button, which the layout linter caught by
             # running it off the left edge.
             nxt = game.next_phase_view()
-            self._cta(d, pal, game, "Next: %s" % VIEW_LABELS.get(nxt, nxt), ("advance",))
+            self._cta(d, pal, game,
+                      "Next: %s" % VIEW_LABELS[nxt] if nxt else "Next",
+                      ("advance",))
 
 
         if self.banner and self.banner[2] == view:

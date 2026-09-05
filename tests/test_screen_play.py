@@ -70,6 +70,19 @@ def test_planning_advances_to_commit():
     assert game.view == "quest_commit"
 
 
+def test_unrecognised_view_ctas_the_plain_word_next():
+    """A save from a future build can carry a view id neither twin
+    recognises. The catch-all draw branch labels its CTA from
+    next_phase_view(), which has no next phase for an unknown view - the
+    button must fall back to the plain word "Next", not crash on a raw
+    VIEW_LABELS[None] lookup or print the literal "Next: None"."""
+    hw, pal, game, screen = _setup("some_legacy_view")
+    screen.draw(hw, game, pal)
+    texts = [c[1] for c in hw.display.calls if c[0] == "text"]
+    assert "Next" in texts
+    assert not any(isinstance(t, str) and t.startswith("Next:") for t in texts)
+
+
 def test_resource_and_planning_each_show_only_their_own_copy():
     hw, pal, game, screen = _setup("resource")
     screen.draw(hw, game, pal)

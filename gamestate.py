@@ -1021,6 +1021,8 @@ class GameState:
         step on the way, not the destination being announced.
         """
         v = self.next_view()
+        if v is None:
+            return None      # an unknown view has no next phase either
         seen = 0
         while is_window_view(v) and seen < len(VIEW_ORDER):
             i = VIEW_ORDER.index(v)

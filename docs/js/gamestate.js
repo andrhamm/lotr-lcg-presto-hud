@@ -852,7 +852,9 @@ export class GameState {
   // because a phase view's button must still read "Next: Questing: Staging"
   // even when the tap lands on that phase's window first.
   nextPhaseView() {
-    let v = this.nextView(), seen = 0;
+    let v = this.nextView();
+    if (v === null) return null;  // an unknown view has no next phase either
+    let seen = 0;
     while (isWindowView(v) && seen < VIEW_ORDER.length) {
       const i = VIEW_ORDER.indexOf(v);
       v = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
