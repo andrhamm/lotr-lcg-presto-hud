@@ -432,6 +432,7 @@ class Player:
         self.eliminated = False
         self.elimination = DEFAULT_ELIMINATION
         self.commit = 0  # willpower committed; persists as next round's default
+        self.engaged = 0  # enemies engaged with this player (the tablet's tracker)
 
 
 class GameState:
@@ -485,6 +486,11 @@ class GameState:
         # adopts the breakdown again (see resync_willpower).
         self.willpower_detached = False
         self.staging = 0             # transient questing input (staging area threat)
+        # The staging area's card counts. The Presto tracks only its threat;
+        # the tablet steps these too, and skip offers + printed-X targets read
+        # them (see set_engaged for why they are keyed tallies).
+        self.staging_enemies = 0
+        self.staging_locations = 0
         self.pending_budget = 0      # success progress awaiting placement
         self.pending_elim = None     # player index that just crossed elimination
         self.pending_quest_card = False   # Progress-detail quest-row tap wants
@@ -736,6 +742,39 @@ class GameState:
             self.log_event("Staging area threat %d" % v, cat="tally", key="stg")
             self.staging = v
         return self.staging
+
+    def set_engaged(self, index, value):
+        """Enemies engaged with player `index`. A keyed tally, like set_staging:
+        a run of stepper taps rewrites one row rather than logging eight."""
+        v = max(0, value)
+        p = self.players[index]
+        if v != p.engaged:
+            self.log_event("P%d engaged enemies %d" % (index + 1, v),
+                           cat="tally", key="eng%d" % index)
+            p.engaged = v
+        return p.engaged
+
+    def engaged_total(self):
+        return sum(p.engaged for p in self.players)
+
+    def set_staging_enemies(self, value):
+        v = max(0, value)
+        if v != self.staging_enemies:
+            self.log_event("Staging enemies %d" % v, cat="tally", key="stgen")
+            self.staging_enemies = v
+        return self.staging_enemies
+
+    def set_staging_locations(self, value):
+        v = max(0, value)
+        if v != self.staging_locations:
+            self.log_event("Staging locations %d" % v, cat="tally", key="stgloc")
+            self.staging_locations = v
+        return self.staging_locations
+
+    def enemies_in_play(self):
+        """What the printed X "enemies in play" counts: engaged with anyone,
+        plus still in staging."""
+        return self.engaged_total() + self.staging_enemies
 
     def resync_willpower(self):
         """Adopt the per-player breakdown as the total, but ONLY when the two
@@ -1622,7 +1661,8 @@ class GameState:
         return {
             "players": {str(i): {"threat": p.threat,
                                  "eliminated": p.eliminated,
-                                 "commit": p.commit}
+                                 "commit": p.commit,
+                                 "engaged": p.engaged}
                         for i, p in enumerate(self.players)},
             "quest": dict(self.quest),
             "active_locations": {str(i): dict(l)
@@ -1634,6 +1674,8 @@ class GameState:
             "willpower": self.willpower,
             "willpower_detached": self.willpower_detached,
             "staging": self.staging,
+            "staging_enemies": self.staging_enemies,
+            "staging_locations": self.staging_locations,
             "sailing": self.sailing,
             "heading": self.heading,
             "pending_budget": self.pending_budget,
@@ -1663,6 +1705,8 @@ class GameState:
             p.threat = pd["threat"]
             p.eliminated = pd["eliminated"]
             p.commit = pd["commit"]
+            # .get: deltas recorded before the tracker existed carry no key
+            p.engaged = pd.get("engaged", 0)
 
         self.willpower_detached = m.get("willpower_detached", False)
         self.quest = dict(m["quest"])
@@ -1675,6 +1719,8 @@ class GameState:
                               for k in sorted(m["quest_history"], key=int)]
         self.willpower = m["willpower"]
         self.staging = m["staging"]
+        self.staging_enemies = m.get("staging_enemies", 0)
+        self.staging_locations = m.get("staging_locations", 0)
         self.sailing = m["sailing"]
         self.heading = m["heading"]
         self.pending_budget = m["pending_budget"]
@@ -1936,6 +1982,7 @@ class GameState:
                          "eliminated": p.eliminated,
                          "elimination": p.elimination,
                          "commit": p.commit,
+                         "engaged": p.engaged,
                          } for p in self.players],
             "view": self.view,
             "round": self.round,
@@ -1963,6 +2010,8 @@ class GameState:
             "willpower": self.willpower,
             "willpower_detached": self.willpower_detached,
             "staging": self.staging,
+            "staging_enemies": self.staging_enemies,
+            "staging_locations": self.staging_locations,
             "pending_budget": self.pending_budget,
             "pending_elim": self.pending_elim,
             "pending_quest_card": self.pending_quest_card,
@@ -2007,6 +2056,7 @@ class GameState:
             p.eliminated = pd["eliminated"]
             p.elimination = pd.get("elimination", DEFAULT_ELIMINATION)
             p.commit = pd.get("commit", 0)
+            p.engaged = pd.get("engaged", 0)
 
             g.players.append(p)
         v = d.get("view", VIEW_ORDER[0])
@@ -2037,6 +2087,8 @@ class GameState:
         g.willpower = d.get("willpower", 0)
         g.willpower_detached = d.get("willpower_detached", False)
         g.staging = d.get("staging", 0)
+        g.staging_enemies = d.get("staging_enemies", 0)
+        g.staging_locations = d.get("staging_locations", 0)
         g.pending_budget = d.get("pending_budget", 0)
         g.pending_elim = d.get("pending_elim", None)
         g.pending_quest_card = d.get("pending_quest_card", False)
