@@ -11,6 +11,7 @@ export const CHROME = {
   round: "Round",
   newGame: "New game",
   resume: "Resume",
+  scenario: "Scenario",
   begin: "Begin",
   eliminated: "Eliminated",
   noLocation: "no active location",

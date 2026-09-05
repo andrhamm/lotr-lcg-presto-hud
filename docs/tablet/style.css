@@ -133,3 +133,17 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .eng-cell { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .eng-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .eng-value { display: flex; align-items: center; gap: 8px; }
+
+/* The new-game / picker screen (Task 6): player count, a starting-threat
+   counter per player, and the official quest catalog grouped by cycle - or
+   a resume chip up top when a save exists (docs/tablet/js/newgame.js). */
+.newgame { gap: 20px; }
+.newgame-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.newgame-section { display: flex; flex-direction: column; gap: 10px; }
+.player-chips { display: flex; gap: 10px; }
+.threat-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.scenario-group { display: flex; flex-direction: column; gap: 8px; }
+.scenario-list { display: flex; flex-direction: column; gap: 8px; }
+.scenario-row { display: flex; align-items: center; gap: 12px; }
+.scenario-row .chip { flex: 1 1 0; justify-content: flex-start; }
+.scenario-pack { flex: 0 0 auto; }

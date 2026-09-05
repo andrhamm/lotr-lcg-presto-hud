@@ -311,3 +311,26 @@ console.log(JSON.stringify({ a: /data-act="skip"[^>]*/.exec(a)?.[0] ?? "", b: /c
 """)
     assert 'data-arg="combat_empty"' in js["a"]
     assert js["aTone"] == "skip" and js["b"] == "plain" and js["counts"]
+
+
+def test_new_game_screen_lists_scenarios_and_players():
+    """renderNewGame(ui) is a pure string builder (Task 6): player-count
+    chips, a starting-threat counter per player, and the official quest
+    catalog (kind=="quest" only - "n" here is kind "nightmare" and must not
+    surface), plus a resume chip whenever the caller says there is a save."""
+    js = node("""
+import { renderNewGame } from "./newgame.js";
+const html = renderNewGame({ picker: { index: { scenarios: [
+  { slug: "a", name: "A", pack: "P", cycle: "C", kind: "quest", order: 1, source: "official" },
+  { slug: "n", name: "N", pack: "P", cycle: "C", kind: "nightmare", order: 2, source: "official" },
+] }, players: 3, threats: [25, 25, 30], hasSave: true } });
+console.log(JSON.stringify({
+  counters: (html.match(/class="counter"/g) || []).length,
+  hasA: html.includes(">A<"),
+  hasN: html.includes(">N<"),
+  resume: html.includes('data-act="resume"'),
+}));
+""")
+    assert js["counters"] == 3
+    assert js["hasA"] and not js["hasN"]
+    assert js["resume"]

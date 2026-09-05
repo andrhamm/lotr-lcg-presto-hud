@@ -7,6 +7,7 @@ import { cta } from "./primitives.js";
 import { renderStrip } from "./strip.js";
 import { renderRail } from "./rail.js";
 import { renderPane } from "./pane.js";
+import { renderNewGame } from "./newgame.js";
 
 function renderGameOver(game) {
   const over = game.game_over ?? {};
@@ -24,10 +25,6 @@ function renderGameOver(game) {
 
 export function layout(game, ui) {
   if (ui.screen === "gameover") return renderGameOver(game);
-  if (ui.screen === "newgame") {
-    // Task 6 wires renderNewGame(ui) from ./newgame.js in here; that module
-    // does not exist yet, so this stays an empty shell.
-    return h`<div class="app"></div>`;
-  }
+  if (ui.screen === "newgame") return h`<div class="app">${raw(renderNewGame(ui))}</div>`;
   return h`<div class="app">${raw(renderStrip(game, ui))}<div class="body-row">${raw(renderRail(game, ui))}${raw(renderPane(game, ui))}</div></div>`;
 }
