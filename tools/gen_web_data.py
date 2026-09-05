@@ -50,6 +50,44 @@ export function drawIcon(ctx, mask, x, y, color, scale = 1) {
 }""")
 open(os.path.join(root, "icons.js"), "w").write("\n".join(out))
 
+# The same masks as SVG path data, for the tablet client (which draws with
+# the DOM, not a framebuffer). One path per icon: each horizontal run of set
+# pixels is an "M x y h w v1 h-w z" rectangle. shape-rendering: crispEdges at
+# the draw site keeps the pixel look at any size.
+def _runs_path(mask):
+    n = len(mask)
+    d = []
+    for y, row in enumerate(mask):
+        x = 0
+        while x < n:
+            if (row >> (n - 1 - x)) & 1:
+                x0 = x
+                while x < n and (row >> (n - 1 - x)) & 1:
+                    x += 1
+                d.append("M%d %dh%dv1h-%dz" % (x0, y, x - x0, x - x0))
+            else:
+                x += 1
+    return "".join(d)
+
+out = ["// GENERATED from ui/icons.py - do not edit (tools/gen_web_data.py)",
+       "export const ICONS = %s;" % json.dumps(
+           {n: {"size": len(getattr(icons, n)), "path": _runs_path(getattr(icons, n))}
+            for n in names}, sort_keys=True),
+       """
+// An inline SVG of one mask. `shadow`, when given, is drawn first offset by
+// (1, 1) - the charcoal under the red helm, the brown under the ranger.
+export function icon(name, px, fill, shadow = null) {
+  const m = ICONS[name];
+  if (!m) return "";
+  const sh = shadow
+    ? `<path d="${m.path}" fill="${shadow}" transform="translate(1 1)"></path>` : "";
+  return `<svg viewBox="0 0 ${m.size} ${m.size}" width="${px}" height="${px}" `
+    + `shape-rendering="crispEdges" style="display:block;flex:none">${sh}`
+    + `<path d="${m.path}" fill="${fill}"></path></svg>`;
+}
+"""]
+open(os.path.join(root, "icons_svg.js"), "w").write("\n".join(out) + "\n")
+
 out = ["// GENERATED from tests/fake_hardware.py - device bitmap8 metrics"]
 out.append("export const BITMAP8_W = %s;" % json.dumps(BITMAP8_W))
 out.append("""export function measureText(s, scale = 1) {

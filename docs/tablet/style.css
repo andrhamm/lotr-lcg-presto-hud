@@ -1,0 +1,39 @@
+:root {
+  --bg: rgb(16,12,9); --card: rgb(36,32,21); --card-hi: rgb(48,44,29); --well: rgb(24,20,12);
+  --border: rgb(60,54,35); --border-gold: rgb(150,118,48);
+  --gold: rgb(214,180,110); --tan: rgb(200,186,144); --muted: rgb(180,162,118); --dim: rgb(162,146,100);
+  --green: rgb(136,168,92); --amber: rgb(214,164,70); --red: rgb(247,101,62); --purple: rgb(166,122,196);
+  --btn: rgb(52,42,26); --btn-ok: rgb(40,50,26); --ok-fg: rgb(158,196,104); --btn-no: rgb(56,26,18); --no-fg: rgb(224,112,80);
+  --bevel-l: rgb(96,86,54); --bevel-d: rgb(7,5,3); --outline: rgb(0,0,0); --brown: rgb(104,70,34);
+  --serif: 'Alegreya', Georgia, 'Times New Roman', serif;
+  --sans: 'Alegreya Sans', 'Gill Sans', 'Trebuchet MS', system-ui, sans-serif;
+}
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tan); font: 20px/1.35 var(--sans); }
+#app, .app { width: 100vw; height: 100vh; overflow: hidden; }
+.display { font: 600 34px/1.1 var(--serif); color: var(--gold); }
+.body { font: 20px/1.35 var(--sans); color: var(--tan); margin: 0; text-wrap: pretty; }
+.body.secondary { font-size: 18px; color: var(--muted); }
+.label { font: 700 13px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--dim); }
+.num { font-family: var(--sans); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--gold); }
+.num-26 { font-size: 26px } .num-36 { font-size: 36px } .num-40 { font-size: 40px } .num-48 { font-size: 48px } .num-56 { font-size: 56px } .num-64 { font-size: 64px } .num-84 { font-size: 84px }
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; background: var(--btn);
+  border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
+  border-radius: 6px; font: 700 13px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.chip-gold { color: var(--gold) } .chip-tan { color: var(--tan) } .chip-amber { color: var(--amber) }
+.cta { display: flex; align-items: center; justify-content: center; height: 64px; padding: 0 24px; border-radius: 8px;
+  border: 1px solid; border-bottom: 3px solid var(--bevel-d); font: 600 22px/1 var(--sans); white-space: nowrap; }
+.cta.grow { flex: 1 1 0 } .cta-ok { background: var(--btn-ok); color: var(--ok-fg); border-color: var(--green) }
+.cta-skip { background: var(--card); color: var(--amber); border-color: var(--amber) }
+.cta-plain { background: var(--btn); color: var(--tan); border-color: var(--bevel-l) }
+.step { width: 64px; height: 52px; background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d); border-radius: 6px; font-size: 30px; color: var(--tan); }
+.band { display: flex; gap: 16px; align-items: center; padding: 10px 12px 10px 18px; background: var(--card); border: 1px solid var(--border); border-left: 6px solid; border-radius: 6px; }
+.band-framework { border-left-color: var(--red) } .band-window { border-left-color: var(--green) }
+.band-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 0 }
+.counter { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; flex: 1 1 0; min-width: 0 }
+.counter-row { display: flex; align-items: center; justify-content: space-between; gap: 12px }
+.counter-value { display: flex; align-items: center; gap: 14px }
+.zone { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 10px; border: 1px solid var(--border); border-top: 3px solid; border-radius: 8px; min-width: 0 }
+.zone-head { display: flex; align-items: center; gap: 8px } .zone-head .label { color: var(--gold) }
+.zone-gold { border-top-color: var(--gold) } .zone-green { border-top-color: var(--green) } .zone-outline { border-top-color: var(--outline) }
+.ground-card { background: var(--card) } .ground-well { background: var(--well) }

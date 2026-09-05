@@ -2,8 +2,8 @@
 
 Two jobs, and the second one is the reason this file exists at all.
 
-**Freshness.** `docs/js/{phases,icons,metrics,viewcopy,xtargets}.js` are
-generated from Python sources. Nothing used to check they were regenerated
+**Freshness.** `docs/js/{phases,icons,metrics,viewcopy,xtargets,icons_svg}.js`
+are generated from Python sources. Nothing used to check they were regenerated
 after their source changed, so a stale mirror shipped silently to the Pages
 build.
 
@@ -24,7 +24,8 @@ sys.path.insert(0, ROOT)
 
 import viewcopy  # noqa: E402
 
-GENERATED = ("phases.js", "icons.js", "metrics.js", "viewcopy.js", "xtargets.js")
+GENERATED = ("phases.js", "icons.js", "metrics.js", "viewcopy.js", "xtargets.js",
+             "icons_svg.js")
 
 
 # --------------------------------------------------------------------------
