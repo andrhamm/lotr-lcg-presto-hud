@@ -196,3 +196,84 @@ def test_phase_skip_behaves_identically_in_both_twins():
     assert js["view"] == g.view
     assert js["step"] == g.step
     assert js["logMentionsSkip"] is True
+
+
+_TRACK_PROBE = """\
+import { GameState } from "./gamestate.js";
+const g = new GameState(2, 25);
+g.advanceView();
+const n0 = g.log.length;
+g.setEngaged(0, 1); g.setEngaged(0, 2); g.setEngaged(0, 3);
+g.setStagingEnemies(2);
+g.setStagingLocations(1);
+const clamp = g.setEngaged(1, -4);
+const saved = GameState.fromDict(g.toDict());
+const snap = g.snapshot();
+const before = g.beginAction();
+g.setEngaged(1, 5);
+g.addDelta(before);
+g.undo();
+console.log(JSON.stringify({
+  engaged: g.players.map(p => p.engaged),
+  rowsAdded: g.log.length - n0,
+  lastTexts: g.log.slice(-3).map(e => e.text),
+  clamp,
+  savedEngaged: saved.players.map(p => p.engaged),
+  savedStaging: [saved.staging_enemies, saved.staging_locations],
+  snapEngaged: snap.players["0"].engaged,
+  snapStaging: [snap.staging_enemies, snap.staging_locations],
+  totals: [g.engagedTotal(), g.enemiesInPlay()],
+  undone: g.players[1].engaged,
+}));
+"""
+
+
+def _js_facts(probe):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node not installed")
+    with tempfile.TemporaryDirectory() as tmp:
+        for f in os.listdir(os.path.join(ROOT, "docs", "js")):
+            if f.endswith(".js"):
+                shutil.copy(os.path.join(ROOT, "docs", "js", f),
+                            os.path.join(tmp, f))
+        with open(os.path.join(tmp, "package.json"), "w") as f:
+            f.write('{"type":"module"}')
+        path = os.path.join(tmp, "probe.mjs")
+        with open(path, "w") as f:
+            f.write(probe)
+        r = subprocess.run([node, path], cwd=tmp, capture_output=True,
+                           text=True)
+        assert r.returncode == 0, "web twin failed to load:\n%s" % r.stderr
+        return json.loads(r.stdout)
+
+
+def test_tracked_counts_behave_identically_in_both_twins():
+    from gamestate import GameState
+
+    js = _js_facts(_TRACK_PROBE)
+
+    g = GameState(2, 25)
+    g.advance_view()
+    n0 = len(g.log)
+    g.set_engaged(0, 1); g.set_engaged(0, 2); g.set_engaged(0, 3)
+    g.set_staging_enemies(2)
+    g.set_staging_locations(1)
+    clamp = g.set_engaged(1, -4)
+    saved = GameState.from_dict(g.to_dict())
+    snap = g.snapshot()
+    before = g.begin_action()
+    g.set_engaged(1, 5)
+    g.add_delta(before)
+    g.undo()
+
+    assert js["engaged"] == [p.engaged for p in g.players]
+    assert js["rowsAdded"] == len(g.log) - n0
+    assert js["lastTexts"] == [e["text"] for e in g.log[-3:]]
+    assert js["clamp"] == clamp
+    assert js["savedEngaged"] == [p.engaged for p in saved.players]
+    assert js["savedStaging"] == [saved.staging_enemies, saved.staging_locations]
+    assert js["snapEngaged"] == snap["players"]["0"]["engaged"]
+    assert js["snapStaging"] == [snap["staging_enemies"], snap["staging_locations"]]
+    assert js["totals"] == [g.engaged_total(), g.enemies_in_play()]
+    assert js["undone"] == g.players[1].engaged

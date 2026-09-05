@@ -328,6 +328,7 @@ export class Player {
     this.eliminated = false;
     this.elimination = DEFAULT_ELIMINATION;
     this.commit = 0;
+    this.engaged = 0;  // enemies engaged with this player (the tablet's tracker)
   }
 }
 
@@ -381,6 +382,11 @@ export class GameState {
     // the breakdown again (see resyncWillpower).
     this.willpower_detached = false;
     this.staging = 0;
+    // The staging area's card counts. The Presto tracks only its threat; the
+    // tablet steps these too, and skip offers + printed-X targets read them
+    // (see setEngaged for why they are keyed tallies).
+    this.staging_enemies = 0;
+    this.staging_locations = 0;
     this.pending_budget = 0;
     this.pending_elim = null;
     this.pending_quest_card = false;   // Progress-detail quest-row tap wants
@@ -607,6 +613,42 @@ export class GameState {
     }
     return this.staging;
   }
+
+  // Enemies engaged with player `index`. A keyed tally, like setStaging: a
+  // run of stepper taps rewrites one row rather than logging eight.
+  setEngaged(index, value) {
+    const v = Math.max(0, value);
+    const p = this.players[index];
+    if (v !== p.engaged) {
+      this.logEvent(`P${index + 1} engaged enemies ${v}`, "tally", `eng${index}`);
+      p.engaged = v;
+    }
+    return p.engaged;
+  }
+
+  engagedTotal() { return this.players.reduce((a, p) => a + p.engaged, 0); }
+
+  setStagingEnemies(value) {
+    const v = Math.max(0, value);
+    if (v !== this.staging_enemies) {
+      this.logEvent(`Staging enemies ${v}`, "tally", "stgen");
+      this.staging_enemies = v;
+    }
+    return this.staging_enemies;
+  }
+
+  setStagingLocations(value) {
+    const v = Math.max(0, value);
+    if (v !== this.staging_locations) {
+      this.logEvent(`Staging locations ${v}`, "tally", "stgloc");
+      this.staging_locations = v;
+    }
+    return this.staging_locations;
+  }
+
+  // What the printed X "enemies in play" counts: engaged with anyone, plus
+  // still in staging.
+  enemiesInPlay() { return this.engagedTotal() + this.staging_enemies; }
 
   // Adopt the per-player breakdown as the total, but ONLY when the two already
   // agree.
@@ -1333,7 +1375,7 @@ export class GameState {
     return {
       players: Object.fromEntries(this.players.map((p, i) => [String(i), {
         threat: p.threat, eliminated: p.eliminated,
-        commit: p.commit }])),
+        commit: p.commit, engaged: p.engaged }])),
       quest: { ...this.quest },
       active_locations: keyed(this.active_locations),
       side_quests: keyed(this.side_quests),
@@ -1341,6 +1383,8 @@ export class GameState {
       willpower: this.willpower,
       willpower_detached: this.willpower_detached,
       staging: this.staging,
+      staging_enemies: this.staging_enemies,
+      staging_locations: this.staging_locations,
       sailing: this.sailing,
       heading: this.heading,
       pending_budget: this.pending_budget,
@@ -1369,6 +1413,8 @@ export class GameState {
       p.threat = pd.threat;
       p.eliminated = pd.eliminated;
       p.commit = pd.commit;
+      // ??: deltas recorded before the tracker existed carry no such key.
+      p.engaged = pd.engaged ?? 0;
     });
     this.willpower_detached = m.willpower_detached ?? false;
     this.quest = { ...m.quest };
@@ -1377,6 +1423,8 @@ export class GameState {
     this.quest_history = unkeyed(m.quest_history);
     this.willpower = m.willpower;
     this.staging = m.staging;
+    this.staging_enemies = m.staging_enemies ?? 0;
+    this.staging_locations = m.staging_locations ?? 0;
     this.sailing = m.sailing;
     this.heading = m.heading;
     this.pending_budget = m.pending_budget;
@@ -1603,7 +1651,7 @@ export class GameState {
       players: this.players.map(p => ({
         label: p.label, threat: p.threat, starting_threat: p.starting_threat,
         threat_per_round: p.threat_per_round, eliminated: p.eliminated,
-        elimination: p.elimination, commit: p.commit })),
+        elimination: p.elimination, commit: p.commit, engaged: p.engaged })),
       view: this.view, round: this.round, first_player: this.first_player,
       step: this.step, quest: { ...this.quest },
       scenario: this.scenario,
@@ -1618,6 +1666,7 @@ export class GameState {
       side_quests: this.side_quests.map(s => ({ ...s })),
       willpower: this.willpower, willpower_detached: this.willpower_detached,
       staging: this.staging,
+      staging_enemies: this.staging_enemies, staging_locations: this.staging_locations,
       pending_budget: this.pending_budget, pending_elim: this.pending_elim,
       pending_quest_card: this.pending_quest_card,
       pending_side_quest_pick: this.pending_side_quest_pick,
@@ -1656,6 +1705,7 @@ export class GameState {
       p.eliminated = pd.eliminated;
       p.elimination = pd.elimination ?? DEFAULT_ELIMINATION;
       p.commit = pd.commit ?? 0;
+      p.engaged = pd.engaged ?? 0;
       return p;
     });
     // saves written before Resource and Planning were split carry the merged
@@ -1683,6 +1733,8 @@ export class GameState {
     g.willpower = d.willpower ?? 0;
     g.willpower_detached = d.willpower_detached ?? false;
     g.staging = d.staging ?? 0;
+    g.staging_enemies = d.staging_enemies ?? 0;
+    g.staging_locations = d.staging_locations ?? 0;
     g.pending_budget = d.pending_budget ?? 0;
     g.pending_elim = d.pending_elim ?? null;
     g.pending_quest_card = d.pending_quest_card ?? false;
