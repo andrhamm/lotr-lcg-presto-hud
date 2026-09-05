@@ -34,6 +34,28 @@ export const phaseViewOf = v =>
 export const windowAfter = v =>
   (WINDOW_PREFIX + v) in VIEW_STEP ? WINDOW_PREFIX + v : null;
 
+// -- window policy -----------------------------------------------------------
+// How a step's action window reaches the player.
+//   "views": the aw_ screens are in the flow. The Presto and its twin.
+//   "bands": the window is drawn on its step's own view, and nextView() /
+//            prevView() step over the aw_ entries. The tablet.
+// Module state, set once by the client at boot. Everything else - the step
+// ids, isActionWindow, lastWindowBefore, the skip landing - is identical under
+// both, which is what keeps the skip's safety rule one rule.
+export const WINDOW_POLICY_VIEWS = "views";
+export const WINDOW_POLICY_BANDS = "bands";
+let _windowPolicy = WINDOW_POLICY_VIEWS;
+export function setWindowPolicy(policy) {
+  if (policy !== WINDOW_POLICY_VIEWS && policy !== WINDOW_POLICY_BANDS) {
+    throw new Error(`unknown window policy: ${policy}`);
+  }
+  _windowPolicy = policy;
+}
+export const windowPolicy = () => _windowPolicy;
+// VIEW_ORDER as navigation sees it under the current policy.
+export const flowViews = () =>
+  _windowPolicy === WINDOW_POLICY_BANDS ? VIEW_ORDER.filter(v => !isWindowView(v)) : VIEW_ORDER;
+
 // Whether this client tracks the board (engaged enemies, staging cards) well
 // enough to answer printed-X questions itself. The tablet sets this at boot;
 // the Presto never does, so its printed-X rows keep asking the player - see
@@ -90,7 +112,13 @@ export const SKIPS = [
   },
 ];
 
-export const skipsFrom = view => SKIPS.filter(s => s.from.includes(view));
+// The contextual skips offered on `view` - usually none. Under "bands" a skip
+// declared from a window is offered on that window's phase view: the window
+// is on the view, so the player is standing on it.
+export const skipsFrom = view => {
+  const bands = _windowPolicy === WINDOW_POLICY_BANDS;
+  return SKIPS.filter(s => s.from.map(f => (bands ? phaseViewOf(f) : f)).includes(view));
+};
 
 export const VIEW_STEP = {
   quest_setup: "0.0", resource: "1.R", planning: "2.P", quest_sailing: "3.1",
@@ -792,11 +820,13 @@ export class GameState {
 
   nextView() {
     if (this.view === "quest_sailing") return "quest_commit";
-    const i = VIEW_ORDER.indexOf(this.view);
-    let nxt = VIEW_ORDER[(i + 1) % VIEW_ORDER.length];
-    // Resolution is entered only by a successful resolve, so the staging
-    // window hands straight to travel.
-    if (this.view === "aw_quest_staging") nxt = "travel";
+    const order = flowViews();
+    const i = order.indexOf(this.view);
+    let nxt = order[(i + 1) % order.length];
+    // Resolution is entered only by a successful resolve, so whichever view
+    // precedes it in the flow hands straight to travel - the staging window
+    // under "views", the staging view itself under "bands".
+    if (nxt === "quest_resolution") nxt = "travel";
     if (this.view === "planning" && this.sailing) nxt = "quest_sailing";
     return nxt;
   }
@@ -829,9 +859,10 @@ export class GameState {
     const landing = lastWindowBefore(skip.to);
     if (!landing || landing === this.view) return null;
 
-    const i = VIEW_ORDER.indexOf(this.view), j = VIEW_ORDER.indexOf(landing);
+    const order = flowViews();
+    const i = order.indexOf(this.view), j = order.indexOf(landing);
     if (j <= i) return null;
-    const passed = VIEW_ORDER.slice(i + 1, j);
+    const passed = order.slice(i + 1, j);
     this.logEvent(`Skipped ${passed.length ? passed.join(", ") : "nothing"} - ${skip.claim}`);
     this.enterView(landing);
     return landing;
@@ -879,10 +910,20 @@ export class GameState {
     // Entered from quest_staging by resolving, never through the staging
     // window - see the play screen's stage_advance CTA.
     if (v === "quest_resolution") return "quest_staging";
-    const i = VIEW_ORDER.indexOf(v);
+    const order = flowViews();
+    if (!order.includes(v)) return null;
+    const i = order.indexOf(v);
     // A closed round is a hard floor: endRound() has already banked its stats,
     // bumped the counter and re-derived the willpower total.
-    return i <= 0 ? null : VIEW_ORDER[i - 1];
+    if (i <= 0) return null;
+    const prev = order[i - 1];
+    // Under "bands" the resolution view sits between staging and travel in the
+    // flow, but it is only entered by a resolve; going back from travel
+    // without one lands on staging. Bands only: under "views" Back from travel
+    // reaches the resolution window first, exactly as before.
+    if (_windowPolicy === WINDOW_POLICY_BANDS
+        && prev === "quest_resolution" && !this.quest_resolved) return "quest_staging";
+    return prev;
   }
 
   canGoBack() {

@@ -133,69 +133,73 @@ def test_screen_play_twins_expose_the_same_methods():
 
 _SKIP_PROBE = """\
 import { skipsFrom, lastWindowBefore, isActionWindow, VIEW_ORDER, SKIPS,
-         GameState } from "./gamestate.js";
+         GameState, setWindowPolicy, flowViews } from "./gamestate.js";
+setWindowPolicy(%(policy)r);
 const g = new GameState();
-g.enterView("aw_enc_checks");
+g.advanceView();
+g.enterView(%(origin)r);
 const landed = g.skipTo("combat_empty");
+const walk = new GameState(); walk.advanceView();
+const seen = [walk.view];
+for (let n = 0; n < 20 && walk.view !== "round_end"; n++) { walk.advanceView(); seen.push(walk.view); }
 console.log(JSON.stringify({
-  offeredOn: VIEW_ORDER.filter(v => skipsFrom(v).length).sort(),
+  offeredOn: flowViews().filter(v => skipsFrom(v).length).sort(),
   landing: lastWindowBefore("refresh"),
   landingIsWindow: isActionWindow(lastWindowBefore("refresh")),
   skipIds: SKIPS.map(s => s.id).sort(),
   landedOn: landed,
   view: g.view,
   step: g.step,
-  logMentionsSkip: g.log.some(e => String(e.text || "").includes("Skipped")),
+  skipText: g.log.filter(e => String(e.text || "").includes("Skipped")).map(e => e.text),
+  walk: seen,
 }));
 """
 
 
-def _js_skip_facts():
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node not installed")
-    with tempfile.TemporaryDirectory() as tmp:
-        for f in os.listdir(os.path.join(ROOT, "docs", "js")):
-            if f.endswith(".js"):
-                shutil.copy(os.path.join(ROOT, "docs", "js", f),
-                            os.path.join(tmp, f))
-        with open(os.path.join(tmp, "package.json"), "w") as f:
-            f.write('{"type":"module"}')
-        probe = os.path.join(tmp, "probe.mjs")
-        with open(probe, "w") as f:
-            f.write(_SKIP_PROBE)
-        r = subprocess.run([node, probe], cwd=tmp, capture_output=True,
-                           text=True)
-        assert r.returncode == 0, "web twin failed to load:\n%s" % r.stderr
-        return json.loads(r.stdout)
-
-
-def test_phase_skip_behaves_identically_in_both_twins():
-    """The skip's safety rule has to hold on the web too.
+@pytest.mark.parametrize("policy,origin", [("views", "aw_enc_checks"),
+                                           ("bands", "enc_checks")])
+def test_phase_skip_behaves_identically_in_both_twins(policy, origin):
+    """The skip's safety rule has to hold on the web too, under both window
+    policies.
 
     Landing on the last action window before the destination is what keeps a
     skip from silently eating a phase-locked opportunity (34 distinct cards
     print "Combat Action:"). A twin that landed somewhere else would be a
     different game, so this compares the actual values rather than trusting
-    that the port looked right.
+    that the port looked right - and it does so under "views" (the Presto)
+    and "bands" (the tablet) alike, since the policy is client-selected state
+    and the skip's safety rule must hold under both.
     """
-    from gamestate import (GameState, VIEW_ORDER, SKIPS, is_action_window,
+    import gamestate
+    from gamestate import (GameState, SKIPS, flow_views, is_action_window,
                            last_window_before, skips_from)
 
-    js = _js_skip_facts()
+    js = _js_facts(_SKIP_PROBE % {"policy": policy, "origin": origin})
+    gamestate.set_window_policy(policy)
 
-    assert js["offeredOn"] == sorted(v for v in VIEW_ORDER if skips_from(v))
+    assert js["offeredOn"] == sorted(v for v in flow_views() if skips_from(v))
     assert js["skipIds"] == sorted(s["id"] for s in SKIPS)
     assert js["landing"] == last_window_before("refresh")
     assert js["landingIsWindow"] is is_action_window(last_window_before("refresh"))
 
     g = GameState()
-    g.enter_view("aw_enc_checks")
+    g.advance_view()
+    g.enter_view(origin)
     landed = g.skip_to("combat_empty")
     assert js["landedOn"] == landed
     assert js["view"] == g.view
     assert js["step"] == g.step
-    assert js["logMentionsSkip"] is True
+    assert js["skipText"] == [e["text"] for e in g.log if "Skipped" in str(e.get("text", ""))]
+
+    walk = GameState()
+    walk.advance_view()
+    seen = [walk.view]
+    for _ in range(20):
+        if walk.view == "round_end":
+            break
+        walk.advance_view()
+        seen.append(walk.view)
+    assert js["walk"] == seen
 
 
 _TRACK_PROBE = """\

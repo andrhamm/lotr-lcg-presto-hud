@@ -1,5 +1,6 @@
-"""Shared fixtures. Board tracking is module state in gamestate; a test
-that flips it must not leak into the next one."""
+"""Shared fixtures. Board tracking and the window policy are both module
+state in gamestate; a test that flips either must not leak into the next
+one."""
 import os
 import sys
 
@@ -13,3 +14,4 @@ def _reset_client_switches():
     import gamestate
     yield
     gamestate.set_board_tracking(False)
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_VIEWS)

@@ -59,6 +59,37 @@ def window_after(v):
     return w if w in VIEW_STEP else None
 
 
+# -- window policy ---------------------------------------------------------
+# How a step's action window reaches the player.
+#   "views": the aw_ screens are in the flow. The Presto: a 480px screen has
+#            no room for a band under the framework text.
+#   "bands": the window is drawn on its step's own view, and next_view() /
+#            prev_view() step over the aw_ entries. The tablet.
+# Module state, set once by the client at boot. Everything else - the step
+# ids, is_action_window, last_window_before, the skip landing - is identical
+# under both, which is what keeps the skip's safety rule one rule.
+WINDOW_POLICY_VIEWS = "views"
+WINDOW_POLICY_BANDS = "bands"
+_window_policy = [WINDOW_POLICY_VIEWS]
+
+
+def set_window_policy(policy):
+    if policy not in (WINDOW_POLICY_VIEWS, WINDOW_POLICY_BANDS):
+        raise ValueError("unknown window policy: %r" % (policy,))
+    _window_policy[0] = policy
+
+
+def window_policy():
+    return _window_policy[0]
+
+
+def flow_views():
+    """VIEW_ORDER as navigation sees it under the current policy."""
+    if _window_policy[0] == WINDOW_POLICY_BANDS:
+        return [v for v in VIEW_ORDER if not is_window_view(v)]
+    return VIEW_ORDER
+
+
 # Whether this client tracks the board (engaged enemies, staging cards) well
 # enough to answer printed-X questions itself. The tablet sets this at boot;
 # the Presto never does, so its printed-X rows keep asking the player - see
@@ -136,8 +167,16 @@ SKIPS = (
 
 
 def skips_from(view):
-    """The contextual skips offered on `view` - usually none."""
-    return tuple(s for s in SKIPS if view in s["from"])
+    """The contextual skips offered on `view` - usually none. Under "bands" a
+    skip declared from a window is offered on that window's phase view: the
+    window is on the view, so the player is standing on it."""
+    bands = _window_policy[0] == WINDOW_POLICY_BANDS
+    out = []
+    for s in SKIPS:
+        origins = [phase_view_of(f) if bands else f for f in s["from"]]
+        if view in origins:
+            out.append(s)
+    return tuple(out)
 
 # view -> representative step id (for the phases screen / log tags / LEDs)
 VIEW_STEP = {
@@ -942,11 +981,13 @@ class GameState:
         """
         if self.view == "quest_sailing":
             return "quest_commit"
-        i = VIEW_ORDER.index(self.view)
-        nxt = VIEW_ORDER[(i + 1) % len(VIEW_ORDER)]
-        # Resolution is entered only by a successful resolve, so the staging
-        # window hands straight to travel.
-        if self.view == "aw_quest_staging":
+        order = flow_views()
+        i = order.index(self.view)
+        nxt = order[(i + 1) % len(order)]
+        # Resolution is entered only by a successful resolve, so whichever
+        # view precedes it in the flow hands straight to travel - the staging
+        # window under "views", the staging view itself under "bands".
+        if nxt == "quest_resolution":
             nxt = "travel"
         if self.view == "planning" and self.sailing:
             nxt = "quest_sailing"
@@ -995,10 +1036,11 @@ class GameState:
         if landing is None or landing == self.view:
             return None
 
-        i, j = VIEW_ORDER.index(self.view), VIEW_ORDER.index(landing)
+        order = flow_views()
+        i, j = order.index(self.view), order.index(landing)
         if j <= i:
             return None
-        passed = [v for v in VIEW_ORDER[i + 1:j]]
+        passed = order[i + 1:j]
         self.log_event("Skipped %s - %s" % (
             ", ".join(passed) if passed else "nothing", skip["claim"]))
         self.enter_view(landing)
@@ -1054,12 +1096,23 @@ class GameState:
             # Entered from quest_staging by resolving, never through the
             # staging window - see the play screen's stage_advance CTA.
             return "quest_staging"
-        if v not in VIEW_ORDER:
+        order = flow_views()
+        if v not in order:
             return None
-        i = VIEW_ORDER.index(v)
+        i = order.index(v)
         # A closed round is a hard floor: end_round() has already banked its
         # stats, bumped the counter and re-derived the willpower total.
-        return None if i == 0 else VIEW_ORDER[i - 1]
+        if i <= 0:
+            return None
+        prev = order[i - 1]
+        # Under "bands" the resolution view sits between staging and travel in
+        # the flow, but it is only entered by a resolve; going back from travel
+        # without one lands on staging. Bands only: under "views" Back from
+        # travel reaches the resolution window first, exactly as before.
+        if (_window_policy[0] == WINDOW_POLICY_BANDS
+                and prev == "quest_resolution" and not self.quest_resolved):
+            return "quest_staging"
+        return prev
 
     def can_go_back(self):
         """Whether the bottom bar's Back arrow has somewhere to go.
