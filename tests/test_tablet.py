@@ -194,3 +194,24 @@ console.log(JSON.stringify({ promoted: /data-phase="Combat"[^>]*is-skippable/.te
 """)
     assert js["promoted"] and js["landing"]
     assert js["demoted"] is False
+
+
+def test_rail_shows_every_player_and_the_three_zones():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderRail } from "./rail.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(3, 25); g.advanceView();
+g.adjustThreat(2, 16); g.setEngaged(2, 1); g.setStagingEnemies(2); g.setStaging(5);
+g.logEvent("P1 threat 25 -> 26");
+const html = renderRail(g, newUi());
+console.log(JSON.stringify({ zones: (html.match(/class="zone /g) || []).length,
+  cells: (html.match(/player-cell/g) || []).length, danger: html.includes("bar-danger"),
+  buttons: html.includes("<button"), log: html.includes("P1 threat 25 -&gt; 26"),
+  prompt: html.includes("Resource"), staging: />5</.test(html) && />2</.test(html) }));
+""")
+    assert js["zones"] == 3 and js["cells"] == 3
+    assert js["danger"]                # P3 at 41 is within 10 of elimination
+    assert js["buttons"] is False      # status, not controls, in this milestone
+    assert js["log"] and js["prompt"] and js["staging"]

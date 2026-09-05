@@ -56,3 +56,34 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .tick-window { width: 12px; height: 12px; border-radius: 50%; align-self: center; background: var(--dim); }
 .tick-window.is-done, .tick-window.is-current { background: var(--green); }
 .playhead { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--gold); }
+
+/* The rail (Task 4): three read-only zones + the log block, pinned bottom. */
+.column { width: 324px; display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--well); border-right: 1px solid var(--border); overflow: hidden; }
+.player-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.player-cell { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--card-hi); border-radius: 6px; min-width: 0; }
+.player-cell.is-eliminated { opacity: .6; }
+.player-label { display: flex; align-items: center; gap: 4px; }
+.player-label.is-first { color: var(--gold); }
+.flag { font-size: 11px; color: var(--gold); }
+.player-threat { display: flex; align-items: center; gap: 6px; }
+.bar { height: 3px; border-radius: 2px; background: var(--gold); }
+.bar.bar-danger { background: var(--red); }
+.player-stats { display: flex; align-items: center; gap: 12px; }
+.stat { display: flex; align-items: center; gap: 4px; }
+.stat.is-dim { opacity: .45; }
+.player-elim { font: 700 11px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--red); }
+
+.pill { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
+.pill-dashed { border-style: dashed; background: transparent; }
+.pill-compact { flex: 1 1 0; flex-direction: row; align-items: center; justify-content: center; gap: 8px; }
+.pill-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pill-stat { display: flex; align-items: center; gap: 6px; }
+.pill-sep { color: var(--dim); }
+.pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.staging-row { display: flex; gap: 8px; }
+
+.log-block { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border); }
+.log-row { display: flex; gap: 8px; align-items: baseline; }
+.log-time { flex: 0 0 auto; width: 44px; font: 600 12px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--dim); }
+.log-text { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; color: var(--muted); }
+.log-prompt { font: 600 15px/1.2 var(--serif); color: var(--gold); }
