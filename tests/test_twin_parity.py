@@ -152,6 +152,7 @@ console.log(JSON.stringify({
   step: g.step,
   skipText: g.log.filter(e => String(e.text || "").includes("Skipped")).map(e => e.text),
   walk: seen,
+  offFlow: (() => { const h = new GameState(); h.advanceView(); h.enterView("aw_quest_resolution"); return [h.nextView(), h.prevView()]; })(),
 }));
 """
 
@@ -200,6 +201,14 @@ def test_phase_skip_behaves_identically_in_both_twins(policy, origin):
         walk.advance_view()
         seen.append(walk.view)
     assert js["walk"] == seen
+
+    # The allocation path enters aw_quest_resolution directly (see
+    # screen_play's apply_alloc) - an off-flow view under "bands". Navigation
+    # from there must be total in both twins, not just in Python.
+    h = GameState()
+    h.advance_view()
+    h.enter_view("aw_quest_resolution")
+    assert js["offFlow"] == [h.next_view(), h.prev_view()]
 
 
 _TRACK_PROBE = """\

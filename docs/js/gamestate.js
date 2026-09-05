@@ -52,9 +52,11 @@ export function setWindowPolicy(policy) {
   _windowPolicy = policy;
 }
 export const windowPolicy = () => _windowPolicy;
-// VIEW_ORDER as navigation sees it under the current policy.
+// VIEW_ORDER as navigation sees it under the current policy. Always a fresh
+// copy - callers must not be able to mutate the shared VIEW_ORDER (or a
+// cached filtered list) by mutating a return value.
 export const flowViews = () =>
-  _windowPolicy === WINDOW_POLICY_BANDS ? VIEW_ORDER.filter(v => !isWindowView(v)) : VIEW_ORDER;
+  _windowPolicy === WINDOW_POLICY_BANDS ? VIEW_ORDER.filter(v => !isWindowView(v)) : [...VIEW_ORDER];
 
 // Whether this client tracks the board (engaged enemies, staging cards) well
 // enough to answer printed-X questions itself. The tablet sets this at boot;
@@ -821,7 +823,14 @@ export class GameState {
   nextView() {
     if (this.view === "quest_sailing") return "quest_commit";
     const order = flowViews();
-    const i = order.indexOf(this.view);
+    // Under "bands" an off-flow window view can be the current view - the
+    // allocation path enters aw_quest_resolution directly (see
+    // screen_play's applyAlloc), and that view is filtered out of
+    // flowViews() under "bands". Navigate as if standing on its phase view
+    // instead of raising. Under "views" every view is already in order, so
+    // this is a no-op there.
+    const v = order.includes(this.view) ? this.view : phaseViewOf(this.view);
+    const i = order.indexOf(v);
     let nxt = order[(i + 1) % order.length];
     // Resolution is entered only by a successful resolve, so whichever view
     // precedes it in the flow hands straight to travel - the staging window
@@ -856,10 +865,16 @@ export class GameState {
   skipTo(skipId) {
     const skip = skipsFrom(this.view).find(s => s.id === skipId);
     if (!skip) return null;
-    const landing = lastWindowBefore(skip.to);
+    let landing = lastWindowBefore(skip.to);
     if (!landing || landing === this.view) return null;
 
     const order = flowViews();
+    // lastWindowBefore walks the raw VIEW_ORDER, so under "bands" it can hand
+    // back an aw_ landing that flowViews() has filtered out (not reachable
+    // today - the only landing is combat_player - but stay total). Index its
+    // phase view instead; a landing whose phase view IS the current view is
+    // still refused, via the j <= i guard below.
+    landing = order.includes(landing) ? landing : phaseViewOf(landing);
     const i = order.indexOf(this.view), j = order.indexOf(landing);
     if (j <= i) return null;
     const passed = order.slice(i + 1, j);
@@ -903,7 +918,7 @@ export class GameState {
   // has Back on the first frame; and it can never reopen a modal flow, because
   // a modal is not a view.
   prevView() {
-    const v = this.view;
+    let v = this.view;
     if (v === "quest_setup") return null;    // its Back leaves the game
     if (v === "quest_sailing") return "planning";
     if (v === "quest_commit") return this.sailing ? "quest_sailing" : "planning";
@@ -911,7 +926,12 @@ export class GameState {
     // window - see the play screen's stage_advance CTA.
     if (v === "quest_resolution") return "quest_staging";
     const order = flowViews();
-    if (!order.includes(v)) return null;
+    // Same off-flow mapping as nextView(): under "bands" a window view
+    // entered directly (e.g. aw_quest_resolution, via screenPlay's
+    // applyAlloc) is not in flowViews(). Treat it as its phase view rather
+    // than refusing to navigate. Under "views" every view is already in
+    // order, so this is a no-op there.
+    v = order.includes(v) ? v : phaseViewOf(v);
     const i = order.indexOf(v);
     // A closed round is a hard floor: endRound() has already banked its stats,
     // bumped the counter and re-derived the willpower total.

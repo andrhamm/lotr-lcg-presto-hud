@@ -100,3 +100,27 @@ def test_views_policy_is_untouched():
     assert g.next_view() == "aw_resource"
     assert skips_from("aw_enc_checks")
     assert not skips_from("enc_checks")
+
+
+def test_bands_navigation_is_total_from_a_window_entered_directly():
+    """The allocation path enters aw_quest_resolution by name (see
+    screen_play's apply_alloc). Under bands that view is not in the flow, so
+    navigation treats it as its phase view rather than raising or teleporting."""
+    set_window_policy(WINDOW_POLICY_BANDS)
+    g = _round1()
+    g.enter_view("aw_quest_resolution")
+    assert g.next_view() == "travel"
+    assert g.prev_view() == "quest_staging"
+    g.advance_view()
+    assert g.view == "travel"
+
+
+def test_flow_views_is_a_copy_under_both_policies():
+    fv = flow_views()
+    fv.append("nope")
+    assert "nope" not in flow_views()
+    assert "nope" not in VIEW_ORDER
+    set_window_policy(WINDOW_POLICY_BANDS)
+    fv = flow_views()
+    fv.append("nope")
+    assert "nope" not in flow_views()

@@ -84,10 +84,14 @@ def window_policy():
 
 
 def flow_views():
-    """VIEW_ORDER as navigation sees it under the current policy."""
+    """VIEW_ORDER as navigation sees it under the current policy.
+
+    Always a fresh copy - callers must not be able to mutate the shared
+    VIEW_ORDER (or a cached filtered list) by mutating a return value.
+    """
     if _window_policy[0] == WINDOW_POLICY_BANDS:
         return [v for v in VIEW_ORDER if not is_window_view(v)]
-    return VIEW_ORDER
+    return list(VIEW_ORDER)
 
 
 # Whether this client tracks the board (engaged enemies, staging cards) well
@@ -982,7 +986,14 @@ class GameState:
         if self.view == "quest_sailing":
             return "quest_commit"
         order = flow_views()
-        i = order.index(self.view)
+        # Under "bands" an off-flow window view can be the current view - the
+        # allocation path enters aw_quest_resolution directly (see
+        # screen_play's apply_alloc), and that view is filtered out of
+        # flow_views() under "bands". Navigate as if standing on its phase
+        # view instead of raising. Under "views" every view is already in
+        # order, so this is a no-op there.
+        v = self.view if self.view in order else phase_view_of(self.view)
+        i = order.index(v)
         nxt = order[(i + 1) % len(order)]
         # Resolution is entered only by a successful resolve, so whichever
         # view precedes it in the flow hands straight to travel - the staging
@@ -1037,6 +1048,12 @@ class GameState:
             return None
 
         order = flow_views()
+        # last_window_before walks the raw VIEW_ORDER, so under "bands" it can
+        # hand back an aw_ landing that flow_views() has filtered out (not
+        # reachable today - the only landing is combat_player - but stay
+        # total). Index its phase view instead; a landing whose phase view IS
+        # the current view is still refused, via the j <= i guard below.
+        landing = landing if landing in order else phase_view_of(landing)
         i, j = order.index(self.view), order.index(landing)
         if j <= i:
             return None
@@ -1097,8 +1114,12 @@ class GameState:
             # staging window - see the play screen's stage_advance CTA.
             return "quest_staging"
         order = flow_views()
-        if v not in order:
-            return None
+        # Same off-flow mapping as next_view(): under "bands" a window view
+        # entered directly (e.g. aw_quest_resolution, via screen_play's
+        # apply_alloc) is not in flow_views(). Treat it as its phase view
+        # rather than refusing to navigate. Under "views" every view is
+        # already in order, so this is a no-op there.
+        v = v if v in order else phase_view_of(v)
         i = order.index(v)
         # A closed round is a hard floor: end_round() has already banked its
         # stats, bumped the counter and re-derived the willpower total.
