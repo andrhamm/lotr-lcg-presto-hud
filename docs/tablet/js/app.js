@@ -71,6 +71,7 @@ const ui = newUi();
 
 function render() {
   root.innerHTML = layout(game, ui);
+  markRoute();
   // The Game Log's row list is the one scrolling region whose position is not
   // implied by the markup, and innerHTML rebuilds it from scratch on every
   // render, so it comes back at scrollTop 0 every time. Opening the log
@@ -134,6 +135,73 @@ function prefetchCardImages(bundle) {
       navigator.serviceWorker?.controller?.postMessage({ type: "prefetch", urls });
     }
   } catch (e) { /* no worker, or a browser that refuses to post */ }
+}
+
+// WHERE THE PLAYER IS, as a small record the next launch can restore. Only
+// the fields that decide what is on screen: the screen itself, and the setup
+// flow's own position in its lists. Not the sheet - a modal restored on top
+// of a recovery reload is a trap, not a convenience - and not any of the
+// per-game seats (ui.overview, ui.locations, ui.tips), which are rebuilt from
+// the slug because they are 10 KB of catalog, not navigation.
+function currentRoute() {
+  const p = ui.picker ?? {};
+  return {
+    screen: ui.screen,
+    source: p.source ?? null, cycle: p.cycle ?? null,
+    drill: p.drill ?? null, slug: p.slug ?? null,
+    players: p.players ?? null, threats: p.threats ?? null,
+  };
+}
+
+// A TAP MUST NEVER TOUCH STORAGE (CLAUDE.md). So render() only marks the
+// route dirty in RAM, and the same background interval that drains the
+// session queue is what writes it - on a frame with nothing else to do, and
+// only when it actually changed.
+let routeDirty = null;
+function markRoute() {
+  const next = JSON.stringify(currentRoute());
+  if (next !== routeDirty?.json) routeDirty = { json: next };
+}
+function flushRoute() {
+  if (!routeDirty) return;
+  const { json } = routeDirty;
+  routeDirty = null;
+  try { db.route.save(JSON.parse(json)); } catch (e) { /* never a tap's problem */ }
+}
+
+// Put the player back where they were. Everything here degrades to the
+// landing screen rather than to a broken view: a route naming a play screen
+// with no save behind it, a setup screen whose scenario has left the catalog,
+// a corrupt record - all of them just fall through.
+async function restoreRoute(haveGame) {
+  const r = db.route.load();
+  const screen = r?.screen;
+  if (!screen || screen === "home") return false;
+  if (screen === "play" || screen === "log" || screen === "gameover") {
+    if (!haveGame) return false;
+    // The game itself decides whether it is over, never the route.
+    ui.screen = game.game_over ? "gameover" : (screen === "gameover" ? "play" : screen);
+    return true;
+  }
+  if (screen !== "newgame" && screen !== "players" && screen !== "overview") return false;
+  ui.picker = await buildPicker();
+  if (ui.picker.error) return false;
+  if (r.source) ui.picker.source = r.source;
+  if (r.cycle) ui.picker.cycle = r.cycle;
+  if (r.drill) ui.picker.drill = r.drill;
+  if (Number.isFinite(r.players)) ui.picker.players = r.players;
+  if (Array.isArray(r.threats) && r.threats.length) ui.picker.threats = r.threats;
+  // A screen that shows a scenario needs that scenario's bundle back. If it
+  // no longer resolves, keep the list and drop the selection rather than
+  // stranding the player on a step whose subject is missing.
+  if (r.slug && !(await seatScenario(r.slug))) {
+    ui.picker.slug = null;
+    ui.picker.error = null;
+    ui.screen = "newgame";
+    return true;
+  }
+  ui.screen = ui.picker.slug ? screen : "newgame";
+  return true;
 }
 
 async function boot() {
@@ -209,6 +277,10 @@ async function boot() {
     ui.home = { resume: null };
   }
   ui.screen = "home";
+  // The landing screen is where a COLD launch lands. A reload is not a cold
+  // launch - the player was looking at something - so the route puts them
+  // back, and only falls through to home when it cannot.
+  await restoreRoute(!!saved);
   render();
 }
 
@@ -219,15 +291,14 @@ async function boot() {
 //
 // It awaits db.bundle(), which is why it lives here and not in
 // acts_newgame.js with the rest of the chooser's ui-only acts.
-async function pickScenario(slug) {
+async function seatScenario(slug) {
   const b = await db.bundle(slug);
   const overview = overviewFor(ui.picker.index, slug, b);
   if (!b || !overview.entry) {
     // The catalog changed under us mid-pick (or the bundle fetch failed) -
     // surface it rather than leaving the tap looking like it did nothing.
     ui.picker.error = CATALOG_UNAVAILABLE;
-    render();
-    return;
+    return false;
   }
   ui.locations = b.locations ?? [];
   // Same two fields as boot()'s resume path (Task 4) - seated here too since
@@ -243,6 +314,12 @@ async function pickScenario(slug) {
   // newgame.js will not draw a detail whose slug the picker is not
   // actually pointing at.
   ui.picker.slug = overview.entry.slug;
+  return true;
+}
+
+// The tap. Seating is separate because boot() restores a pick without one.
+async function pickScenario(slug) {
+  await seatScenario(slug);
   render();
 }
 
@@ -341,7 +418,29 @@ async function handleAct(act, arg) {
   // still sitting in the background queue is on disk before the page goes.
   if (act === "reload_app") {
     try { db.session.flush(game); } catch (e) { /* nothing queued, or no game */ }
-    location.reload();
+    flushRoute();   // the interval may not have reached this tap yet
+    // A HARD reload, because a plain one is not enough here: sw.js serves the
+    // shell stale-while-revalidate, which is right for a cold start (the app
+    // opens instantly, the new version lands in the background) and wrong for
+    // a button whose entire job is "give me the current code" - it would hand
+    // back the previous version every single time, and the fix would look
+    // like it had not shipped.
+    //
+    // Dropping the SHELL cache is enough: the next fetch has nothing to serve
+    // from and goes to the network. The image cache is deliberately left
+    // alone - it holds megabytes of card art that has not gone stale, and
+    // re-downloading it is exactly what a player on hotel wifi does not want
+    // from a recovery button.
+    //
+    // Cache Storage is same-origin from the page, so this needs no round trip
+    // through the worker; a browser with no caches API at all just reloads.
+    (async () => {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(k => /shell/.test(k)).map(k => caches.delete(k)));
+      } catch (e) { /* no Cache Storage, or a browser that refuses */ }
+      location.reload();
+    })();
     return;
   }
   if (ui.screen === "home" || ui.screen === "players"
@@ -430,8 +529,8 @@ root.addEventListener("error", ev => {
 // Gameplay touches RAM only (perform(), above); tick() drains the queue in
 // the background - see db.js's Session doc comment. flush() on pagehide so a
 // tab close/reload never loses the last few taps' journal entries.
-setInterval(() => db.session.tick(game), 250);
-window.addEventListener("pagehide", () => db.session.flush(game));
+setInterval(() => { db.session.tick(game); flushRoute(); }, 250);
+window.addEventListener("pagehide", () => { db.session.flush(game); flushRoute(); });
 
 // The service worker (Task 6): this client's offline shell and its card-image
 // cache. Registered from here rather than from index.html so the SCOPE is
@@ -465,6 +564,18 @@ function debugOverlay() {
   if (!/(^|[?&])debug=1(&|$)/.test(location.search)) return;
   const el = document.createElement("pre");
   el.className = "debug-overlay";
+  // "Is this even the new code?" is the first question any layout report has
+  // to answer, and on a device with no inspector there is no other way to ask
+  // it. The stylesheet's own BYTE LENGTH is the answer, read out of resource
+  // timing rather than fetched - this file may not fetch (the no-stray-IO
+  // guard, and rightly: a stray fetch is how a screen grows its own cache).
+  // The length changes with every edit, so it identifies the build; and
+  // transferSize 0 means the bytes came from a cache rather than the wire,
+  // which is the other half of "am I looking at something stale".
+  let cacheNames = [];
+  caches?.keys?.().then(k => { cacheNames = k; }).catch(() => {});
+  const cssEntry = () => performance.getEntriesByType?.("resource")
+    ?.find(e => e.name.endsWith("style.css")) ?? null;
   const read = () => {
     const cs = getComputedStyle(document.documentElement);
     const box = document.getElementById("app").getBoundingClientRect();
@@ -481,6 +592,9 @@ function debugOverlay() {
       `.cta-row           ${cta ? round(cta.top) + " .. " + round(cta.bottom) : "-"}`,
       `sa top/right/btm/left  ${cs.getPropertyValue("--sa-top").trim()} / ${cs.getPropertyValue("--sa-right").trim()} / ${cs.getPropertyValue("--sa-bottom").trim()} / ${cs.getPropertyValue("--sa-left").trim()}`,
       `standalone         ${!!navigator.standalone || matchMedia("(display-mode: standalone)").matches}`,
+      `sw controlling     ${!!navigator.serviceWorker?.controller}`,
+      `caches             ${cacheNames.join(" ") || "-"}`,
+      `style.css bytes    ${cssEntry()?.decodedBodySize ?? "?"}  (from ${cssEntry()?.transferSize ? "network" : "cache"})`,
     ].join("\n");
   };
   read();

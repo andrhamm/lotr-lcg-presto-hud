@@ -18,6 +18,7 @@ export const DEFAULT_PREFIX = "lotr-hud-";
 export function storageKeys(prefix = DEFAULT_PREFIX) {
   return {
     state: prefix + "state", prefs: prefix + "prefs", log: prefix + "log",
+    route: prefix + "route",
     replay: prefix + "replay",                   // legacy
     replayJournal: prefix + "replay-journal",
     history: prefix + "history", rollup: prefix + "stats",
@@ -214,6 +215,37 @@ export class History {
   }
 }
 
+// WHERE THE PLAYER WAS, as opposed to what the game is. One small object -
+// the screen, and the setup flow's own list position - so a reload comes back
+// to the view it left rather than to the landing screen. It is deliberately
+// NOT part of the save: it describes the client, survives a game ending, and
+// a corrupt or absent route costs a player nothing but a trip through home.
+//
+// A collection of its own rather than a field on the session, because the two
+// have opposite lifetimes: session state dies with `db.session.clear()` on a
+// new game, and where you are looking does not.
+export class Route {
+  constructor({ prefix = DEFAULT_PREFIX } = {}) {
+    this.keys = storageKeys(prefix);
+  }
+
+  load() {
+    try { return JSON.parse(localStorage.getItem(this.keys.route)); }
+    catch { return null; }
+  }
+
+  // Whole-object replace: it is one small record, and a merge would let a
+  // stale field outlive the screen it belonged to.
+  save(route) {
+    try { localStorage.setItem(this.keys.route, JSON.stringify(route)); }
+    catch { /* quota */ }
+  }
+
+  clear() {
+    try { localStorage.removeItem(this.keys.route); } catch { /* nothing */ }
+  }
+}
+
 export class DataClient {
   constructor({ prefix = DEFAULT_PREFIX } = {}) {
     this._index = null;
@@ -225,6 +257,7 @@ export class DataClient {
     this.keys = storageKeys(prefix);
     this.session = new Session({ prefix });
     this.history = new History({ prefix });
+    this.route = new Route({ prefix });
   }
 
   // PROPAGATES on failure, deliberately — main.js surfaces it as

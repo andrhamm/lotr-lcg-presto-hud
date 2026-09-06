@@ -35,6 +35,11 @@ const hist = new History({ prefix: "lotr-tablet-" });
 hist.append({ result: "victory", round: 9 });
 const client = new DataClient({ prefix: "lotr-tablet-" });
 client.savePrefs({ brightness: 50 });
+// The route (where the player was looking) is its own collection, and its
+// lifetime is the point: a new game clears the session, and where you are
+// looking is not part of that.
+client.route.save({ screen: "newgame", cycle: "The Haradrim", slug: "the-mumakil" });
+const routeBeforeClear = client.route.load();
 console.log(JSON.stringify({
   keys: [...store.keys()].sort(),
   hudPlayers: hud.loadState().state.players.length,
@@ -43,7 +48,10 @@ console.log(JSON.stringify({
   defaults: storageKeys(),
   legacyState: STATE_KEY,
   prefs: client.loadPrefs().brightness,
+  route: routeBeforeClear,
   cleared: (() => { tab.clear(); return [...store.keys()].sort(); })(),
+  routeAfterSessionClear: client.route.load(),
+  routeAfterOwnClear: (() => { client.route.clear(); return client.route.load(); })(),
 }));
 """
 
@@ -93,6 +101,18 @@ def test_history_and_prefs_take_the_prefix_too(js):
     assert "lotr-tablet-stats" in js["keys"]
     assert "lotr-tablet-prefs" in js["keys"]
     assert js["prefs"] == 50
+
+
+def test_the_route_is_its_own_collection_and_outlives_a_new_game(js):
+    """Where the player was looking is not part of the save: db.session.clear()
+    (what "New game" does) must leave it alone, or a reload during setup would
+    be sent back to the landing screen by the very act of starting a game.
+    It takes the prefix like everything else, and it has its own clear()."""
+    assert "lotr-tablet-route" in js["keys"]
+    assert js["route"] == {"screen": "newgame", "cycle": "The Haradrim",
+                           "slug": "the-mumakil"}
+    assert js["routeAfterSessionClear"] == js["route"]
+    assert js["routeAfterOwnClear"] is None
 
 
 def test_clearing_one_client_leaves_the_other(js):
