@@ -111,7 +111,7 @@ async function buildPicker() {
   // the right belongs to. A fresh picker starts at the top of the drill-in
   // with nothing selected, so the detail side shows its instruction.
   return { index, players: 2, threats: [25, 25], source, cycle,
-           drill: "cycles", slug: null,
+           drill: "cycles", slug: null, stage: "overview",
            error: index ? null : CATALOG_UNAVAILABLE };
 }
 
@@ -148,7 +148,7 @@ function currentRoute() {
   return {
     screen: ui.screen,
     source: p.source ?? null, cycle: p.cycle ?? null,
-    drill: p.drill ?? null, slug: p.slug ?? null,
+    drill: p.drill ?? null, slug: p.slug ?? null, stage: p.stage ?? null,
     players: p.players ?? null, threats: p.threats ?? null,
   };
 }
@@ -194,12 +194,15 @@ async function restoreRoute(haveGame) {
   // A screen that shows a scenario needs that scenario's bundle back. If it
   // no longer resolves, keep the list and drop the selection rather than
   // stranding the player on a step whose subject is missing.
+  // seatScenario resets the stage to the overview, so the remembered one is
+  // reapplied after it - not before.
   if (r.slug && !(await seatScenario(r.slug))) {
     ui.picker.slug = null;
     ui.picker.error = null;
     ui.screen = "newgame";
     return true;
   }
+  if (ui.picker.slug && r.stage) ui.picker.stage = r.stage;
   ui.screen = ui.picker.slug ? screen : "newgame";
   return true;
 }
@@ -314,6 +317,11 @@ async function seatScenario(slug) {
   // newgame.js will not draw a detail whose slug the picker is not
   // actually pointing at.
   ui.picker.slug = overview.entry.slug;
+  // A freshly picked scenario always opens on its overview: it is the first
+  // row of the stage list and the whole-quest view, and carrying the previous
+  // scenario's stage number across would land on a stage this quest may not
+  // even have.
+  ui.picker.stage = "overview";
   return true;
 }
 

@@ -39,6 +39,33 @@ export const CHROME = {
   // The chosen cycle, shown as a filter you can clear rather than as a
   // heading. Singular, and its own key: `cycles` above heads the LIST.
   cycleOne: "Cycle",
+  // The left column's third section (M7): the chosen scenario's stages, with
+  // Overview as the first row and the default. Selecting one is what the
+  // detail pane draws - so the stage list left the middle column entirely,
+  // where it was three repeated blocks of the same shape.
+  stagesHeader: "Stages",
+  overview: "Overview",
+  // A stage that advances on a condition prints no target, so its row shows
+  // this instead of a number. NEVER a 0 - ~137 of ~400 stage cards advance on
+  // a condition (xshape.js carries the full reasoning).
+  noPoints: "—",
+  questPointsShort: "%s QP",
+  stageShort: "Stage %s",
+  stageAlternatives: "%s alternatives",
+  // The tip SLOTS. Fixed set, fixed order, drawn whether or not the scenario
+  // has anything for them, because the whole point is that a player learns
+  // where to look once. `notes` is where an unclassified tip lands - every
+  // tip in tips.json is one today; the classification pass fills the rest.
+  tipSlots: {
+    pacing: "Pacing", threat: "Threat", combat: "Combat",
+    watch: "Watch for", deck: "Deckbuilding", notes: "Notes",
+  },
+  tipSlotEmpty: "Nothing recorded yet.",
+  stageSideA: "Side A", stageSideB: "Side B",
+  // 75 stage cards in the catalog have no A-side text at all (their B side
+  // carries the rules). Saying so is better than an empty panel that reads
+  // like a loading failure.
+  stageFaceBlank: "This side prints no text.",
   startingThreat: "Starting threat",
   continueToPlayers: "Continue ›",
   back: "‹ Back",

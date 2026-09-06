@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<!-- THROWAWAY layout mock A. Real data (Journey Down the Anduin, counts read
+     out of docs/data). Tips are FIXTURE - marked as such - because the real
+     classification pass is a separate effort. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock B — stages as expanding rows</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:wght@500;600;700&family=Alegreya+Sans:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="tablet/style.css">
+<style>
+  /* Mock-only. The real thing would live in style.css. */
+  .stage-rail { display: flex; gap: 8px; align-items: center; }
+  .stage-tab { display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+    min-height: 56px; padding: 7px 14px; background: var(--btn); border: 1px solid var(--bevel-l);
+    border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d); border-radius: 6px; }
+  .stage-tab.is-selected { background: var(--card-hi); border-color: var(--gold); }
+  .stage-tab .label { color: var(--dim) }
+  .stage-tab.is-selected .label { color: var(--gold) }
+  .detail-body { display: grid; grid-template-columns: minmax(0,1fr) 240px; gap: 22px; align-items: start; }
+  .questcard { width: 240px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+  .questcard .art { width: 100%; aspect-ratio: 5/7; border-radius: 6px; background: var(--well);
+    border: 1px solid var(--border-gold); display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 14px; }
+  .tipslot { display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 14px; padding: 10px 0;
+    border-top: 1px solid var(--border); }
+  .tipslot:first-of-type { border-top: 0 }
+  .tipslot .label { padding-top: 5px }
+  .tipslot.is-empty .body { color: var(--dim); font-style: italic }
+  .statgrid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+  .stat { padding: 10px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+  .stat .num { font-size: 34px }
+  .bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+  .bar i { display: block }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px }
+  .kchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 6px; }
+  .fixture { border-color: var(--amber) !important; }
+  .fixture-note { color: var(--amber) }
+</style>
+</head>
+<body>
+<div id="app"><div class="app">
+<main class="pane setup">
+  <header class="setup-head">
+    <div class="setup-head-nav"><button class="chip chip-tan" style="height:44px">‹ Back</button>
+      <span class="label">Step 1 of 2</span></div>
+    <h1 class="display">Choose a scenario</h1>
+  </header>
+
+  <div class="setup-grid">
+    <div class="setup-list">
+      <div class="label">Cycle</div>
+      <button class="drill-row drill-current"><span class="body">Core Set (Mirkwood Paths)</span><span class="drill-x">✕</span></button>
+      <div class="label">Scenarios</div>
+      <div class="drill-list">
+        <button class="drill-row drill-scenario"><span class="seticon is-missing" style="width:36px;height:36px"><i class="seticon-fallback">◆</i></span><span class="body">Passage Through Mirkwood</span></button>
+        <button class="drill-row drill-scenario is-selected"><span class="seticon is-missing" style="width:36px;height:36px"><i class="seticon-fallback">◆</i></span><span class="body">Journey Down the Anduin</span></button>
+        <button class="drill-row drill-scenario"><span class="seticon is-missing" style="width:36px;height:36px"><i class="seticon-fallback">◆</i></span><span class="body">Escape from Dol Guldur</span></button>
+      </div>
+    </div>
+
+    <div class="setup-detail">
+      <header class="ov-head" style="margin-bottom:14px">
+        <span class="seticon is-missing" style="width:44px;height:44px"><i class="seticon-fallback">◆</i></span>
+        <div class="ov-head-text"><h1 class="display">Journey Down the Anduin</h1>
+        <p class="label">Core Set · 3 stages · 51-card encounter deck</p></div>
+      </header>
+
+      <!-- No rail, no modes: each stage is a ROW, and tapping one expands it
+           in place. The repetition the current screen has is exactly what an
+           accordion removes - a collapsed stage costs one line. -->
+      <div class="label" style="margin-bottom:8px">Stages</div>
+
+      <button class="drill-row" style="margin-bottom:8px">
+        <span class="label" style="width:74px">Stage 1</span>
+        <span class="body">To the River…</span>
+        <span class="label">8 QP</span><span class="drill-chev">›</span>
+      </button>
+
+      <div style="border:1px solid var(--gold); border-radius:8px; background:var(--card-hi); padding:12px 14px; margin-bottom:8px">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px">
+          <span class="label" style="width:74px">Stage 2</span>
+          <span class="body" style="flex:1">Anduin Passage</span>
+          <span class="label">16 QP</span><span class="drill-chev" style="transform:rotate(90deg)">›</span>
+        </div>
+        <div class="detail-body">
+          <div>
+            <div class="fixture" style="border:1px solid;border-radius:8px;padding:4px 14px 10px;margin-bottom:14px">
+              <div class="label" style="padding-top:10px">Tips <span class="fixture-note">· fixture content</span></div>
+              <div class="tipslot"><span class="label">Pacing</span><p class="body">Stall here. Two extra cards a round is survivable; stage 3's ambush is not.</p></div>
+              <div class="tipslot"><span class="label">Threat</span><p class="body">No engagement checks, so threat only gates what you may optionally take.</p></div>
+              <div class="tipslot"><span class="label">Combat</span><p class="body">Each player may still engage 1 enemy. Cheaper here than later.</p></div>
+              <div class="tipslot is-empty"><span class="label">Deckbuilding</span><p class="body">Nothing recorded for this stage.</p></div>
+            </div>
+            <div class="statgrid" style="margin-bottom:10px">
+              <div class="stat"><div class="label">Enemies</div><span class="num">20</span></div>
+              <div class="stat"><div class="label">Locations</div><span class="num">13</span></div>
+              <div class="stat"><div class="label">Treacheries</div><span class="num">18</span></div>
+            </div>
+            <div class="bar" style="margin-bottom:10px">
+              <i style="flex:20;background:var(--red)"></i><i style="flex:13;background:var(--green)"></i><i style="flex:18;background:var(--purple)"></i>
+            </div>
+            <div class="chips">
+              <span class="kchip"><span class="num num-26">35%</span><span class="body secondary">shadow</span></span>
+              <span class="kchip"><span class="num num-26">4</span><span class="body secondary">Surge</span></span>
+              <span class="kchip"><span class="body secondary">Orc ×12 · Dol Guldur ×8</span></span>
+            </div>
+          </div>
+          <figure class="questcard">
+            <div class="art"><p class="body secondary">Stage 2B<br>quest card art<br><span class="label">tap to open</span></p></div>
+            <figcaption class="body secondary">side B · tap to flip</figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <button class="drill-row" style="margin-bottom:16px">
+        <span class="label" style="width:74px">Stage 3</span>
+        <span class="body">Ambush on the Shore</span>
+        <span class="label">CONDITION</span><span class="drill-chev">›</span>
+      </button>
+
+      <section class="ov-section">
+        <div class="label">Whole scenario · 51-card encounter deck</div>
+        <div class="chips">
+          <span class="kchip"><span class="num num-26">20</span><span class="body secondary">enemies</span></span>
+          <span class="kchip"><span class="num num-26">13</span><span class="body secondary">locations</span></span>
+          <span class="kchip"><span class="num num-26">18</span><span class="body secondary">treacheries</span></span>
+          <span class="kchip"><span class="num num-26">35%</span><span class="body secondary">shadow</span></span>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+</div></div>
+</body>
+</html>

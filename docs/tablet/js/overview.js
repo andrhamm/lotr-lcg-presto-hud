@@ -18,7 +18,7 @@
 // Nothing here writes a sentence about the game: the mode tips are
 // viewcopy's (difficulty.js), the card and stage text is the catalog's own,
 // and the notes are tips.json's already-fact-checked distillation.
-import { h, raw, fmt } from "./dom.js";
+import { h, raw, fmt, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
 import { setIcon } from "./seticon.js";
@@ -26,8 +26,7 @@ import { cardImage } from "./cardimage.js";
 import { stagePointsShape } from "./xshape.js";
 import { branchName } from "./resolve_step.js";
 import { frontFace } from "./cards.js";
-import { allNotes } from "./notes.js";
-import { renderNotesGroup } from "./sheet_notes.js";
+import { notesAt } from "./notes.js";
 import { difficultyOptions, modeTip } from "./difficulty.js";
 import { slugify } from "../../js/quest_catalog.js";
 
@@ -219,11 +218,36 @@ function cardsSection(groups, prefix) {
 // numeric order, each carrying its own Source link. Nothing at all for a
 // scenario tips.json never distilled (122 of ~350), which is the same
 // degrade the phase pane's notes panel makes.
-function notesSection(ui, slug) {
-  const groups = allNotes(ui.tips, slug ?? ui.scenarioSlug);
-  if (!groups.length) return "";
+// The tips, in FIXED SLOTS. Same set, same order, every time - a player
+// learns once where pacing advice lives and then always looks there, which
+// only works if an empty slot is drawn as empty rather than dropped. That is
+// the whole reason this is not just a list.
+//
+// Tips are strings in tips.json today and every one of them lands in `notes`;
+// notes.js's slotted() also accepts {kind, text}, so the classification pass
+// can land scenario by scenario without a flag day here.
+function slotRows(slots) {
+  return slots.map(s => {
+    const body = s.items.length
+      ? s.items.map(t => h`<li class="body">${t}</li>`).join("")
+      : h`<li class="body is-empty">${CHROME.tipSlotEmpty}</li>`;
+    return h`<div class="${cx("tipslot", !s.items.length && "is-empty")}">
+<span class="label">${CHROME.tipSlots[s.kind]}</span>
+<ul>${raw(body)}</ul></div>`;
+  }).join("");
+}
+
+// `stage` is null for the scenario's general tips, or the stage number.
+function tipsSection(ui, slug, stage) {
+  const at = notesAt(ui.tips, slug ?? ui.scenarioSlug, stage);
+  if (!at) return "";
+  const name = at.source?.name ?? "";
+  const url = at.source?.url ?? "";
+  const link = url
+    ? h`<a class="chip chip-tan" href="${url}" target="_blank" rel="noopener">${CHROME.source} · ${name} ›</a>`
+    : (name ? h`<span class="label">${CHROME.source} · ${name}</span>` : "");
   return h`<section class="ov-section"><div class="label">${CHROME.notes}</div>
-${raw(groups.map(renderNotesGroup).join(""))}</section>`;
+<div class="tipslots">${raw(slotRows(at.slots))}</div>${raw(link)}</section>`;
 }
 
 // The whole-screen host has exactly one way out, because it now has exactly
@@ -231,6 +255,39 @@ ${raw(groups.map(renderNotesGroup).join(""))}</section>`;
 // used to double as the pre-game step between the picker and setup, with a
 // Back and a Begin setup - that job belongs to the chooser now, which embeds
 // renderScenarioDetail() directly and brings its own Continue.
+// One stage, in full: each alternative card, each of its faces, with the
+// printed text as written. A branch stage (39 in the catalog) shows every
+// alternative - which one the quest deck turns up is not knowable here, and
+// naming only the first would be a claim.
+//
+// Faces are labelled by their printed side. The A side is story/setup and the
+// B side carries the quest points (CLAUDE.md: quest cards are two-sided, and
+// the flip happens at every stage advance), so both are worth reading before
+// the game starts - which is the whole reason this screen exists.
+function stageFace(face) {
+  const label = face.side === "B" ? CHROME.stageSideB
+    : (face.side === "A" ? CHROME.stageSideA : "");
+  const text = face.text
+    ? h`<p class="body">${face.text}</p>`
+    : h`<p class="body is-empty">${CHROME.stageFaceBlank}</p>`;
+  return h`<div class="stage-face">${label ? raw(h`<div class="label">${label}</div>`) : ""}${raw(text)}</div>`;
+}
+
+function stageCardBlock(card) {
+  const faces = (card.faces ?? []).map(stageFace).join("");
+  return h`<article class="stage-card">
+<header class="stage-card-head"><h2 class="display">${branchName(card)}</h2>${raw(stagePoints(card))}</header>
+${raw(faces)}
+</article>`;
+}
+
+function stageDetail(stage, n) {
+  const cards = stage.cards ?? [];
+  const blocks = cards.map(stageCardBlock).join("");
+  return h`<section class="ov-section"><div class="label">${fmt(CHROME.stageShort, n)}</div>
+${raw(blocks)}</section>`;
+}
+
 function footer() {
   return h`<div class="cta-row ov-foot">${raw(cta({ act: "ov_close", label: CHROME.close, tone: "plain" }))}</div>`;
 }
@@ -258,13 +315,43 @@ export function renderScenarioDetail(game, ui) {
   const name = entry.name ?? data.name ?? game?.scenario?.name ?? "";
   const difficulty = ov.difficulty ?? "Standard";
   const sets = gatherSets(data, name);
+  const head = header(name, entry, entry.stageCount ?? stages.length);
 
-  const left = h`<div class="ov-main">${raw(header(name, entry, entry.stageCount ?? stages.length))}
+  // Which of the two views this is. The selection lives on the chooser's own
+  // picker seat; the in-game reference has no list to select from, so it is
+  // always the overview.
+  const sel = ui.picker?.stage ?? "overview";
+  const stage = sel === "overview" ? null
+    : stages.find((st, i) => String(st.stage ?? i + 1) === String(sel));
+
+  if (!stage) {
+    // OVERVIEW. What the whole quest is: the one decision (difficulty), what
+    // to pull off the shelf, what its cards look like, and the tips that are
+    // not about any single stage. NO stage list - that is the left column's
+    // job now, and three repeated blocks of it here is what this replaced.
+    const left = h`<div class="ov-main">${raw(head)}
 ${raw(difficultySection(ov, entry, data, difficulty))}
 ${raw(setsSection(sets))}
-${raw(stagesSection(stages))}
 ${raw(cardsSection(cardGroups(data, name), ui.imagePrefix))}</div>`;
-  const right = h`<div class="ov-side">${raw(notesSection(ui, ov.slug))}</div>`;
+    const right = h`<div class="ov-side">${raw(tipsSection(ui, ov.slug, null))}</div>`;
+    return h`<div class="ov-grid">${raw(left)}${raw(right)}</div>`;
+  }
+
+  // A STAGE. Its own printed text is the authority on what it does, so that
+  // is what the view is built around - the card's words, not a paraphrase of
+  // them (CLAUDE.md iron rule 4). Its tips sit beside it, and only its: a
+  // stage's advice is only findable if it is not mixed in with every other
+  // stage's.
+  //
+  // There are deliberately no per-stage DECK statistics. The encounter deck
+  // is one deck for the whole game - it is not partitioned by stage - so any
+  // "this stage's enemies" figure would be the scenario's figure wearing a
+  // label that claims more than the data says. Deck-wide counts belong to the
+  // overview.
+  const n = stage.stage ?? sel;
+  const left = h`<div class="ov-main">${raw(head)}
+${raw(stageDetail(stage, n))}</div>`;
+  const right = h`<div class="ov-side">${raw(tipsSection(ui, ov.slug, n))}</div>`;
   return h`<div class="ov-grid">${raw(left)}${raw(right)}</div>`;
 }
 

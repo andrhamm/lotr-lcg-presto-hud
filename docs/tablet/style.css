@@ -554,9 +554,54 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
   align-items: center; justify-content: center; color: var(--gold);
   font-size: 18px; line-height: 1; border: 1px solid var(--border-gold);
   border-radius: 6px; }
-/* The list's own labels sit in the column, not inside the scrolling list, so
-   CYCLE and SCENARIOS stay put while the quests scroll under them. */
-.setup-list > .label { padding: 2px 4px 0; }
+/* The list's own labels sit in the column, not inside the scrolling lists, so
+   CYCLE, SCENARIOS and STAGES stay put while their rows scroll under them. */
+.setup-list > .label { padding: 2px 4px 0; flex: 0 0 auto; }
+/* THREE sections in one column (M7): the cycle, its scenarios, and - once a
+   scenario is picked - its stages. Both lists scroll independently, and both
+   are flex: 1 1 auto so a 9-scenario cycle and a 5-stage quest share the
+   column instead of one pushing the other off the bottom. The scenario list
+   yields first (a lower basis): the stage list is the one you are actively
+   working when a scenario is open. */
+/* Both lists are CONTENT-sized (flex: 0 1 auto), never growing to fill: a
+   growing scenario list pushes STAGES to the foot of the column with a hole
+   above it. They shrink and scroll only when the two together outrun the
+   column, which is the case worth spending the scrollbar on. */
+.setup-list > .drill-list, .setup-list > .stage-list { flex: 0 1 auto; }
+/* A stage row: its number as LABEL chrome at a fixed width so the names line
+   up, the name taking the slack, its points hard right. Overview is the same
+   row with none of that - one row shape, not two. */
+.stage-row .stage-n { flex: 0 0 auto; width: 62px; }
+.stage-row { min-height: 52px; }
+
+/* THE TIP SLOTS. Fixed set, fixed order, empty ones drawn as empty - the
+   whole point is that a player learns once where pacing advice lives. The
+   label column is fixed-width so those labels form a readable rail down the
+   left rather than a ragged edge. */
+.tipslots { display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: 8px; padding: 2px 14px 6px; }
+.tipslot { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px;
+  padding: 10px 0; border-top: 1px solid var(--border); align-items: start; }
+.tipslot:first-child { border-top: 0; }
+.tipslot > .label { padding-top: 5px; }
+.tipslot ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+/* An empty slot is muted and italic: present, plainly nothing yet, and never
+   mistakable for advice. */
+.body.is-empty { color: var(--dim); font-style: italic; }
+.tipslot.is-empty ul { padding-left: 0; list-style: none; }
+
+/* A STAGE, in the detail pane. Its own printed text is the authority on what
+   it does, so the card's words are the view - one block per alternative (a
+   branch stage has several and which one the quest deck turns up is not
+   knowable here), each with its faces labelled by printed side. */
+.stage-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+.stage-card + .stage-card { margin-top: 10px; }
+.stage-card-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.stage-card-head .display { margin: 0; }
+.stage-face { display: flex; flex-direction: column; gap: 6px; padding-top: 10px;
+  border-top: 1px solid var(--border); }
+.stage-face:first-of-type { padding-top: 0; border-top: 0; }
 .player-chips { display: flex; gap: 10px; }
 /* Player-count chips are single digits in an otherwise ALL-CAPS chip row -
    without a floor they pinch down to the glyph's own width and read as a

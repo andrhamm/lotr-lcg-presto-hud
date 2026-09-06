@@ -24,6 +24,8 @@ import { setupHead } from "./setup_head.js";
 import { renderScenarioDetail } from "./overview.js";
 import { cyclesFor, groupByCycle } from "../../js/quest_catalog.js";
 import { setIcon } from "./seticon.js";
+import { stagePointsShape } from "./xshape.js";
+import { branchName } from "./resolve_step.js";
 
 function sourceToggle(source) {
   const chips = [
@@ -95,6 +97,44 @@ function drillList(p, cycles, scenarios) {
 <div class="drill-list">${raw(scenarios.map(s => scenarioRow(s, p.slug)).join(""))}</div>`;
 }
 
+// The chosen scenario's stages, under the scenario list. Overview is the
+// first row and the default, so a scenario that has just loaded shows the
+// whole-quest view and every stage is one tap away - rather than the three
+// repeated STAGE blocks the middle column used to carry, which is what this
+// section replaced.
+//
+// A stage's own points are LABEL metadata beside its name, and a stage that
+// advances on a condition prints no number at all (never a 0 - xshape.js's
+// stagePointsShape carries the reasoning; ~137 of ~400 stage cards are this
+// kind). `stages` here is the bundle's, so this list is exactly what the
+// detail can draw.
+function stageRow(label, name, meta, arg, selected) {
+  return h`<button type="button" class="${cx("drill-row", "stage-row", selected && "is-selected")}" data-act="ng_stage" data-arg="${arg}">
+${label ? raw(h`<span class="label stage-n">${label}</span>`) : ""}
+<span class="body">${name}</span>
+${meta ? raw(h`<span class="label">${meta}</span>`) : ""}
+</button>`;
+}
+
+function stagesSection(stages, selected) {
+  const rows = [stageRow(null, CHROME.overview, null, "overview", selected === "overview")];
+  stages.forEach((st, i) => {
+    const n = st.stage ?? i + 1;
+    const card = (st.cards ?? [])[0];
+    const shape = card ? stagePointsShape(card) : null;
+    const meta = shape === "number"
+      ? fmt(CHROME.questPointsShort, card.questPoints) : CHROME.noPoints;
+    // A branch stage has several possible cards; the row names the stage, not
+    // one of the alternatives, because which one you get is not known here.
+    const name = (st.cards ?? []).length > 1
+      ? fmt(CHROME.stageAlternatives, (st.cards ?? []).length)
+      : (card ? branchName(card) : "");
+    rows.push(stageRow(fmt(CHROME.stageShort, n), name, meta, String(n), selected === String(n)));
+  });
+  return h`<div class="label">${CHROME.stagesHeader}</div>
+<div class="drill-list stage-list">${raw(rows.join(""))}</div>`;
+}
+
 // The detail half before anything is picked. One sentence, BODY, saying what
 // to do - not a description of the screen, and not an empty panel.
 function emptyDetail() {
@@ -132,8 +172,11 @@ export function renderNewGame(game, ui) {
     ? h`<div class="cta-row detail-foot">${raw(cta({ act: "go_players", label: h`${CHROME.continueToPlayers}`, tone: "ok" }))}</div>`
     : "";
 
+  const stages = picked ? (ui.overview?.bundle?.stages ?? []) : [];
+  const stageList = picked ? stagesSection(stages, p.stage ?? "overview") : "";
+
   return h`<main class="pane setup">${raw(head)}<div class="setup-grid">
-<div class="setup-list">${raw(drillList({ ...p, source, cycle }, cycles, scenarios))}</div>
+<div class="setup-list">${raw(drillList({ ...p, source, cycle }, cycles, scenarios))}${raw(stageList)}</div>
 <div class="setup-detail">${raw(detail)}${raw(foot)}</div>
 </div></main>`;
 }

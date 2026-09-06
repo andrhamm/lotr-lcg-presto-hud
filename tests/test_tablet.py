@@ -1097,38 +1097,40 @@ console.log(JSON.stringify({
     assert js["hardTip"]                # the printed Mode card's own text
 
 
-def test_overview_stages_list_branch_alternatives_and_never_print_a_zero():
-    """R7: one row per stage, named off the back face, with the points the
-    card actually prints. A branch stage gets a row per alternative (23 of
-    the catalog's 39 forks share one front name, which is why the back is
-    what names them), a condition stage prints nothing at all - ~137 of
-    ~400 stage cards advance on a condition, and no stage card ever prints
-    a 0 (xshape.js's stagePointsShape) - and an X-shaped stage (questPointsX)
-    prints the card's own formula sentence as BODY prose, never a number."""
+def test_the_stage_list_moved_to_the_left_column_and_never_prints_a_zero():
+    """The stages left the detail pane: they are the chooser's third list now,
+    under CYCLE and SCENARIOS, with Overview as the first row and the default.
+    Three repeated STAGE blocks in the middle column is what that replaced.
+
+    The rows keep R7's rules. A condition stage prints no target at all - ~137
+    of ~400 stage cards advance on a condition, and no stage card ever prints
+    a 0 (xshape.js's stagePointsShape) - and a branch stage names itself by
+    its count rather than by one of its alternatives, since which card the
+    quest deck turns up is not knowable from here."""
     js = node(OV_FIXTURE + r"""
 import { GameState } from "../../js/gamestate.js";
-import { renderOverview } from "./overview.js";
-const html = renderOverview(new GameState(), uiFor({}));
-// Scoped to the Stages section: the Cards grid prints quest points too (a
-// location's), and this is about what the STAGE cards claim.
-const sect = /class="ov-stages">([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
-console.log(JSON.stringify({
-  labels: [...sect.matchAll(/<span class="label">Stage (\d+)<\/span>/g)].map(m => m[1]),
-  hasLeft: sect.includes(">Left Path<"), hasRight: sect.includes(">Right Path<"),
-  frontNamed: sect.includes(">Through the Marsh<"),
-  points: [...sect.matchAll(/(\d+) quest points/g)].map(m => m[1]),
-  lastStage: /Stage 3<\/span>([\s\S]*?)<\/div>/.exec(sect)?.[1] ?? "",
-  xStage: /Stage 4<\/span>([\s\S]*?)<\/div>/.exec(sect)?.[1] ?? "",
-}));
+import { renderNewGame } from "./newgame.js";
+const idx = { scenarios: [{ slug: "ov1", name: "Overview One", pack: "P", cycle: "C1",
+  kind: "quest", source: "official", order: 1, stageCount: 4, releaseDate: "2011-01" }] };
+const ui = uiFor({});
+ui.picker = { index: idx, source: "official", cycle: "C1", drill: "scenarios", slug: "ov1" };
+const html = renderNewGame(new GameState(), ui);
+const sect = /class="drill-list stage-list">([\s\S]*?)<\/div>\s*<\/div>/.exec(html)?.[1] ?? html;
+const rows = [...sect.matchAll(/data-arg="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)]
+  .map(m => [m[1], m[2].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()]);
+console.log(JSON.stringify({ rows, overviewFirst: rows[0]?.[0] }));
 """)
-    assert js["labels"] == ["1", "2", "3", "4"]
-    assert js["hasLeft"] and js["hasRight"]
-    assert not js["frontNamed"]                 # named off the BACK face
-    assert js["points"] == ["8", "13", "13"]    # the condition stage adds none
-    assert "Hold the Line" in js["lastStage"]
-    assert "0" not in js["lastStage"].replace("Hold the Line", "")
-    assert '<p class="body">X is the number of players.</p>' in js["xStage"]
-    assert not any(ch.isdigit() for ch in js["xStage"].replace("Many Foes", ""))
+    args = [r[0] for r in js["rows"]]
+    text = {r[0]: r[1] for r in js["rows"]}
+    assert js["overviewFirst"] == "overview"        # Overview is row one...
+    assert args == ["overview", "1", "2", "3", "4"]
+    assert "Overview" in text["overview"]
+    assert "8 QP" in text["1"]
+    # Stage 3 advances on a condition: a dash, never a 0.
+    assert "QP" not in text["3"] and "0" not in text["3"]
+    # Stage 2 is the branch: named by its count, not by one alternative.
+    assert "2 alternatives" in text["2"]
+    assert "Left Path" not in text["2"] and "Right Path" not in text["2"]
 
 
 def test_overview_cards_are_the_scenarios_own_set_with_counts_and_printed_values():
@@ -1189,28 +1191,53 @@ console.log(JSON.stringify({
     assert js["fallback"] == ["Overview One"]   # no enrichment: its own set
 
 
-def test_overview_notes_reuse_the_sheets_group_renderer_with_its_source():
-    """The notes section is notes.js's allNotes() drawn by sheet_notes.js's
-    own renderNotesGroup - one markup for both surfaces, so the sheet and the
-    overview cannot drift. General first, then each stage in numeric order,
-    each group carrying its own Source link (R9)."""
+def test_tips_render_as_fixed_slots_at_the_scope_being_shown():
+    """The tips are SLOTS, not a list: the same set in the same order every
+    time, and an empty one drawn as empty rather than dropped. That is the
+    whole point - a player learns once where pacing advice lives and then
+    always looks there, which a list that varies per scenario cannot offer.
+
+    Scope follows the left column's selection: the overview shows the
+    scenario's general tips, a selected stage shows only that stage's. A
+    stage's advice is only findable if it is not mixed in with every other
+    stage's.
+
+    Both tip shapes are accepted - a plain string (every tip in tips.json
+    today) lands in `notes`; {kind, text} lands in its named slot - so the
+    classification pass can land scenario by scenario with no flag day."""
     js = node(OV_FIXTURE + r"""
 import { GameState } from "../../js/gamestate.js";
 import { renderOverview } from "./overview.js";
-const html = renderOverview(new GameState(), uiFor({}));
+import { TIP_SLOTS, slotted } from "./notes.js";
+const ov = renderOverview(new GameState(), uiFor({}));
+const stageUi = uiFor({});
+stageUi.picker = { stage: "1" };
+const st = renderOverview(new GameState(), stageUi);
 const none = renderOverview(new GameState(), uiFor({ slug: "no-tips-here" }));
+const labels = h => [...h.matchAll(/<div class="tipslot[^"]*">\s*<span class="label">([^<]+)</g)].map(m => m[1]);
 console.log(JSON.stringify({
-  scopes: [...html.matchAll(/<div class="notes-group">\s*<div class="label">([^<]+)</g)].map(m => m[1]),
-  tip: html.includes("Keep a location in play for the extra progress."),
-  link: /<a class="chip chip-tan" href="([^"]+)"[^>]*rel="noopener">([^<]+)</.exec(html)?.slice(1) ?? [],
-  noneHasNotes: none.includes("notes-group"),
+  slots: TIP_SLOTS,
+  ovLabels: labels(ov),
+  stLabels: labels(st),
+  ovHasGeneral: ov.includes("Keep a location in play for the extra progress."),
+  stHasGeneral: st.includes("Keep a location in play for the extra progress."),
+  emptySlots: (ov.match(/tipslot is-empty/g) || []).length,
+  noneHasSlots: none.includes("tipslot"),
+  classified: slotted([{ kind: "pacing", text: "Stall." }, "plain one"]) 
+    .filter(s => s.items.length).map(s => [s.kind, s.items]),
 }));
 """)
-    assert js["scopes"] == ["General", "Stage 1"]
-    assert js["tip"]
-    assert js["link"][0] == "https://example.invalid/ov1"
-    assert "Vision of the Palantir" in js["link"][1]
-    assert not js["noneHasNotes"]
+    # Same slots, same order, on both scopes.
+    assert js["ovLabels"] == ["Pacing", "Threat", "Combat", "Watch for", "Deckbuilding", "Notes"]
+    assert js["stLabels"] == js["ovLabels"]
+    # ...and the scopes really are different content.
+    assert js["ovHasGeneral"] and not js["stHasGeneral"]
+    # Every slot but the catch-all is empty today, and says so.
+    assert js["emptySlots"] == 5
+    # A scenario with no tips at all draws no panel, not an empty shell.
+    assert not js["noneHasSlots"]
+    # Both tip shapes, routed.
+    assert js["classified"] == [["pacing", ["Stall."]], ["notes", ["plain one"]]]
 
 
 def test_overview_readonly_swaps_the_ladder_for_a_badge_and_the_footer_for_close():
@@ -1229,6 +1256,7 @@ console.log(JSON.stringify({
   close: html.includes('data-act="ov_close"'),
   begin: html.includes('data-act="begin_setup"'),
   back: html.includes('data-act="ov_back"'),
+  sets: html.includes(">Gathered Set<"),
   stages: html.includes(">Left Path<"),
 }));
 """)
@@ -1237,7 +1265,10 @@ console.log(JSON.stringify({
     assert js["tip"]                      # the mode's own verified sentence stays
     assert js["close"]
     assert not js["begin"] and not js["back"]
-    assert js["stages"]                   # everything else is the same screen
+    assert js["sets"]                     # everything else is the same screen
+    # The in-game reference has no stage list to select from, so it is always
+    # the overview - and the overview no longer carries the stage cards.
+    assert not js["stages"]
 
 
 def test_overview_acts_open_from_the_stage_pill_and_close_back_to_play():

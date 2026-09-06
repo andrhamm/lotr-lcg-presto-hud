@@ -42,6 +42,14 @@ export function handle(game, ui, act, arg) {
     ui.picker.drill = "cycles";
     return true;
   }
+  // The left column's third list: which stage the detail pane is drawing, or
+  // "overview" for the whole quest. ui-only, and cheap - the bundle is
+  // already pinned, so switching stages reads nothing.
+  if (act === "ng_stage") {
+    if (ui.picker.stage === arg) return false;
+    ui.picker.stage = arg;
+    return true;
+  }
   // The two ways between the setup steps. Both are ui-only: `begin_setup` is
   // the one act that creates a game, and it stays in app.js (it rebinds
   // `game`, which clears the tagged write queue with it).

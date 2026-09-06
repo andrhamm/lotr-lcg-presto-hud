@@ -44,6 +44,47 @@ export function notesFor(tips, scenarioSlug, stage_n) {
   return { scope: CHROME.scopeGeneral, items: general.slice(0, PANEL_MAX), source: rec.attribution };
 }
 
+// THE SLOTS. A player should learn once where pacing advice lives and then
+// always look there, which only works if the set and the order never change -
+// so this is a fixed list, and an empty slot is DRAWN as empty rather than
+// dropped. `notes` is last because it is the catch-all.
+export const TIP_SLOTS = ["pacing", "threat", "combat", "watch", "deck", "notes"];
+
+// One tip is either a plain string (every tip in tips.json today) or
+// {kind, text} once the classification pass has been over it. Both shapes are
+// accepted deliberately: the corpus can be reclassified scenario by scenario
+// without a flag day, and an unrecognised kind lands in `notes` rather than
+// vanishing.
+export function tipSlot(tip) {
+  if (typeof tip === "string") return "notes";
+  const kind = tip?.kind;
+  return TIP_SLOTS.includes(kind) ? kind : "notes";
+}
+
+export function tipText(tip) {
+  return typeof tip === "string" ? tip : (tip?.text ?? "");
+}
+
+// Group one scope's tips into the fixed slots. Returns every slot in order,
+// each with its (possibly empty) list - the render decides how to show an
+// empty one, this decides nothing.
+export function slotted(items) {
+  const by = Object.fromEntries(TIP_SLOTS.map(k => [k, []]));
+  for (const t of items ?? []) by[tipSlot(t)].push(tipText(t));
+  return TIP_SLOTS.map(kind => ({ kind, items: by[kind] }));
+}
+
+// One scope's tips, for the scenario detail: `stage` is a number for a stage
+// or null for the scenario's general tips. Null when there is nothing at that
+// scope at all - the caller draws no panel rather than an empty shell.
+export function notesAt(tips, scenarioSlug, stage) {
+  const rec = tips?.[scenarioSlug];
+  if (!rec) return null;
+  const items = stage == null ? (rec.general ?? []) : (rec.stages?.[String(stage)] ?? []);
+  if (!items.length) return null;
+  return { slots: slotted(items), source: rec.attribution };
+}
+
 // The Notes sheet ("More notes ›", acts_notes.js's open_notes): every group
 // this scenario has - General first, then each stage in numeric order
 // (Object.keys on a stages map carries no ordering guarantee once keys
