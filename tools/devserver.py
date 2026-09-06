@@ -37,12 +37,19 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", type=int, default=8642)
     ap.add_argument("--directory", default="docs")
+    # Loopback by default - this serves the whole checkout and has no auth of
+    # any kind, so exposing it is an explicit act. "--host 0.0.0.0" is for
+    # trying the tablet client on a real iPad over the LAN, which is the one
+    # thing a desktop browser cannot stand in for (touch targets, the fixed
+    # page, Safari's own chrome).
+    ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
 
     root = os.path.abspath(args.directory)
     handler = lambda *a, **kw: NoCacheHandler(*a, directory=root, **kw)
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), handler)
-    print("web twin (no-cache) on http://localhost:%d  serving %s" % (args.port, root))
+    srv = http.server.ThreadingHTTPServer((args.host, args.port), handler)
+    where = "localhost" if args.host in ("127.0.0.1", "localhost") else args.host
+    print("web twin (no-cache) on http://%s:%d  serving %s" % (where, args.port, root))
     srv.serve_forever()
 
 

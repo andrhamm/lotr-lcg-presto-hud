@@ -28,11 +28,12 @@ export const CHROME = {
   // do on THIS step - never a description of the screen.
   setupStep: "Step %s of 2",
   chooseScenarioTitle: "Choose a scenario",
-  chooseScenarioHint: "Pick a cycle, then a quest. Its details open on the right.",
   choosePlayersTitle: "Set up the players",
   choosePlayersHint: "How many are playing, and each player's starting threat.",
-  chooseScenarioEmpty: "Choose a quest on the left to see its encounter sets, stages and cards.",
-  allCycles: "‹ All cycles",
+  chooseScenarioEmpty: "Choose a scenario on the left to see its encounter sets, stages and cards.",
+  // The chosen cycle, shown as a filter you can clear rather than as a
+  // heading. Singular, and its own key: `cycles` above heads the LIST.
+  cycleOne: "Cycle",
   startingThreat: "Starting threat",
   continueToPlayers: "Continue ›",
   back: "‹ Back",
@@ -62,7 +63,6 @@ export const CHROME = {
   setsToGather: "Sets to gather",
   stages: "Stages",
   cards: "Cards",
-  sharedSets: "Shared sets",
   copies: "×%s",
   // The card grid's type headings. `enemies`/`locations` below are the
   // STAGING zone's pill captions - two surfaces that happen to want the same

@@ -1,8 +1,9 @@
 // Step 1 of setup: the scenario chooser.
 //
 // Master/detail, not three columns of lists. The left column is a DRILL-IN -
-// cycles, and tapping one replaces the list with that cycle's quests plus a
-// way back up - and the right two thirds is the scenario's own detail,
+// cycles, and tapping one replaces the list with that cycle as a clearable
+// filter above its own quests - and the right two thirds is the scenario's
+// own detail,
 // rendered by overview.js's renderScenarioDetail(). That is the same
 // function the in-game "scenario details" route draws, so what a player
 // reads while choosing and what they can re-read mid-game cannot drift.
@@ -60,19 +61,34 @@ ${raw(setIcon(scn.name ?? "", 26))}
 </button>`;
 }
 
-// The list half. Two states, never both: the cycles, or one cycle's quests
-// with a row back up to the cycles. The header row of the drilled-in state
-// names the cycle you are inside - a list of quest names with no cycle
-// heading is where "which cycle am I in?" becomes a guess.
+// The list half. Two states, never both.
+//
+// At the top: the source toggle and every cycle.
+//
+// Drilled in: the chosen cycle is a FILTER you can see and clear, not a
+// heading - CYCLE, the cycle itself on a row with an X, then SCENARIOS and
+// the quests inside it. Tapping the row clears the filter and puts the cycle
+// list back. (The whole row is the target, not just the glyph: the X says
+// what the row does, and a 20px hit area on a table would be a miss waiting
+// to happen.)
+//
+// The source toggle is NOT drawn here. Official/Community chooses which
+// catalog the cycle list comes from, and once a cycle is chosen that question
+// is already answered - leaving the toggle up offers a control that would
+// silently throw away the selection under it.
 function drillList(p, cycles, scenarios) {
   if (p.drill !== "scenarios") {
-    return h`<div class="drill-list">${raw(cycles.map(cycleRow).join(""))}</div>`;
+    return h`${raw(sourceToggle(p.source ?? "official"))}
+<div class="label">${CHROME.cycles}</div>
+<div class="drill-list">${raw(cycles.map(cycleRow).join(""))}</div>`;
   }
-  const back = h`<button type="button" class="drill-row drill-back" data-act="ng_cycles">
-<span class="body">${CHROME.allCycles}</span></button>`;
-  return h`<div class="drill-list">${raw(back)}
-<div class="drill-heading label">${p.cycle ?? ""}</div>
-${raw(scenarios.map(s => scenarioRow(s, p.slug)).join(""))}</div>`;
+  return h`<div class="label">${CHROME.cycleOne}</div>
+<button type="button" class="drill-row drill-current" data-act="ng_cycles">
+<span class="body">${p.cycle ?? ""}</span>
+<span class="drill-x" aria-hidden="true">✕</span>
+</button>
+<div class="label">${CHROME.scenarios}</div>
+<div class="drill-list">${raw(scenarios.map(s => scenarioRow(s, p.slug)).join(""))}</div>`;
 }
 
 // The detail half before anything is picked. One sentence, BODY, saying what
@@ -83,10 +99,7 @@ function emptyDetail() {
 
 export function renderNewGame(game, ui) {
   const p = ui.picker ?? {};
-  const head = setupHead({
-    step: 1, title: CHROME.chooseScenarioTitle, hint: CHROME.chooseScenarioHint,
-    back: "go_home",
-  });
+  const head = setupHead({ step: 1, title: CHROME.chooseScenarioTitle, back: "go_home" });
 
   // A catalog that never loaded costs the player the rows, not the screen:
   // the error goes where the quests would have been, and the detail side
@@ -116,7 +129,7 @@ export function renderNewGame(game, ui) {
     : "";
 
   return h`<main class="pane setup">${raw(head)}<div class="setup-grid">
-<div class="setup-list">${raw(sourceToggle(source))}${raw(drillList({ ...p, cycle }, cycles, scenarios))}</div>
+<div class="setup-list">${raw(drillList({ ...p, source, cycle }, cycles, scenarios))}</div>
 <div class="setup-detail">${raw(detail)}${raw(foot)}</div>
 </div></main>`;
 }

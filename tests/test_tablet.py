@@ -1103,11 +1103,15 @@ console.log(JSON.stringify({
                          "https://art.example.invalid/l1.jpg"]
 
 
-def test_overview_shared_sets_are_the_gather_list_minus_this_ones_own():
-    """Sets to gather is the whole list (the twin's _gatherSets, falling back
-    to the scenario's own name when the enrichment never covered it); Shared
-    sets is that list minus this scenario's own - the cards the grid above
-    does NOT show. Neither is tappable: nothing here is a button."""
+def test_overview_sets_to_gather_is_the_whole_list_and_nothing_repeats_it():
+    """Sets to gather is the gather list entire (the twin's _gatherSets,
+    falling back to the scenario's own name when the enrichment never covered
+    it), and it is not tappable - nothing here is a button.
+
+    There is no second list. A "Shared sets" section used to print that same
+    list minus this scenario's own set, in the sidebar, which is by
+    construction a subset of the rows already above it - the same names, the
+    same icons, no new fact. Removed."""
     js = node(OV_FIXTURE + r"""
 import { GameState } from "../../js/gamestate.js";
 import { renderOverview } from "./overview.js";
@@ -1115,21 +1119,18 @@ const html = renderOverview(new GameState(), uiFor({}));
 const noSets = renderOverview(new GameState(), uiFor({
   bundle: { ...bundle, scenario: { ...bundle.scenario, includedSets: undefined } } }));
 const gather = /class="ov-sets">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? "";
-const shared = /class="ov-chips">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? "";
 console.log(JSON.stringify({
   gather: [...gather.matchAll(/<span class="body">([^<]+)</g)].map(m => m[1]),
-  shared: [...shared.matchAll(/<span class="body">([^<]+)</g)].map(m => m[1]),
-  sharedTappable: shared.includes("data-act"),
+  gatherTappable: gather.includes("data-act"),
+  anySecondList: html.includes("ov-chips") || html.includes("Shared sets"),
   fallback: [...(/class="ov-sets">([\s\S]*?)<\/ul>/.exec(noSets)?.[1] ?? "")
     .matchAll(/<span class="body">([^<]+)</g)].map(m => m[1]),
-  fallbackShared: noSets.includes("ov-chips"),
 }));
 """)
     assert js["gather"] == ["Overview One", "Gathered Set", "Other Set"]
-    assert js["shared"] == ["Gathered Set", "Other Set"]
-    assert not js["sharedTappable"]
+    assert not js["gatherTappable"]
+    assert not js["anySecondList"]
     assert js["fallback"] == ["Overview One"]   # no enrichment: its own set
-    assert not js["fallbackShared"]             # ...and so no shared section
 
 
 def test_overview_notes_reuse_the_sheets_group_renderer_with_its_source():

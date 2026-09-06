@@ -214,20 +214,6 @@ function cardsSection(groups, prefix) {
 <div class="ov-types">${raw(blocks)}</div></section>`;
 }
 
-// The gather list minus this scenario's own set: the cards that are NOT in
-// the Cards grid above, so the players know the grid is not the whole
-// encounter deck. Chips by shape only - there is nothing to tap here, so
-// they carry no bevel.
-function sharedSection(sets, name) {
-  const own = slugify(name);
-  const others = sets.filter(s => slugify(s) !== own);
-  if (!others.length) return "";
-  const chips = others.map(s =>
-    h`<span class="ov-chip">${raw(setIcon(s, 22))}<span class="body">${s}</span></span>`).join("");
-  return h`<section class="ov-section"><div class="label">${CHROME.sharedSets}</div>
-<div class="ov-chips">${raw(chips)}</div></section>`;
-}
-
 // The same groups the Notes sheet lists, drawn by the same renderer
 // (sheet_notes.js's renderNotesGroup) - General first, then each stage in
 // numeric order, each carrying its own Source link. Nothing at all for a
@@ -278,7 +264,7 @@ ${raw(difficultySection(ov, entry, data, difficulty))}
 ${raw(setsSection(sets))}
 ${raw(stagesSection(stages))}
 ${raw(cardsSection(cardGroups(data, name), ui.imagePrefix))}</div>`;
-  const right = h`<div class="ov-side">${raw(sharedSection(sets, name))}${raw(notesSection(ui, ov.slug))}</div>`;
+  const right = h`<div class="ov-side">${raw(notesSection(ui, ov.slug))}</div>`;
   return h`<div class="ov-grid">${raw(left)}${raw(right)}</div>`;
 }
 

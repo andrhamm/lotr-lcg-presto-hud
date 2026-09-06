@@ -69,7 +69,7 @@ def _button_heights_of(css):
     # the way into the read-only Scenario overview - it sits inside the
     # 324px rail, which is exactly where a tap target gets quietly shrunk.
     for m in re.finditer(
-        r"\.(chip|cta|step|drill-row|drill-back|step-sm|locpick-row|sqpick-row|rsheet-row|tbtn|tick-btn|log-line|pill-name-btn)(?![\w-])[^{]*\{([^}]*)\}",
+        r"\.(chip|cta|step|drill-row|drill-current|step-sm|locpick-row|sqpick-row|rsheet-row|tbtn|tick-btn|log-line|pill-name-btn)(?![\w-])[^{]*\{([^}]*)\}",
         css,
     ):
         hm = re.search(r"(?:min-)?height\s*:\s*(\d+)px", m.group(2))

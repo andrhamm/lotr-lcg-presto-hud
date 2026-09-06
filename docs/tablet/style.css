@@ -464,10 +464,18 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .drill-row .label { flex: 0 0 auto; }
 .drill-chev { flex: 0 0 auto; color: var(--dim); font-size: 22px; line-height: 1; }
 .drill-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
-/* The way back up out of a cycle, and the name of the cycle you are in. The
-   heading is not a row - nothing to tap - so it takes no bevel. */
-.drill-back { min-height: 52px; color: var(--muted); }
-.drill-heading { padding: 6px 4px 2px; color: var(--gold); }
+/* The chosen cycle, drilled in: a filter you can see and clear, under its own
+   CYCLE label. Gold-edged on the card_hi ground - the same "this one is
+   active" treatment .is-selected uses - because it is a live selection, not a
+   heading. The X is the affordance; the whole row is the target. */
+.drill-current { background: var(--card-hi); border-color: var(--gold); }
+.drill-x { flex: 0 0 auto; width: 32px; height: 32px; display: flex;
+  align-items: center; justify-content: center; color: var(--gold);
+  font-size: 18px; line-height: 1; border: 1px solid var(--border-gold);
+  border-radius: 6px; }
+/* The list's own labels sit in the column, not inside the scrolling list, so
+   CYCLE and SCENARIOS stay put while the quests scroll under them. */
+.setup-list > .label { padding: 2px 4px 0; }
 .player-chips { display: flex; gap: 10px; }
 /* Player-count chips are single digits in an otherwise ALL-CAPS chip row -
    without a floor they pinch down to the glyph's own width and read as a
@@ -718,12 +726,6 @@ a.chip { text-decoration: none; min-height: 44px; }
    caption that still runs long does not shove its neighbours down. */
 .ov-cards { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
 .ov-cards .card-frame { width: 150px; }
-.ov-chips { display: flex; flex-wrap: wrap; gap: 10px; }
-/* A shared set: icon + name, chip-shaped but not a chip - same no-bevel rule
-   as .ov-badge above, because there is nothing to tap. */
-.ov-chip { display: inline-flex; align-items: center; gap: 8px; height: 44px;
-  padding: 0 12px; background: var(--card); border: 1px solid var(--border);
-  border-radius: 8px; min-width: 0; }
 /* The footer spans both columns and sticks to the bottom of the scroll: on
    a screen this long (a scenario with 30 cards runs well past one viewport)
    Begin setup would otherwise be a scroll away from the ladder that decides
