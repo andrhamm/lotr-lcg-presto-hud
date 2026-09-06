@@ -110,19 +110,15 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs
-      - name: Publish to Cloudflare Pages
-        # The second host (Task 1 of the hosting plan): lotrlcg.app, same
-        # docs/ artifact this job just built for GitHub Pages, no separate
-        # build. main-only so a PR preview build never publishes to the
-        # live project; --commit-dirty=true because this checkout isn't a
-        # clean clone from wrangler's own perspective (build steps above
-        # wrote generated files into docs/ that git doesn't track).
-        if: github.ref == 'refs/heads/main'
-        uses: cloudflare/wrangler-action@v3
+      - uses: actions/upload-artifact@v4
+        # The same built docs/ for the Cloudflare job below - GitHub Pages
+        # gets it through upload-pages-artifact (a tarball with its own
+        # name), so this is the plain copy the other publisher downloads.
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
-          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy docs --project-name=lotrlcg --branch=main --commit-dirty=true
+          name: site
+          path: docs
+          retention-days: 1
+          include-hidden-files: true
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -132,3 +128,25 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+  publish-cloudflare:
+    # The second host (the hosting plan): lotrlcg.app, published from the SAME
+    # docs/ the build job produced - no second build. A separate job, in
+    # parallel with `deploy`, so a Cloudflare failure (token expiry, outage)
+    # shows red here without skipping the GitHub Pages deploy. main-only so a
+    # manual run from another branch never publishes to the live project.
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: docs
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          # --commit-dirty=true: the downloaded artifact makes the checkout
+          # dirty from wrangler's point of view (generated docs/data/).
+          command: pages deploy docs --project-name=lotrlcg --branch=main --commit-dirty=true
