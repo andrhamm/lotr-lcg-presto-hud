@@ -60,6 +60,9 @@ across columns, and surface blockers here.
 - [ ] Decide what a blank quest-points field means (parse_marker)
   - notes: `tools/build_card_data.py` `parse_marker("")` returns None, so 48 stage faces land as `questPoints: 0` with no kind (e.g. Passage Through Mirkwood 3B "Don't Leave the Path!", The Nin-in-Eilph "Fleeing from Tharbad"); `flipToB` then treats them as points-mode 0 instead of condition-mode. Check each face's printed text before mapping blank -> "na" (it flips 48 stages to condition mode in both twins). The tablet already renders no number for them.
 
+- [ ] One elimination prompt per eliminated player, not just the last
+  - notes: `adjustAllThreat` / `applyRefresh` (both twins) set `pending_elim` to the LAST player crossing the level in one tap; when two cross together the first gets no avert prompt. Pre-existing in the Presto twin; on the tablet the un-prompted player has no route back until the M4 rewind lands. Fix: a queue (or a list) of pending eliminations, drained one prompt at a time - both twins, parity test.
+
 ## In Progress
 * Notes for in progress overhaul of location/quest "progress":
 	* [these four are UNADDRESSED — the plan below shipped first. They are
