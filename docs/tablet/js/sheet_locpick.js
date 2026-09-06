@@ -12,6 +12,7 @@
 import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
+import { setIcon } from "./seticon.js";
 
 function step(act, arg, label) {
   return h`<button type="button" class="step step-sm" data-act="${act}" data-arg="${arg}">${label}</button>`;
@@ -63,7 +64,7 @@ function renderList(game, ui) {
     ? h`<p class="body secondary">${fmt(CHROME.locpickReplacing, loc.progress, loc.points)}</p>`
     : h`<p class="body secondary">${CHROME.locpickPrompt}</p>`;
   const groups = groupBySet(entries).map(({ set, rows }) => h`<div class="locpick-group">
-${set ? raw(h`<div class="label">${set}</div>`) : ""}
+${set ? raw(h`<div class="locpick-group-head">${raw(setIcon(set, 20))}<span class="label">${set}</span></div>`) : ""}
 ${raw(rows.map(e => locRow(e, e.id === sheet.selected)).join(""))}
 </div>`).join("");
   return h`${raw(sub)}<div class="locpick-list">${raw(groups)}</div>`;

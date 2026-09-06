@@ -29,6 +29,16 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tan); 
    is-danger treatments already use for "this goes badly". */
 .body.no { color: var(--no-fg); }
 .label { font: 700 13px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--dim); }
+/* A set/expansion icon (Task 5, seticon.js): sized inline by the caller's
+   style="width/height" (18-22px everywhere it appears), img filling that box
+   until it 404s - app.js's one delegated `error` listener adds is-missing,
+   which is what actually swaps the vector for the diamond glyph. Never both
+   at once. */
+.seticon { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.seticon img { width: 100%; height: 100%; display: block; }
+.seticon-fallback { font-style: normal; font-size: 13px; line-height: 1; color: var(--dim); }
+.seticon.is-missing img { display: none; }
+.seticon:not(.is-missing) .seticon-fallback { display: none; }
 .num { font-family: var(--sans); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--gold); }
 .num-26 { font-size: 26px } .num-34 { font-size: 34px } .num-36 { font-size: 36px } .num-40 { font-size: 40px } .num-48 { font-size: 48px } .num-56 { font-size: 56px } .num-64 { font-size: 64px } .num-84 { font-size: 84px }
 button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation;
@@ -172,7 +182,11 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .pill { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
 .pill-dashed { border-style: dashed; background: transparent; }
 .pill-compact { flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px; min-width: 0; }
-.pill-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* flex-start, not space-between: the stage pill (rail.js) now leads with the
+   scenario's set icon (Task 5) and the two must sit together at the start of
+   the row, not pushed to opposite ends - the header carried only the one
+   label span before, so this was invisible until the icon landed. */
+.pill-head { display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
 .pill-stat { display: flex; align-items: center; gap: 6px; }
 .pill-sep { color: var(--dim); }
 .pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -411,6 +425,10 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .qsheet-section { margin-top: 2px; }
 .qsheet-group { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .qsheet-name { display: flex; flex-direction: column; gap: 2px; }
+/* The quest group's own "Stage n" line, with its set icon (Task 5) sharing
+   a row - same shape as .pill-head, kept separate since a qsheet-name is not
+   a pill. */
+.qsheet-name-head { display: flex; align-items: center; gap: 8px; }
 .qsheet-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .qsheet-controls { display: flex; align-items: center; gap: 8px; }
 .qsheet-val { display: flex; align-items: center; gap: 6px; min-width: 56px; justify-content: center; }
@@ -423,6 +441,9 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    .seg.is-skippable and .locpick-row's own selected state share elsewhere. */
 .locpick-list { display: flex; flex-direction: column; gap: 14px; }
 .locpick-group { display: flex; flex-direction: column; gap: 8px; }
+/* The group header: the set's icon (Task 5) beside its LABEL name, replacing
+   the bare .label div the header used to be (sheet_locpick.js's renderList). */
+.locpick-group-head { display: flex; align-items: center; gap: 8px; }
 .locpick-row { display: flex; align-items: center; justify-content: space-between;
   gap: 16px; width: 100%; min-height: 56px; padding: 8px 16px; text-align: left;
   background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);

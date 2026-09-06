@@ -240,6 +240,18 @@ root.addEventListener("click", ev => {
   handleAct(btn.dataset.act, btn.dataset.arg ?? "");
 });
 
+// Task 5's set icons (seticon.js) and Task 6b's card images both render a
+// plain <img> that can fail to load (a set name whose slug the icon pack
+// has no SVG under, a card-art hotlink that doesn't resolve) - this is the
+// one place that catches it, for both. `error` events on <img> don't
+// bubble, so this must be capture-phase to see them at all; the wrapper
+// (.seticon/.card-frame), not the <img> itself, is what actually swaps in
+// the fallback glyph (style.css's `.is-missing` pair of rules).
+root.addEventListener("error", ev => {
+  const img = ev.target;
+  if (img?.tagName === "IMG") img.closest(".seticon, .card-frame")?.classList.add("is-missing");
+}, true);
+
 // Gameplay touches RAM only (perform(), above); tick() drains the queue in
 // the background - see db.js's Session doc comment. flush() on pagehide so a
 // tab close/reload never loses the last few taps' journal entries.

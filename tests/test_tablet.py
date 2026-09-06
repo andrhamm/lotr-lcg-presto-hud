@@ -1073,8 +1073,12 @@ console.log(JSON.stringify({
 """)
     assert js["travelChip"], "the Travel pane must offer its own CTA when no location is active"
     assert js["rowRendered"]
-    assert '<div class="label">Passage Through Mirkwood</div>' in js["setHeaderHtml"], \
+    assert '<span class="label">Passage Through Mirkwood</span>' in js["setHeaderHtml"], \
         "the set header must render as markup, not escaped text"
+    assert '<div class="locpick-group-head">' in js["setHeaderHtml"]
+    # Task 5: the set icon sits before the label, sourced from the SVG pack
+    # tools/build_icons.py exports (slugify() applied to the set name).
+    assert 'icons/svg/passage-through-mirkwood.svg"' in js["setHeaderHtml"]
     assert "&lt;div" not in js["setHeaderHtml"], \
         "a nested h`` fragment interpolated without raw(...) double-escapes into literal text"
     assert js["name"] == "Old Forest Road" and js["points"] == 3 and js["threat"] == 1
@@ -2876,3 +2880,74 @@ console.log(JSON.stringify({
     assert js["hasTip"], js["html"]
     assert js["hasName"], "the source name must still be present"
     assert not js["hasAnchor"], "empty URL must render as plain label, not anchor"
+
+
+def test_location_picker_group_header_shows_the_sets_own_icon():
+    """Task 5: sheet_locpick.js's group header leads with the set's own icon
+    (seticon.js) before its LABEL name - sourced from the SVGs
+    tools/build_icons.py exports beside icons.json (docs/data/icons/svg/
+    <slug>.svg, commit abfbd80), addressed by quest_catalog.js's slugify()
+    applied to the printed set name (seticon.js's own rule, not a second
+    copy of build_icons._slug - see the slug-parity test below)."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView(); g.enterView("travel");
+const ui = newUi();
+ui.locations = [{ id: "a", name: "Old Forest Road", points: 3, threat: 1, set: "Passage Through Mirkwood" }];
+perform(g, ui, "open_locpick", "new::play");
+console.log(JSON.stringify({ html: layout(g, ui) }));
+""")
+    assert 'class="seticon"' in js["html"]
+    assert '<img src="' in js["html"]
+    assert 'icons/svg/passage-through-mirkwood.svg"' in js["html"]
+
+
+def test_stage_pill_shows_the_scenario_set_icon_only_when_named():
+    """rail.js's stage pill (Task 5): the scenario's own set icon goes
+    before the "Stage n" label when `game.scenario?.name` is set. A bare
+    game with no preloaded scenario (newUi()'s default GameState) has no
+    name to build a slug from at all, so the pill omits the icon rather than
+    guessing - that is a different case from a NAMED set with no matching
+    SVG file, which is the fallback-glyph path seticon.js's own comment
+    documents, not this one."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderRail } from "./rail.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const named = new GameState(1, 25); named.advanceView();
+named.preloadScenario({ slug: "x", name: "Passage Through Mirkwood" }, [{ stage: 1, cards: [{}] }]);
+const bare = new GameState(1, 25); bare.advanceView();
+console.log(JSON.stringify({
+  namedHtml: renderRail(named, newUi()),
+  bareHtml: renderRail(bare, newUi()),
+}));
+""")
+    assert 'class="seticon"' in js["namedHtml"]
+    assert 'icons/svg/passage-through-mirkwood.svg"' in js["namedHtml"]
+    assert 'class="seticon"' not in js["bareHtml"]
+
+
+def test_seticon_slug_matches_build_icons_pack_naming_for_the_three_mirkwood_sets():
+    """seticon.js derives its filename by applying quest_catalog.js's own
+    slugify() to the printed SET NAME - deliberately not a client-side copy
+    of tools/build_icons.py's _slug() (which instead lowercases the PACK'S
+    OWN FILENAME). The two rules give the same slug for a plain multi-word
+    name with no punctuation - the shape build_icons._slug's docstring names
+    as its own convention ("passage_through_mirkwood.svg" ->
+    "passage-through-mirkwood") - which is pinned here for the three sets
+    task-5-brief.md calls out, so a future edit to either rule can't drift
+    silently. An apostrophe (e.g. "The Steward's Fear") is a known, accepted
+    mismatch class - see seticon.js's own comment - and is deliberately not
+    asserted here; that case just falls back to the placeholder glyph."""
+    import tools.build_icons as build_icons
+    names = ["Passage Through Mirkwood", "Dol Guldur Orcs", "Spiders of Mirkwood"]
+    expected = [build_icons._slug(n.lower().replace(" ", "_") + ".svg") for n in names]
+    js = node("""
+import { slugify } from "../../js/quest_catalog.js";
+console.log(JSON.stringify(%s.map(slugify)));
+""" % json.dumps(names))
+    assert js == expected

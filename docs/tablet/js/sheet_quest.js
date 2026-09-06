@@ -11,6 +11,7 @@ import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
 import { faceOf } from "./cards.js";
 import { icon } from "../../js/icons_svg.js";
+import { setIcon } from "./seticon.js";
 import { labelFor, resolve } from "../../js/xtargets.js";
 import { questShowsPointsStepper, xShape } from "./xshape.js";
 import { TRAIL_GREEN, TRAIL_BROWN, THREAT_BLACK, THREAT_BLACK_EDGE } from "./palette.js";
@@ -67,8 +68,14 @@ function renderQuestGroup(game) {
       : "";
     body = progressRow + ptsRow;
   }
+  // The scenario's own set icon (Task 5, seticon.js) before the "Stage n"
+  // label - same treatment as rail.js's stage pill, and the same guard:
+  // `game.scenario?.name` is the one name this app can turn into an icon
+  // slug, omitted for a bare/manual game with no preloaded scenario.
+  const setName = game.scenario?.name;
+  const stageIcon = setName ? setIcon(setName, 20) : "";
   return h`<div class="qsheet-group">
-<div class="qsheet-name"><span class="body">${CHROME.stage} ${game.questLabel()}</span>${raw(nameLine)}</div>
+<div class="qsheet-name"><div class="qsheet-name-head">${raw(stageIcon)}<span class="body">${CHROME.stage} ${game.questLabel()}</span></div>${raw(nameLine)}</div>
 ${raw(body)}
 </div>`;
 }
