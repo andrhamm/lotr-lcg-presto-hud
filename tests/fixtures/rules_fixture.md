@@ -6,7 +6,11 @@
 
 Fixture: a player leaves the game when the fixture says so.
 
-###### See also: Threat, Threat Elimination Level
+###### See also: Threat,
+
+Threat Elimination Level
+
+-----
 
 ##### Threat
 

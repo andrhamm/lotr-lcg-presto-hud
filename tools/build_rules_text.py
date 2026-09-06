@@ -19,8 +19,20 @@ DEFAULT_NAME = "rules-reference.md"
 DEFAULT_OUT = os.path.join(ROOT, "docs", "data", "rules_text.json")
 SOURCE = os.path.join(HERE, "data", "rules.SOURCE.txt")
 
+# Assumes a step's title text never itself contains an N.N-shaped token (a
+# card cost, a page number, a quoted rule id) - such a token would be read as
+# a second merged step id splitting the title in the wrong place.
 STEP_RE = re.compile(r"(\d+\.\d+(?:[ab]|\.\d+)?)\s+(.+?)(?=\s+\d+\.\d+(?:[ab]|\.\d+)?\s+|$)")
-SEE_ALSO_RE = re.compile(r"^#{2,6}\s*See also:\s*(.+?)\s*$", re.I)
+# The corpus writes "See also:" cross-references two ways - as a "######"
+# subheading (most entries) and, less often, bolded inline ("**See also:
+# ...**"); both are matched here so neither leaks into `text`. A long list
+# wraps onto a second markdown line (a blank line, then the remaining terms)
+# before the entry's separator or the next heading - see parse()'s handling
+# of cur["collecting_see_also"].
+SEE_ALSO_RE = re.compile(r"^(?:#{2,6}|\*\*)\s*See also:\s*(.+?)\*{0,2}\s*$", re.I)
+# The corpus separates glossary entries (and, less often, marks a two-column
+# page break mid-paragraph) with a bare "-----" line - never real body text.
+SEP_RE = re.compile(r"^-{3,}\s*$")
 
 def _clean(lines):
     text = "\n".join(lines).strip()
@@ -34,9 +46,27 @@ def parse(md):
         if cur is None: return
         rec = cur["rec"]; rec["text"] = _clean(body); body.clear()
     for line in md.splitlines():
+        # (a) a separator is never body text, in any state - it marks either
+        # an entry boundary or, mid-paragraph, a two-column page break.
+        if SEP_RE.match(line):
+            continue
+        # (b) once a "See also:" line has matched, a wrapped continuation
+        # (the remaining terms, one blank line down) still needs to land in
+        # see_also rather than body. The blank line right after the match is
+        # tolerated rather than ending collection - the corpus always puts
+        # exactly one before the wrapped terms - and collection only really
+        # ends at the next heading (handled below) or separator (above).
+        if cur is not None and cur.get("collecting_see_also"):
+            if line.strip() == "":
+                continue
+            if not line.startswith("#"):
+                cur["rec"]["see_also"].extend(t.strip() for t in line.split(",") if t.strip())
+                continue
+            cur["collecting_see_also"] = False  # a heading: fall through and end it below
         m = SEE_ALSO_RE.match(line)
         if m and cur is not None:
             cur["rec"]["see_also"] = [t.strip() for t in m.group(1).split(",") if t.strip()]
+            cur["collecting_see_also"] = True
             continue
         if line.startswith("###### "):
             flush(); head = line[7:].strip()
@@ -64,8 +94,10 @@ def build(corpus_dir, out_path=DEFAULT_OUT, corpus_name=DEFAULT_NAME):
         raise SystemExit("rules corpus not found at %s - build it with tools/build_rules_corpus.py (see rules/README.md; research/rules is gitignored and lives in the main checkout)" % path)
     md = open(path, encoding="utf-8").read()
     doc = parse(md)
-    doc.update({"generated": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z", "book": "Rules Reference",
-                "source": {"sha256": hashlib.sha256(md.encode("utf-8")).hexdigest(), "page": _pin().get("page", ""), "pin": _pin().get("sha256", "")}})
+    pin = _pin()
+    generated = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    doc.update({"generated": generated, "book": "Rules Reference",
+                "source": {"sha256": hashlib.sha256(md.encode("utf-8")).hexdigest(), "page": pin.get("page", ""), "pin": pin.get("sha256", "")}})
     # ids that alias one record must serialise once each - JSON has no shared refs, so emit per id.
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:

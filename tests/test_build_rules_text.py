@@ -16,8 +16,14 @@ def test_parse_splits_merged_headings_and_keeps_one_text():
 def test_parse_collects_glossary_and_see_also():
     doc = brt.parse(open(os.path.join(FIX, "rules_fixture.md")).read())
     g = doc["glossary"]["Player Elimination"]
+    # The fixture wraps this entry's "See also:" onto a second markdown line
+    # (blank line, then the remaining terms, blank line, then a "-----"
+    # separator) the way the real corpus does - both wrapped terms must land
+    # in see_also, and text must carry neither the separator nor a "See also"
+    # fragment.
     assert g["text"] == "Fixture: a player leaves the game when the fixture says so."
     assert g["see_also"] == ["Threat", "Threat Elimination Level"]
+    assert "-----" not in g["text"] and "See also" not in g["text"]
     assert doc["glossary"]["Threat"]["text"] == "Fixture threat entry."
     assert doc["faq"] == []
 

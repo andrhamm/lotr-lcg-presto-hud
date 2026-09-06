@@ -187,6 +187,13 @@ def test_every_shipped_string_is_device_renderable():
     files = (glob.glob(os.path.join(root, "docs", "data", "*.json"))
              + glob.glob(os.path.join(root, "docs", "data", "scenarios", "*.json"))
              + glob.glob(os.path.join(root, "docs", "data", "players", "*.json")))
+    # rules_text.json (tools/build_rules_text.py) is exempt: it is verbatim FFG
+    # Rules Reference text, which must ship unmodified rather than normalised
+    # to fit the device's font table - and nothing normalises it for a reason,
+    # because no firmware screen reads it. Only docs/tablet/js/app.js
+    # (db.rulesText(), a browser-only client) fetches the file; the device
+    # never loads docs/data/rules_text.json.
+    files = [f for f in files if os.path.basename(f) != "rules_text.json"]
     if not files:
         return          # generated catalog absent on a bare tree
     offenders = []

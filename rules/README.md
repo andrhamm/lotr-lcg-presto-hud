@@ -42,8 +42,11 @@ gitignored, regenerated, never hand-edited — because it is still verbatim FFG
 text, just a narrower slice of it. The source PDF is pinned by content hash in
 `tools/data/rules.SOURCE.txt` (no verified direct download URL exists, so
 `url=` is usually empty and the CI step that would fetch it skips with a
-message). A device deploy needs this only once a firmware feature reads it —
-today only the tablet client does — and at that point it is
+message). The tablet client is a web app served from `docs/tablet/`, not a
+firmware feature — it fetches `rules_text.json` straight off Pages (or the
+worktree dev server) the same way it fetches the rest of `docs/data/`, no
+device deploy involved. No firmware screen reads this file today; if one
+ever does, a device deploy at that point would be
 `python3 tools/build_rules_text.py && mpremote cp -r docs/data/ :/data/`, the
 same one-liner the rest of `docs/data/` uses.
 
