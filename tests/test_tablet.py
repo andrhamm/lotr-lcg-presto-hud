@@ -634,6 +634,40 @@ console.log(JSON.stringify({ a, b, c, n, canUndo, stagingAfterUndo: g.staging, r
     assert js["replay"]
 
 
+def test_a_rewind_survives_the_journal_round_trip():
+    """A cursor move via rw_undo writes a position op to the journal without
+    recording a delta. Folding the journal ops via foldReplay should
+    reconstruct [deltas, replay_step] matching the live game state."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, foldReplay } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); const ui = newUi();
+perform(g, ui, "stg+", "");
+perform(g, ui, "advance", "");
+perform(g, ui, "stg+", "");
+perform(g, ui, "rw_undo", "");
+const journal = g.takeReplayAppends();
+const folded = foldReplay(journal);
+const dict = g.replayToDict();
+console.log(JSON.stringify({
+  deltasLength: folded[0].length,
+  foldedStep: folded[1],
+  gameDeltas: g.deltas.length,
+  gameStep: g.replay_step,
+  dictStep: dict.replay_step,
+  folded: [folded[0].length, folded[1]],
+  game: [g.deltas.length, g.replay_step]
+}));
+""")
+    assert js["deltasLength"] == 3
+    assert js["foldedStep"] == 1
+    assert js["gameDeltas"] == 3
+    assert js["gameStep"] == 1
+    assert js["dictStep"] == 1
+    assert js["folded"] == js["game"]
+
+
 def test_defeat_lands_inside_the_same_delta_so_undo_reverts_it():
     """app.js used to check allEliminated()/setGameOver() AFTER perform()
     had already closed its delta window (dispatch, then addDelta), so the
