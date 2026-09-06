@@ -405,7 +405,10 @@ local directory instead of fetching (useful offline); either source degrades
 gracefully to an empty `icons.json` (missing local dir) or a friendly
 `SystemExit` (fetch/rasterize failure) rather than a crash — icon slots just
 fall back to their placeholder glyph. The same run also writes the pack's
-SVGs verbatim to `docs/data/icons/svg/<slug>.svg` (gitignored, same pin) for
+SVGs — recoloured from `currentColor` to the palette gold both twins use for
+set icons (`rgb(214,180,110)`, `pal.gold` in `docs/js/ui.js`), since a
+tablet `<img>` can't inherit `currentColor` from the page the way an inline
+SVG can — to `docs/data/icons/svg/<slug>.svg` (gitignored, same pin) for
 the tablet client; `--svg-out` overrides the directory, and `--svg-out ""`
 disables the export. Rasterizing needs Pillow plus either
 `cairosvg` or the `rsvg-convert` CLI. Runs alongside `build_card_data.py` in

@@ -13,7 +13,7 @@ import { faceOf } from "./cards.js";
 import { fmtMs } from "../../js/gamestate.js";
 import { VIEW_LABELS } from "../../js/viewcopy.js";
 import { icon } from "../../js/icons_svg.js";
-import { setIcon } from "./seticon.js";
+import { scenarioIcon } from "./seticon.js";
 import {
   THREAT_RED, THREAT_SHADOW, THREAT_BLACK, THREAT_BLACK_EDGE,
   WILLPOWER_GOLD, TRAIL_GREEN, TRAIL_BROWN,
@@ -65,18 +65,17 @@ function renderPlayersZone(game) {
 // line is omitted rather than shown blank). Catalog cards are
 // `{ faces: [...] }`, not `{ name }` at the top level.
 //
-// The scenario's own set icon (Task 5, seticon.js) goes before the "Stage n"
-// label - `game.scenario?.name` rather than the stage card's own name, since
-// that is the one name this app can turn into an icon slug at all (a
-// scenario is usually also the encounter set its own quest cards belong to;
-// a bare/manual game with no preloaded scenario has no name to try, so the
-// icon is omitted rather than guessing).
+// The scenario's own set icon (Task 5, seticon.js's scenarioIcon) goes
+// before the "Stage n" label - `game.scenario?.name` rather than the stage
+// card's own name, since that is the one name this app can turn into an
+// icon slug at all (a scenario is usually also the encounter set its own
+// quest cards belong to; a bare/manual game with no preloaded scenario has
+// no name to try, so the icon is omitted rather than guessing).
 function renderStagePill(game) {
   const card = game.stages[game.stage_idx]?.cards?.[game.card_idx];
   const name = faceOf(card, game.quest.side)?.name;
   const nameRow = name ? h`<p class="body pill-name">${name}</p>` : "";
-  const setName = game.scenario?.name;
-  const stageIcon = setName ? setIcon(setName, 20) : "";
+  const stageIcon = scenarioIcon(game, 20);
   return h`<div class="pill">
 <div class="pill-head">${raw(stageIcon)}<span class="label">${CHROME.stage} ${game.questLabel()}</span></div>
 <div class="pill-stat">${raw(icon("TRAIL", 18, TRAIL_GREEN, TRAIL_BROWN))}<span class="num num-26">${game.quest.progress}</span><span class="pill-sep">/</span><span class="num num-26">${game.quest.points}</span></div>

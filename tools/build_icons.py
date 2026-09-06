@@ -22,16 +22,21 @@ optional (card data is the critical artifact - see CLAUDE.md's Card data
 section).
 
 The same pass over the source (tarball or --assets dir) also writes every
-SVG verbatim to --svg-out (default docs/data/icons/svg/<slug>.svg, same
+SVG to --svg-out (default docs/data/icons/svg/<slug>.svg, same
 gitignored/regenerated posture, same collision rule as icons.json) for
 consumers that want the vector art directly instead of the rasterized
-mask; --svg-out "" disables the export."""
+mask; --svg-out "" disables the export. Each exported SVG is recoloured
+(see _recolor_svg) from the pack's fill="currentColor" - meant for an
+inline SVG that inherits the surrounding page's text color, which an <img>
+cannot do - to the palette gold both twins use for set icons, otherwise
+byte-identical to the source."""
 import argparse
 import datetime
 import glob
 import io
 import json
 import os
+import re
 import subprocess
 import tarfile
 import tempfile
@@ -51,6 +56,11 @@ except ImportError:  # pragma: no cover - exercised only where Pillow is absent
 DEFAULT_OUT = os.path.join("docs", "data", "icons.json")
 DEFAULT_SVG_OUT = os.path.join("docs", "data", "icons", "svg")
 SIZE = 24
+
+# Palette gold both twins use for set icons (pal.gold = [214, 180, 110],
+# docs/js/ui.js) - see _recolor_svg.
+SVG_FILL = "rgb(214,180,110)"
+_CURRENT_COLOR_RE = re.compile(rb"currentColor")
 
 REPO = "KevBelisle/lotr-lcg-assets"
 TARBALL = "https://codeload.github.com/KevBelisle/lotr-lcg-assets/tar.gz/{sha}"
@@ -143,6 +153,31 @@ def svg_to_mask(svg_bytes, size=24, threshold=128):
     return mask
 
 
+def _recolor_svg(svg_bytes):
+    """Recolor an exported SVG's `currentColor` references to SVG_FILL, for
+    the verbatim svg_out copy only (see _assemble) - NOT for the
+    icons.json mask (svg_to_mask composites onto a white background and
+    thresholds on darkness, so currentColor's default-black resolution
+    there is already correct regardless of what color the export ends up
+    painted).
+
+    The pack's SVGs use fill="currentColor" so the source repo's own demo
+    page can recolor them by inheriting the surrounding text color: an
+    inline <svg> can do that, but a tablet <img> can't inherit anything
+    from the page, so left alone every exported icon renders black on the
+    tablet's near-black ground (Task 5b review, "Important").
+
+    `currentColor` is the literal SVG/CSS keyword and appears as that exact
+    token in every shape the pack uses it in - a bare attribute value
+    (fill="currentColor"), inside a style="" attribute
+    (style="fill:currentColor"), and inside a <style> block's declarations
+    (.a{fill:currentColor;stroke:currentColor}) - so one case-sensitive
+    byte-level regex substitution over the whole file catches all of them
+    without parsing the markup. Everything else about the file - structure,
+    whitespace, every other attribute/declaration - stays byte-identical."""
+    return _CURRENT_COLOR_RE.sub(SVG_FILL.encode("ascii"), svg_bytes)
+
+
 def _slug(path):
     """Filename (no directory, no .svg) lowercased with underscores turned
     to hyphens - e.g. "passage_through_mirkwood.svg" -> "passage-through-
@@ -213,10 +248,11 @@ def _assemble(svg_sources, size, svg_out=None):
     encounter sets always win, matching the pre-existing behavior.
 
     `svg_out`, when given, is a directory that also receives each source
-    SVG's raw bytes verbatim as `<slug>.svg` - written in this same single
-    pass over `svg_sources`, so a collision resolves to the identical
-    winner as the icons.json mask (the later source for a slug overwrites
-    both the dict entry and the file). Never iterates svg_sources twice."""
+    SVG as `<slug>.svg` - recoloured by _recolor_svg (currentColor ->
+    SVG_FILL) but otherwise verbatim - written in this same single pass
+    over `svg_sources`, so a collision resolves to the identical winner as
+    the icons.json mask (the later source for a slug overwrites both the
+    dict entry and the file). Never iterates svg_sources twice."""
     icons = {}
     counts = {"encounter_sets": 0, "expansion_symbols": 0, "collisions": 0}
     if svg_out:
@@ -235,7 +271,7 @@ def _assemble(svg_sources, size, svg_out=None):
         if svg_out:
             try:
                 with open(os.path.join(svg_out, slug + ".svg"), "wb") as f:
-                    f.write(svg_bytes)
+                    f.write(_recolor_svg(svg_bytes))
             except OSError as e:
                 raise SystemExit("Failed to write SVG %r to %r: %s" % (slug, svg_out, e))
     return icons, counts

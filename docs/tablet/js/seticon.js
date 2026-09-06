@@ -31,3 +31,15 @@ export function setIcon(name, px) {
   const src = dataUrl("icons/svg/" + slugify(name) + ".svg");
   return h`<span class="seticon" style="width:${px}px;height:${px}px"><img src="${src}" alt="" loading="lazy"><i class="seticon-fallback">◆</i></span>`;
 }
+
+// The scenario's own set icon, keyed by `game.scenario?.name` (the one name
+// this app can turn into an icon slug at all - a scenario is usually also
+// the encounter set its own quest cards belong to). Empty string for a
+// bare/manual game with no preloaded scenario, so callers can `raw()` it
+// unconditionally instead of repeating the `setName ? setIcon(...) : ""`
+// guard - rail.js's stage pill and sheet_quest.js's quest-group header both
+// used to carry that exact two-line duplicate.
+export function scenarioIcon(game, px) {
+  const setName = game.scenario?.name;
+  return setName ? setIcon(setName, px) : "";
+}

@@ -14,6 +14,11 @@ HALF = b'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
 # blank), same as cairosvg's own preserveAspectRatio="xMidYMid meet" default.
 WIDE = b'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">
 <rect x="0" y="0" width="20" height="10" fill="black"/></svg>'''
+# currentColor in both an attribute value and a <style> declaration - the
+# two shapes the real pack uses it in (see _recolor_svg's docstring).
+CURRENT_COLOR = b'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+<style>.a { fill: currentColor; stroke: currentColor; }</style>
+<rect x="0" y="0" width="10" height="10" fill="currentColor"/></svg>'''
 
 
 def test_full_square_sets_every_bit():
@@ -195,7 +200,10 @@ def test_fetch_and_build_writes_source_naming_repo_and_sha(tmp_path, monkeypatch
 def test_svg_out_writes_verbatim_copy_alongside_icons_json(tmp_path):
     # Directory names ("encounter sets" / "expansion symbols", with a
     # space) match _iter_local_svgs's expected subtrees, same as every
-    # other --assets fixture above.
+    # other --assets fixture above. SQUARE has no currentColor to recolor,
+    # so the write is verbatim except _recolor_svg (a no-op here) - see
+    # test_svg_out_recolors_current_color_fill_and_style_to_palette_gold
+    # for the case where it isn't.
     assets = tmp_path / "assets"
     (assets / "encounter sets").mkdir(parents=True)
     (assets / "expansion symbols").mkdir(parents=True)
@@ -208,10 +216,34 @@ def test_svg_out_writes_verbatim_copy_alongside_icons_json(tmp_path):
     assert summary["count"] == 1
     written = svg_out / "passage-through-mirkwood.svg"
     assert written.exists()
-    assert written.read_bytes() == SQUARE  # byte-identical to the source
+    # Verbatim except currentColor -> SVG_FILL (build_icons._recolor_svg).
+    assert written.read_bytes() == build_icons._recolor_svg(SQUARE)
     assert out.exists()
     import json
     assert "passage-through-mirkwood" in json.loads(out.read_text())["icons"]
+
+
+def test_svg_out_recolors_current_color_fill_and_style_to_palette_gold(tmp_path):
+    # Important (Task 5b review): the pack's SVGs use fill="currentColor",
+    # meant for an inline SVG that inherits the page's text color - a
+    # tablet <img> can't do that, so left alone every icon renders black on
+    # the near-black ground. The export recolors both shapes currentColor
+    # appears in: a bare attribute value and a <style> block's
+    # declarations.
+    assets = tmp_path / "assets"
+    (assets / "encounter sets").mkdir(parents=True)
+    (assets / "expansion symbols").mkdir(parents=True)
+    (assets / "encounter sets" / "passage_through_mirkwood.svg").write_bytes(CURRENT_COLOR)
+    out = tmp_path / "icons.json"
+    svg_out = tmp_path / "svg"
+
+    build_icons.build(str(assets), str(out), svg_out=str(svg_out))
+
+    written = (svg_out / "passage-through-mirkwood.svg").read_bytes()
+    assert b"currentColor" not in written
+    gold = build_icons.SVG_FILL.encode("ascii")
+    assert written.count(gold) == 3  # style fill + style stroke + attribute
+    assert written == CURRENT_COLOR.replace(b"currentColor", gold)
 
 
 def test_svg_out_mirrors_encounter_set_collision_winner(tmp_path):
