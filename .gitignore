@@ -63,3 +63,6 @@ research/rules/
 # Design-pane render output (tools/build_design_pane.py). Build artifact:
 # every image in it is regenerated from tests/scenes.py.
 build/
+
+# wrangler's local state from `wrangler pages deploy` (the hosting plan): per-machine, never committed.
+.wrangler/
