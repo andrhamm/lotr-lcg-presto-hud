@@ -68,6 +68,10 @@ export const CHROME = {
   // Verbatim QuestingProgressModal's own fallback (docs/js/screens.js) for a
   // condition stage with no card-supplied advance sentence.
   questConditionFallback: "This stage advances on a condition, not on progress.",
+  // A location's printed X with no coded spec at all (xshape.js's "blank"
+  // shape) - verbatim LocationConfigModal's own line for this exact case
+  // (docs/js/screens.js ~2052-2056, review finding 1).
+  xElsewhere: "the card prints X and defines it elsewhere",
   // The location picker (Task 5) - LocationPickModal is its canvas-modal
   // reference (docs/js/screens.js), minus pagination (the sheet scrolls)
   // and the "how it arrived" toggle (inferred from ui.sheet.back instead -

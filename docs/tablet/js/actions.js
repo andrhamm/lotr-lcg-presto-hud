@@ -3,7 +3,7 @@
 // and count the taps.
 import { VIEW_ORDER } from "../../js/gamestate.js";
 import { resolve as resolveX } from "../../js/xtargets.js";
-import { xIsAuto, questShowsPointsStepper } from "./sheet_quest.js";
+import { questShowsPointsStepper, xShape } from "./xshape.js";
 
 // Clamp a stepped value the way every progress/points editor in the twin
 // does (QuestingProgressModal._clampAdj, docs/js/screens.js): floor 0,
@@ -259,7 +259,7 @@ export function dispatch(game, ui, act, arg) {
     const i = Number(arg);
     if (i >= game.active_locations.length) return false;
     const loc = game.active_locations[i];
-    if (loc.threatKind === "x") return false;   // lX± owns this location's threat instead
+    if (xShape(loc) !== "plain") return false;   // lX± owns every printed-X shape instead
     const before = loc.threat ?? 0;
     const next = Math.max(0, Math.min(30, before + (act === "lThr+" ? 1 : -1)));
     if (next === before) return false;
@@ -275,7 +275,8 @@ export function dispatch(game, ui, act, arg) {
     const i = Number(arg);
     if (i >= game.active_locations.length) return false;
     const loc = game.active_locations[i];
-    if (loc.threatKind !== "x" || !loc.threatX || xIsAuto(loc.threatX)) return false;
+    const shape = xShape(loc);
+    if (shape !== "count" && shape !== "bare") return false;
     const before = loc.threatCount ?? 0;
     const next = Math.max(0, Math.min(60, before + (act === "lX+" ? 1 : -1)));
     if (next === before) return false;

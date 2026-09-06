@@ -24,6 +24,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tan); 
 .display { font: 600 34px/1.1 var(--serif); color: var(--gold); }
 .body { font: 20px/1.35 var(--sans); color: var(--tan); margin: 0; text-wrap: pretty; }
 .body.secondary { font-size: 18px; color: var(--muted); }
+/* A quest's own loss condition, paired under its advance sentence (the quest
+   sheet's condition-stage row, sheet_quest.js) - the same red the cta-no/
+   is-danger treatments already use for "this goes badly". */
+.body.no { color: var(--no-fg); }
 .label { font: 700 13px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--dim); }
 .num { font-family: var(--sans); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--gold); }
 .num-26 { font-size: 26px } .num-34 { font-size: 34px } .num-36 { font-size: 36px } .num-40 { font-size: 40px } .num-48 { font-size: 48px } .num-56 { font-size: 56px } .num-64 { font-size: 64px } .num-84 { font-size: 84px }

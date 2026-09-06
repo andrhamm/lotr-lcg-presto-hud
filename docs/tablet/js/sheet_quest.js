@@ -11,10 +11,8 @@ import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
 import { faceOf } from "./cards.js";
 import { icon } from "../../js/icons_svg.js";
-import { boardTracking } from "../../js/gamestate.js";
-import {
-  labelFor, autoFor, resolve, AUTO_ENEMIES, AUTO_STAGING_LOCATIONS,
-} from "../../js/xtargets.js";
+import { labelFor, resolve } from "../../js/xtargets.js";
+import { questShowsPointsStepper, xShape } from "./xshape.js";
 import { TRAIL_GREEN, TRAIL_BROWN, THREAT_BLACK, THREAT_BLACK_EDGE } from "./palette.js";
 
 function step(act, arg, label) {
@@ -41,31 +39,6 @@ const trailIcon = () => icon("TRAIL", 28, TRAIL_GREEN, TRAIL_BROWN);
 // (design/stat-system.md's stat-colour rules), not the player-threat red.
 const threatIcon = () => icon("THREAT", 28, THREAT_BLACK, THREAT_BLACK_EDGE);
 
-// QuestConfigModal (docs/js/screens.js) shows its points stepper for every
-// mode except "condition" (no printed target - the card's own advance
-// sentence covers that stage instead, milestone 5) and "formula" (X-driven;
-// stepping the pre-resolution printed 0 would invite "fixing" a number the
-// card never printed). Undefined mode is a manual/custom game, which has
-// always been freely editable.
-export function questShowsPointsStepper(game) {
-  const mode = game.quest.mode;
-  return mode !== "condition" && mode !== "formula";
-}
-
-// Whether a location's printed X is answered by a tracked value (no
-// stepper) or needs the player to supply a count via lX± - mirrors
-// LocationConfigModal's threatShape exactly: the three always-on auto
-// targets (players/stage/highestThreat) are never gated, but
-// AUTO_ENEMIES/AUTO_STAGING_LOCATIONS only count as "auto" when this client
-// actually tracks the board (boardTracking()) - otherwise the player
-// supplies the count exactly like an untracked target does.
-export function xIsAuto(threatX) {
-  const auto = autoFor(threatX?.target);
-  if (!auto) return false;
-  const trackerBacked = auto === AUTO_ENEMIES || auto === AUTO_STAGING_LOCATIONS;
-  return !trackerBacked || boardTracking();
-}
-
 function renderQuestGroup(game) {
   const card = game.stages[game.stage_idx]?.cards?.[game.card_idx];
   const face = faceOf(card, game.quest.side);
@@ -78,7 +51,13 @@ function renderQuestGroup(game) {
   const cond = game.quest.mode === "condition";
   let body;
   if (cond) {
-    body = h`<p class="body secondary">${game.quest.advance || CHROME.questConditionFallback}</p>`;
+    // 11 stages state BOTH how they are won and how they are lost -
+    // QuestingProgressModal's own "cond" row pairs them the same way
+    // (docs/js/screens.js ~1069-1077): showing only the win is showing half
+    // the rule (review finding 2, task-4 fix round 1).
+    const advanceLine = h`<p class="body secondary">${game.quest.advance || CHROME.questConditionFallback}</p>`;
+    const loseLine = game.quest.lose ? h`<p class="body no">${game.quest.lose}</p>` : "";
+    body = advanceLine + loseLine;
   } else {
     const progressRow = row(trailIcon(), CHROME.progress, game.quest.progress,
       step("qP-", "", "−"), step("qP+", "", "+"));
@@ -101,23 +80,50 @@ function locationName(loc, i) {
   return loc.name ?? (i === 0 ? CHROME.location : `${CHROME.location} ${i + 1}`);
 }
 
-// The threat block, in whichever shape the card calls for - read-only when a
-// tracked value answers it, otherwise that same read-only value PLUS a
-// labelled count stepper the player dials in by looking at the table (see
-// xIsAuto above). An ordinary printed number gets a plain editable stepper.
+// The threat block, in whichever shape the card calls for (xShape, xshape.js
+// - mirrors LocationConfigModal's own threatShape switch, docs/js/screens.js
+// ~1950-2180). Every shape but "plain" carries the card's own X = ... text
+// underneath when the catalog has one - CLAUDE.md's rule 4, "prefer the
+// card's own printed text over a paraphrase" (review finding 4).
+function xFormula(threatX) {
+  return threatX.text ? h`<p class="body secondary">X = ${threatX.text}</p>` : "";
+}
+
 function renderLocationThreat(game, loc, i) {
-  if (loc.threatKind === "x" && loc.threatX) {
-    const resolved = resolve(loc.threatX, { count: loc.threatCount, ...game.xContext() });
-    const shown = resolved === null ? "–" : String(resolved);
-    const valueRow = row(threatIcon(), CHROME.threat, shown, "", "");
-    if (xIsAuto(loc.threatX)) return valueRow;
-    const label = labelFor(loc.threatX.target) ?? CHROME.threat;
-    const countRow = row("", label, loc.threatCount ?? 0,
-      step("lX-", `${i}`, "−"), step("lX+", `${i}`, "+"));
-    return valueRow + countRow;
+  const shape = xShape(loc);
+  if (shape === "plain") {
+    return row(threatIcon(), CHROME.threat, loc.threat ?? 0,
+      step("lThr-", `${i}`, "−"), step("lThr+", `${i}`, "+"));
   }
-  return row(threatIcon(), CHROME.threat, loc.threat ?? 0,
-    step("lThr-", `${i}`, "−"), step("lThr+", `${i}`, "+"));
+  if (shape === "blank") {
+    // No coded spec at all - a read-only, BLANK slot (never a 0 the card did
+    // not print) plus the twin's own line for exactly this case (draw() ~2052
+    // in docs/js/screens.js): the card prints X and defines it nowhere this
+    // app can read, so acts_quest.js's lThr± stays refused rather than
+    // offering a stepper that would just sit there dead (review finding 1).
+    const valueRow = row(threatIcon(), CHROME.threat, "", "", "");
+    const note = h`<p class="body secondary">${CHROME.xElsewhere}</p>`;
+    return valueRow + note;
+  }
+  if (shape === "bare") {
+    // The count IS the value - one stepper labelled by the card's own target,
+    // not a value row plus a count row repeating the same number twice
+    // (review finding 3).
+    const label = labelFor(loc.threatX.target) ?? CHROME.threat;
+    const barRow = row(threatIcon(), label, loc.threat ?? 0,
+      step("lX-", `${i}`, "−"), step("lX+", `${i}`, "+"));
+    return barRow + xFormula(loc.threatX);
+  }
+  const resolved = resolve(loc.threatX, { count: loc.threatCount, ...game.xContext() });
+  const shown = resolved === null ? "–" : String(resolved);
+  const valueRow = row(threatIcon(), CHROME.threat, shown, "", "");
+  if (shape === "auto") return valueRow + xFormula(loc.threatX);
+  // shape === "count": read-only resolved value PLUS a labelled count
+  // stepper the player dials in by looking at the table.
+  const label = labelFor(loc.threatX.target) ?? CHROME.threat;
+  const countRow = row("", label, loc.threatCount ?? 0,
+    step("lX-", `${i}`, "−"), step("lX+", `${i}`, "+"));
+  return valueRow + countRow + xFormula(loc.threatX);
 }
 
 function renderLocationGroup(game, loc, i) {
@@ -166,13 +172,13 @@ export function renderQuestSheet(game, ui) {
   const sqSection = sqs.length
     ? h`<div class="label qsheet-section">${CHROME.sideQuestsHeader}</div>${raw(sqs.map((s, i) => renderSideQuestGroup(s, i)).join(""))}`
     : "";
-  // The pickers these open are Tasks 5 (locations) and 6 (side quests) - the
-  // chips render now (per the task-4 brief) but ui.sheet's "locpick"/
-  // "sqpick" kinds have no entry in sheets.js's RENDERERS yet, so tapping
-  // either shows nothing until that lands (renderSheet's documented
-  // fallback for a kind it does not recognise). Neither dispatches in
-  // actions.js yet either - that wiring is those tasks' job, same as
-  // open_quest sat inert in rail.js until this one.
+  // "+ Add location" opens the location picker (Task 5, landed - see
+  // sheet_locpick.js/acts_locpick.js). "+ Side quest" is Task 6's own chip:
+  // ui.sheet's "sqpick" kind has no entry in sheets.js's RENDERERS yet, so
+  // tapping it shows nothing until that lands (renderSheet's documented
+  // fallback for a kind it does not recognise), and open_sqpick dispatches
+  // nowhere yet either - same as open_quest sat inert in rail.js until this
+  // sheet landed.
   const addRow = h`<div class="qsheet-add">
 ${raw(chip({ act: "open_locpick", label: CHROME.addLocation, tone: "tan" }))}
 ${raw(chip({ act: "open_sqpick", label: CHROME.sideQuest, tone: "tan" }))}

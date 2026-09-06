@@ -855,6 +855,71 @@ console.log(JSON.stringify({
     assert not js["hasStepper"]
 
 
+def test_quest_sheet_blank_printed_x_has_no_stepper_and_no_invented_zero():
+    """Task-4 fix round 1, review finding 1 (important): a location with
+    threatKind "x" but no coded threatX spec at all (21 of the catalog's
+    locations) used to fall through to the ordinary editable stepper, which
+    actions.js's lThr± then silently refused for every threatKind "x"
+    location - a dead button, visible and tappable, doing nothing. Fixed:
+    xshape.js's "blank" shape renders a read-only, blank value slot (never a
+    0 the card never printed) plus the twin's own line for exactly this case
+    (LocationConfigModal's threatBlank-with-no-threatX branch, docs/js/
+    screens.js ~2052-2056)."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+g.active_locations.push({ points: 3, progress: 0, name: "Ranger Camp", threatKind: "x" });
+const ui = newUi();
+perform(g, ui, "open_quest", "");
+const html = layout(g, ui);
+console.log(JSON.stringify({
+  name: html.includes("Ranger Camp"),
+  noThrStepper: !html.includes('data-act="lThr+"') && !html.includes('data-act="lThr-"'),
+  noXStepper: !html.includes('data-act="lX+"') && !html.includes('data-act="lX-"'),
+  elsewhere: html.includes("the card prints X and defines it elsewhere"),
+  blankValue: html.includes('<span class="num num-34"></span>'),
+}));
+""")
+    assert js["name"]
+    assert js["noThrStepper"], "threatKind x with no coded spec must not fall through to the ordinary stepper"
+    assert js["noXStepper"], "no coded threatX means no count stepper either"
+    assert js["elsewhere"]
+    assert js["blankValue"], "the value slot must render blank, never an invented 0"
+
+
+def test_quest_sheet_condition_stage_shows_both_advance_and_lose():
+    """Task-4 fix round 1, review finding 2 (important): a condition stage
+    only ever rendered how you WIN (game.quest.advance) - game.quest.lose was
+    never shown. QuestingProgressModal's own "cond" row pairs them
+    (docs/js/screens.js ~1069-1077: "showing only the win is showing half the
+    rule"). Fixed: the lose sentence renders under the advance line as
+    <p class="body no"> (var(--no-fg))."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+g.quest.mode = "condition";
+g.quest.advance = "Heal Wilyador to advance.";
+g.quest.lose = "If Wilyador is discarded, the players lose.";
+const ui = newUi();
+perform(g, ui, "open_quest", "");
+const html = layout(g, ui);
+console.log(JSON.stringify({
+  advance: html.includes("Heal Wilyador to advance."),
+  lose: html.includes("If Wilyador is discarded, the players lose."),
+  loseClass: html.includes('class="body no"'),
+}));
+""")
+    assert js["advance"]
+    assert js["lose"]
+    assert js["loseClass"]
+
+
 def test_location_picker_travel_then_manual_entry_appends_a_second_seat():
     """From the task-5 brief: the Travel pane's own CTA opens the location
     picker in mode "new"/back "play" (pane.js); picking the one catalog row
