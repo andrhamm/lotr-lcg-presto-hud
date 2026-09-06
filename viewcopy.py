@@ -467,3 +467,47 @@ PROGRESS_PLACEMENT = ("Progress fills the active location first, then the "
                       "current quest. Each resolves the moment it is full, so "
                       "exploring a location can advance the quest in the same "
                       "motion.")
+
+# --------------------------------------------------------------------------
+# ScenarioOptionsScreen's Difficulty tip (M6 Task 1). Previously each twin
+# carried its own literal copy (ui/screen_quest.py, docs/js/screens_other.js),
+# with nothing to compare them against - the same gap ACTION_WINDOW_TIPS and
+# COMBAT_FLOW once fell into before this module existed.
+#
+# Only Easy and Nightmare get authored copy here, because only those two are
+# general rules. A scenario-specific mode (Hard, Epic Multiplayer) shows that
+# card's own printed setup text instead - the real rules, not a paraphrase
+# (CLAUDE.md Iron rule #4) - and falls back to MODE_TIPS_FALLBACK only when
+# the loaded scenario doesn't carry that card's text.
+#
+# Both wordings follow FFG's own, not a paraphrase:
+#
+#   Easy - Learn to Play p.28 "Modes of Play", and the Easy Mode Rules (2013)
+#   p.1. It is TWO steps: add one resource to each hero's resource pool, and
+#   remove any card from the encounter deck that has a gold border
+#   surrounding its encounter set icon. FFG calls that marker the
+#   "difficulty" indicator.
+#
+#   Nightmare - the printed Nightmare Setup card (wording consistent across
+#   the setup cards that carry full text). It is a swap, not a substitution:
+#   remove the listed cards from the standard encounter deck, "then, shuffle
+#   the encounter cards in this Nightmare Deck into the remainder".
+#
+# Kept short deliberately: each must wrap to at most 3 lines at BODY, so it
+# still fits unclipped in the tightest layout (4 sets-to-gather rows).
+#
+# The Nightmare sentence used a spaced dash before it moved here
+# ("a separately sold deck - remove..."); test_copy_uses_no_spaced_dash
+# forbids that once the string is walked from viewcopy, so the dash became a
+# colon clause instead. No other wording changed from what already shipped.
+MODE_TIPS = {
+    "Easy": "Easy: add 1 resource to each hero at setup, and remove every "
+            "encounter card with a gold-bordered set icon.",
+    "Nightmare": "Nightmare: a separately sold deck: remove the cards its "
+                 "setup card lists, then shuffle it into the rest.",
+}
+
+# The generic message for a scenario-specific mode (Hard, Epic Multiplayer)
+# when the loaded scenario's data has no printed text for that mode card.
+# %s x2: the difficulty label, e.g. "Hard: follow this quest's Hard Mode card."
+MODE_TIPS_FALLBACK = "%s: follow this quest's %s Mode card."

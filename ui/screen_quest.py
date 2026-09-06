@@ -14,7 +14,7 @@ from ui.widgets import (Button, panel, bevel, text_center, text_left,
                          truncate_text, wrap_text, disc, arc_runs, note_panel,
                          BAND_PAD, band_line_h)
 from ui import icons
-from viewcopy import CATALOG_UNAVAILABLE
+from viewcopy import CATALOG_UNAVAILABLE, MODE_TIPS, MODE_TIPS_FALLBACK
 import quest_catalog
 
 
@@ -386,34 +386,10 @@ class ScenarioOptionsScreen:
     CTA_Y = 410
     CTA_H = 54
 
-    # Only Easy and Nightmare get authored copy, because only those two are
-    # general rules. A scenario-specific mode (Hard, Epic Multiplayer) shows
-    # that card's own printed setup text instead - the real rules, not a
-    # paraphrase (CLAUDE.md Iron rule #4).
-    # Both wordings follow FFG's own, not a paraphrase (CLAUDE.md Iron rule #4):
-    #
-    #   Easy - Learn to Play p.28 "Modes of Play", and the Easy Mode Rules
-    #   (2013) p.1. It is TWO steps, and an earlier version of this tip shipped
-    #   only the second: "1. Add one resource to each hero's resource pool.
-    #   2. Remove any card from the encounter deck that has a gold border
-    #   surrounding its encounter set icon." FFG calls that marker the
-    #   "difficulty" indicator.
-    #
-    #   Nightmare - the printed Nightmare Setup card (wording consistent across
-    #   the setup cards that carry full text). It is a swap, not a substitution:
-    #   remove the listed cards from the standard encounter deck, "then, shuffle
-    #   the encounter cards in this Nightmare Deck into the remainder".
-    #
-    # Kept short deliberately: each must wrap to at most 3 lines at scale 2, so
-    # it still fits unclipped in the tightest layout (4 sets-to-gather rows).
-    # There is a test for that - lengthen these and it fails rather than
-    # silently truncating the rule.
-    TIP_TEXT = {
-        "Easy": "Easy: add 1 resource to each hero at setup, and remove "
-                "every encounter card with a gold-bordered set icon.",
-        "Nightmare": "Nightmare: a separately sold deck - remove the cards "
-                     "its setup card lists, then shuffle it into the rest.",
-    }
+    # The Easy/Nightmare tip copy (and the generic fallback for a
+    # scenario-specific mode card) lives in viewcopy.MODE_TIPS /
+    # MODE_TIPS_FALLBACK now - one home for both twins, see the citations
+    # and reasoning there.
 
     def __init__(self, scenario, data, icons=None, difficulty="Standard"):
         self.scenario = scenario
@@ -483,13 +459,13 @@ class ScenarioOptionsScreen:
     def _tip_messages(self):
         """At most one message - the tip always renders at the same size, so
         it must never have to fit two (see the scale note in draw())."""
-        if self.difficulty in self.TIP_TEXT:
-            return [self.TIP_TEXT[self.difficulty]]
+        if self.difficulty in MODE_TIPS:
+            return [MODE_TIPS[self.difficulty]]
         if self.difficulty == "Standard":
             return []
         # a scenario-specific mode card: show what it actually says
         return [self._mode_card_text(self.difficulty)
-                or "%s: follow this quest's %s Mode card." % (self.difficulty, self.difficulty)]
+                or MODE_TIPS_FALLBACK % (self.difficulty, self.difficulty)]
 
     # -- draw --------------------------------------------------------------
     def draw(self, hw, game, pal):

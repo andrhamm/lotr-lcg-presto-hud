@@ -835,3 +835,47 @@ def test_image_prefix_reads_the_same_pinned_key_in_both_twins():
     assert js["withoutPrefix"] is None
     assert qc.image_prefix({"generated": "2026-09-05", "source": "fixture"}) is None
     assert js["emptyObject"] is None and qc.image_prefix({}) is None
+
+
+_MODE_TIPS_PROBE = """\
+import { ScenarioOptionsScreen } from "./screens_other.js";
+const scenario = { modes: ["Hard Mode"], hasNightmare: true };
+const data = { modes: [] };
+const out = {};
+for (const d of ["Easy", "Standard", "Nightmare", "Hard"]) {
+  out[d] = new ScenarioOptionsScreen(scenario, data, {}, d)._tipMessages();
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def test_mode_tips_match_the_twin():
+    """The Easy/Nightmare difficulty tips (and the Hard/Epic Multiplayer
+    fallback) used to be two independent literals - `TIP_TEXT` in both
+    ui/screen_quest.py and docs/js/screens_other.js - with nothing to compare
+    them against. They now both read viewcopy.MODE_TIPS / MODE_TIPS_FALLBACK,
+    so this checks the twins' *screens* still agree, not just the shared
+    constants: `screens_other.js` already loads cleanly under node (it is in
+    test_every_routed_web_class_can_be_drawn_and_tapped's `_ROUTED` map), so
+    `_tipMessages()` can be called directly without a document/canvas mock.
+
+    The fixture scenario prints a Hard Mode card (`modes: ["Hard Mode"]`) and
+    has a Nightmare deck (`hasNightmare: true`), but the loaded scenario data
+    carries no mode-card text (`data.modes: []`) - so "Hard" must fall back
+    to MODE_TIPS_FALLBACK on both twins, exactly like an unresolved Epic
+    Multiplayer scenario would.
+    """
+    from ui.screen_quest import ScenarioOptionsScreen
+
+    js = _js_facts(_MODE_TIPS_PROBE)
+
+    scenario = {"modes": ["Hard Mode"], "hasNightmare": True}
+    data = {"modes": []}
+    for d in ("Easy", "Standard", "Nightmare", "Hard"):
+        py = ScenarioOptionsScreen(scenario, data, {}, d)._tip_messages()
+        assert py == js[d], "difficulty %r: py=%r js=%r" % (d, py, js[d])
+
+    # Sanity: the fixture actually exercises both branches, not just Standard's
+    # empty list for every difficulty.
+    assert js["Easy"] and js["Nightmare"] and js["Hard"] and not js["Standard"]
+    assert js["Hard"] == ["Hard: follow this quest's Hard Mode card."]

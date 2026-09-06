@@ -9,7 +9,7 @@ import { measureText } from "./metrics.js";
 import * as icons from "./icons.js";
 import { viewForStep, DEFAULT_START_THREAT, MAX_PLAYERS } from "./gamestate.js";
 import { PHASES, STEPS } from "./phases.js";
-import { CATALOG_UNAVAILABLE } from "./viewcopy.js";
+import { CATALOG_UNAVAILABLE, MODE_TIPS, MODE_TIPS_FALLBACK } from "./viewcopy.js";
 import { step as phaseStep } from "./phases.js";
 import { drawHeader, HEADER_H, QuestCardModal } from "./screens.js";
 import { iconFor, slugify } from "./quest_catalog.js";
@@ -887,21 +887,10 @@ export class ScenarioOptionsScreen {
   static CTA_Y = 410;
   static CTA_H = 54;
 
-  // Only Easy and Nightmare get authored copy, because only those two are
-  // general rules. A scenario-specific mode (Hard, Epic Multiplayer) shows that
-  // card's own printed setup text instead - the real rules, not a paraphrase.
-  // Both wordings follow FFG's own, not a paraphrase (CLAUDE.md Iron rule #4):
-  // Easy is TWO steps - Learn to Play p.28 / Easy Mode Rules (2013) p.1: add
-  // one resource to each hero's pool, AND remove any card with a gold border
-  // around its encounter set icon (FFG's "difficulty" indicator). Nightmare is
-  // a swap, per the printed Nightmare Setup card: remove the listed cards, then
-  // "shuffle the encounter cards in this Nightmare Deck into the remainder".
-  // Kept to at most 3 lines at scale 2 so the tip fits unclipped even with 4
-  // sets-to-gather rows. There is a test for that.
-  static TIP_TEXT = {
-    Easy: "Easy: add 1 resource to each hero at setup, and remove every encounter card with a gold-bordered set icon.",
-    Nightmare: "Nightmare: a separately sold deck - remove the cards its setup card lists, then shuffle it into the rest.",
-  };
+  // The Easy/Nightmare tip copy (and the generic fallback for a
+  // scenario-specific mode card) lives in viewcopy's MODE_TIPS /
+  // MODE_TIPS_FALLBACK now - one home for both twins, see the citations and
+  // reasoning in viewcopy.py.
 
   constructor(scenario, data, icons = {}, difficulty = "Standard") {
     this.scenario = scenario;
@@ -962,11 +951,10 @@ export class ScenarioOptionsScreen {
   // At most one message - the tip always renders at the same size, so it must
   // never have to fit two (see the scale note in draw()).
   _tipMessages() {
-    const { TIP_TEXT } = ScenarioOptionsScreen;
-    if (TIP_TEXT[this.difficulty]) return [TIP_TEXT[this.difficulty]];
+    if (MODE_TIPS[this.difficulty]) return [MODE_TIPS[this.difficulty]];
     if (this.difficulty === "Standard") return [];
     return [this._modeCardText(this.difficulty)
-            ?? `${this.difficulty}: follow this quest's ${this.difficulty} Mode card.`];
+            ?? MODE_TIPS_FALLBACK.replace(/%s/g, this.difficulty)];
   }
 
   // -- draw -------------------------------------------------------------
