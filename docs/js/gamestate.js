@@ -596,8 +596,16 @@ export class GameState {
 
   // Rows this action created or rewrote, then clear. Call AFTER addDelta,
   // which stamps `delta_i` onto the new rows.
+  // Shallow copies, not the live row objects: db.js's Session.record queues
+  // whatever this returns and only serializes it later in tick(), but two
+  // paths mutate a row IN PLACE after it has been handed out here - the
+  // MAX_SAVED_DELTAS front trim (above) decrements delta_i on every row still
+  // sitting in queue, so a not-yet-drained reference gets shifted twice (once
+  // here, once again by foldLog's "lx" replay); and a keyed-tally coalesce
+  // rewrites text/seq/t on the same row object it already returned. A copy
+  // freezes the record at hand-off time, which is what the queue assumes.
   takeLogAppends() {
-    const out = this._log_appends;
+    const out = this._log_appends.map(r => ({ ...r }));
     this._log_appends = [];
     return out;
   }

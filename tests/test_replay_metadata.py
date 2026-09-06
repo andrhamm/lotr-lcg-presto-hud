@@ -243,3 +243,62 @@ def test_the_front_trim_shifts_delta_i_in_the_store_too():
     assert stamped[0] == -1                 # the dropped delta: no longer a target
     assert stamped[-1] == g.replay_step == gamestate.MAX_SAVED_DELTAS - 1
     assert fold_log(appends) == g.log
+
+
+def test_take_log_appends_hands_out_frozen_rows():
+    """take_log_appends() must hand out copies, not the live row dicts.
+
+    db.py's Session.record() calls take_log_appends() on every tap and queues
+    whatever it returns; the durable write only serializes that queue later,
+    in tick(). Two things mutate a row IN PLACE after it has already been
+    handed out: a keyed-tally coalesce rewrites text/seq/t on the same dict
+    (log_event), and the MAX_SAVED_DELTAS front trim decrements delta_i on
+    every row still live (covered by the next test). A queued reference would
+    silently pick up either edit; a queued copy can't."""
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_BANDS)
+    g = GameState(2)
+    _tap(g, lambda: g.set_staging(1))                   # delta 0, keyed row
+    taken = g.take_log_appends()
+    assert len(taken) == 1
+    assert taken[0]["text"] == "Staging area threat 1"
+
+    # Mutate the live row directly.
+    g.log[-1]["text"] = "changed"
+    assert taken[0]["text"] == "Staging area threat 1"
+
+    # Re-tally onto the same (key, round, step) - log_event's coalesce path
+    # rewrites the live dict in place rather than appending a new one.
+    _tap(g, lambda: g.set_staging(2))
+    g.take_log_appends()
+    assert taken[0]["text"] == "Staging area threat 1"  # still untouched
+
+
+def test_front_trim_never_shifts_a_queued_row_twice():
+    """A row already handed to the durability queue must not be shifted
+    twice when the MAX_SAVED_DELTAS front trim lands on a later tap.
+
+    This mirrors db.py's Session.record(): every tap extracts its rows via
+    take_log_appends() immediately, but the queue is only SERIALIZED later,
+    in tick() - so a row can sit "in flight", still referenced, across many
+    more taps, including the one that triggers the trim. The trim shifts
+    every LIVE row's delta_i down by `drop` directly (gamestate.py, add_delta)
+    and separately journals {"op": "lx", "n": drop} for fold_log to replay
+    against whatever is already durable. If take_log_appends() hands out the
+    live dict instead of a copy, a row still in the queue gets the direct
+    shift AND the replayed "lx" shift - double-counted - the exact hazard
+    take_log_appends()'s copy fixes.
+
+    Confirmed to fail on pre-fix code (took_log_appends returning the live
+    dicts): folded delta_i came back -2 where the live row's is -1.
+    """
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_BANDS)
+    g = GameState(2)
+    taken = []  # stand-in for db.py's Session._queue, never drained/ticked
+    for i in range(gamestate.MAX_SAVED_DELTAS + 1):
+        # Alternate two steppers so no tap coalesces onto the previous row.
+        _tap(g, (lambda i=i: g.set_staging(i % 9 + 1)) if i % 2
+                else (lambda i=i: g.set_willpower(i % 9 + 1)))
+        taken += g.take_log_appends()          # extracted every tap, like record()
+
+    assert any(r.get("op") == "lx" for r in taken)
+    assert fold_log(taken) == g.log

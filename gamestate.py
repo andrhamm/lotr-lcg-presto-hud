@@ -739,8 +739,18 @@ class GameState:
 
     def take_log_appends(self):
         """Rows this action created or rewrote, then clear. Call AFTER
-        add_delta, which stamps `delta_i` onto the new rows."""
-        out = self._log_appends
+        add_delta, which stamps `delta_i` onto the new rows.
+
+        Returns shallow copies, not the live row dicts: db.py's Session
+        queues whatever this returns and only serializes it later in
+        tick(), but two paths mutate a row IN PLACE after it has been
+        handed out here - the MAX_SAVED_DELTAS front trim (above) decrements
+        delta_i on every row still sitting in queue, so a not-yet-drained
+        reference gets shifted twice (once here, once again by fold_log's
+        "lx" replay); and a keyed-tally coalesce rewrites text/seq/t on the
+        same row dict it already returned. A copy freezes the record at
+        hand-off time, which is what the queue assumes."""
+        out = [dict(r) for r in self._log_appends]
         self._log_appends = []
         return out
 

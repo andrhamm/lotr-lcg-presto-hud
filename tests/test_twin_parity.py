@@ -724,3 +724,86 @@ def test_a_coalesced_tally_row_is_restamped_and_the_trim_is_journalled_in_both_t
     assert js["firstStamped"] == stamped[0] == -1
     assert js["lastStamped"] == stamped[-1] == gamestate.MAX_SAVED_DELTAS - 1
     assert js["trimFolded"] is True and fold_log(t_appends) == t.log
+
+
+_FROZEN_ROW_PROBE = """\
+import { GameState, foldLog, setWindowPolicy, WINDOW_POLICY_BANDS, MAX_SAVED_DELTAS } from "./gamestate.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const tap = (g, fn) => { const s = g.beginAction(); fn(); return g.addDelta(s); };
+
+// (a) a row handed out by takeLogAppends() must not change when the live row
+// is mutated afterwards - directly, or via a re-tally's coalesce.
+const f = new GameState(2);
+tap(f, () => f.setStaging(1));
+const taken = f.takeLogAppends();
+const takenTextBefore = taken[0].text;
+f.log[f.log.length - 1].text = "changed";
+const takenTextAfterDirectMutate = taken[0].text;
+tap(f, () => f.setStaging(2));
+f.takeLogAppends();
+const takenTextAfterRetally = taken[0].text;
+
+// (b) a row extracted every tap but never folded/consumed (a stand-in for
+// db.js's Session._queue sitting undrained) must not be shifted twice when
+// the MAX_SAVED_DELTAS front trim lands on a later tap.
+const t = new GameState(2);
+let queued = [];
+for (let i = 0; i <= MAX_SAVED_DELTAS; i++) {
+  tap(t, () => (i % 2 ? t.setStaging(i % 9 + 1) : t.setWillpower(i % 9 + 1)));
+  queued = queued.concat(t.takeLogAppends());
+}
+const hasTrim = queued.some(r => r.op === "lx");
+const liveFoldedMatch = JSON.stringify(foldLog(queued)) === JSON.stringify(t.log);
+
+console.log(JSON.stringify({
+  takenTextBefore, takenTextAfterDirectMutate, takenTextAfterRetally,
+  hasTrim, liveFoldedMatch,
+}));
+"""
+
+
+def test_take_log_appends_hands_out_frozen_rows_in_both_twins():
+    """Node mirror of test_take_log_appends_hands_out_frozen_rows and
+    test_front_trim_never_shifts_a_queued_row_twice in test_replay_metadata.py.
+
+    takeLogAppends()/take_log_appends() must hand out copies, never the live
+    row objects - db.js's/db.py's Session queues whatever they return and
+    only serializes it later, in tick(). Two things mutate a row in place
+    after it has already been handed out: a re-tally's coalesce (log_event/
+    logEvent rewrites the same dict), and the MAX_SAVED_DELTAS front trim
+    (decrements delta_i on every row still live). Either would leak into an
+    already-queued record if takeLogAppends()/take_log_appends() returned a
+    reference instead of a copy."""
+    import gamestate
+    from gamestate import GameState, fold_log
+
+    js = _js_facts(_FROZEN_ROW_PROBE)
+
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_BANDS)
+
+    def tap(g, fn):
+        s = g.begin_action(); fn(); return g.add_delta(s)
+
+    f = GameState(2)
+    tap(f, lambda: f.set_staging(1))
+    taken = f.take_log_appends()
+    taken_text_before = taken[0]["text"]
+    f.log[-1]["text"] = "changed"
+    taken_text_after_direct_mutate = taken[0]["text"]
+    tap(f, lambda: f.set_staging(2))
+    f.take_log_appends()
+    taken_text_after_retally = taken[0]["text"]
+
+    assert js["takenTextBefore"] == taken_text_before == "Staging area threat 1"
+    assert js["takenTextAfterDirectMutate"] == taken_text_after_direct_mutate == "Staging area threat 1"
+    assert js["takenTextAfterRetally"] == taken_text_after_retally == "Staging area threat 1"
+
+    t = GameState(2)
+    queued = []
+    for i in range(gamestate.MAX_SAVED_DELTAS + 1):
+        tap(t, (lambda i=i: t.set_staging(i % 9 + 1)) if i % 2
+               else (lambda i=i: t.set_willpower(i % 9 + 1)))
+        queued += t.take_log_appends()
+
+    assert js["hasTrim"] is True and any(r.get("op") == "lx" for r in queued)
+    assert js["liveFoldedMatch"] is True and fold_log(queued) == t.log
