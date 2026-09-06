@@ -39,8 +39,9 @@ export function renderPlayersSetup(ui) {
   const players = p.players ?? 2;
   const threats = p.threats ?? Array(players).fill(25);
   const head = setupHead({
-    step: 2, title: CHROME.choosePlayersTitle, hint: CHROME.choosePlayersHint,
-    back: "go_scenario",
+    title: CHROME.choosePlayersTitle, meta: CHROME.choosePlayersHint,
+    back: "go_scenario", backLabel: CHROME.backToScenario,
+    aside: cta({ act: "begin_setup", label: CHROME.beginSetup, tone: "ok", grow: false }),
   });
   // The quest chosen in step 1, named here rather than left behind: this is
   // the screen that starts the game, and "which quest am I about to start?"
@@ -56,6 +57,5 @@ ${raw(questLine)}
 <section class="setup-block"><div class="label">${CHROME.players}</div>${raw(playerChips(players))}</section>
 <section class="setup-block"><div class="label">${CHROME.startingThreat}</div>${raw(threatCounters(threats))}</section>
 </div>
-<div class="cta-row">${raw(cta({ act: "begin_setup", label: CHROME.beginSetup, tone: "ok" }))}</div>
 </main>`;
 }

@@ -23,7 +23,7 @@ import { chip, cta } from "./primitives.js";
 import { setupHead } from "./setup_head.js";
 import { renderScenarioDetail } from "./overview.js";
 import { cyclesFor, groupByCycle } from "../../js/quest_catalog.js";
-import { setIcon } from "./seticon.js";
+import { setIcon, cycleIcon } from "./seticon.js";
 import { stagePointsShape } from "./xshape.js";
 import { branchName } from "./resolve_step.js";
 
@@ -45,6 +45,7 @@ function cycleRow(g) {
   const year = g.date ? g.date.slice(0, 4) : "";
   const meta = year ? `${g.count} · ${year}` : String(g.count);
   return h`<button type="button" class="drill-row" data-act="ng_cycle" data-arg="${g.cycle}">
+${raw(cycleIcon(g.cycle, 30))}
 <span class="body">${g.cycle}</span>
 <span class="label">${meta}</span>
 <span class="drill-chev" aria-hidden="true">›</span>
@@ -90,6 +91,7 @@ function drillList(p, cycles, scenarios) {
   }
   return h`<div class="label">${CHROME.cycleOne}</div>
 <button type="button" class="drill-row drill-current" data-act="ng_cycles">
+${raw(cycleIcon(p.cycle ?? "", 30))}
 <span class="body">${p.cycle ?? ""}</span>
 <span class="drill-x" aria-hidden="true">✕</span>
 </button>
@@ -149,8 +151,11 @@ function emptyDetail() {
 // The metadata line drops the pack when the cycle already contains it ("Core
 // Set" inside "Core Set (Mirkwood Paths)"): the breadcrumb printed both, which
 // is how it came to be four items long and two of them the same words.
-function barFor(ui, picked) {
-  if (!picked) return { title: CHROME.chooseScenarioTitle };
+function barFor(ui, picked, openCycle) {
+  // Before a scenario is picked the band still has something true to show: the
+  // cycle you are inside.
+  if (!picked) return { title: CHROME.chooseScenarioTitle,
+                        mark: openCycle ? cycleIcon(openCycle, 56) : null };
   const ov = ui.overview ?? {};
   const entry = ov.entry ?? {};
   const name = entry.name ?? ov.bundle?.scenario?.name ?? "";
@@ -188,7 +193,8 @@ export function renderNewGame(game, ui) {
   // the error goes where the quests would have been, and the detail side
   // keeps its own empty state rather than showing the failure twice.
   if (p.error) {
-    const head = setupHead({ step: 1, title: CHROME.chooseScenarioTitle, back: "go_home" });
+    const head = setupHead({ title: CHROME.chooseScenarioTitle,
+                             back: "go_home", backLabel: CHROME.backToHome });
     return h`<main class="pane setup">${raw(head)}<div class="setup-grid">
 <div class="setup-list"><div class="well"><p class="body">${p.error}</p></div></div>
 <div class="setup-detail">${raw(emptyDetail())}</div>
@@ -208,19 +214,29 @@ export function renderNewGame(game, ui) {
   // fresh picker.
   const picked = p.slug && ui.overview?.slug === p.slug;
   const detail = picked ? renderScenarioDetail(game, ui) : emptyDetail();
-  const foot = picked
-    ? h`<div class="cta-row detail-foot">${raw(cta({ act: "go_players", label: h`${CHROME.continueToPlayers}`, tone: "ok" }))}</div>`
-    : "";
 
   const stages = picked ? (ui.overview?.bundle?.stages ?? []) : [];
   const stageList = picked ? stagesSection(stages, p.stage ?? "overview") : "";
+  // Continue lives in the band, not at the foot of the pane. It is the step's
+  // forward action, so it belongs with the step's other navigation - and a
+  // full-width green bar across the bottom of a reference screen shouted
+  // louder than anything it was letting you read.
+  //
+  // It is drawn whether or not it is armed. A control that appears only once
+  // you have done the right thing cannot tell you that the thing exists; a
+  // visible, plainly-inert one can. The disabled form carries NO data-act -
+  // nothing for the delegation to catch - which is this client's existing
+  // convention for an off control (primitives.js's transportButton).
   const head = setupHead({
-    step: 1, back: "go_home", ...barFor(ui, picked),
-    aside: picked ? stageChip(ui, stages) : "",
+    back: "go_home", backLabel: CHROME.backToHome, ...barFor(ui, picked, p.drill === "scenarios" ? cycle : null),
+    aside: (picked ? stageChip(ui, stages) : "")
+      + (picked
+        ? cta({ act: "go_players", label: h`${CHROME.continueToPlayers}`, tone: "ok", grow: false })
+        : h`<span class="cta cta-ok is-off">${CHROME.continueToPlayers}</span>`),
   });
 
   return h`<main class="pane setup">${raw(head)}<div class="setup-grid">
 <div class="setup-list">${raw(drillList({ ...p, source, cycle }, cycles, scenarios))}${raw(stageList)}</div>
-<div class="setup-detail">${raw(detail)}${raw(foot)}</div>
+<div class="setup-detail">${raw(detail)}</div>
 </div></main>`;
 }

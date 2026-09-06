@@ -31,7 +31,10 @@ export const CHROME = {
   // steps, so "no header, no instruction at all" is answered once rather
   // than per screen. Each step's instruction is one sentence naming what to
   // do on THIS step - never a description of the screen.
-  setupStep: "Step %s of 2",
+  // The Back chip says WHERE IT GOES, not that it goes back - which is what
+  // the step stamp beside it was for. One piece of chrome instead of two.
+  backToHome: "‹ Main Menu",
+  backToScenario: "‹ Scenario",
   chooseScenarioTitle: "Choose a scenario",
   choosePlayersTitle: "Set up the players",
   choosePlayersHint: "How many are playing, and each player's starting threat.",

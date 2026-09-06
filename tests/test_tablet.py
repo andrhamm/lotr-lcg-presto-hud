@@ -760,6 +760,47 @@ console.log(JSON.stringify({
     assert js["threats"] == [26, 25, 25]
 
 
+def test_clearing_the_cycle_clears_everything_downstream_of_it():
+    """Deselecting the cycle used to leave the chosen scenario loaded under a
+    list that no longer contained it: its stages still in the rail, its detail
+    still in the pane, its name still in the app bar, and Continue still armed
+    - a state you could start a game from with no visible selection anywhere.
+
+    The cycle is the root of that chain, so clearing it clears the chain."""
+    js = node(NG_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+import { overviewFor } from "./overview.js";
+import { renderNewGame } from "./newgame.js";
+const g = new GameState();
+const bundle = { stages: [{ id: 1, stage: 1, cards: [{ faces: [] }] }], locations: [], tips: null };
+const ui = { screen: "newgame", overview: overviewFor(index, "o1a", bundle),
+  picker: { index, source: "official", cycle: "C1", drill: "scenarios",
+            slug: "o1a", stage: "1" } };
+const before = renderNewGame(g, ui);
+const changed = dispatch(g, ui, "ng_cycles", "");
+const after = renderNewGame(g, ui);
+console.log(JSON.stringify({
+  changed, slug: ui.picker.slug, stage: ui.picker.stage, drill: ui.picker.drill,
+  beforeHadStages: before.includes("stage-list"),
+  afterHasStages: after.includes("stage-list"),
+  afterHasDetail: after.includes("ov-grid"),
+  afterEmpty: after.includes("detail-empty"),
+  afterContinueArmed: /class="[^"]*cta[^"]*"[^>]*data-act="go_players"/.test(after),
+  afterContinueShown: after.includes("cta-ok"),
+}));
+""")
+    assert js["changed"] is True
+    assert js["beforeHadStages"]                  # it really was loaded...
+    assert js["slug"] is None and js["stage"] == "overview"
+    assert js["drill"] == "cycles"
+    assert not js["afterHasStages"] and not js["afterHasDetail"]
+    assert js["afterEmpty"]                       # ...and the pane says so
+    # Continue is still VISIBLE, just inert - a control that vanishes cannot
+    # tell you it exists.
+    assert not js["afterContinueArmed"] and js["afterContinueShown"]
+
+
 def test_new_game_chooser_drill_rows_are_real_buttons():
     js = node(NG_FIXTURE + """
 import { renderNewGame } from "./newgame.js";

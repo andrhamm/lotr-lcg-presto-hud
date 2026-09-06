@@ -40,6 +40,13 @@ export function handle(game, ui, act, arg) {
   if (act === "ng_cycles") {
     if (ui.picker.drill !== "scenarios") return false;
     ui.picker.drill = "cycles";
+    // Everything downstream of the cycle goes with it. Leaving the slug behind
+    // left the previous scenario loaded under a list that no longer contained
+    // it: its stages still in the rail, its detail still in the pane, its name
+    // still in the app bar, and Continue still armed - a state you could start
+    // a game from without a visible selection anywhere.
+    ui.picker.slug = null;
+    ui.picker.stage = "overview";
     return true;
   }
   // The left column's third list: which stage the detail pane is drawing, or

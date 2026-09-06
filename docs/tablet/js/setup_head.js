@@ -29,21 +29,29 @@
 // `--well` ground, a bottom border, a fixed height - so every screen in this
 // client has the same thing at the top and the content below it starts at the
 // same place.
-import { h, raw, fmt } from "./dom.js";
+import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip } from "./primitives.js";
 import { setIcon } from "./seticon.js";
 
-// `subject` is what this screen is about right now. `meta` is the dense
-// metadata under it (LABEL, where LABEL belongs); `aside` is an already-
-// rendered chip shown at the right of the band. Everything but step/title/back
-// is optional, and an absent piece leaves no gap behind it.
-export function setupHead({ step, title, meta = null, icon = null, aside = "", back }) {
-  const mark = icon ? setIcon(icon, 34) : "";
+// `title` is what this screen is about right now. `meta` is the dense metadata
+// under it (LABEL, where LABEL belongs); `aside` is already-rendered markup for
+// the band's right zone - the step's own forward action, so the eye finds
+// "what next" in the same place on every screen instead of at the foot of a
+// pane whose height depends on its content.
+//
+// There is no step stamp. "STEP 1 OF 2" sat beside the Back chip saying what
+// the Back chip's own label now says outright ("Main Menu" / "Scenario"), and
+// two pieces of chrome describing the same thing is what made this corner
+// noisy in the first place.
+export function setupHead({ title, meta = null, icon = null, mark = null, aside = "", back, backLabel }) {
+  // The mark is large on purpose: it is the one piece of the band that is not
+  // text, and at 34px it read as a bullet beside the title rather than as the
+  // scenario's own symbol.
+  const glyph = mark ?? (icon ? setIcon(icon, 56) : "");
   return h`<header class="appbar">
-<div class="appbar-nav">${raw(chip({ act: back, label: h`${CHROME.back}`, tone: "tan" }))}
-<span class="label">${fmt(CHROME.setupStep, step)}</span></div>
-<div class="appbar-subject">${raw(mark)}
+<div class="appbar-nav">${raw(chip({ act: back, label: h`${backLabel}`, tone: "tan" }))}</div>
+<div class="appbar-subject">${raw(glyph)}
 <div class="appbar-text"><h1 class="display">${title}</h1>${meta ? raw(h`<p class="label">${meta}</p>`) : ""}</div>
 </div>
 <div class="appbar-aside">${raw(aside)}</div>

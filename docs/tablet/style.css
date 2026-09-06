@@ -527,18 +527,35 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    screen in the treatment this system uses to DEMOTE things, and a step stamp
    - all four at the same rank as each other or as the rail's own headers.
    The right padding clears the corner reload, which floats above everything. */
-.appbar { flex: 0 0 auto; display: flex; align-items: center; gap: 24px;
-  height: 84px; padding: 0 66px 0 18px; background: var(--well);
+/* A grid, not a flex row, so the SUBJECT is centred on the BAND rather than on
+   whatever space the nav and the aside happen to leave: the two 1fr tracks are
+   equal whatever is in them, so the title does not drift left when Continue is
+   wide or right when Back is short. */
+.appbar { flex: 0 0 auto; display: grid; align-items: center; gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  height: 96px; padding: 0 66px 0 18px; background: var(--well);
   border-bottom: 1px solid var(--border); }
-.appbar-nav { display: flex; align-items: center; gap: 14px; flex: 0 0 auto; }
+.appbar-nav { display: flex; align-items: center; gap: 14px; justify-self: start; }
 /* The subject takes the slack and truncates rather than wrapping: the band is
    a fixed height, and a title that wrapped would push its own metadata out of
    the box. */
-.appbar-subject { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 0; }
+.appbar-subject { display: flex; align-items: center; gap: 14px; min-width: 0; justify-self: center; }
+/* The title block is centred as a block, but its own lines stay left-aligned
+   against the mark: centred text under a left-aligned icon reads as two
+   unrelated things. */
 .appbar-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .appbar-text .display, .appbar-text .label { margin: 0; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
-.appbar-aside { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.appbar-aside { display: flex; align-items: center; justify-content: flex-end;
+  gap: 10px; justify-self: end; min-width: 0; }
+/* The band's own CTA is shorter than a pane's full-width one - it is a
+   forward action in a row of chrome, not the whole bottom of a screen. */
+.appbar-aside .cta { height: 52px; font-size: 20px; }
+/* An inert control: visible, plainly not tappable, and carrying no data-act
+   at all (the same convention .tbtn.is-off and .step-off already use, so
+   there is nothing for app.js's delegation to catch). It keeps its shape so
+   the band does not reflow the moment a scenario is picked. */
+.cta.is-off { opacity: .38; border-style: dashed; cursor: default; }
 /* Master/detail: the drill-in list at a fixed width (a list of names does not
    want to grow), the scenario's own detail taking everything else. Each side
    scrolls independently - min-height: 0 is load-bearing on a grid item that

@@ -86,13 +86,36 @@ export function iconSlugs(name) {
   return out;
 }
 
-export function setIcon(name, px) {
-  const [primary, ...rest] = iconSlugs(name);
+// A CYCLE's own icon. The pack files these as "<name>-cycle.svg" with any
+// leading "the" dropped - "The Dwarrowdelf" is dwarrowdelf-cycle.svg,
+// "The Vengeance of Mordor" is vengeance-of-mordor-cycle.svg - so the cycle
+// name needs its own chain rather than the set one. Verified against the pack:
+// this resolves 9 of the catalog's 17 cycles. The 8 it does not are groupings
+// this project invented rather than printed cycles (Core Set (Mirkwood Paths),
+// the two Sagas, Standalone/PoD and the four ALeP groups), which have no cycle
+// symbol to find - they fall back to the placeholder glyph, correctly.
+export function cycleIcon(name, px) {
+  const base = slugify(name);
+  const bare = base.startsWith("the-") ? base.slice(4) : base;
+  const chain = [];
+  for (const b of [base, bare]) {
+    for (const s of [b + "-cycle", b]) if (s && !chain.includes(s)) chain.push(s);
+  }
+  return iconImg(chain, px);
+}
+
+// One <img> carrying a chain of candidates. data-alt is the rest of it,
+// comma-separated; app.js's error listener shifts one off and retries before
+// giving up on the placeholder glyph.
+function iconImg(chain, px) {
+  const [primary, ...rest] = chain;
   const src = dataUrl("icons/svg/" + primary + ".svg");
-  // data-alt is the rest of the chain, comma-separated; app.js's error
-  // listener shifts one off and retries before giving up on the glyph.
   const alt = rest.map(s => dataUrl("icons/svg/" + s + ".svg")).join(",");
   return h`<span class="seticon" style="width:${px}px;height:${px}px"><img src="${src}" alt="" loading="lazy"${alt ? raw(h` data-alt="${alt}"`) : ""}><i class="seticon-fallback">◆</i></span>`;
+}
+
+export function setIcon(name, px) {
+  return iconImg(iconSlugs(name), px);
 }
 
 // The scenario's own set icon, keyed by `game.scenario?.name` (the one name
