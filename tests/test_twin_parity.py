@@ -837,6 +837,46 @@ def test_image_prefix_reads_the_same_pinned_key_in_both_twins():
     assert js["emptyObject"] is None and qc.image_prefix({}) is None
 
 
+_LOCATION_IMAGE_PROBE = """\
+import { locationsFor } from "./quest_catalog.js";
+const packs = { q: { encounter: { location: [
+  { id: "a", name: "Front Face", encounterSet: "Q", image: "a.jpg",
+    faces: [{ questPoints: 3, threat: 1 }] },
+  { id: "b", name: "Back Face", encounterSet: "Q", image: "b.B.jpg",
+    faces: [{ questPoints: 4, threat: 2 }] },
+  { id: "c", name: "No Art", encounterSet: "Q",
+    faces: [{ questPoints: 1, threat: 0 }] },
+] } } };
+console.log(JSON.stringify(locationsFor({ slug: "q" }, packs)));
+"""
+
+
+def test_locations_carry_the_card_art_filename_in_both_twins():
+    """Task 6 (tablet): the location picker draws each card's printed art, so
+    locations_for()/locationsFor() carry the card's `image` FILENAME through
+    - not one rebuilt from the id, because 24 of 1016 catalog locations print
+    on the BACK of a two-sided card and record "<id>.B.jpg". Purely additive:
+    a card with no `image` gets no key at all, so an entry for a card without
+    art is exactly what it was before."""
+    import quest_catalog as qc
+
+    packs = {"q": {"encounter": {"location": [
+        {"id": "a", "name": "Front Face", "encounterSet": "Q", "image": "a.jpg",
+         "faces": [{"questPoints": 3, "threat": 1}]},
+        {"id": "b", "name": "Back Face", "encounterSet": "Q", "image": "b.B.jpg",
+         "faces": [{"questPoints": 4, "threat": 2}]},
+        {"id": "c", "name": "No Art", "encounterSet": "Q",
+         "faces": [{"questPoints": 1, "threat": 0}]},
+    ]}}}
+    py = qc.locations_for({"slug": "q"}, packs)
+    js = _js_facts(_LOCATION_IMAGE_PROBE)
+
+    # name-sorted: Back Face, Front Face, No Art
+    assert [e.get("image") for e in py] == ["b.B.jpg", "a.jpg", None]
+    assert [e.get("image") for e in js] == ["b.B.jpg", "a.jpg", None]
+    assert "image" not in py[2] and "image" not in js[2]
+
+
 _MODE_TIPS_PROBE = """\
 import { ScenarioOptionsScreen } from "./screens_other.js";
 const scenario = { modes: ["Hard Mode"], hasNightmare: true };

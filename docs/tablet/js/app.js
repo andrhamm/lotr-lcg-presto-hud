@@ -18,6 +18,8 @@ import { CATALOG_UNAVAILABLE } from "../../js/viewcopy.js";
 import { layout } from "./layout.js";
 import { perform, newUi, afterTap } from "./actions.js";
 import { logText } from "./logfilter.js";
+import { imagePrefix } from "../../js/quest_catalog.js";
+import { imageUrls } from "./cardimage.js";
 
 // A finished game is appended to history once. Reset wherever `game` is
 // rebound (new game / a fresh scenario pick) - mirrors main.js's own
@@ -62,8 +64,37 @@ async function buildPicker() {
   let index = null;
   try { index = await db.index(); }
   catch (e) { console.error("tablet: quest catalog unavailable", e); }
+  // The card-art prefix rides along with the index the picker already had to
+  // read - see seatImagePrefix() for the resume path, which has no picker.
+  ui.imagePrefix = imagePrefix(index);
   return { index, players: 2, threats: [25, 25],
            error: index ? null : CATALOG_UNAVAILABLE };
+}
+
+// The pinned card-image URL prefix (Task 6). Needed on BOTH boot paths: a
+// resumed game never builds a picker, but it can still open the location
+// picker mid-round, and that is where the card art shows. db.index()
+// PROPAGATES on failure (db.js's contract), and it caches, so this is one
+// read shared with buildPicker() - caught here the same way, because a
+// catalog that will not load must cost the player captions, not the app.
+async function seatImagePrefix() {
+  try { ui.imagePrefix = imagePrefix(await db.index()); }
+  catch (e) { ui.imagePrefix = null; }
+}
+
+// Warm the image cache for the scenario the players just committed to (Task
+// 6): every card db.bundle() pins, in one message, while they are still
+// laying out heroes. Fire-and-forget by design - there is no controller at
+// all on the very first load (the worker activates after this page did), the
+// browser may have no service workers, and a failure here costs a hotlink on
+// the first location picker, never a tap. Nothing awaits it.
+function prefetchCardImages(bundle) {
+  try {
+    const urls = imageUrls(bundle, ui.imagePrefix);
+    if (urls.length) {
+      navigator.serviceWorker?.controller?.postMessage({ type: "prefetch", urls });
+    }
+  } catch (e) { /* no worker, or a browser that refuses to post */ }
 }
 
 async function boot() {
@@ -95,6 +126,7 @@ async function boot() {
     // "no panel" contract as an absent tips.json.
     ui.tips = b?.tips ?? null;
     ui.scenarioSlug = game.scenario?.slug ?? null;
+    await seatImagePrefix();
     // A save can land exactly between a successful "resolve" and
     // "apply_alloc" (pending_budget > 0, nothing placed yet). ui.alloc is
     // never part of the save (it is UI state, not game state), and pane.js
@@ -179,6 +211,7 @@ async function handleAct(act, arg) {
     // since a fresh pick never goes through boot()'s branch at all.
     ui.tips = b.tips ?? null;
     ui.scenarioSlug = scenarioMeta.slug;
+    prefetchCardImages(b);
     ui.sheet = null;
     ui.screen = "play";
     db.session.saveState(game);
@@ -257,5 +290,20 @@ root.addEventListener("error", ev => {
 // tab close/reload never loses the last few taps' journal entries.
 setInterval(() => db.session.tick(game), 250);
 window.addEventListener("pagehide", () => db.session.flush(game));
+
+// The service worker (Task 6): this client's offline shell and its card-image
+// cache. Registered from here rather than from index.html so the SCOPE is
+// derived instead of written down - GitHub Pages serves the site under
+// /lotr-lcg-presto-hud/tablet/, not /tablet/, and a hard-coded "/tablet/"
+// would be rejected there (a worker's scope can never be broader than its
+// own directory). new URL("./", swUrl) IS that directory, on either host.
+// Every failure is swallowed: no service worker support, an insecure origin,
+// a file:// preview - the client works exactly as it did before, just
+// without a cache.
+if ("serviceWorker" in navigator) {
+  const swUrl = new URL("../sw.js", import.meta.url);
+  navigator.serviceWorker.register(swUrl, { scope: new URL("./", swUrl).href })
+    .catch(() => {});
+}
 
 boot();

@@ -39,6 +39,18 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tan); 
 .seticon-fallback { font-style: normal; font-size: 13px; line-height: 1; color: var(--dim); }
 .seticon.is-missing img { display: none; }
 .seticon:not(.is-missing) .seticon-fallback { display: none; }
+/* A card thumbnail (Task 6, cardimage.js): the printed art at 96px wide in a
+   5:7 card aspect, with the card's name as its caption. The caption is not
+   decoration - when there is no art (no pinned imagePrefix, an offline
+   reload with a cold cache, a 404) it is ALL there is, so it is BODY, and
+   app.js's delegated `error` listener adds .is-missing here exactly as it
+   does for .seticon above. The --well ground is what the box shows while the
+   picture is still arriving, so a list of rows does not reflow as they land. */
+.card-frame { width: 96px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.card-frame img { width: 100%; aspect-ratio: 5/7; object-fit: cover;
+  background: var(--well); border-radius: 4px; display: block; }
+.card-frame.is-missing img { display: none; }
+.card-frame figcaption { font-size: 18px; }
 .num { font-family: var(--sans); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--gold); }
 .num-26 { font-size: 26px } .num-34 { font-size: 34px } .num-36 { font-size: 36px } .num-40 { font-size: 40px } .num-48 { font-size: 48px } .num-56 { font-size: 56px } .num-64 { font-size: 64px } .num-84 { font-size: 84px }
 button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation;
@@ -449,6 +461,16 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
   background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
   border-radius: 6px; }
 .locpick-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
+/* Inside a picker row the frame lays out sideways: the 96px thumbnail is the
+   row's leading column and the caption - the location's name and its printed
+   threat/quest points - is the rest of the line. Only the ARRANGEMENT
+   changes; the thumbnail keeps its 96px width and 5:7 card aspect. When the
+   art is missing the img is hidden and the caption alone carries the row,
+   which still clears the 56px floor above. */
+.locpick-row .card-frame { width: auto; flex: 1 1 auto; flex-direction: row;
+  align-items: center; gap: 16px; }
+.locpick-row .card-frame img { width: 96px; flex: none; }
+.locpick-row .card-frame figcaption { flex: 1 1 auto; }
 .locpick-manual { display: flex; flex-direction: column; gap: 10px; }
 
 /* The side-quest picker (Task 6): a sphere list, then that sphere's quests -

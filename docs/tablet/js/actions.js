@@ -37,6 +37,13 @@ export const newUi = () => ({
   // null when the build has no rules_text.json (same optional-at-runtime
   // contract as tips/icons/locations).
   rules: null,
+  // Milestone 5 (Task 6): the pinned card-image URL prefix (index.json's
+  // `imagePrefix`, read by quest_catalog.js's imagePrefix()), seated by
+  // app.js on both boot paths. null for an index built before the pin
+  // existed or any catalog failure - cardimage.js then draws captions with
+  // no <img> at all, which is the same optional-at-runtime contract as
+  // tips/icons/rules/locations.
+  imagePrefix: null,
   // Milestone 5 (Task 4): the whole tips.json map (db.bundle(slug).tips -
   // db.js's own comment: the bundle carries the WHOLE map, not a per-
   // scenario slice) plus the current scenario's own slug, so notes.js's

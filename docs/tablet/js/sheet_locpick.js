@@ -13,6 +13,7 @@ import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
 import { setIcon } from "./seticon.js";
+import { cardImage } from "./cardimage.js";
 
 function step(act, arg, label) {
   return h`<button type="button" class="step step-sm" data-act="${act}" data-arg="${arg}">${label}</button>`;
@@ -41,18 +42,26 @@ function groupBySet(entries) {
   return [...groups.entries()].map(([set, rows]) => ({ set, rows }));
 }
 
-// One row: name (BODY - a name a player reads) with its threat/quest-points
-// pair right-aligned as BODY secondary, not a chip's ALL-CAPS LABEL - same
-// distinction newgame.js's scenario-row draws between a printed name and
-// chrome. A card that prints a literal X shows "X", never a 0 it made up
-// (locationsFor/quest_catalog.js hands the picker *Kind for exactly this -
-// see LocationPickModal's own eThreat/ePoints comment).
-function locRow(e, selected) {
+// One row: the card's own art (Task 6, cardimage.js) beside its name (BODY -
+// a name a player reads) and its printed threat/quest-points pair, not a
+// chip's ALL-CAPS LABEL - same distinction newgame.js's scenario-row draws
+// between a printed name and chrome. A card that prints a literal X shows
+// "X", never a 0 it made up (locationsFor/quest_catalog.js hands the picker
+// *Kind for exactly this - see LocationPickModal's own eThreat/ePoints
+// comment).
+//
+// Name and numbers are the FIGCAPTION rather than two spans beside the
+// thumbnail, so they are written once: when there is no art to show (no
+// pinned imagePrefix, an offline reload with a cold cache, a 404) the
+// caption is the whole row, and it still says which location this is and
+// what it prints. style.css lays the frame out sideways inside a row.
+function locRow(e, selected, prefix) {
   const eThreat = e.threatKind === "x" ? "X" : (e.threat ?? 0);
   const ePoints = e.pointsKind === "x" ? "X" : (e.points ?? 0);
+  const frame = cardImage({ prefix, id: e.id, image: e.image, name: e.name ?? "",
+                            caption: fmt(CHROME.locpickStats, eThreat, ePoints) });
   return h`<button type="button" class="${cx("locpick-row", selected && "is-selected")}" data-act="locpick_row" data-arg="${e.id}">
-<span class="body">${e.name ?? ""}</span>
-<span class="body secondary">${fmt(CHROME.locpickStats, eThreat, ePoints)}</span>
+${raw(frame)}
 </button>`;
 }
 
@@ -65,7 +74,7 @@ function renderList(game, ui) {
     : h`<p class="body secondary">${CHROME.locpickPrompt}</p>`;
   const groups = groupBySet(entries).map(({ set, rows }) => h`<div class="locpick-group">
 ${set ? raw(h`<div class="locpick-group-head">${raw(setIcon(set, 20))}<span class="label">${set}</span></div>`) : ""}
-${raw(rows.map(e => locRow(e, e.id === sheet.selected)).join(""))}
+${raw(rows.map(e => locRow(e, e.id === sheet.selected, ui.imagePrefix)).join(""))}
 </div>`).join("");
   return h`${raw(sub)}<div class="locpick-list">${raw(groups)}</div>`;
 }

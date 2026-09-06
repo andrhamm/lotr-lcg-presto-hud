@@ -11,6 +11,7 @@ client delegates to, and its pure functions are separately host-tested.
 """
 import ast
 import os
+import re
 import sys
 
 import pytest
@@ -113,6 +114,76 @@ def test_the_web_twin_keeps_localstorage_in_its_client_too():
     assert not offenders, (
         "localStorage outside docs/js/db.js at %s - route it through the client"
         % offenders)
+
+
+# The browser twins' version of the `open` rule above: `fetch` is how a page
+# reads, so every read has to go through the client for the same reason - one
+# home for caching, formats and durability. Two files are exempt, each for the
+# same reason its Python counterpart is.
+FETCH_OWNERS = {
+    # The catalog READER db.js delegates to - the exact JS twin of the
+    # quest_catalog.py exception in STORAGE_OWNERS above.
+    os.path.join("docs", "js", "quest_catalog.js"),
+    # The tablet's service worker IS the network (Task 6): its whole contract
+    # is to intercept requests and re-issue them, and the client's own reads
+    # are among the requests passing through it. It also runs in a worker
+    # global with no module graph at all, so it could not import the client
+    # even if the layering allowed it.
+    os.path.join("docs", "tablet", "sw.js"),
+}
+
+# `fetch(` in code, not in prose - several comments in docs/js discuss "a
+# catalog fetch (...)", so the comment filter below is load-bearing. \b keeps
+# `prefetch(` out of it.
+FETCH_CALL = re.compile(r"\bfetch\s*\(")
+
+
+def test_the_browser_twins_keep_fetch_in_the_catalog_reader_and_the_worker():
+    """Same rule as the localStorage one above, for reads instead of writes.
+    A stray fetch is how a screen grows its own cache: the location picker
+    used to re-read its gather-list union on every open, and the tablet's
+    picker would have every reason to do it again for card art if this were
+    not enforced."""
+    offenders = []
+    for sub in ("js", "tablet"):
+        top = os.path.join(ROOT, "docs", sub)
+        if not os.path.isdir(top):
+            continue
+        for dirpath, _dirs, files in os.walk(top):
+            for fn in sorted(files):
+                if not fn.endswith(".js"):
+                    continue
+                path = os.path.join(dirpath, fn)
+                rel = os.path.relpath(path, ROOT)
+                if rel in FETCH_OWNERS:
+                    continue
+                with open(path) as f:
+                    for i, line in enumerate(f, 1):
+                        if line.strip().startswith("//"):
+                            continue
+                        if FETCH_CALL.search(line):
+                            offenders.append("%s:%d" % (rel, i))
+    assert not offenders, (
+        "fetch outside %s at %s - route it through the client"
+        % (sorted(FETCH_OWNERS), offenders))
+
+
+def test_the_fetch_owners_are_the_ones_that_actually_fetch():
+    """Guards the inverse: an allow-list entry that stopped fetching would
+    make the test above pass vacuously (and would mean the exemption is stale
+    and should be deleted)."""
+    for rel in sorted(FETCH_OWNERS):
+        with open(os.path.join(ROOT, rel)) as f:
+            code = [ln for ln in f if not ln.strip().startswith("//")]
+        assert any(FETCH_CALL.search(ln) for ln in code), \
+            "%s is allow-listed for fetch but never calls it" % rel
+
+
+def test_the_fetch_regex_ignores_prose_and_prefetch():
+    assert FETCH_CALL.search("return fetch(url)")
+    assert FETCH_CALL.search("await fetch (url)")
+    assert not FETCH_CALL.search("prefetch(urls)")
+    assert not FETCH_CALL.search("a catalog fetch, once")
 
 
 def test_the_twins_expose_the_same_client_surface():

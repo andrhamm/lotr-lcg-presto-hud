@@ -2951,3 +2951,116 @@ import { slugify } from "../../js/quest_catalog.js";
 console.log(JSON.stringify(%s.map(slugify)));
 """ % json.dumps(names))
     assert js == expected
+
+
+# --- Task 6: card images ----------------------------------------------------
+
+_PREFIX = "https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/"
+_CARD_ID = "51223bd0-ffd1-11df-a976-0801200c9099"     # Old Forest Road, Core Set
+
+
+def test_location_picker_rows_carry_the_card_art_from_the_pinned_prefix():
+    """Task 6: a picker row leads with the location's own printed art. The
+    URL is the pinned image prefix (tools/data/cardDb.SOURCE.txt's
+    `image_prefix=`, surfaced as index.json's `imagePrefix` and seated on
+    `ui.imagePrefix` by app.js) joined to the FILENAME the card record
+    carries - not one rebuilt from the id, because 24 of 1016 catalog
+    locations print on the back of a two-sided card and carry "<id>.B.jpg".
+
+    The name and the printed threat/quest points live in the figure's
+    caption, so they are written once: when the art cannot be shown the
+    caption is the whole row and it still says which location this is."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+function pick(prefix) {
+  const g = new GameState(1, 25); g.advanceView(); g.enterView("travel");
+  const ui = newUi();
+  ui.imagePrefix = prefix;
+  ui.locations = [{ id: "%s", image: "%s.jpg", name: "Old Forest Road",
+                    points: 3, threat: 1, set: "Passage Through Mirkwood" },
+                  { id: "b-side", image: "b-side.B.jpg", name: "Shrine to Morgoth",
+                    points: 4, threat: 2, set: "Passage Through Mirkwood" },
+                  { id: "no-image-field", name: "Forest Gate",
+                    points: 4, threat: 2, set: "Passage Through Mirkwood" },
+                  { name: "Hand-typed", points: 1, threat: 0, set: "" }];
+  perform(g, ui, "open_locpick", "new::play");
+  return layout(g, ui);
+}
+console.log(JSON.stringify({ withArt: pick("%s"), noPrefix: pick(null) }));
+""" % (_CARD_ID, _CARD_ID, _PREFIX))
+    art = js["withArt"]
+    assert '<figure class="card-frame">' in art
+    assert 'src="%s%s.jpg"' % (_PREFIX, _CARD_ID) in art
+    assert 'loading="lazy"' in art and 'alt=""' in art
+    # The printed filename wins over "<id>.jpg" - a back-face location must
+    # not render the front of the card.
+    assert 'src="%sb-side.B.jpg"' % _PREFIX in art
+    # An entry with no `image` field at all (a picker entry from a game saved
+    # before quest_catalog carried one) falls back to "<id>.jpg" rather than
+    # losing its picture.
+    assert 'src="%sno-image-field.jpg"' % _PREFIX in art
+    # An entry with neither is caption-only - no <img> to 404.
+    assert '<figure class="card-frame"><figcaption class="body">Hand-typed' in art
+    # The caption is the name plus the numbers the row has always shown.
+    assert ">Old Forest Road · threat 1 · 3 quest points</figcaption>" in art
+
+    # No pinned prefix (an index built before the pin, or a catalog that
+    # would not load): not one card <img> anywhere, and the rows still read.
+    # (The set-group header's own icon is a separate <img>; it is unaffected.)
+    assert '<figure class="card-frame"><img' not in js["noPrefix"]
+    assert '<figure class="card-frame"><figcaption' in js["noPrefix"]
+    assert "Old Forest Road · threat 1 · 3 quest points" in js["noPrefix"]
+
+
+def test_card_image_urls_cover_the_scenario_and_every_set_it_gathers():
+    """`imageUrls(bundle, prefix)` is what app.js posts to the service worker
+    when the players commit to a scenario. It has to span the same union
+    locationsFor() does - a scenario's own scenarios/<slug>.json holds only
+    cards whose encounterSet IS its set, so Passage Through Mirkwood's own
+    file has 2 of its 6 locations - which db.bundle() pins in two pieces: the
+    scenario's own file (every encounter.* group, all card types) and
+    `locations`, the already-flattened union across the gather list.
+
+    Each url once, and [] with no prefix so the worker is never asked to warm
+    a cache it could not fill."""
+    js = node("""
+import { imageUrls, cardUrl } from "./cardimage.js";
+const bundle = {
+  scenario: { encounter: {
+    location: [{ id: "own-1", image: "own-1.jpg" }, { id: "own-2", image: "own-2.jpg" }],
+    enemy: [{ id: "enemy-1", image: "enemy-1.jpg" }],
+    treachery: [{ id: "trick-1", image: "trick-1.jpg" }],
+  } },
+  locations: [
+    { id: "own-1", image: "own-1.jpg" },              // already seen: once only
+    { id: "gathered-1", image: "gathered-1.jpg" },
+    { id: "gathered-2", image: "gathered-2.B.jpg" },  // a back-face location
+    { id: "no-art" },                                 // no image field at all
+    { id: "hotlink", image: "https://s3.amazonaws.com/hallofbeorn/x.jpg" },
+  ],
+};
+console.log(JSON.stringify({
+  urls: imageUrls(bundle, "%s"),
+  noPrefix: imageUrls(bundle, null),
+  emptyBundle: imageUrls({}, "%s"),
+  idFallback: cardUrl("%s", { id: "plain" }),
+  absoluteKept: cardUrl("%s", { image: "https://elsewhere.test/a.jpg" }),
+  nothing: cardUrl("%s", {}),
+}));
+""" % (_PREFIX, _PREFIX, _PREFIX, _PREFIX, _PREFIX))
+    p = _PREFIX
+    assert js["urls"] == [
+        p + "own-1.jpg", p + "own-2.jpg", p + "enemy-1.jpg", p + "trick-1.jpg",
+        p + "gathered-1.jpg", p + "gathered-2.B.jpg", p + "no-art.jpg",
+    ], "own set (every card type) then the gather list's, each url once"
+    # A Hall of Beorn hotlink is not under the prefix, so sw.js's isImage()
+    # could never serve it from the image cache - prefetching it is a wasted
+    # request, not a warm one.
+    assert not any("hallofbeorn" in u for u in js["urls"])
+    assert js["noPrefix"] == [] and js["emptyBundle"] == []
+    assert js["idFallback"] == p + "plain.jpg"
+    assert js["absoluteKept"] == "https://elsewhere.test/a.jpg"
+    assert js["nothing"] is None

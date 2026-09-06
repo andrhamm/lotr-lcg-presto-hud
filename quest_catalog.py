@@ -418,7 +418,8 @@ def location_set_slugs(scenario):
 
 def locations_for(scenario, packs):
     """Every location `scenario` can put into play, as a name-sorted list of
-    {"id","name","points","threat","set"} for the location picker.
+    {"id","name","points","threat","set"} (plus "image" where the card has
+    art) for the location picker.
 
     The union is load-bearing. A scenario's own scenarios/<slug>.json carries
     only cards whose encounterSet IS that scenario's set, so Passage Through
@@ -467,6 +468,16 @@ def locations_for(scenario, packs):
             seen[key] = True
             entry = {"id": card.get("id"), "name": card.get("name"),
                      "set": card.get("encounterSet")}
+            # The card-art FILENAME as the build recorded it (tablet task 6:
+            # docs/tablet/js/cardimage.js joins it to index.json's
+            # imagePrefix). Usually "<id>.jpg", but not always - 24 of 1016
+            # catalog locations print on the BACK of a two-sided card and
+            # carry "<id>.B.jpg", and 2 carry an absolute Hall of Beorn URL -
+            # so the filename is carried rather than rebuilt from the id.
+            # Omitted when the card has none, so an entry for a card without
+            # art is identical to before.
+            if card.get("image"):
+                entry["image"] = card["image"]
             faces = card.get("faces") or []
             for stat, out_key in (("questPoints", "points"),
                                   ("threat", "threat")):

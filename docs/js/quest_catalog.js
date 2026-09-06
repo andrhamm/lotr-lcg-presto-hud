@@ -230,7 +230,8 @@ export function locationSetSlugs(scenario) {
 }
 
 // Every location `scenario` can put into play, as a name-sorted array of
-// {id, name, points, threat, set} for the location picker. Mirrors
+// {id, name, points, threat, set} (plus `image` where the card has art) for
+// the location picker. Mirrors
 // quest_catalog.py's locations_for() verbatim - keep the two in lockstep.
 //
 // The union is load-bearing. A scenario's own scenarios/<slug>.json carries
@@ -279,6 +280,14 @@ export function locationsFor(scenario, packs) {
       const qp = stat("questPoints"), th = stat("threat");
       const entry = { id: card.id, name: card.name, points: qp.value,
                       threat: th.value, set: card.encounterSet };
+      // The card-art FILENAME as the build recorded it (tablet task 6:
+      // docs/tablet/js/cardimage.js joins it to index.json's imagePrefix).
+      // Usually "<id>.jpg", but not always - 24 of 1016 catalog locations
+      // print on the BACK of a two-sided card and carry "<id>.B.jpg", and 2
+      // carry an absolute Hall of Beorn URL - so the filename is carried
+      // rather than rebuilt from the id. Omitted when the card has none, so
+      // an entry for a card without art is byte-identical to before.
+      if (card.image) entry.image = card.image;
       for (const [s, key] of [[qp, "points"], [th, "threat"]]) {
         if (s.kind) entry[key + "Kind"] = s.kind;
         if (s.x) entry[key + "X"] = s.x;
