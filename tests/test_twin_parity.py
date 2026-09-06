@@ -440,3 +440,44 @@ def test_adjust_all_threat_matches_the_twin():
     assert js["text"] == g.log[-1]["text"]
     assert js["pendingElim"] == g.pending_elim == 2
     assert js["eliminated"] == [p.eliminated for p in g.players] == [False, False, True]
+
+
+_METADATA_PROBE = """\
+import { GameState, foldLog, setWindowPolicy, WINDOW_POLICY_BANDS } from "./gamestate.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2); g.view = "resource";
+const tap = fn => { const s = g.beginAction(); fn(); return g.addDelta(s); };
+tap(() => g.setStaging(1)); tap(() => g.advanceView()); tap(() => g.setStaging(2));
+const views = g.deltas.map(d => d._delta_metadata.view);
+const idx = [g.deltaIndexForView(g.round, "planning"), g.deltaIndexForView(g.round, "resource"), g.deltaIndexForView(g.round, "combat_shadow")];
+let appends = g.takeLogAppends();
+g.undo(); tap(() => g.setWillpower(3));
+appends = appends.concat(g.takeLogAppends());
+console.log(JSON.stringify({ views, idx,
+  folded: foldLog(appends).map(e => e.text), live: g.log.map(e => e.text),
+  ops: appends.filter(r => r.op === "lt").length }));
+"""
+
+
+def test_delta_metadata_and_log_truncation_match_the_twin():
+    """A delta's _delta_metadata carries the view/round it landed on, and an
+    edit after an undo truncates the log rows the discarded redo future
+    produced, on both twins identically - deltaIndexForView, foldLog's "lt"
+    tombstone, and the live g.log all agree."""
+    import gamestate
+    from gamestate import GameState, fold_log
+
+    js = _js_facts(_METADATA_PROBE)
+
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_BANDS)
+    g = GameState(2); g.view = "resource"
+    def tap(fn):
+        s = g.begin_action(); fn(); return g.add_delta(s)
+    tap(lambda: g.set_staging(1)); tap(lambda: g.advance_view()); tap(lambda: g.set_staging(2))
+    assert js["views"] == [d["_delta_metadata"]["view"] for d in g.deltas]
+    assert js["idx"] == [g.delta_index_for_view(g.round, v) for v in ("planning", "resource", "combat_shadow")]
+    appends = list(g.take_log_appends()); g.undo(); tap(lambda: g.set_willpower(3))
+    appends += g.take_log_appends()
+    assert js["live"] == [e["text"] for e in g.log]
+    assert js["folded"] == js["live"] == [e["text"] for e in fold_log(appends)]
+    assert js["ops"] == 1

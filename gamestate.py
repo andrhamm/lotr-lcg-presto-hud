@@ -300,6 +300,9 @@ def fold_log(records):
     """
     out = []
     for r in records:
+        if r.get("op") == "lt":
+            out = [e for e in out if not (r["lo"] <= e.get("seq", -1) <= r["hi"])]
+            continue
         prev = out[-1] if out else None
         if (r.get("key") is not None and prev is not None
                 and prev.get("key") == r.get("key")
@@ -1946,14 +1949,24 @@ class GameState:
             self.messages = []
             return False
         d["_delta_metadata"] = {"unix_ms": self._now(),
-                                "log_messages": self.messages}
+                                "log_messages": self.messages,
+                                "view": self.view, "round": self.round}
         # A fresh action after an undo discards the redo future. Python's slice
         # handles replay_step == -1 naturally; the reference needs an explicit
         # guard there because Elixir's 0..-1 range means "to the end".
         if self.replay_step + 1 < len(self.deltas):
             # A fresh action after an undo discards the redo future. The
-            # journal cannot un-append, so record the truncation instead.
+            # journal cannot un-append, so record the truncation instead - and
+            # the log rows that future produced go with it (design spec,
+            # "Rewind": later entries stay greyed until an edit truncates
+            # them). Rows are contiguous in seq: kept deltas' rows < the
+            # orphaned rows < this action's own rows (which have no delta_i
+            # yet), so one [lo, hi] range names them all. Known limitation: a
+            # keyed tally row re-tallied inside the undone stretch had its
+            # delta_i restamped there and is dropped too, though its earlier
+            # value survives in the kept state. The log is advisory.
             self._replay_appends.append({"op": "t", "to": self.replay_step + 1})
+            self._truncate_log(self.replay_step)
         self.deltas = self.deltas[:self.replay_step + 1]
         self.deltas.append(d)
         self._replay_appends.append({"op": "d", "d": d})
@@ -1982,6 +1995,28 @@ class GameState:
 
     def can_redo(self):
         return self.replay_step < len(self.deltas) - 1
+
+    def _truncate_log(self, keep):
+        """Drop log rows produced by deltas past `keep` (the redo future an
+        edit just discarded) and journal the same cut for fold_log."""
+        gone = [e for e in self.log if isinstance(e.get("delta_i"), int) and e["delta_i"] > keep]
+        if not gone:
+            return
+        lo = min(e["seq"] for e in gone)
+        hi = max(e["seq"] for e in gone)
+        self.log = [e for e in self.log
+                    if not (isinstance(e.get("delta_i"), int) and e["delta_i"] > keep)]
+        self._log_appends.append({"op": "lt", "lo": lo, "hi": hi})
+
+    def delta_index_for_view(self, round_n, view):
+        """The delta whose tap first landed on `view` in `round_n` - the
+        strip's tick target - or -1 when no recorded tap did (a future or
+        skipped step, or a history written before deltas carried a view)."""
+        for i, d in enumerate(self.deltas):
+            md = d.get("_delta_metadata") or {}
+            if md.get("round") == round_n and md.get("view") == view:
+                return i
+        return -1
 
     def undo(self):
         """Parity: game_ui.ex undo/1."""

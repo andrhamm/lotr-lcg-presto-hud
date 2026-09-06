@@ -232,6 +232,11 @@ export function foldReplay(ops) {
 export function foldLog(records) {
   const out = [];
   for (const r of records) {
+    if (r.op === "lt") {
+      const keep = out.filter(e => !(e.seq >= r.lo && e.seq <= r.hi));
+      out.length = 0; out.push(...keep);
+      continue;
+    }
     const prev = out.length ? out[out.length - 1] : null;
     if (r.key !== undefined && r.key !== null && prev
         && prev.key === r.key && prev.round === r.round && prev.step === r.step) {
@@ -1618,11 +1623,20 @@ export class GameState {
     }
     const d = getDelta(prevSnapshot, this.snapshot());
     if (d === null) { this.messages = []; return false; }
-    d._delta_metadata = { unix_ms: this._now(), log_messages: this.messages };
+    d._delta_metadata = { unix_ms: this._now(), log_messages: this.messages,
+                          view: this.view, round: this.round };
     // A fresh action after an undo discards the redo future. The journal
-    // cannot un-append, so record the truncation instead.
+    // cannot un-append, so record the truncation instead - and the log rows
+    // that future produced go with it (design spec, "Rewind": later entries
+    // stay greyed until an edit truncates them). Rows are contiguous in seq:
+    // kept deltas' rows < the orphaned rows < this action's own rows (which
+    // have no delta_i yet), so one [lo, hi] range names them all. Known
+    // limitation: a keyed tally row re-tallied inside the undone stretch had
+    // its delta_i restamped there and is dropped too, though its earlier value
+    // survives in the kept state. The log is advisory.
     if (this.replay_step + 1 < this.deltas.length) {
       this._replay_appends.push({ op: "t", to: this.replay_step + 1 });
+      this._truncateLog(this.replay_step);
     }
     this.deltas = this.deltas.slice(0, this.replay_step + 1);
     this.deltas.push(d);
@@ -1664,6 +1678,24 @@ export class GameState {
 
   canUndo() { return this.replay_step >= 0; }
   canRedo() { return this.replay_step < this.deltas.length - 1; }
+
+  // Drop log rows produced by deltas past `keep` (the redo future an edit
+  // just discarded) and journal the same cut for foldLog.
+  _truncateLog(keep) {
+    const gone = this.log.filter(e => typeof e.delta_i === "number" && e.delta_i > keep);
+    if (!gone.length) return;
+    const lo = Math.min(...gone.map(e => e.seq)), hi = Math.max(...gone.map(e => e.seq));
+    this.log = this.log.filter(e => !(typeof e.delta_i === "number" && e.delta_i > keep));
+    this._log_appends.push({ op: "lt", lo, hi });
+  }
+
+  // The delta whose tap first landed on `view` in `round` - the strip's tick
+  // target - or -1 when no recorded tap did (a future or skipped step, or a
+  // history written before deltas carried a view).
+  deltaIndexForView(round, view) {
+    return this.deltas.findIndex(d => d._delta_metadata?.round === round
+                                   && d._delta_metadata?.view === view);
+  }
 
   undo() {                                   // parity: game_ui.ex undo/1
     if (!this.canUndo()) return false;
