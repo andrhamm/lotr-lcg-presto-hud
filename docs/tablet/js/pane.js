@@ -181,8 +181,14 @@ function renderViewParts(view, game, ui) {
     // (Cloudy)" followed by a well repeating "Cloudy" would just be noise).
     case "quest_sailing": {
       const [, , , degree] = HEADINGS[game.heading];
+      // "Sailing test" opens the wheel-count sheet (Task 8, sheet_sailing.js
+      // / acts_sailing.js) - a chip alongside the common Next CTA below
+      // (cta: null), not a replacement for it, the same way Travel's own
+      // chip sits beside Next rather than gating it: a table that finds no
+      // wheels this round still has a plain way past this view.
+      const testChip = chip({ act: "open_sailing", label: CHROME.sailingTest, tone: "tan" });
       return {
-        parts: h`<p class="display">${game.headingDesc()}</p><div class="well"><p class="body">${degree}</p></div>`,
+        parts: h`<p class="display">${game.headingDesc()}</p><div class="well"><p class="body">${degree}</p></div>` + testChip,
         cta: null,
       };
     }

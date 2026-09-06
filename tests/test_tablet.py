@@ -1442,6 +1442,84 @@ console.log(JSON.stringify({
                               "forcedFlag": False, "branchPick": None}
 
 
+def test_sailing_sheet_wheels_found_shifts_heading_and_cancel_leaves_it_unchanged():
+    """SailingModal is the twin's canvas reference (docs/js/screens.js): the
+    arrival shift (advanceView's planning -> quest_sailing branch,
+    gamestate.js ~950) starts every sailing round 1 step off-course before
+    the player ever opens the sheet, so heading is 1 (Off-course/Cloudy) by
+    the time open_sailing runs - asserted here as the walk's own
+    precondition. +1 wheel twice (sail_d) then Apply shifts heading back to
+    0 (On-course) via shiftHeading(-v, why), logging the twin's own why
+    string verbatim ("2 wheels found (sailing test)"). A second
+    open/nudge/Cancel leaves heading untouched and adds no log line - only
+    Apply ever calls shiftHeading. The stepper's own -3..8 clamp
+    (acts_sailing.js, NOT the 0..3 heading-index clamp the RESULT preview
+    uses) is asserted at its floor: a further sail_d -1 is a no-op on the
+    draft and the rendered stepper switches to the unbevelled step-off span,
+    the same convention pane.js's allocStep uses."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25);
+g.advanceView();               // quest_setup -> resource
+g.sailing = true;
+g.advanceView();               // resource -> planning
+g.advanceView();               // planning -> quest_sailing (arrival shift: heading 0 -> 1)
+const ui = newUi();
+const preHeading = g.heading;
+const paneHtml = layout(g, ui);
+
+perform(g, ui, "open_sailing", "");
+const opened = { ...ui.sheet };
+perform(g, ui, "sail_d", "1");
+perform(g, ui, "sail_d", "1");
+const draftV = ui.sheet.v;
+const sheetHtml = layout(g, ui);
+perform(g, ui, "sail_apply", "");
+const afterApply = { heading: g.heading, sheet: ui.sheet, log: g.log.at(-1).text };
+
+// A fresh open, nudged off-course, then Cancel - no shift, no log line.
+perform(g, ui, "open_sailing", "");
+perform(g, ui, "sail_d", "-1");
+perform(g, ui, "sail_cancel", "");
+const afterCancel = { heading: g.heading, sheet: ui.sheet, log: g.log.at(-1).text };
+
+// The floor: nudge to -3, then past it - the draft holds and the stepper
+// renders step-off instead of a live button.
+perform(g, ui, "open_sailing", "");
+for (let i = 0; i < 4; i++) perform(g, ui, "sail_d", "-1");
+const floored = ui.sheet.v;
+const flooredHtml = layout(g, ui);
+
+console.log(JSON.stringify({
+  preHeading,
+  paneHasCta: paneHtml.includes('data-act="open_sailing"'),
+  opened,
+  draftV,
+  sheetHasSheet: sheetHtml.includes('class="sheet sheet-sailing"'),
+  afterApply, afterCancel,
+  floored, flooredHasStepOff: flooredHtml.includes('step step-sm step-off'),
+}));
+""")
+    assert js["preHeading"] == 1
+    assert js["paneHasCta"]
+    assert js["opened"] == {"kind": "sailing", "v": 0}
+    assert js["draftV"] == 2
+    assert js["sheetHasSheet"]
+    assert js["afterApply"] == {
+        "heading": 0, "sheet": None,
+        "log": "Sailing: heading Off-course (Cloudy) -> On-course (Sunny) "
+               "(shifted on-course, 2 wheels found (sailing test))",
+    }
+    assert js["afterCancel"]["heading"] == 0            # unchanged by cancel
+    assert js["afterCancel"]["sheet"] is None
+    assert js["afterCancel"]["log"] == js["afterApply"]["log"], "cancel must not log"
+    assert js["floored"] == -3
+    assert js["flooredHasStepOff"]
+
+
 def test_chip_labels_are_composed_with_h():
     """chip()/cta() in primitives.js insert `label` via raw() (see
     test_h_escapes_interpolations_but_not_raw above), so a label built from

@@ -148,4 +148,20 @@ export const CHROME = {
   notYet: "Not yet - keep playing",
   markComplete: "Mark Complete",
   leaveAsIs: "Leave as-is",
+  // The sailing test sheet (Task 8) - SailingModal's own captions/sub-lines
+  // (docs/js/screens.js), verbatim: "CURRENT HEADING"/"RESULT" are LABEL
+  // captions (stored sentence-case here like every other LABEL string -
+  // the .label CSS rule does the uppercasing), and the three sub-line
+  // states are spelled out as whole sentences rather than one template with
+  // an embedded "s", the same way sqpickOneQuest/sqpickManyQuests are two
+  // keys instead of one.
+  sailingTest: "Sailing test",
+  currentHeading: "Current heading",
+  result: "Result",
+  apply: "Apply",
+  sailNoWheels: "no wheels found - heading stays",
+  sailWheelFound: "1 wheel found - shift on-course",
+  sailWheelsFound: "%d wheels found - shift on-course",
+  sailStepOff: "1 step off-course (card effect)",
+  sailStepsOff: "%d steps off-course (card effect)",
 };

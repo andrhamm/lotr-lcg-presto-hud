@@ -314,3 +314,13 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
   border-radius: 6px; }
 .rsheet-row-head { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; }
 .rsheet-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
+
+/* The sailing test sheet (Task 8): SailingModal's own wheel-count stepper
+   (docs/js/screens.js) centred between a -/+ pair, with a LABEL/BODY pair
+   above it for the current heading and another below the sub-line for the
+   RESULT preview - the same LABEL-caption-then-BODY-value shape every other
+   sheet uses (.esheet-lvl-val, .qsheet-val), just centred rather than
+   trailing a row since there is no row label to sit beside here. */
+.sailsheet-heading { display: flex; flex-direction: column; gap: 4px; }
+.sailsheet-stepper { display: flex; align-items: center; justify-content: center; gap: 16px; }
+.sailsheet-val { display: flex; align-items: center; gap: 10px; min-width: 72px; justify-content: center; }
