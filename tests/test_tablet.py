@@ -3021,12 +3021,14 @@ console.log(JSON.stringify({
 
 
 def test_resource_pane_bands_carry_the_rules_chips_from_the_map():
-    """pane.js wires each of resource's two direct band() calls to
-    sectionsFor("resource")'s own ids in order - the framework band
-    (PHASE_FRAMEWORK.resource, "1.1 Beginning of the Resource phase") and the
-    window band (ACTION_WINDOW_TIPS.resource[0], "1.2-1.3 Gain resources and
-    draw cards") - rather than a hand-typed id that could drift from
-    rules_map.js's own VIEW_SECTIONS."""
+    """pane.js wires each of resource's two direct band() calls to the
+    sectionsFor("resource") id whose phases.py label that band's own text
+    describes: the framework band IS the work ("1.2-1.3 Gain resources and
+    draw cards"), and the window band's tip - "Anything played now happens
+    before the planning phase begins" - is about the phase ENDING ("1.4 End
+    of the Resource phase"). The M5 final review found these inverted (1.1
+    on the framework band, the work step on the window band); the broader
+    pin is the test below."""
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { renderPane } from "./pane.js";
@@ -3038,7 +3040,203 @@ console.log(JSON.stringify({
   chips: [...html.matchAll(/data-act="open_rules" data-arg="([^"]*)"/g)].map(m => m[1]),
 }));
 """)
-    assert js["chips"] == ["1.1", "1.2"], js["html"]
+    assert js["chips"] == ["1.2", "1.4"], js["html"]
+
+
+# Every "Rules §n ›" chip a pane emits, in render order, as
+# (section id, the phases.py STEPS label that id falls under, the opening
+# words of the band the chip sits in). Written by hand FROM docs/js/phases.js's
+# own labels - deliberately not derived from rules_map.js, which is the thing
+# under test: an inversion inside a view's own allowed set (the M5 final
+# review's finding - the resource/combat_shadow/refresh framework bands cited
+# their phase's "Beginning of the ..." step while their window bands cited the
+# work step) stays inside sectionsFor(view) and so passes every set-membership
+# check. The rule this table encodes: a chip cites the step whose label
+# describes the band's own text.
+PANE_CHIPS = {
+    "resource": [
+        ("1.2", "1.2-1.3 Gain resources and draw cards",
+         "Each hero gains a resource and each player draws a card"),
+        ("1.4", "1.4 End of the Resource phase",
+         "Anything played now happens before the planning phase begins."),
+    ],
+    "planning": [
+        ("2.2", "2.2-2.3 Play cards in turn order - player actions throughout",
+         "In player order, each player becomes the active player once."),
+    ],
+    "quest_commit": [
+        ("3.2", "3.2 Commit characters to the quest",
+         "In player order, exhaust characters to commit them"),
+    ],
+    "quest_staging": [
+        ("3.3", "3.3 Staging", "Reveal 1 encounter card per player."),
+        ("3.3", "3.3 Staging", "Responses to the reveal."),
+    ],
+    # The outcome band above this one carries NO chip: its text is whatever
+    # resolveQuest() just produced, so "3.4 Quest resolution" would open a
+    # Timing summary quoting a string that changes every round.
+    "quest_resolution": [
+        ("3.5", "3.5 End of the Quest phase",
+         "This is the last action window before travel."),
+    ],
+    "travel": [
+        ("4.2", "4.2 Travel opportunity",
+         "Travel to one location in the staging area."),
+        ("4.3", "4.3 End of the Travel phase",
+         "This is the last action window in the travel phase."),
+    ],
+    "travel_blocked": [
+        ("4.1", "4.1 Beginning of the Travel phase",
+         "A location is already active, so there is no travel this phase."),
+        ("4.3", "4.3 End of the Travel phase",
+         "This is the last action window in the travel phase."),
+    ],
+    "enc_optional": [
+        ("5.2", "5.2 Optional engagement",
+         "In player order, each player may engage 1 enemy in the staging area."),
+    ],
+    "enc_checks": [
+        ("5.3", "5.3 Engagement checks",
+         "Not optional. In player order, each player engages one enemy at a time."),
+        ("5.4", "5.4 End of the Encounter phase",
+         "This is the last action window before combat."),
+    ],
+    "combat_shadow": [
+        ("6.2", "6.2 Deal shadow cards",
+         "In player order, deal 1 facedown shadow card"),
+        ("6.1", "6.1 Beginning of the Combat phase", "Responses."),
+    ],
+    "combat_enemy": [
+        ("6.3", "6.3-6.6 Enemy attacks",
+         "In player order, one attack per engaged enemy."),
+    ],
+    "combat_player": [
+        ("6.8a", "6.7-6.10 Player attacks",
+         "In player order, each player may attack."),
+        ("6.11", "6.11 End of the Combat phase",
+         "Lower threat now or refresh may eliminate."),
+    ],
+    "refresh": [
+        ("7.2", "7.2-7.4 Ready cards, raise threat, pass P1 token",
+         "Simultaneously ready all exhausted cards."),
+        ("7.1", "7.1 Beginning of the Refresh phase", "Responses."),
+    ],
+    "round_end": [
+        ("7.5", "7.5 End of the Refresh phase",
+         'Resolve any "at the end of the round" effects.'),
+    ],
+}
+
+
+def test_every_pane_chip_cites_the_step_its_own_band_describes():
+    """M5 final review, CRITICAL: three views handed the phase-begins id to
+    the band doing the phase's WORK and the work id to the response window -
+    resource (1.1 <-> 1.2), combat_shadow (6.1 <-> 6.2) and refresh
+    (7.1 <-> 7.2). Every existing chip test passed anyway, because each wrong
+    id was still one of sectionsFor(view)'s own, so nothing compared a chip
+    to the TEXT of the band carrying it.
+
+    This does. It pulls (section id, band text) pairs straight out of the
+    rendered HTML in render order and compares them to PANE_CHIPS above, a
+    hand-written table built from docs/js/phases.js's STEPS labels (the
+    generated mirror of phases.py, the repo's verified turn sequence). The
+    label each id falls under is asserted too, resolved out of phases.js by
+    parsing the leading "N.M" / "N.M-N.K" range off each STEPS label - so
+    "6.8a" resolving to "6.7-6.10 Player attacks" is read from the generated
+    file, never re-typed here.
+
+    Also the coverage assertion for the second review finding: every chip a
+    pane emits must have a rules_map.js SECTION_SUMMARY entry, so no live
+    chip can open the Rules sheet with the Timing block missing."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { STEPS } from "../../js/phases.js";
+import { renderPane } from "./pane.js";
+import { SECTION_SUMMARY } from "./rules_map.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+
+// h``'s escaping, undone, so the expectation table can be written as the
+// plain prose viewcopy.js holds (apostrophes and quotes included). &amp;
+// last: a source "&lt;" escapes to "&amp;lt;" and must come back as "&lt;".
+const unesc = s => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+  .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+
+// Every band() (primitives.js) in render order, keeping only those that
+// carry a Rules chip, as [section id, the band's own first .body line].
+// Splitting on the band opener bounds each fragment at the next band, so a
+// chip-less band (a loop's closing note) can never be handed the next
+// band's chip.
+function chipBands(html) {
+  return html.split('<div class="band ').slice(1).map(f => {
+    const text = /^[^>]*><div class="band-text"><p class="body">([\\s\\S]*?)<\\/p>/.exec(f);
+    const chip = /data-act="open_rules" data-arg="([^"]*)"/.exec(f);
+    return text && chip ? [chip[1], unesc(text[1])] : null;
+  }).filter(Boolean);
+}
+
+// A rules_map.js id -> the phases.js STEPS label covering it. Ranges are
+// parsed off the label itself ("1.2-1.3 Gain resources...", "6.7-6.10 Player
+// attacks"), and a step letter is dropped first ("6.8a" -> 6.8), so this
+// reads the generated file rather than restating it.
+function stepLabelFor(id) {
+  const [maj, min] = id.replace(/[a-z]+$/, "").split(".").map(Number);
+  for (const s of STEPS) {
+    const m = /^(\\d+)\\.(\\d+)(?:-(\\d+)\\.(\\d+))?\\s/.exec(s.label);
+    if (!m) continue;
+    const loMaj = Number(m[1]), loMin = Number(m[2]);
+    const hiMaj = m[3] ? Number(m[3]) : loMaj, hiMin = m[3] ? Number(m[4]) : loMin;
+    if (maj === loMaj && maj === hiMaj && min >= loMin && min <= hiMin) return s.label;
+  }
+  return null;
+}
+
+const CASES = [
+  ["resource", "resource", null],
+  ["planning", "planning", null],
+  ["quest_commit", "quest_commit", null],
+  ["quest_staging", "quest_staging", null],
+  ["quest_resolution", "quest_resolution",
+   g => { g.setWillpower(9); g.setStaging(2); g.resolveQuest(9, 2); g.pending_budget = 7; }],
+  ["travel", "travel", null],
+  ["travel_blocked", "travel", g => g.travelTo(4, 0, "Forest Gate")],
+  ["enc_optional", "enc_optional", null],
+  ["enc_checks", "enc_checks", null],
+  ["combat_shadow", "combat_shadow", null],
+  ["combat_enemy", "combat_enemy", null],
+  ["combat_player", "combat_player", null],
+  ["refresh", "refresh", null],
+  ["round_end", "round_end", null],
+];
+
+const bands = {};
+for (const [key, view, setup] of CASES) {
+  const g = new GameState(4, 25); g.advanceView(); g.enterView(view);
+  if (setup) setup(g);
+  bands[key] = chipBands(renderPane(g, newUi()));
+}
+const ids = [...new Set(Object.values(bands).flat().map(b => b[0]))];
+const labels = {};
+for (const id of ids) labels[id] = stepLabelFor(id);
+console.log(JSON.stringify({ bands, labels, summarised: Object.keys(SECTION_SUMMARY) }));
+""")
+    assert set(js["bands"]) == set(PANE_CHIPS), (sorted(js["bands"]), sorted(PANE_CHIPS))
+    for key, expected in PANE_CHIPS.items():
+        got = js["bands"][key]
+        assert [g[0] for g in got] == [e[0] for e in expected], (
+            "%s emits chips %r, expected %r" % (key, got, expected))
+        for (sec_id, label, opening), (got_id, got_text) in zip(expected, got):
+            assert got_text.startswith(opening), (
+                "%s's §%s chip sits on a band reading %r, expected it to open %r"
+                % (key, sec_id, got_text, opening))
+            assert js["labels"][sec_id] == label, (
+                "§%s is %r in phases.js, but the table under test says %r"
+                % (sec_id, js["labels"][sec_id], label))
+    emitted = {b[0] for bs in js["bands"].values() for b in bs}
+    missing = sorted(emitted - set(js["summarised"]))
+    assert not missing, (
+        "these live chips open the Rules sheet with no Timing summary: %r" % missing)
+
 
 
 def test_section_summary_text_matches_the_pane_it_is_quoting():
@@ -3052,10 +3250,21 @@ def test_section_summary_text_matches_the_pane_it_is_quoting():
     loaded module rather than re-typing an expected string per id, so this
     test itself can't drift from rules_map.js either.
 
-    Also exercises the two ids Fix round 1 adds (4.1/4.2, TRAVEL.open;
-    6.11, COMBAT_LAST_CHANCE) and the "tips" parity fix (1.2/3.5 must show
+    Also exercises the "tips" parity fix (1.4/3.5 must show
     ACTION_WINDOW_TIPS[view][0], not the old summaryFor()'s blanket
-    `.join(" ")` of the whole array - see rules_map.js's bandTextFor)."""
+    `.join(" ")` of the whole array - see rules_map.js's bandTextFor), the
+    four loop framings the M5 final review found unsummarised (2.2, 5.3,
+    6.3, 6.8a - LOOP_FLOW[view].intro, drawn by loops.js), and 6.11's
+    COMBAT_LAST_CHANCE.
+
+    travel is rendered TWICE, because its first band is the one place a view
+    swaps which copy it shows: TRAVEL.blocked (4.1) with a location already
+    active, TRAVEL.open (4.2) without. Before the fix both ids resolved to
+    TRAVEL.open, so 4.1's own chip opened a Timing block describing travel
+    as on offer on the very pane that had just said there is none - and a
+    single fresh-game render could never catch it, since a fresh game has no
+    active location. Which id belongs to which band is pinned exactly by
+    test_every_pane_chip_cites_the_step_its_own_band_describes above."""
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { renderPane } from "./pane.js";
@@ -3063,23 +3272,30 @@ import { newUi } from "./actions.js";
 import { SECTION_SUMMARY } from "./rules_map.js";
 import { esc } from "./dom.js";
 setWindowPolicy(WINDOW_POLICY_BANDS);
+// Every state a view can render a DIFFERENT band in - travel is the only
+// one today. A summary must appear on at least one of its view's variants.
+const VARIANTS = { travel: [null, g => g.travelTo(4, 0, "Forest Gate")] };
 const rendered = {};
 const out = {};
 for (const [id, spec] of Object.entries(SECTION_SUMMARY)) {
   if (!(spec.view in rendered)) {
-    const g = new GameState(4, 25); g.advanceView(); g.enterView(spec.view);
-    rendered[spec.view] = renderPane(g, newUi());
+    rendered[spec.view] = (VARIANTS[spec.view] ?? [null]).map(setup => {
+      const g = new GameState(4, 25); g.advanceView(); g.enterView(spec.view);
+      if (setup) setup(g);
+      return renderPane(g, newUi());
+    });
   }
   // The band's own text is HTML-escaped by h`` on the way into the pane
   // (dom.js's esc()), so a summary containing a quote or apostrophe (e.g.
   // combat_shadow's "that player's engaged enemies") never matches a raw
   // includes() against the unescaped spec.text - compare against the same
   // escaped form the pane itself renders.
-  out[id] = { view: spec.view, text: spec.text, present: rendered[spec.view].includes(esc(spec.text)) };
+  out[id] = { view: spec.view, text: spec.text,
+              present: rendered[spec.view].some(html => html.includes(esc(spec.text))) };
 }
 console.log(JSON.stringify(out));
 """)
-    assert len(js) >= 15, "expected every SECTION_SUMMARY id to be exercised: %r" % js
+    assert len(js) >= 20, "expected every SECTION_SUMMARY id to be exercised: %r" % js
     for sec_id, r in js.items():
         assert r["present"], (
             "SECTION_SUMMARY[%r]'s text %r does not appear verbatim on the %r pane"
@@ -3140,14 +3356,18 @@ def test_rules_sheet_degrades_when_rules_text_is_unavailable():
     js = node("""
 import { renderRulesSheet } from "./sheet_rules.js";
 import { CHROME, rulesPageUrl } from "./copy.js";
-import { PHASE_WINDOW } from "../../js/viewcopy.js";
+import { PHASE_FRAMEWORK } from "../../js/viewcopy.js";
+import { esc } from "./dom.js";
 const ui = { sheet: { kind: "rules", section: "6.2" }, rules: null };
 const html = renderRulesSheet({}, ui);
 console.log(JSON.stringify({
   html,
   unavailable: html.includes(CHROME.rulesUnavailable),
   hasLink: html.includes('href="' + rulesPageUrl + '"') && html.includes('target="_blank"'),
-  timingPresent: html.includes(PHASE_WINDOW.combat_shadow),
+  // 6.2 "Deal shadow cards" summarises with the band that describes dealing
+  // them - PHASE_FRAMEWORK, not the bare "Responses." window band, which is
+  // 6.1 (the M5 final review's inversion fix).
+  timingPresent: html.includes(esc(PHASE_FRAMEWORK.combat_shadow)),
   relatedChips: [...html.matchAll(/data-act="open_rules" data-arg="([^"]*)"/g)].map(m => m[1]),
   noOfficialBody: !html.includes('class="rules-body"'),
 }));

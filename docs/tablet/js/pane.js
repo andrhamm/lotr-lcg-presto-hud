@@ -183,11 +183,19 @@ function renderViewParts(view, game, ui) {
     case "quest_setup":
       return renderQuestSetup(game);
 
+    // A band's chip cites the step whose phases.py label that band's own
+    // text DESCRIBES - not the phase's rung order (M5 final review, the
+    // inversion this replaces gave the framework band "1.1 Beginning of the
+    // Resource phase" and the window band the work step). The framework band
+    // IS the work: "1.2-1.3 Gain resources and draw cards". The window band
+    // ("Anything played now happens before the planning phase begins") is
+    // about what this window sits in front of, so the honest id is "1.4 End
+    // of the Resource phase" - not 1.1, which it has already passed.
     case "resource": {
-      const [begins, opens] = sectionsFor(view);
+      const [, gain, , ends] = sectionsFor(view);
       return {
-        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: begins })
-          + band({ kind: "window", text: bandTextFor(view, "tips"), section: opens }),
+        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: gain })
+          + band({ kind: "window", text: bandTextFor(view, "tips"), section: ends }),
         cta: null,
       };
     }
@@ -281,8 +289,15 @@ function renderViewParts(view, game, ui) {
       } else {
         text = OUTCOME.toast_success.replace("%d", String(game.quest_outcome_n));
       }
-      const [resolved, ends] = sectionsFor(view);
-      const parts = band({ kind: "framework", text, section: resolved })
+      // No chip on this band: its text is the OUTCOME resolveQuest() just
+      // produced (fail/tie/success, with a live %d), so "3.4 Quest
+      // resolution" would open a Timing summary quoting a dynamic string
+      // that changes every round - rules_map.js's SECTION_SUMMARY must hold
+      // static copy or nothing (M5 final review). 3.4 stays in VIEW_SECTIONS
+      // and is still reachable from the sheet's own Related chips; it just
+      // has no band to be tapped from.
+      const [, ends] = sectionsFor(view);
+      const parts = band({ kind: "framework", text })
         + band({ kind: "window", text: bandTextFor(view, "tips"), section: ends });
       return { parts, cta: null };
     }
@@ -333,11 +348,15 @@ function renderViewParts(view, game, ui) {
       return { parts, cta: null };
     }
 
+    // Same rule as resource above: the framework band's text IS "6.2 Deal
+    // shadow cards" (it says how to deal them), and the bare "Responses."
+    // window band is the response window that opens with the phase, "6.1
+    // Beginning of the Combat phase".
     case "combat_shadow": {
       const [begins, deal] = sectionsFor(view);
       return {
-        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: begins })
-          + band({ kind: "window", text: bandTextFor(view, "window"), section: deal }),
+        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: deal })
+          + band({ kind: "window", text: bandTextFor(view, "window"), section: begins }),
         cta: null,
       };
     }
@@ -370,11 +389,15 @@ function renderViewParts(view, game, ui) {
       };
     }
 
+    // Same rule again: the framework band ("ready all exhausted cards, pass
+    // the first player token") IS "7.2-7.4 Ready cards, raise threat, pass
+    // P1 token"; the "Responses." window band is "7.1 Beginning of the
+    // Refresh phase".
     case "refresh": {
-      const [begins, opens] = sectionsFor(view);
+      const [begins, ready] = sectionsFor(view);
       return {
-        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: begins })
-          + band({ kind: "window", text: bandTextFor(view, "window"), sub: bandTextFor(view, "tips"), section: opens }),
+        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: ready })
+          + band({ kind: "window", text: bandTextFor(view, "window"), sub: bandTextFor(view, "tips"), section: begins }),
         cta: null,
       };
     }

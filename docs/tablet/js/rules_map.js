@@ -12,7 +12,8 @@
 // of their own, so they are left out entirely - sectionsFor() returns []
 // for them and pane.js gives them no chip (interfaces note).
 import {
-  PHASE_FRAMEWORK, PHASE_WINDOW, ACTION_WINDOW_TIPS, TRAVEL, COMBAT_LAST_CHANCE,
+  PHASE_FRAMEWORK, PHASE_WINDOW, ACTION_WINDOW_TIPS, LOOP_FLOW, TRAVEL,
+  COMBAT_LAST_CHANCE,
 } from "../../js/viewcopy.js";
 
 export const VIEW_SECTIONS = {
@@ -43,7 +44,7 @@ export const STEP_ORDER = [...new Set(Object.values(VIEW_SECTIONS).flat())];
 
 // Views whose action-window tips band shows only the FIRST tip line
 // (ACTION_WINDOW_TIPS[view][0]) rather than every tip joined with a space -
-// resource's "1.2" and quest_resolution's "3.5", per pane.js's own
+// resource's "1.4" band and quest_resolution's "3.5", per pane.js's own
 // renderViewParts. Every other view that bands ACTION_WINDOW_TIPS joins the
 // whole array (a sub-line under a framework/window band, or - travel,
 // enc_checks - the band's own main text).
@@ -76,46 +77,64 @@ export function bandTextFor(view, kind) {
 // say two different things about the same rule (CLAUDE.md iron rule 4:
 // never re-word a rules claim). Only sections that a pane.js band actually
 // names get an entry - a section reachable solely via the sheet's own
-// Related prev/next chips (planning, combat_enemy, and most of
-// combat_player, plus every id besides the ones below) has no tracker copy
-// to show without inventing new prose, so sheet_rules.js just omits the
-// Timing block for those rather than ship a placeholder.
+// Related prev/next chips (planning's 2.1/2.3/2.4, resource's 1.1/1.3, most
+// of combat_enemy and combat_player, plus every id besides the ones below)
+// has no tracker copy to show without inventing new prose, so
+// sheet_rules.js just omits the Timing block for those rather than ship a
+// placeholder.
 //
 // Most entries resolve through bandTextFor(view, kind) above - a plain
 // (view, kind) lookup is enough for every framework/window/tips band that
 // pane.js keys off PHASE_FRAMEWORK/PHASE_WINDOW/ACTION_WINDOW_TIPS by view
-// name. Two ids don't fit that shape and are resolved to a literal value
+// name. The rest don't fit that shape and are resolved to a literal value
 // instead, imported from the same viewcopy.js module pane.js itself reads,
 // so there is still exactly one source of truth:
 //   - "4.1"/"4.2" (travel) - pane.js's own first band toggles between
-//     TRAVEL.blocked (framework, "4.1") and TRAVEL.open (window, "4.2")
-//     depending on whether a location is already active, a game-state fact
-//     this static map cannot know ahead of time. Both ids summarise with
-//     TRAVEL.open - the copy pane.js shows whenever travel is actually on
-//     offer this phase - rather than modelling the blocked variant too.
+//     TRAVEL.blocked (framework, "4.1 Beginning of the Travel phase") and
+//     TRAVEL.open (window, "4.2 Travel opportunity") depending on whether a
+//     location is already active. Each id summarises with the copy the band
+//     carrying THAT id actually shows (M5 final review: both used to
+//     resolve to TRAVEL.open, so tapping the blocked band's own 4.1 chip
+//     opened a Timing block describing travel as on offer).
+//   - "2.2"/"5.3"/"6.3"/"6.8a" - the four loop views' framing band is built
+//     by loops.js's renderLoop() from LOOP_FLOW[view].intro, not by a
+//     bandTextFor() lookup, so they read that same field directly. Same
+//     no-drift property: the sheet quotes the exact string the loop's own
+//     framing band shows.
 //   - "6.11" (combat_player) - pane.js's own closing band there is a fixed
 //     "tip", COMBAT_LAST_CHANCE, not a per-view PHASE_*/ACTION_WINDOW_TIPS
 //     lookup.
+//
+// Every id a pane.js band actually chips is present here - the render test
+// in tests/test_tablet.py asserts that both ways round (every emitted chip
+// has an entry; every entry's text appears verbatim on its own view). The
+// one numbered step a live band deliberately does NOT chip is "3.4 Quest
+// resolution": that band's text is the outcome resolveQuest() just produced,
+// a dynamic string, and a Timing summary must quote static copy or nothing.
 // `view` names the pane each id's text actually appears on (not read by
 // summaryFor() itself - only `text` is - but kept alongside it so a test can
 // render that one view and assert the summary shows up verbatim there,
 // without hand-maintaining a second id->view table that could itself drift
 // from this one).
 export const SECTION_SUMMARY = {
-  "1.1": { view: "resource", text: bandTextFor("resource", "framework") },
-  "1.2": { view: "resource", text: bandTextFor("resource", "tips") },
+  "1.2": { view: "resource", text: bandTextFor("resource", "framework") },
+  "1.4": { view: "resource", text: bandTextFor("resource", "tips") },
+  "2.2": { view: "planning", text: LOOP_FLOW.planning.intro },
   "3.2": { view: "quest_commit", text: bandTextFor("quest_commit", "window") },
   "3.3": { view: "quest_staging", text: bandTextFor("quest_staging", "tips") },
   "3.5": { view: "quest_resolution", text: bandTextFor("quest_resolution", "tips") },
-  "4.1": { view: "travel", text: TRAVEL.open },
+  "4.1": { view: "travel", text: TRAVEL.blocked },
   "4.2": { view: "travel", text: TRAVEL.open },
   "4.3": { view: "travel", text: bandTextFor("travel", "tips") },
   "5.2": { view: "enc_optional", text: bandTextFor("enc_optional", "window") },
+  "5.3": { view: "enc_checks", text: LOOP_FLOW.enc_checks.intro },
   "5.4": { view: "enc_checks", text: bandTextFor("enc_checks", "tips") },
-  "6.1": { view: "combat_shadow", text: bandTextFor("combat_shadow", "framework") },
-  "6.2": { view: "combat_shadow", text: bandTextFor("combat_shadow", "window") },
+  "6.1": { view: "combat_shadow", text: bandTextFor("combat_shadow", "window") },
+  "6.2": { view: "combat_shadow", text: bandTextFor("combat_shadow", "framework") },
+  "6.3": { view: "combat_enemy", text: LOOP_FLOW.combat_enemy.intro },
+  "6.8a": { view: "combat_player", text: LOOP_FLOW.combat_player.intro },
   "6.11": { view: "combat_player", text: COMBAT_LAST_CHANCE },
-  "7.1": { view: "refresh", text: bandTextFor("refresh", "framework") },
-  "7.2": { view: "refresh", text: bandTextFor("refresh", "window") },
+  "7.1": { view: "refresh", text: bandTextFor("refresh", "window") },
+  "7.2": { view: "refresh", text: bandTextFor("refresh", "framework") },
   "7.5": { view: "round_end", text: bandTextFor("round_end", "framework") },
 };
