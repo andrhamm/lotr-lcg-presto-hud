@@ -21,6 +21,11 @@ export const CHROME = {
   wordmarkSub: "The Card Game · Tracker",
   resumeGame: "Resume game",
   fullscreen: "Fullscreen",
+  // The app's own reload, top-right of every screen. Not a debug affordance:
+  // in standalone/fullscreen there is NO browser chrome, so without this
+  // there is no way to reload at all. Title text, not a visible label - the
+  // glyph is the control.
+  refresh: "Reload the app",
   disclaimer: "An unofficial fan-made tracker. Not affiliated with, or endorsed by, Fantasy Flight Games or Middle-earth Enterprises.",
   // The setup flow's shared header (setup_head.js). One header on both
   // steps, so "no header, no instruction at all" is answered once rather

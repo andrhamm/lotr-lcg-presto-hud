@@ -6,6 +6,17 @@
   --green: rgb(136,168,92); --amber: rgb(214,164,70); --red: rgb(247,101,62); --purple: rgb(166,122,196);
   --btn: rgb(52,42,26); --btn-ok: rgb(40,50,26); --ok-fg: rgb(158,196,104); --btn-no: rgb(56,26,18); --no-fg: rgb(224,112,80);
   --bevel-l: rgb(96,86,54); --bevel-d: rgb(7,5,3); --outline: rgb(0,0,0); --brown: rgb(104,70,34);
+  /* The OS's own reserved edges. In standalone (added to the Home Screen)
+     with apple-mobile-web-app-status-bar-style: black-translucent, the page
+     is laid out UNDER the status bar and the home indicator - which is what
+     gives the app the full screen, and what makes reserving these edges the
+     app's own job. Held as variables rather than inlined so a test (and a
+     screenshot) can override them with real numbers; env() itself reports 0
+     everywhere except a device that actually has an inset. */
+  --sa-top: env(safe-area-inset-top, 0px);
+  --sa-right: env(safe-area-inset-right, 0px);
+  --sa-bottom: env(safe-area-inset-bottom, 0px);
+  --sa-left: env(safe-area-inset-left, 0px);
   --serif: 'Alegreya', Georgia, 'Times New Roman', serif;
   --sans: 'Alegreya Sans', 'Gill Sans', 'Trebuchet MS', system-ui, sans-serif;
 }
@@ -42,14 +53,32 @@ html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: n
 .export-text { user-select: text; -webkit-user-select: text; }
 /* 100vh first as the fallback for a browser with no dvh support; 100dvh
    after it wins wherever it is supported, so the app shrinks with the
-   on-screen chrome (Safari's URL bar) instead of being covered by it. The
-   safe-area padding then reserves the home-indicator strip - .cta-row's own
-   margin-top: auto (.pane) keeps it pinned just above that padding, not
-   past it. */
-/* position: relative anchors .scrim's inset:0 to the app, not the viewport -
-   same visual result at this size (.app already fills the viewport) but the
-   correct containing block regardless. */
-#app, .app { position: relative; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
+   on-screen chrome (Safari's URL bar) instead of being covered by it.
+   The safe-area padding on ALL FOUR sides is what keeps the app clear of the
+   OS: the status bar (clock left, radios right) across the top, the home
+   indicator along the bottom, and the rounded/notched edges in landscape.
+   It is padding rather than a smaller height on purpose - the app's own
+   ground still paints edge to edge behind the status bar, so the screen
+   reads as full-bleed while nothing lands underneath the OS.
+   Everything between is the content area: .app is a flex column, the strip
+   and the rail are fixed-height, and the pane takes the rest (flex: 1 1 0),
+   so a bottom CTA sits on the real bottom edge - .cta-row's margin-top:auto
+   pins it just inside the home-indicator padding, never past it.
+   position: relative anchors .scrim's inset:0 to the app, not the viewport -
+   same visual result at this size but the correct containing block.
+
+   TWO elements, one padding. #app is the host div index.html ships; .app is
+   what layout() renders inside it, once per screen. They used to share one
+   rule, which applied the inset TWICE (24px of status bar became 48px of
+   gap) and gave the inner box a full 100dvh inside an already-padded outer
+   one, so it overflowed by exactly the insets and .app's overflow: hidden
+   ate the difference. The outer owns the viewport and the OS edges; the
+   inner just fills what is left. */
+#app { position: relative; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden;
+  display: flex; flex-direction: column;
+  padding: var(--sa-top) var(--sa-right) var(--sa-bottom) var(--sa-left); }
+.app { position: relative; flex: 1 1 0; min-height: 0; width: 100%; overflow: hidden;
+  display: flex; flex-direction: column; }
 .body-row { flex: 1 1 0; min-height: 0; display: flex; overflow: hidden; }
 .display { font: 600 34px/1.1 var(--serif); color: var(--gold); }
 .body { font: 20px/1.35 var(--sans); color: var(--tan); margin: 0; text-wrap: pretty; }
@@ -142,7 +171,7 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .ground-card { background: var(--card) } .ground-well { background: var(--well) }
 
 /* Transport strip (Task 3): one segment per phase, one tick per flow view. */
-.strip { height: 96px; display: flex; align-items: stretch; gap: 8px; padding: 12px 18px; background: var(--well); border-bottom: 1px solid var(--border); overflow: hidden; }
+.strip { height: 96px; display: flex; align-items: stretch; gap: 8px; padding: 12px 62px 12px 18px; background: var(--well); border-bottom: 1px solid var(--border); overflow: hidden; }
 /* `.round` was a single flex column (ROUND label, then the round-row). The
    replay transport (Task 2, milestone 4) adds two more children - the
    button row and its "Step n/N" readout - and there is no headroom to just
@@ -392,6 +421,23 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .eng-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .eng-value { display: flex; align-items: center; gap: 8px; }
 
+/* THE APP'S OWN RELOAD (layout.js), top-right of every screen. In standalone
+   or fullscreen there is no browser chrome, so this is the ONLY reload the
+   app has. Quiet by default - it is a recovery, not a control anyone should
+   feel invited to press - and it sits above every screen's own content, with
+   .strip reserving room on its right so a phase segment never runs under it.
+   44px like every other target here. */
+/* Positioned against .app, which now sits INSIDE #app's safe-area padding -
+   so the OS edges are already excluded here and adding --sa-top again would
+   push it a second status bar down. */
+.app-reload { position: absolute; top: 8px; right: 10px; z-index: 30;
+  width: 44px; height: 44px; display: flex; align-items: center;
+  justify-content: center; font-size: 26px; line-height: 1; color: var(--dim);
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  opacity: .4; }
+.app-reload:active { opacity: 1; color: var(--gold); border-color: var(--border-gold);
+  background: var(--btn); transform: none; }
+
 /* THE LANDING SCREEN (home.js). Full-bleed, centred, and deliberately almost
    empty: two things to do, and the name of the app. `.home-art` is the layer
    the Presto fills with box art - left empty here on purpose (the data
@@ -428,7 +474,8 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    Back - so a player always knows where they are and what this step wants.
    The screen itself does not scroll; the regions inside it do. */
 .setup { gap: 16px; overflow: hidden; }
-.setup-head { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.setup-head { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto;
+  padding-right: 56px; }
 .setup-head-nav { display: flex; align-items: center; gap: 14px; }
 .setup-head .display { margin: 0; }
 /* Master/detail: the drill-in list at a fixed width (a list of names does not

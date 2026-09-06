@@ -49,15 +49,19 @@ function cycleRow(g) {
 </button>`;
 }
 
-// One scenario inside a cycle. Selected state is what tells the player which
-// quest the detail on the right belongs to - without it the two halves of
-// the screen read as unrelated. Scenario names are catalog text, not ours -
-// h`` escapes them (names carry apostrophes, e.g. "The Steward's Fear").
+// One scenario inside a cycle: its set icon and its name, and nothing else.
+// The stage count used to ride along on the right; it is metadata about a
+// quest you have not chosen yet, it does not help you choose, and the detail
+// beside the list prints it (and the stages themselves) the moment you do.
+//
+// Selected state is what tells the player which quest the detail on the right
+// belongs to - without it the two halves of the screen read as unrelated.
+// Scenario names are catalog text, not ours - h`` escapes them (names carry
+// apostrophes, e.g. "The Steward's Fear").
 function scenarioRow(scn, selected) {
   return h`<button type="button" class="${cx("drill-row", "drill-scenario", scn.slug === selected && "is-selected")}" data-act="pick_scenario" data-arg="${scn.slug}">
 ${raw(setIcon(scn.name ?? "", 26))}
 <span class="body">${scn.name ?? ""}</span>
-<span class="label">${(scn.stageCount ?? 0) === 1 ? CHROME.stagesCountOne : fmt(CHROME.stagesCount, scn.stageCount ?? 0)}</span>
 </button>`;
 }
 

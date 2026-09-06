@@ -772,12 +772,17 @@ console.log(JSON.stringify({ n: tags.length, allButtons: tags.every(t => t === "
     assert js["allButtons"]
 
 
-def test_stage_count_is_singular_for_one_stage_in_picker_and_overview():
+def test_stage_count_is_singular_for_one_stage_and_only_the_detail_prints_it():
     """copy.js's stagesCount ("%s stages") printed the ungrammatical "1
-    stages" for the 8 catalog scenarios with exactly one stage. Both render
-    sites (newgame.js's scenarioRow, overview.js's header) now pick
-    stagesCountOne ("1 stage") when the count is 1."""
-    js = node(OV_FIXTURE + """
+    stages" for the 8 catalog scenarios with exactly one stage. The one
+    remaining render site - overview.js's header - picks stagesCountOne
+    instead when the count is 1.
+
+    The chooser's rows no longer print a count at all: it is metadata about a
+    quest you have not chosen, it does not help you choose, and the detail
+    beside the list prints it (and the stages themselves) the moment you
+    do."""
+    js = node(OV_FIXTURE + r"""
 import { GameState } from "../../js/gamestate.js";
 import { renderNewGame } from "./newgame.js";
 import { renderOverview } from "./overview.js";
@@ -788,68 +793,78 @@ const oneStageIndex = { scenarios: [
 const pickerHtml = renderNewGame(null, { picker: { index: oneStageIndex, cycle: "C1", drill: "scenarios" } });
 const ovHtml = renderOverview(new GameState(),
   uiFor({ entry: { ...entry, stageCount: 1 } }));
+// Scoped to the ROW, not the page - and to the row's LABEL span, which is
+// where the count lived and is the only thing on this row that was ever
+// LABEL. Matching the word "stage" instead would hit the set icon's own
+// src ("one-stage-quest.svg"), which is how this assertion first passed
+// while proving nothing.
+const row = /<button[^>]*data-act="pick_scenario"[\s\S]*?<\/button>/.exec(pickerHtml)?.[0] ?? "";
 console.log(JSON.stringify({
-  singular: pickerHtml.includes("1 stage<"),
-  plural: pickerHtml.includes("1 stages"),
+  pickerHasRow: row.includes('data-arg="one-stage"'),
+  pickerAnyCount: /class="label"/.test(row),
   ovSingular: ovHtml.includes("1 stage<"),
   ovPlural: ovHtml.includes("1 stages"),
 }));
 """)
-    assert js["singular"]
-    assert not js["plural"]
+    assert js["pickerHasRow"]        # the row is there...
+    assert not js["pickerAnyCount"]  # ...carrying no count
     assert js["ovSingular"]
     assert not js["ovPlural"]
 
 
-def test_a_new_game_is_at_most_three_taps_from_the_picker():
-    """Spec R1 (the tap budget): a new game starting from the picker with
-    Official source and first cycle preselected takes at most 3 taps to reach
-    the setup screen (ng_cycle even though preselected, pick_scenario via
-    overviewFor, begin_setup via scenarioMetaFor). With a source switch first
-    (ng_source alep) it is at most 4 taps."""
+def test_a_new_game_is_at_most_five_taps_from_the_landing_screen():
+    """Spec R1 (the tap budget), re-counted for the M7 flow. The budget grew
+    by two deliberate taps and the reason is worth holding onto:
+
+      home_new       the landing screen exists now, so a player with a save
+                     is asked which game they mean instead of being dropped
+                     into one;
+      ng_cycle       enter the cycle (the list is a drill-in, not a
+                     preselected column);
+      pick_scenario  fills the detail beside the list - it no longer LEAVES
+                     the screen, so comparing a second quest costs one more
+                     tap, not three;
+      go_players     Continue;
+      begin_setup    start.
+
+    Five from a cold launch, six with a source switch. The two extra taps buy
+    a landing screen and a players step; the round loop itself is untouched
+    (tests/test_tap_budget.py is what guards that)."""
     js = node(NG_FIXTURE + """
 import { GameState } from "../../js/gamestate.js";
 import { dispatch } from "./actions.js";
-import { overviewFor } from "./overview.js";
-import { scenarioMetaFor } from "./overview.js";
+import { overviewFor, scenarioMetaFor } from "./overview.js";
 const g = new GameState();
-const ui = { picker: { index, players: 2, threats: [25, 25], source: "official", cycle: "C1" } };
-const taps = [];
-const tap = (act, arg) => { taps.push(act); return dispatch(g, ui, act, arg ?? ""); };
-
-// Official path: 3 taps
-tap("ng_cycle", "C1");          // Tap 1: cycle (even though preselected)
 const bundle = { stages: [{ id: 1 }], locations: [], tips: null };
-ui.overview = overviewFor(index, "o1a", bundle);  // Tap 2: pick_scenario (simulated)
-taps.push("pick_scenario");
-const meta = scenarioMetaFor(ui.overview.entry, ui.overview.difficulty);  // Tap 3: begin_setup (simulated)
-taps.push("begin_setup");
-const officialTaps = taps.length;
 
-// Reset for alep path
-taps.length = 0;
-ui.picker.source = "official";
-ui.picker.cycle = "C1";
-
-// With source switch: 4 taps
-tap("ng_source", "alep");       // Tap 1: switch source
-tap("ng_cycle", "A1");          // Tap 2: cycle (A1 is first cycle of alep)
-ui.overview = overviewFor(index, "a1a", bundle);  // Tap 3: pick_scenario (simulated)
-taps.push("pick_scenario");
-const meta2 = scenarioMetaFor(ui.overview.entry, ui.overview.difficulty);  // Tap 4: begin_setup (simulated)
-taps.push("begin_setup");
-const alepTaps = taps.length;
-
-console.log(JSON.stringify({
-  officialTaps, alepTaps,
-  mode: meta.mode, nightmare: meta.nightmare,
-  mode2: meta2.mode, nightmare2: meta2.nightmare,
-}));
+function run(source) {
+  const ui = { screen: "home",
+               picker: { index, players: 2, threats: [25, 25],
+                         source: "official", cycle: "C1", drill: "cycles", slug: null } };
+  const taps = [];
+  // home_new and pick_scenario/begin_setup are app.js's (they await a fetch
+  // or rebind `game`), so they are counted here and simulated; every other
+  // tap goes through the real dispatch table.
+  taps.push("home_new"); ui.screen = "newgame";
+  if (source === "alep") { taps.push("ng_source"); dispatch(g, ui, "ng_source", "alep"); }
+  const cycle = source === "alep" ? "A1" : "C1";
+  const slug = source === "alep" ? "a1a" : "o1a";
+  taps.push("ng_cycle"); dispatch(g, ui, "ng_cycle", cycle);
+  taps.push("pick_scenario");
+  ui.overview = overviewFor(index, slug, bundle);
+  ui.picker.slug = slug;
+  taps.push("go_players"); dispatch(g, ui, "go_players", "");
+  taps.push("begin_setup");
+  const meta = scenarioMetaFor(ui.overview.entry, ui.overview.difficulty);
+  return { n: taps.length, screen: ui.screen, mode: meta.mode, nightmare: meta.nightmare };
+}
+console.log(JSON.stringify({ official: run("official"), alep: run("alep") }));
 """)
-    assert js["officialTaps"] == 3, f"Official path should be exactly 3 taps, got {js['officialTaps']}"
-    assert js["alepTaps"] == 4, f"ALeP path should be exactly 4 taps, got {js['alepTaps']}"
-    assert js["mode"] == "Standard" and js["nightmare"] is False
-    assert js["mode2"] == "Standard" and js["nightmare2"] is False
+    assert js["official"]["n"] == 5, "official path: %s taps" % js["official"]["n"]
+    assert js["alep"]["n"] == 6, "alep path: %s taps" % js["alep"]["n"]
+    assert js["official"]["screen"] == "players"
+    for path in ("official", "alep"):
+        assert js[path]["mode"] == "Standard" and js[path]["nightmare"] is False
 
 
 def test_overview_for_builds_the_seat_pick_scenario_hands_to_ui_overview():

@@ -18,7 +18,7 @@ import { CATALOG_UNAVAILABLE } from "../../js/viewcopy.js";
 import { layout } from "./layout.js";
 import { perform, dispatch, newUi, afterTap } from "./actions.js";
 import { logText } from "./logfilter.js";
-import { imagePrefix, cyclesFor } from "../../js/quest_catalog.js";
+import { imagePrefix, cyclesFor, groupByCycle } from "../../js/quest_catalog.js";
 import { imageUrls } from "./cardimage.js";
 import { overviewFor, scenarioMetaFor } from "./overview.js";
 
@@ -212,6 +212,49 @@ async function boot() {
   render();
 }
 
+// Seat a scenario's bundle and mark it as the chooser's selection. Its own
+// function because two things reach it: the player tapping a row, and
+// entering a cycle (which auto-picks that cycle's first quest, so the detail
+// side is never empty once you are inside a cycle).
+//
+// It awaits db.bundle(), which is why it lives here and not in
+// acts_newgame.js with the rest of the chooser's ui-only acts.
+async function pickScenario(slug) {
+  const b = await db.bundle(slug);
+  const overview = overviewFor(ui.picker.index, slug, b);
+  if (!b || !overview.entry) {
+    // The catalog changed under us mid-pick (or the bundle fetch failed) -
+    // surface it rather than leaving the tap looking like it did nothing.
+    ui.picker.error = CATALOG_UNAVAILABLE;
+    render();
+    return;
+  }
+  ui.locations = b.locations ?? [];
+  // Same two fields as boot()'s resume path (Task 4) - seated here too since
+  // a fresh pick never goes through that branch at all.
+  ui.tips = b.tips ?? null;
+  ui.scenarioSlug = overview.entry.slug;
+  ui.overview = overview;
+  ui.sheet = null;
+  // Picking does not LEAVE the chooser (M7): the detail fills the right two
+  // thirds of the same screen, so comparing three quests in a cycle costs
+  // three taps rather than three taps and three Backs. ui.picker.slug is
+  // what marks the selected row and what gates the Continue CTA -
+  // newgame.js will not draw a detail whose slug the picker is not
+  // actually pointing at.
+  ui.picker.slug = overview.entry.slug;
+  render();
+}
+
+// The first quest of a cycle, in the order the chooser lists them - the same
+// groupByCycle the render uses, so "first" cannot mean two different things.
+function firstScenarioOf(cycle) {
+  const source = ui.picker?.source ?? "official";
+  const group = groupByCycle(ui.picker?.index?.scenarios ?? [], source)
+    .find(g => g.cycle === cycle);
+  return group?.scenarios?.[0]?.slug ?? null;
+}
+
 async function handleAct(act, arg) {
   // The landing screen's two ways in. Both are the first real tap of the
   // session, which is what makes them the right place to ask for fullscreen:
@@ -240,39 +283,7 @@ async function handleAct(act, arg) {
     render();
     return;
   }
-  if (act === "pick_scenario") {
-    // Milestone 6 (Task 2): picking a scenario no longer starts the game -
-    // it opens the Scenario overview so the player sees the difficulty
-    // ladder, stages and cards before committing. ng_players/ng_threat±
-    // moved out to acts_newgame.js (ui-only, ui.picker edits) - this stays
-    // here because it awaits db.bundle().
-    const slug = arg;
-    const b = await db.bundle(slug);
-    const overview = overviewFor(ui.picker.index, slug, b);
-    if (!b || !overview.entry) {
-      // The catalog changed under us mid-pick (or the bundle fetch failed) -
-      // surface it rather than leaving the tap looking like it did nothing.
-      ui.picker.error = CATALOG_UNAVAILABLE;
-      render();
-      return;
-    }
-    ui.locations = b.locations ?? [];
-    // Same two fields as the resume path above (Task 4) - seated here too
-    // since a fresh pick never goes through boot()'s branch at all.
-    ui.tips = b.tips ?? null;
-    ui.scenarioSlug = overview.entry.slug;
-    ui.overview = overview;
-    ui.sheet = null;
-    // M7: picking no longer LEAVES the chooser. The detail fills the right
-    // two thirds of the same screen, so a player comparing three quests in a
-    // cycle taps three rows rather than three rows and three Backs.
-    // ui.picker.slug is what marks the selected row and what gates the
-    // Continue CTA - newgame.js will not draw a detail whose slug the picker
-    // is not actually pointing at.
-    ui.picker.slug = overview.entry.slug;
-    render();
-    return;
-  }
+  if (act === "pick_scenario") { await pickScenario(arg); return; }
   if (act === "begin_setup") {
     // The other half of what pick_scenario used to do in one step (Task 2):
     // this is where the game object itself is actually created, so this is
@@ -324,6 +335,15 @@ async function handleAct(act, arg) {
     render();
     return;
   }
+  // The corner reload (layout.js). Everything the app knows is durable in
+  // storage - the state checkpoint, the log, the delta journal - so a reload
+  // is a re-render from the save, never a loss. Flush first so a checkpoint
+  // still sitting in the background queue is on disk before the page goes.
+  if (act === "reload_app") {
+    try { db.session.flush(game); } catch (e) { /* nothing queued, or no game */ }
+    location.reload();
+    return;
+  }
   if (ui.screen === "home" || ui.screen === "players"
       || ui.screen === "newgame" || ui.screen === "overview") {
     // The picker's own edits (ng_source/ng_cycle/ng_players/ng_threat±,
@@ -337,6 +357,15 @@ async function handleAct(act, arg) {
     // (CLAUDE.md's "the queue is tagged with its game object" hazard - a
     // rebind is what is supposed to drop it, and none has happened yet).
     const changed = dispatch(game, ui, act, arg);
+    // Entering a cycle auto-picks its first quest, so the detail side is
+    // never blank once you are inside one: the list and the detail always
+    // describe the same thing. It is a second act on one tap rather than a
+    // branch inside ng_cycle because it awaits db.bundle() - dispatch()'s
+    // handlers are pure and synchronous by contract.
+    if (changed && act === "ng_cycle") {
+      const first = firstScenarioOf(ui.picker.cycle);
+      if (first) { await pickScenario(first); return; }
+    }
     if (changed) render();
     return;
   }
