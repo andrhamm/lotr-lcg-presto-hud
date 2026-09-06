@@ -1,0 +1,8 @@
+# The Rules Reference PDF this corpus was parsed from. Pinned by content hash
+# (sha256 of the PDF) - FFG's product page serves the download behind a
+# script-blocking page, so there is no verified direct URL; `page=` is where
+# a human fetches it. Fill `url=` only with a verified direct link; the Pages
+# step downloads it when present and skips the artifact when absent (plan R3).
+page=https://www.fantasyflightgames.com/en/products/the-lord-of-the-rings-the-card-game/
+sha256=<fill from `shasum -a 256` of the local PDF>
+url=

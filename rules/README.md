@@ -30,6 +30,23 @@ The parse turns every numbered rule step into a markdown heading
 (`###### 6.4a Next enemy attack initiates`), so a hit lands on the step rather
 than mid-page. Claude reaches the same index through the qmd MCP server.
 
+## What ships
+
+The corpus above is for searching, never for shipping — `research/rules/` is
+gitignored and stays that way. `tools/build_rules_text.py` reads
+`research/rules/rules-reference.md` and writes `docs/data/rules_text.json`: a
+build artifact keyed by section id (`"6.4a"`) and glossary term
+(`"Player Elimination"`), holding only the excerpts a screen actually shows.
+Same posture as the compiled card DB (CLAUDE.md, "What may be committed") —
+gitignored, regenerated, never hand-edited — because it is still verbatim FFG
+text, just a narrower slice of it. The source PDF is pinned by content hash in
+`tools/data/rules.SOURCE.txt` (no verified direct download URL exists, so
+`url=` is usually empty and the CI step that would fetch it skips with a
+message). A device deploy needs this only once a firmware feature reads it —
+today only the tablet client does — and at that point it is
+`python3 tools/build_rules_text.py && mpremote cp -r docs/data/ :/data/`, the
+same one-liner the rest of `docs/data/` uses.
+
 ## Building the corpus
 
 ```bash

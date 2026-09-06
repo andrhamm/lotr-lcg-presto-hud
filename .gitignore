@@ -19,6 +19,9 @@ docs/data/*
 # text this project wrote itself; nothing is reproduced verbatim). Committed
 # so the Pages build doesn't re-scrape a third-party site on every deploy.
 !docs/data/tips.json
+# docs/data/rules_text.json (tools/build_rules_text.py) needs no allow-list
+# entry: unlike tips.json it is verbatim FFG excerpts, not our own words, so
+# it stays covered by the blanket docs/data/* ignore above.
 # Hall of Beorn raw per-scenario API responses (verbatim third-party card
 # data) — never committed. The *aggregated* output built from them,
 # tools/data/enrichment.json, is just a per-scenario list of encounter-set

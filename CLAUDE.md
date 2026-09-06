@@ -543,6 +543,21 @@ Same data policy as everything else here: `--refresh` fetches, nothing runs in
 CI, and **only text we write ourselves** from reading either corpus reaches
 `tools/data/tips_distilled.json` and from there `docs/data/tips.json`.
 
+`tools/build_rules_text.py` parses `research/rules/rules-reference.md` (the
+gitignored liteparse corpus `build_rules_corpus.py` builds, see
+`rules/README.md`) into `docs/data/rules_text.json` — sections keyed by
+numbered turn-step id (`"6.4a"`) and glossary entries keyed by term
+(`"Player Elimination"`). Unlike `tips.json` this is **not** an allow-listed
+exception: it is verbatim FFG excerpts, not our own summary, so it stays
+under the blanket `docs/data/*` ignore and is never committed — same
+generated-and-gitignored posture as the compiled card DB. The source PDF is
+pinned by content hash in `tools/data/rules.SOURCE.txt`; FFG's product page
+has no verified direct download link (plan ruling R3), so `url=` is normally
+empty and both the tool and the CI step that would fetch it are no-ops until
+someone fills it in from a verified source. Same no-op-when-present rule as
+the rest of `docs/data/`: the tool skips with a one-line message unless
+`--force` or the output is missing.
+
 ## The TODO board (TODO.md)
 
 `TODO.md` is an Obsidian Kanban board (also plain markdown). Columns:

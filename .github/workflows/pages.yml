@@ -18,6 +18,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        # Only the optional "Build rules text" step below needs Node (for
+        # `npm i -g @llamaindex/liteparse`) - nothing else in this workflow
+        # touches it. Set up unconditionally rather than gating the setup
+        # step on url= being non-empty; it costs a few seconds and keeps the
+        # rules-text step self-contained.
+        with:
+          node-version: "20"
       - name: Build card data
         # Single pass: the sets-to-gather enrichment it merges
         # (tools/data/enrichment.json) is COMMITTED, so there is no fetch
@@ -62,6 +70,36 @@ jobs:
         # until the next successful build.
         continue-on-error: true
         run: python3 tools/build_icons.py
+      - name: Build rules text
+        # docs/data/rules_text.json: Rules Reference excerpts keyed by
+        # section id and glossary term, for the tablet client's rules
+        # lookup (see rules/README.md's "What ships" and CLAUDE.md's Card
+        # data section). continue-on-error, same reasoning as icons above:
+        # this is optional context, not the critical artifact. Skips
+        # cleanly when tools/data/rules.SOURCE.txt has no url= - there is
+        # no verified direct download link for the PDF (plan ruling R3),
+        # so most runs take this branch and do nothing. When a url= is
+        # filled in: fetch the pinned PDF, verify it against the pinned
+        # sha256, parse it to markdown with liteparse (needs Node - not
+        # otherwise used by this workflow, hence actions/setup-node below),
+        # then run the two build steps a local rebuild would run.
+        continue-on-error: true
+        run: |
+          url=$(grep '^url=' tools/data/rules.SOURCE.txt | cut -d= -f2-)
+          if [ -z "$url" ]; then
+            echo "no pinned rules URL - skipping rules_text.json"
+          else
+            curl -fsSL -o /tmp/rr.pdf "$url"
+            pin=$(grep '^sha256=' tools/data/rules.SOURCE.txt | cut -d= -f2-)
+            got=$(sha256sum /tmp/rr.pdf | cut -d' ' -f1)
+            if [ "$pin" != "$got" ]; then
+              echo "sha256 mismatch: pinned $pin, got $got" >&2
+              exit 1
+            fi
+            npm i -g @llamaindex/liteparse
+            python3 tools/build_rules_corpus.py /tmp/rr.pdf --title "Rules Reference" --no-ocr
+            python3 tools/build_rules_text.py
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs
