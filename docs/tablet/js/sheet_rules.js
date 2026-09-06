@@ -11,33 +11,35 @@
 // shows - rules_map.js's SECTION_SUMMARY, never re-worded here), an FAQ
 // block (always empty today - tools/build_rules_text.py's "faq": [] - kept
 // so a future corpus pass has somewhere to land), and Related chips
-// (STEP_ORDER prev/next plus the record's own see_also terms). ui.rules
-// null, or missing the requested id/term entirely, degrades every block but
-// the footer to CHROME.rulesUnavailable - never a placeholder rules claim.
+// (STEP_ORDER prev/next plus the record's own see_also terms).
+//
+// ui.rules null, or missing the requested id/term entirely, degrades ONLY
+// the official excerpt to CHROME.rulesUnavailable - never a placeholder
+// rules claim. The Timing summary and the Related prev/next chips are both
+// static lookups (SECTION_SUMMARY / STEP_ORDER) that don't read `rules` at
+// all, so a build shipped without the rulebook artifact still shows this
+// tracker's own summary and a way to keep browsing - only the verbatim
+// official text is unavailable (Fix round 1: this used to read as "every
+// block but the footer degrades", which was never what the code did).
 import { h, raw, fmt } from "./dom.js";
 import { CHROME, rulesPageUrl } from "./copy.js";
 import { chip, cta } from "./primitives.js";
 import { STEP_ORDER, SECTION_SUMMARY } from "./rules_map.js";
-import { PHASE_FRAMEWORK, PHASE_WINDOW, ACTION_WINDOW_TIPS } from "../../js/viewcopy.js";
-
-const SUMMARY_SOURCES = { framework: PHASE_FRAMEWORK, window: PHASE_WINDOW, tips: ACTION_WINDOW_TIPS };
 
 // The Timing block's text - the SAME string pane.js already bands next to
-// this section's own chip, read back by id (never duplicated/re-typed) so
-// the two can never drift apart. null for a section rules_map.js has no
-// entry for (a view whose band lives in loops.js, out of this task's
-// scope, or one only reached via a Related chip) - sheet_rules.js just
-// omits the block rather than inventing a summary.
+// this section's own chip, resolved once in rules_map.js's SECTION_SUMMARY
+// (never duplicated/re-typed here) so the two can never drift apart. null
+// for a section rules_map.js has no entry for (a view whose band lives in
+// loops.js with no tracker copy of its own, or one only reached via a
+// Related chip) - sheet_rules.js just omits the block rather than
+// inventing a summary.
 function summaryFor(id) {
-  const spec = SECTION_SUMMARY[id];
-  if (!spec) return null;
-  const val = SUMMARY_SOURCES[spec.source]?.[spec.view];
-  if (val == null) return null;
-  return Array.isArray(val) ? val.join(" ") : val;
+  return SECTION_SUMMARY[id]?.text ?? null;
 }
 
 function relatedSectionChip(id, rules) {
-  const title = rules?.sections?.[id]?.ids ? rules.sections[id].title : null;
+  const rec = rules?.sections?.[id];
+  const title = rec && rec.title ? rec.title : null;
   const label = title ? h`§${id} · ${title}` : h`§${id}`;
   return chip({ act: "open_rules", arg: id, label, tone: "tan" });
 }

@@ -2487,30 +2487,52 @@ console.log(JSON.stringify({ moved, alloc: ui.alloc, placed: ui.placed,
 
 # -- The Rules modal (Task 3, milestone 5) -----------------------------------
 
-def test_rules_sections_map_covers_every_flow_view():
-    """sectionsFor() (rules_map.js) is the pane's own Rules Reference lookup -
-    every phase view the tablet can land on (flowViews() under the bands
-    policy, since bands is the only policy this client runs) must resolve to
-    at least one section id, except quest_setup/quest_sailing: neither has a
-    Rules Reference section of its own (stage-1A setup text and the sailing
-    test are this tracker's own affordances, not numbered book steps) - the
-    interfaces note both are chip-less for exactly that reason. flowViews()
-    under WINDOW_POLICY_BANDS never actually returns either one (they are not
-    in VIEW_ORDER at all), so the filter below is defensive documentation,
-    not a functional exclusion - see gamestate.js's own VIEW_ORDER."""
+def test_every_flow_view_pane_renders_a_rules_chip_in_its_own_section():
+    """Fix round 1, finding 1: sectionsFor() (rules_map.js) mapping every
+    view to section ids was never proof a CHIP actually reached the screen -
+    planning/combat_enemy rendered solely through renderLoop() (loops.js),
+    which didn't take a `section` at all, so those two panes carried no
+    "Rules §n ›" chip whatsoever, and enc_checks/combat_player's own loop-
+    drawn framework/window band was silently chip-less too (the pane's OWN
+    extra band next to it still had one). This is a render assertion, not a
+    sectionsFor() one: for every flow view but quest_setup/quest_sailing
+    (neither has a Rules Reference section of its own - stage-1A setup text
+    and the sailing test are this tracker's own affordances, not numbered
+    book steps; flowViews() under WINDOW_POLICY_BANDS never actually returns
+    either one, so excluding them here is defensive documentation, not a
+    functional exclusion), renderPane() must carry at least one
+    data-act="open_rules" chip whose arg is one of sectionsFor(view)'s own
+    ids - never a hand-picked or stale one. planning and combat_enemy get an
+    exact-value check since their own loop-framing band is the ONLY chip on
+    the pane (no second, pane-built band to fall back on)."""
     js = node("""
-import { setWindowPolicy, WINDOW_POLICY_BANDS, flowViews } from "../../js/gamestate.js";
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, flowViews } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
 import { sectionsFor } from "./rules_map.js";
+import { newUi } from "./actions.js";
 setWindowPolicy(WINDOW_POLICY_BANDS);
-const views = flowViews().filter(v => v !== "quest_setup" && v !== "quest_sailing");
+const out = {};
+for (const v of flowViews().filter(x => x !== "quest_setup" && x !== "quest_sailing")) {
+  const g = new GameState(4, 25); g.advanceView(); g.enterView(v);
+  if (v === "quest_resolution") { g.setWillpower(9); g.setStaging(2); g.resolveQuest(9, 2); g.pending_budget = 7; }
+  const html = renderPane(g, newUi());
+  out[v] = {
+    chips: [...html.matchAll(/data-act="open_rules" data-arg="([^"]*)"/g)].map(m => m[1]),
+    allowed: sectionsFor(v),
+  };
+}
 console.log(JSON.stringify({
-  views,
-  covered: views.every(v => sectionsFor(v).length > 0),
+  out,
   excluded: { quest_setup: sectionsFor("quest_setup"), quest_sailing: sectionsFor("quest_sailing") },
 }));
 """)
-    assert len(js["views"]) > 0
-    assert js["covered"], "every flow view except quest_setup/quest_sailing needs a section id: %r" % js["views"]
+    out = js["out"]
+    assert len(out) > 0
+    for v, r in out.items():
+        assert len(r["chips"]) > 0, "no Rules chip rendered on %r's pane: %r" % (v, r)
+        assert set(r["chips"]) <= set(r["allowed"]), (v, r)
+    assert out["planning"]["chips"] == ["2.2"], out["planning"]
+    assert out["combat_enemy"]["chips"] == ["6.3"], out["combat_enemy"]
     assert js["excluded"] == {"quest_setup": [], "quest_sailing": []}
 
 
@@ -2533,6 +2555,51 @@ console.log(JSON.stringify({
 }));
 """)
     assert js["chips"] == ["1.1", "1.2"], js["html"]
+
+
+def test_section_summary_text_matches_the_pane_it_is_quoting():
+    """Fix round 1, finding 3: SECTION_SUMMARY's whole reason to exist is
+    "the sheet and the pane can never say two different things about the
+    same rule" (rules_map.js's own comment) - assert that promise directly
+    rather than trust it, by rendering, for every id in SECTION_SUMMARY, the
+    one pane view that owns it (its own `view` field) and checking the
+    summary's exact text is somewhere in that pane's own rendered HTML - not
+    a plausible-looking paraphrase of it. Reads `spec.text` back out of the
+    loaded module rather than re-typing an expected string per id, so this
+    test itself can't drift from rules_map.js either.
+
+    Also exercises the two ids Fix round 1 adds (4.1/4.2, TRAVEL.open;
+    6.11, COMBAT_LAST_CHANCE) and the "tips" parity fix (1.2/3.5 must show
+    ACTION_WINDOW_TIPS[view][0], not the old summaryFor()'s blanket
+    `.join(" ")` of the whole array - see rules_map.js's bandTextFor)."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { newUi } from "./actions.js";
+import { SECTION_SUMMARY } from "./rules_map.js";
+import { esc } from "./dom.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const rendered = {};
+const out = {};
+for (const [id, spec] of Object.entries(SECTION_SUMMARY)) {
+  if (!(spec.view in rendered)) {
+    const g = new GameState(4, 25); g.advanceView(); g.enterView(spec.view);
+    rendered[spec.view] = renderPane(g, newUi());
+  }
+  // The band's own text is HTML-escaped by h`` on the way into the pane
+  // (dom.js's esc()), so a summary containing a quote or apostrophe (e.g.
+  // combat_shadow's "that player's engaged enemies") never matches a raw
+  // includes() against the unescaped spec.text - compare against the same
+  // escaped form the pane itself renders.
+  out[id] = { view: spec.view, text: spec.text, present: rendered[spec.view].includes(esc(spec.text)) };
+}
+console.log(JSON.stringify(out));
+""")
+    assert len(js) >= 15, "expected every SECTION_SUMMARY id to be exercised: %r" % js
+    for sec_id, r in js.items():
+        assert r["present"], (
+            "SECTION_SUMMARY[%r]'s text %r does not appear verbatim on the %r pane"
+            % (sec_id, r["text"], r["view"]))
 
 
 def test_rules_sheet_renders_fixture_text_verbatim_with_prev_next_chips():
@@ -2574,20 +2641,39 @@ def test_rules_sheet_degrades_when_rules_text_is_unavailable():
     text block to CHROME.rulesUnavailable rather than a blank sheet or a
     crash (CLAUDE.md iron rule 4: no placeholder rules text ships). The
     footer's Open-the-rulebook link still works, falling back to copy.js's
-    pinned page URL since there is no ui.rules.source.page to prefer."""
+    pinned page URL since there is no ui.rules.source.page to prefer.
+
+    Fix round 1, finding 2 (ruling reversed from the original brief's
+    wording): the spec's own Risks section says a build shipped without the
+    rules artifact "shows the summary and the product-page link" - so the
+    Timing block and the Related prev/next chips must SURVIVE a null
+    ui.rules (both are static lookups, SECTION_SUMMARY/STEP_ORDER, that
+    never read `rules` at all); only the verbatim official excerpt degrades.
+    Also asserts no `.rules-body` wrapper renders - the class the real
+    official-text paragraphs are wrapped in (sheet_rules.js's officialBlock)
+    - so there is no way a fabricated rules paragraph could sneak onto the
+    unavailable path."""
     js = node("""
 import { renderRulesSheet } from "./sheet_rules.js";
 import { CHROME, rulesPageUrl } from "./copy.js";
+import { PHASE_WINDOW } from "../../js/viewcopy.js";
 const ui = { sheet: { kind: "rules", section: "6.2" }, rules: null };
 const html = renderRulesSheet({}, ui);
 console.log(JSON.stringify({
   html,
   unavailable: html.includes(CHROME.rulesUnavailable),
   hasLink: html.includes('href="' + rulesPageUrl + '"') && html.includes('target="_blank"'),
+  timingPresent: html.includes(PHASE_WINDOW.combat_shadow),
+  relatedChips: [...html.matchAll(/data-act="open_rules" data-arg="([^"]*)"/g)].map(m => m[1]),
+  noOfficialBody: !html.includes('class="rules-body"'),
 }));
 """)
     assert js["unavailable"], js["html"]
     assert js["hasLink"], js["html"]
+    assert js["timingPresent"], "the Timing block must survive a missing rules build: %r" % js["html"]
+    assert "6.1" in js["relatedChips"] and "6.3" in js["relatedChips"], (
+        "Related prev/next chips must survive a missing rules build: %r" % js["relatedChips"])
+    assert js["noOfficialBody"], "no fabricated rules text may render when ui.rules is null: %r" % js["html"]
 
 
 def test_elim_sheet_rules_chip_opens_glossary_then_returns_to_elim():

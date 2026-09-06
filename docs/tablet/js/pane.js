@@ -8,13 +8,13 @@ import { h, raw, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta, counter, band } from "./primitives.js";
 import { renderLoop } from "./loops.js";
-import { sectionsFor } from "./rules_map.js";
+import { sectionsFor, bandTextFor } from "./rules_map.js";
 import { notesFor } from "./notes.js";
 import { frontFace } from "./cards.js";
 import { phaseViewOf, HEADINGS } from "../../js/gamestate.js";
 import {
-  VIEW_LABELS, ACTION_WINDOW_TIPS, COMBAT_LAST_CHANCE, LOOP_FLOW, OUTCOME,
-  PHASE_FRAMEWORK, PHASE_WINDOW, PROGRESS_PLACEMENT, QUEST_SETUP,
+  VIEW_LABELS, COMBAT_LAST_CHANCE, LOOP_FLOW, OUTCOME,
+  PROGRESS_PLACEMENT, QUEST_SETUP,
   SETUP_TIP, STAGING, TOTALS, TRAVEL,
 } from "../../js/viewcopy.js";
 import { icon } from "../../js/icons_svg.js";
@@ -184,14 +184,19 @@ function renderViewParts(view, game, ui) {
     case "resource": {
       const [begins, opens] = sectionsFor(view);
       return {
-        parts: band({ kind: "framework", text: PHASE_FRAMEWORK.resource, section: begins })
-          + band({ kind: "window", text: ACTION_WINDOW_TIPS.resource[0], section: opens }),
+        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: begins })
+          + band({ kind: "window", text: bandTextFor(view, "tips"), section: opens }),
         cta: null,
       };
     }
 
+    // renderLoop's own framing band (loops.js) is the whole view - it opens
+    // with `kind: "window"` (LOOP_FLOW.planning), so it takes the window
+    // step (sectionsFor(view)[1], "2.2"), matching every other view's own
+    // framework-gets-[0]/window-gets-[1] convention (Fix round 1: this band
+    // used to carry no chip at all).
     case "planning":
-      return { parts: renderLoop(LOOP_FLOW.planning), cta: null };
+      return { parts: renderLoop(LOOP_FLOW.planning, { section: sectionsFor(view)[1] }), cta: null };
 
     // Entered only with game.sailing on (gamestate.nextView: planning &&
     // sailing -> quest_sailing) - so there is no "no keyword" state to report
@@ -221,7 +226,7 @@ function renderViewParts(view, game, ui) {
         // No separate framework band here - the one window band IS the whole
         // view (committing characters), so it names 3.2 (the commit step
         // itself), not 3.1 (the phase's generic "begins" step).
-        parts: band({ kind: "window", text: PHASE_WINDOW.quest_commit, sub: ACTION_WINDOW_TIPS.quest_commit.join(" "), section: sectionsFor(view)[1] })
+        parts: band({ kind: "window", text: bandTextFor(view, "window"), sub: bandTextFor(view, "tips"), section: sectionsFor(view)[1] })
           + counter({ label: TOTALS.willpower, icon: icon("WILLPOWER", 40, WILLPOWER_GOLD), value: game.willpower, act: "wp" }),
         cta: null,
       };
@@ -233,7 +238,7 @@ function renderViewParts(view, game, ui) {
       // and-respond step, so both bands point at the same id.
       const [staging] = sectionsFor(view);
       const parts = band({ kind: "framework", text: STAGING.framework, section: staging })
-        + band({ kind: "window", text: STAGING.window, sub: ACTION_WINDOW_TIPS.quest_staging.join(" "), section: staging })
+        + band({ kind: "window", text: STAGING.window, sub: bandTextFor(view, "tips"), section: staging })
         + counters + renderWithoutActions(line);
       // "Resolve Quest..." is the ONLY forward CTA here - it is what runs
       // resolveQuest() (the "resolve" act). advanceView() from quest_staging
@@ -276,7 +281,7 @@ function renderViewParts(view, game, ui) {
       }
       const [resolved, ends] = sectionsFor(view);
       const parts = band({ kind: "framework", text, section: resolved })
-        + band({ kind: "window", text: ACTION_WINDOW_TIPS.quest_resolution[0], section: ends });
+        + band({ kind: "window", text: bandTextFor(view, "tips"), section: ends });
       return { parts, cta: null };
     }
 
@@ -297,7 +302,7 @@ function renderViewParts(view, game, ui) {
         ? chip({ act: "open_locpick", arg: "change:0:play", label: TRAVEL.btn_replace, tone: "tan" })
         : chip({ act: "open_locpick", arg: "new::play", label: TRAVEL.btn_travel, tone: "tan" });
       return {
-        parts: fw + band({ kind: "window", text: ACTION_WINDOW_TIPS.travel.join(" "), section: ends }) + travelChip,
+        parts: fw + band({ kind: "window", text: bandTextFor(view, "tips"), section: ends }) + travelChip,
         cta: null,
       };
     }
@@ -306,19 +311,22 @@ function renderViewParts(view, game, ui) {
       return {
         // Single band, no separate "phase begins" band - it names 5.2
         // (Optional engagement) itself, not 5.1 (the generic phase start).
-        parts: band({ kind: "window", text: PHASE_WINDOW.enc_optional, sub: ACTION_WINDOW_TIPS.enc_optional.join(" "), section: sectionsFor(view)[1] }),
+        parts: band({ kind: "window", text: bandTextFor(view, "window"), sub: bandTextFor(view, "tips"), section: sectionsFor(view)[1] }),
         cta: null,
       };
 
     case "enc_checks": {
       const offer = game.skipOffer();
       const twoCol = h`<div class="two-col">${raw(renderEncChecksSummary(game))}${offer ? raw(renderSkipOffer(offer)) : ""}</div>`;
-      // renderLoop()'s own framework/tip bands (loops.js) are out of this
-      // task's scope - only the window band pane.js adds here gets a chip,
-      // naming 5.4 (End of the Encounter phase - "last action window before
-      // combat", ACTION_WINDOW_TIPS.enc_checks's own framing).
-      const parts = renderLoop(LOOP_FLOW.enc_checks)
-        + band({ kind: "window", text: ACTION_WINDOW_TIPS.enc_checks.join(" "), section: sectionsFor(view)[1] })
+      // renderLoop()'s own framing band (loops.js) now carries the Rules
+      // chip too (Fix round 1) - it opens with `kind: "framework"`
+      // (LOOP_FLOW.enc_checks), so it takes the phase-begins step
+      // (sectionsFor(view)[0], "5.3", Engagement checks). The window band
+      // pane.js adds here separately names 5.4 (End of the Encounter phase -
+      // "last action window before combat", ACTION_WINDOW_TIPS.enc_checks's
+      // own framing).
+      const parts = renderLoop(LOOP_FLOW.enc_checks, { section: sectionsFor(view)[0] })
+        + band({ kind: "window", text: bandTextFor(view, "tips"), section: sectionsFor(view)[1] })
         + twoCol;
       return { parts, cta: null };
     }
@@ -326,26 +334,36 @@ function renderViewParts(view, game, ui) {
     case "combat_shadow": {
       const [begins, deal] = sectionsFor(view);
       return {
-        parts: band({ kind: "framework", text: PHASE_FRAMEWORK.combat_shadow, section: begins })
-          + band({ kind: "window", text: PHASE_WINDOW.combat_shadow, section: deal }),
+        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: begins })
+          + band({ kind: "window", text: bandTextFor(view, "window"), section: deal }),
         cta: null,
       };
     }
 
+    // renderLoop's own framing band (loops.js) opens with `kind: "framework"`
+    // (LOOP_FLOW.combat_enemy), so it takes the phase-begins step
+    // (sectionsFor(view)[0], "6.3") - Fix round 1: this band used to carry
+    // no chip at all.
     case "combat_enemy": {
       const cells = game.players.map((_, i) => renderEngagedCell(game, i)).join("");
-      return { parts: renderLoop(LOOP_FLOW.combat_enemy) + h`<div class="eng-grid">${raw(cells)}</div>`, cta: null };
+      return {
+        parts: renderLoop(LOOP_FLOW.combat_enemy, { section: sectionsFor(view)[0] }) + h`<div class="eng-grid">${raw(cells)}</div>`,
+        cta: null,
+      };
     }
 
     case "combat_player": {
-      // renderLoop()'s own window band (loops.js) is out of this task's
-      // scope - the tip band pane.js adds here names 6.11 (End of the Combat
-      // phase), the closest numbered step to "lower threat now or refresh
-      // may eliminate" - refresh, not combat, is where that threat raise and
-      // elimination check actually happen.
+      // renderLoop's own framing band (loops.js) opens with `kind: "window"`
+      // (LOOP_FLOW.combat_player), so it takes the window step
+      // (secs[1], "6.8a") - Fix round 1: this band used to carry no chip at
+      // all. The tip band pane.js adds separately still names 6.11 (End of
+      // the Combat phase), the closest numbered step to "lower threat now or
+      // refresh may eliminate" - refresh, not combat, is where that threat
+      // raise and elimination check actually happen.
       const secs = sectionsFor(view);
       return {
-        parts: renderLoop(LOOP_FLOW.combat_player) + band({ kind: "tip", text: COMBAT_LAST_CHANCE, section: secs[secs.length - 1] }),
+        parts: renderLoop(LOOP_FLOW.combat_player, { section: secs[1] })
+          + band({ kind: "tip", text: COMBAT_LAST_CHANCE, section: secs[secs.length - 1] }),
         cta: null,
       };
     }
@@ -353,15 +371,15 @@ function renderViewParts(view, game, ui) {
     case "refresh": {
       const [begins, opens] = sectionsFor(view);
       return {
-        parts: band({ kind: "framework", text: PHASE_FRAMEWORK.refresh, section: begins })
-          + band({ kind: "window", text: PHASE_WINDOW.refresh, sub: ACTION_WINDOW_TIPS.refresh.join(" "), section: opens }),
+        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: begins })
+          + band({ kind: "window", text: bandTextFor(view, "window"), sub: bandTextFor(view, "tips"), section: opens }),
         cta: null,
       };
     }
 
     case "round_end":
       return {
-        parts: band({ kind: "framework", text: PHASE_FRAMEWORK.round_end, section: sectionsFor(view)[0] }),
+        parts: band({ kind: "framework", text: bandTextFor(view, "framework"), section: sectionsFor(view)[0] }),
         cta: cta({ act: "endround", label: h`${CHROME.nextPrefix}${VIEW_LABELS.resource} (Round ${game.round + 1})` }),
       };
 

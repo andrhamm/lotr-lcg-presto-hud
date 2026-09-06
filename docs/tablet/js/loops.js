@@ -27,8 +27,16 @@ function renderRung(n, label, opens, sub) {
 // the closing note banded by its own note_kind ("framework" or "tip" - see
 // style.css's .band-tip, added alongside .band-framework/.band-window for
 // this).
-export function renderLoop(flow) {
-  const intro = band({ kind: flow.kind, text: flow.intro });
+//
+// `opts.section` (Fix round 1, milestone 5 Task 3) is a Rules Reference
+// section id (rules_map.js's sectionsFor()) for the FRAMING band only - the
+// same "Rules §n ›" chip band() already grows for pane.js's own direct
+// band() calls (primitives.js's `section` prop), reused rather than
+// duplicated here since the framing band is itself built with band(). The
+// numbered rungs and the closing note never carry one - only the one band a
+// player would tap first.
+export function renderLoop(flow, opts = {}) {
+  const intro = band({ kind: flow.kind, text: flow.intro, section: opts.section });
   const rungs = flow.rungs.map(([label, opens, sub], i) => renderRung(i + 1, label, opens, sub)).join("");
   const ticks = flow.rungs.some(r => r[1]);
   const legend = ticks
