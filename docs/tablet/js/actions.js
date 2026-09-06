@@ -20,9 +20,11 @@ import { handle as sailingActs } from "./acts_sailing.js";
 import { handle as transportActs } from "./acts_transport.js";
 import { handle as logActs } from "./acts_log.js";
 import { handle as rulesActs } from "./acts_rules.js";
+import { handle as notesActs } from "./acts_notes.js";
 
 const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs,
-                  sqpickActs, resolveActs, sailingActs, transportActs, logActs, rulesActs];
+                  sqpickActs, resolveActs, sailingActs, transportActs, logActs, rulesActs,
+                  notesActs];
 
 export const newUi = () => ({
   screen: "play", alloc: null, placed: false, picker: null,
@@ -35,6 +37,14 @@ export const newUi = () => ({
   // null when the build has no rules_text.json (same optional-at-runtime
   // contract as tips/icons/locations).
   rules: null,
+  // Milestone 5 (Task 4): the whole tips.json map (db.bundle(slug).tips -
+  // db.js's own comment: the bundle carries the WHOLE map, not a per-
+  // scenario slice) plus the current scenario's own slug, so notes.js's
+  // notesFor()/allNotes() can index it. Both seated by app.js on the resume
+  // path and on pick_scenario; null/null for a bare game with no scenario
+  // at all (notesFor() degrades to "no panel" for that case, same as an
+  // absent tips.json).
+  tips: null, scenarioSlug: null,
   // Milestone 4: the Game Log screen's own two pieces of state - which filter
   // is showing, and the `seq` of the selected row (null for none). Seated
   // here rather than only by open_log so every renderer can read it without

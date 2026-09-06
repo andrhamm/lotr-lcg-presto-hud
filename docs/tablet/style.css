@@ -496,3 +496,35 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    center content inside on its own - inline-flex fixes that without
    touching the button rule at all. */
 a.cta { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+
+/* The Notes panel (Task 4, milestone 5, pane.js's renderNotesPanel) and the
+   Notes sheet it opens into (sheet_notes.js): the scenario's own tips.json
+   tips, in the tracker's own distilled words. Card ground with a gold left
+   edge - the same border-left: 6px solid var(--border-gold) treatment
+   .rsheet-face already uses for "this block is quoted, not authored here".
+   Tips are sentences (CLAUDE.md's "if a player reads it as a sentence... it
+   is BODY"), so each line is li.body - at 18px, not .body's default 20px,
+   matching .body.secondary's size on the same SCALE the type-scale test
+   already allows. */
+.notes { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px;
+  background: var(--card); border: 1px solid var(--border); border-left: 6px solid var(--border-gold); border-radius: 6px; }
+.notes-head { display: flex; align-items: center; gap: 10px; }
+.notes ul, .notes-group ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.notes li.body, .notes-group li.body { font-size: 18px; }
+.notes-foot { display: flex; gap: 10px; flex-wrap: wrap; }
+/* .chip is a <button> everywhere else; the Source link (panel and sheet
+   alike) is a real <a> (a new tab, not an app act) wearing the same class.
+   .chip's own display:inline-flex/align-items:center already fit an anchor
+   with no override needed (unlike a.cta above, which has to flip .cta's
+   block-level display:flex) - text-decoration and a floor are the only new
+   rules, since anchors underline by default and carry no height of their
+   own the way chip()'s inline style="height:44px" gives a <button>. */
+a.chip { text-decoration: none; min-height: 44px; }
+
+/* The Notes sheet (Task 4, milestone 5): "More notes ›" - every tip group
+   for the current scenario, General first then each stage in numeric order
+   (notes.js's allNotes()). One .notes-group per scope, same list-plus-
+   source shape as the panel above, just without its 3-item cap or its own
+   card border - the sheet's .sheet already frames the whole thing. */
+.notes-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.notes-group:last-child { margin-bottom: 0; }

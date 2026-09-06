@@ -87,6 +87,14 @@ async function boot() {
     // and loadLocations degrades to [] on any catalog failure - either way
     // the picker still opens, straight to its manual entry.
     ui.locations = b?.locations ?? [];
+    // The Notes panel/sheet (Task 4) - the whole tips.json map plus the
+    // current scenario's own slug, so notes.js's notesFor()/allNotes() can
+    // index it (db.bundle()'s "tips" field is the WHOLE map, not a per-
+    // scenario slice - db.js's own comment). Both null for a bare/manual
+    // game with no scenario at all (`b` null above), same degrade-to-
+    // "no panel" contract as an absent tips.json.
+    ui.tips = b?.tips ?? null;
+    ui.scenarioSlug = game.scenario?.slug ?? null;
     // A save can land exactly between a successful "resolve" and
     // "apply_alloc" (pending_budget > 0, nothing placed yet). ui.alloc is
     // never part of the save (it is UI state, not game state), and pane.js
@@ -167,6 +175,10 @@ async function handleAct(act, arg) {
     game.preloadScenario(scenarioMeta, b.stages);
     game.view = "quest_setup";
     ui.locations = b.locations ?? [];
+    // Same two fields as the resume path above (Task 4) - seated here too
+    // since a fresh pick never goes through boot()'s branch at all.
+    ui.tips = b.tips ?? null;
+    ui.scenarioSlug = scenarioMeta.slug;
     ui.sheet = null;
     ui.screen = "play";
     db.session.saveState(game);

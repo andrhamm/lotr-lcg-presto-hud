@@ -17,6 +17,7 @@ import { renderResolveSheet } from "./sheet_resolve.js";
 import { renderSailingSheet } from "./sheet_sailing.js";
 import { renderExportSheet } from "./sheet_export.js";
 import { renderRulesSheet } from "./sheet_rules.js";
+import { renderNotesSheet } from "./sheet_notes.js";
 
 // Unknown kinds render nothing (not an error): a sheet kind not wired up
 // here is a no-op overlay, never a crash.
@@ -32,6 +33,7 @@ const RENDERERS = {
   sailing: renderSailingSheet,
   export: renderExportSheet,
   rules: renderRulesSheet,
+  notes: renderNotesSheet,
 };
 
 export function renderSheet(game, ui) {

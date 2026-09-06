@@ -236,6 +236,17 @@ export const CHROME = {
   // label naming the term it opens, not templated, since it always opens
   // the same one.
   elimRulesChip: "Rules · Player Elimination ›",
+  // The Notes panel and Notes sheet (Task 4, milestone 5) - notes.js's
+  // notesFor()/allNotes(), pane.js's renderNotesPanel, sheet_notes.js. Every
+  // tip line itself is tips.json's own text (this tracker's distillation,
+  // already fact-checked per CLAUDE.md's precedence for that file); nothing
+  // here writes a new sentence about the game - just the chrome around it.
+  notes: "Notes",
+  source: "Source",
+  moreNotes: "More notes",
+  scopeGeneral: "General",
+  scopeStage: "Stage %s",
+  notesSheetTitle: "Notes",
 };
 
 // The Rules Reference's product page (tools/data/rules.SOURCE.txt's own

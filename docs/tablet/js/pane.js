@@ -9,6 +9,7 @@ import { CHROME } from "./copy.js";
 import { chip, cta, counter, band } from "./primitives.js";
 import { renderLoop } from "./loops.js";
 import { sectionsFor } from "./rules_map.js";
+import { notesFor } from "./notes.js";
 import { frontFace } from "./cards.js";
 import { phaseViewOf, HEADINGS } from "../../js/gamestate.js";
 import {
@@ -150,6 +151,23 @@ function renderSkipOffer(offer) {
     : "";
   const cls = offer.promoted ? "well well-amber" : "well";
   return h`<div class="${cls}">${raw(claim)}${raw(counts)}</div>`;
+}
+
+// The Notes panel (Task 4, milestone 5): notesFor()'s {scope, items,
+// source} rendered verbatim - every line is tips.json's own text, so
+// nothing here composes a new sentence about the game (iron rule 4). The
+// pipe icon is the twin's own tips-modal glyph (icons_svg.js's ICONS.PIPE);
+// gold, matching the panel's own gold left edge (style.css's .notes). The
+// Source link is a real <a>, not an app act - it leaves the app, so it gets
+// the same a.chip text-decoration override a.cta already needed (Task 3)
+// for the identical reason.
+function renderNotesPanel(notes) {
+  const items = notes.items.map(t => h`<li class="body">${t}</li>`).join("");
+  const name = notes.source?.name ?? "";
+  const url = notes.source?.url ?? "";
+  const sourceLink = h`<a class="chip chip-tan" href="${url}" target="_blank" rel="noopener">${CHROME.source} · ${name} ›</a>`;
+  const more = chip({ act: "open_notes", label: h`${CHROME.moreNotes} ›` });
+  return h`<aside class="notes"><div class="notes-head">${raw(icon("PIPE", 22, WILLPOWER_GOLD))}<span class="label">${CHROME.notes} · ${notes.scope}</span></div><ul>${raw(items)}</ul><div class="notes-foot">${raw(sourceLink)}${raw(more)}</div></aside>`;
 }
 
 // One view -> { parts, cta }. `cta` is null when the common Next/advance
@@ -361,6 +379,8 @@ export function renderPane(game, ui) {
   const view = phaseViewOf(game.view);
   const title = view === "round_end" ? `${CHROME.endOfRound}${game.round}` : (VIEW_LABELS[view] ?? view);
   const { parts, cta: customCta } = renderViewParts(view, game, ui);
+  const notes = notesFor(ui.tips, ui.scenarioSlug, game.quest?.stage_n);
+  const notesHtml = notes ? renderNotesPanel(notes) : "";
 
   const titleLine = h`${CHROME.round} ${game.round} · ${CHROME.step} ${game.step} · ${CHROME.firstPlayer} P${game.first_player + 1}`;
 
@@ -389,6 +409,7 @@ export function renderPane(game, ui) {
 <h1 class="display">${title}</h1>
 <p class="label">${raw(titleLine)}</p>
 ${raw(parts)}
+${raw(notesHtml)}
 <div class="cta-row">${raw(ctaButtons.join(""))}</div>
 </main>`;
 }

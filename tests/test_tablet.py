@@ -2627,3 +2627,132 @@ console.log(JSON.stringify({
     assert js["glossaryShown"], "the fixture glossary text must render verbatim"
     assert js["afterClose"] == {"kind": "elim", "i": 0}, "the elim sheet must return, flag persisted"
     assert js["pendingElim"] == 0, "the elimination flag must survive the rules detour"
+
+
+# The fixture below stands in for a scenario's real tips.json entry
+# (build_tips.py's distillation) - a placeholder attribution URL, never a
+# real one, per CLAUDE.md's data policy on verbatim vs. derived content:
+# this is a fixture for a test, not something that ships.
+_NOTES_FIXTURE = """{ scenarios: { "passage-through-mirkwood": {
+  attribution: { name: "Vision of the Palantir", url: "https://example.invalid/votp" },
+  general: ["g1", "g2", "g3", "g4"],
+  stages: { "2": ["s2a"] },
+} } }"""
+
+
+def test_notes_panel_shows_general_tips_and_the_source_link_at_stage_one():
+    """notesFor() (notes.js) falls back to a scenario's general tips when
+    the current stage (1, the default) has no group of its own in the
+    fixture - R9's first half. At most three show (the panel's own 3-item
+    cap), and the Source chip is a real <a> carrying the fixture's own
+    href and rel="noopener" - CLAUDE.md iron rule 4: this is tips.json's
+    own text plus a link back to it, never a paraphrase."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25);
+const ui = newUi();
+ui.scenarioSlug = "passage-through-mirkwood";
+ui.tips = %s;
+const html = renderPane(g, ui);
+console.log(JSON.stringify({
+  html,
+  hasNotes: html.includes('class="notes"'),
+  hasG1: html.includes(">g1<"), hasG2: html.includes(">g2<"), hasG3: html.includes(">g3<"),
+  hasG4: html.includes(">g4<"),
+  hasHeader: html.includes("Notes \\u00b7 General"),
+  linkHref: (html.match(/<a class="chip chip-tan" href="([^"]*)"/) || [])[1],
+  hasNoopener: html.includes('rel="noopener"'),
+}));
+""" % _NOTES_FIXTURE)
+    assert js["hasNotes"], js["html"]
+    assert js["hasG1"] and js["hasG2"] and js["hasG3"], js["html"]
+    assert not js["hasG4"], "the panel must cap at three tips"
+    assert js["hasHeader"], js["html"]
+    assert js["linkHref"] == "https://example.invalid/votp"
+    assert js["hasNoopener"], js["html"]
+
+
+def test_notes_panel_shows_the_current_stages_tips_over_general():
+    """Once stage_n reaches a stage the fixture has its own group for,
+    that group wins over general (R9) - here stage 2's single tip, scoped
+    "Stage 2" via CHROME.scopeStage, not folded in alongside general."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25);
+g.quest.stage_n = 2;
+const ui = newUi();
+ui.scenarioSlug = "passage-through-mirkwood";
+ui.tips = %s;
+const html = renderPane(g, ui);
+console.log(JSON.stringify({
+  html,
+  hasS2a: html.includes(">s2a<"),
+  hasHeader: html.includes("Notes \\u00b7 Stage 2"),
+  hasG1: html.includes(">g1<"),
+}));
+""" % _NOTES_FIXTURE)
+    assert js["hasS2a"], js["html"]
+    assert js["hasHeader"], js["html"]
+    assert not js["hasG1"], "a stage's own tips replace general, not add to them"
+
+
+def test_open_notes_lists_every_group_general_then_stages_in_order():
+    """acts_notes.js's open_notes seats {kind:"notes"}; sheet_notes.js's
+    renderNotesSheet then lists notes.js's allNotes() in full - General
+    first, then each stage in numeric order (R9's second half), each group
+    carrying its own Source link and none of the panel's 3-item cap."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { dispatch, newUi } from "./actions.js";
+import { renderSheet } from "./sheets.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25);
+const ui = newUi();
+ui.scenarioSlug = "passage-through-mirkwood";
+ui.tips = %s;
+const opened = dispatch(g, ui, "open_notes", "");
+const html = renderSheet(g, ui);
+console.log(JSON.stringify({
+  opened, kind: ui.sheet.kind, html,
+  hasG4: html.includes(">g4<"),
+  hasS2a: html.includes(">s2a<"),
+  generalBeforeStage: html.indexOf("General") < html.indexOf("Stage 2"),
+  linkCount: (html.match(/chip chip-tan/g) || []).length,
+}));
+""" % _NOTES_FIXTURE)
+    assert js["opened"] is True
+    assert js["kind"] == "notes"
+    assert js["hasG4"], "the sheet carries no 3-item cap"
+    assert js["hasS2a"], js["html"]
+    assert js["generalBeforeStage"], "General must list before Stage 2"
+    assert js["linkCount"] == 2, "every group must carry its own Source link"
+
+
+def test_notes_panel_renders_nothing_for_a_scenario_absent_from_tips():
+    """A scenario tips.json has never heard of - or a bare game with no
+    scenario at all (ui.scenarioSlug/ui.tips both null, newUi()'s default)
+    - renders no .notes markup, never an empty shell (R9: "a scenario
+    absent from tips renders no panel")."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const ui = newUi();
+ui.scenarioSlug = "some-other-quest";
+ui.tips = %s;
+const html = renderPane(new GameState(2, 25), ui);
+const bareHtml = renderPane(new GameState(2, 25), newUi());
+console.log(JSON.stringify({
+  hasNotes: html.includes('class="notes"'),
+  bareHasNotes: bareHtml.includes('class="notes"'),
+}));
+""" % _NOTES_FIXTURE)
+    assert not js["hasNotes"], "a scenario slug absent from tips must render no panel at all"
+    assert not js["bareHasNotes"], "a bare game with no scenario must render no panel at all"
