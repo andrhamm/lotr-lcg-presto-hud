@@ -81,5 +81,5 @@
 ## Done when
 
 - `python3 -m pytest tests/` green; `test_viewcopy.py` passes after the regeneration.
-- Browser at 1366×1024: New game shows Players / Cycles / Scenarios; Community toggles; picking a scenario opens the overview with the set icon, ladder, sets to gather with icons, stages with points (no `0` on condition stages), the own cards with counts, shared-set chips, notes with a working Source link; Begin setup starts the game at Quest Setup with the chosen difficulty logged in the "New game" line; during play, tapping the stage name opens the read-only overview and Close returns.
+- Browser at 1366×1024: New game shows Players / Cycles / Scenarios; Community toggles; picking a scenario opens the overview with the set icon, ladder, sets to gather with icons, stages with points (no `0` on condition stages), the own cards with counts, shared-set chips, notes with a working Source link; Begin setup starts the game at Quest Setup with the chosen difficulty in `game.scenario.mode` (the read-only overview's badge shows it); during play, tapping the stage name opens the read-only overview and Close returns.
 - The three-tap new game holds in the browser.

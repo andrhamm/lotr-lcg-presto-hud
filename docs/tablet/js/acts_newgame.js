@@ -2,9 +2,8 @@
 // toggle, the cycle list and the player-count/threat steppers. Split out the
 // same way every other screen's acts are (actions.js's dispatch() tries each
 // per-area handler in order, `handle` returning null for any act it does not
-// own) - these never
-// touch the network or create a game, which is what keeps pick_scenario/
-// begin_setup in app.js instead of here.
+// own) - these never touch the network or create a game, which is what
+// keeps pick_scenario/begin_setup in app.js instead of here.
 //
 // ng_players/ng_threat± are moved verbatim from app.js's old hand-rolled
 // `if` chain (task-2 brief) - app.js only ever wanted the async acts

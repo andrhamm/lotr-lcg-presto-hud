@@ -56,7 +56,7 @@ function scenarioRow(scn) {
   return h`<button type="button" class="scenario-row" data-act="pick_scenario" data-arg="${scn.slug}">
 <div class="scenario-head">${raw(setIcon(scn.name ?? "", 28))}<span class="body">${scn.name ?? ""}</span></div>
 <span class="body secondary">${scn.pack ?? ""}</span>
-<span class="label">${fmt(CHROME.stagesCount, scn.stageCount ?? 0)}</span>
+<span class="label">${(scn.stageCount ?? 0) === 1 ? CHROME.stagesCountOne : fmt(CHROME.stagesCount, scn.stageCount ?? 0)}</span>
 </button>`;
 }
 

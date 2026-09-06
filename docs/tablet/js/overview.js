@@ -68,7 +68,10 @@ function header(name, entry, stageCount) {
   // LABEL. Each piece is dropped when the catalog has nothing for it (a
   // minimal/synthetic index, or no entry at all) rather than leaving a
   // stranded separator.
-  const meta = [entry.pack, entry.cycle, stageCount ? fmt(CHROME.stagesCount, stageCount) : ""]
+  const stagesLabel = stageCount
+    ? (stageCount === 1 ? CHROME.stagesCountOne : fmt(CHROME.stagesCount, stageCount))
+    : "";
+  const meta = [entry.pack, entry.cycle, stagesLabel]
     .filter(Boolean).join(" · ");
   return h`<header class="ov-head">${raw(setIcon(name, 44))}
 <div class="ov-head-text"><h1 class="display">${name}</h1><p class="label">${meta}</p></div>

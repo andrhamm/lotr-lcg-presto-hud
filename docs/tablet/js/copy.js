@@ -19,6 +19,7 @@ export const CHROME = {
   cycles: "Cycles",
   scenarios: "Scenarios",
   stagesCount: "%s stages",
+  stagesCountOne: "1 stage",
   // The Scenario overview (Task 3, milestone 6) - its section headings, its
   // footer CTAs and the two templates its rows fill in. "Close" is the Game
   // Log screen's own key below (the read-only variant's footer says exactly
@@ -43,12 +44,15 @@ export const CHROME = {
   // (the same reason `filters.all` and `all` are two keys).
   cardTypes: { enemy: "Enemies", location: "Locations", treachery: "Treacheries",
                objective: "Objectives", other: "Other" },
-  // What a card prints, under its picture. The words are the game's own -
-  // Learn to Play uses "engagement cost" (Encounter phase, "Engagement
-  // Checks"), "attack", "defense" (US spelling, as FFG prints it; the parsed
-  // Rules Reference uses "defense" - 7 occurrences - and never "defence")
-  // and "Hit Points and Damage" (p.20). The VALUES are the card's own, never
-  // a default: a null field is left out of the line entirely.
+  // What a card prints, under its picture. The caption abbreviates the
+  // game's own stat names to one word each - Learn to Play calls this stat
+  // "engagement cost" (Encounter phase, "Engagement Checks"), but the
+  // shipped label is just "engagement %s"; "threat", "attack", "defense"
+  // (US spelling, as FFG prints it; the parsed Rules Reference uses
+  // "defense" - 7 occurrences - and never "defence") and "hit points"
+  // (Learn to Play's "Hit Points and Damage", p.20) print as the game names
+  // them. The VALUES are the card's own, never a default: a null field is
+  // left out of the line entirely.
   stats: { engagement: "engagement %s", threat: "threat %s", attack: "attack %s",
            defense: "defense %s", hitPoints: "hit points %s" },
   begin: "Begin",

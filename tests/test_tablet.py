@@ -712,6 +712,35 @@ console.log(JSON.stringify({ n: tags.length, allButtons: tags.every(t => t === "
     assert js["allButtons"]
 
 
+def test_stage_count_is_singular_for_one_stage_in_picker_and_overview():
+    """copy.js's stagesCount ("%s stages") printed the ungrammatical "1
+    stages" for the 8 catalog scenarios with exactly one stage. Both render
+    sites (newgame.js's scenarioRow, overview.js's header) now pick
+    stagesCountOne ("1 stage") when the count is 1."""
+    js = node(OV_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { renderNewGame } from "./newgame.js";
+import { renderOverview } from "./overview.js";
+const oneStageIndex = { scenarios: [
+  { slug: "one-stage", name: "One Stage Quest", pack: "P", cycle: "C1",
+    kind: "quest", source: "official", order: 1, stageCount: 1, releaseDate: "2011-01" },
+] };
+const pickerHtml = renderNewGame({ picker: { index: oneStageIndex, players: 2, threats: [25, 25] } });
+const ovHtml = renderOverview(new GameState(),
+  uiFor({ entry: { ...entry, stageCount: 1 } }));
+console.log(JSON.stringify({
+  singular: pickerHtml.includes("1 stage<"),
+  plural: pickerHtml.includes("1 stages"),
+  ovSingular: ovHtml.includes("1 stage<"),
+  ovPlural: ovHtml.includes("1 stages"),
+}));
+""")
+    assert js["singular"]
+    assert not js["plural"]
+    assert js["ovSingular"]
+    assert not js["ovPlural"]
+
+
 def test_a_new_game_is_at_most_three_taps_from_the_picker():
     """Spec R1 (the tap budget): a new game starting from the picker with
     Official source and first cycle preselected takes at most 3 taps to reach
@@ -732,7 +761,9 @@ const tap = (act, arg) => { taps.push(act); return dispatch(g, ui, act, arg ?? "
 tap("ng_cycle", "C1");          // Tap 1: cycle (even though preselected)
 const bundle = { stages: [{ id: 1 }], locations: [], tips: null };
 ui.overview = overviewFor(index, "o1a", bundle);  // Tap 2: pick_scenario (simulated)
+taps.push("pick_scenario");
 const meta = scenarioMetaFor(ui.overview.entry, ui.overview.difficulty);  // Tap 3: begin_setup (simulated)
+taps.push("begin_setup");
 const officialTaps = taps.length;
 
 // Reset for alep path
@@ -744,7 +775,9 @@ ui.picker.cycle = "C1";
 tap("ng_source", "alep");       // Tap 1: switch source
 tap("ng_cycle", "A1");          // Tap 2: cycle (A1 is first cycle of alep)
 ui.overview = overviewFor(index, "a1a", bundle);  // Tap 3: pick_scenario (simulated)
+taps.push("pick_scenario");
 const meta2 = scenarioMetaFor(ui.overview.entry, ui.overview.difficulty);  // Tap 4: begin_setup (simulated)
+taps.push("begin_setup");
 const alepTaps = taps.length;
 
 console.log(JSON.stringify({
@@ -753,8 +786,8 @@ console.log(JSON.stringify({
   mode2: meta2.mode, nightmare2: meta2.nightmare,
 }));
 """)
-    assert js["officialTaps"] <= 3, f"Official path should be at most 3 taps, got {js['officialTaps']}"
-    assert js["alepTaps"] <= 4, f"ALeP path should be at most 4 taps, got {js['alepTaps']}"
+    assert js["officialTaps"] == 3, f"Official path should be exactly 3 taps, got {js['officialTaps']}"
+    assert js["alepTaps"] == 4, f"ALeP path should be exactly 4 taps, got {js['alepTaps']}"
     assert js["mode"] == "Standard" and js["nightmare"] is False
     assert js["mode2"] == "Standard" and js["nightmare2"] is False
 
@@ -823,7 +856,7 @@ console.log(JSON.stringify({
 OV_FIXTURE = """
 const entry = { slug: "ov1", name: "Overview One", pack: "Pack P", cycle: "Cycle C",
   kind: "quest", source: "official", modes: ["Hard Mode"], hasNightmare: true,
-  stageCount: 3, maxCardThreat: 3, hasXThreat: false };
+  stageCount: 4, maxCardThreat: 3, hasXThreat: false };
 const index = { scenarios: [entry] };
 const bundle = {
   scenario: {
@@ -856,6 +889,8 @@ const bundle = {
     ] },
     { stage: 3, questPointsKind: "na", cards: [{ questPoints: 0, questPointsKind: "na",
         faces: [{ name: "The Last Stand", side: "A" }, { name: "Hold the Line", side: "B" }] }] },
+    { stage: 4, cards: [{ questPointsX: { text: "X is the number of players." },
+        faces: [{ name: "The Open Ground", side: "A" }, { name: "Many Foes", side: "B" }] }] },
   ],
   locations: [],
   tips: { ov1: { attribution: { name: "Vision of the Palantir", url: "https://example.invalid/ov1" },
@@ -933,9 +968,10 @@ def test_overview_stages_list_branch_alternatives_and_never_print_a_zero():
     """R7: one row per stage, named off the back face, with the points the
     card actually prints. A branch stage gets a row per alternative (23 of
     the catalog's 39 forks share one front name, which is why the back is
-    what names them), and a condition stage prints nothing at all - ~137 of
+    what names them), a condition stage prints nothing at all - ~137 of
     ~400 stage cards advance on a condition, and no stage card ever prints
-    a 0 (xshape.js's stagePointsShape)."""
+    a 0 (xshape.js's stagePointsShape) - and an X-shaped stage (questPointsX)
+    prints the card's own formula sentence as BODY prose, never a number."""
     js = node(OV_FIXTURE + r"""
 import { GameState } from "../../js/gamestate.js";
 import { renderOverview } from "./overview.js";
@@ -949,14 +985,17 @@ console.log(JSON.stringify({
   frontNamed: sect.includes(">Through the Marsh<"),
   points: [...sect.matchAll(/(\d+) quest points/g)].map(m => m[1]),
   lastStage: /Stage 3<\/span>([\s\S]*?)<\/div>/.exec(sect)?.[1] ?? "",
+  xStage: /Stage 4<\/span>([\s\S]*?)<\/div>/.exec(sect)?.[1] ?? "",
 }));
 """)
-    assert js["labels"] == ["1", "2", "3"]
+    assert js["labels"] == ["1", "2", "3", "4"]
     assert js["hasLeft"] and js["hasRight"]
     assert not js["frontNamed"]                 # named off the BACK face
     assert js["points"] == ["8", "13", "13"]    # the condition stage adds none
     assert "Hold the Line" in js["lastStage"]
     assert "0" not in js["lastStage"].replace("Hold the Line", "")
+    assert '<p class="body">X is the number of players.</p>' in js["xStage"]
+    assert not any(ch.isdigit() for ch in js["xStage"].replace("Many Foes", ""))
 
 
 def test_overview_cards_are_the_scenarios_own_set_with_counts_and_printed_values():

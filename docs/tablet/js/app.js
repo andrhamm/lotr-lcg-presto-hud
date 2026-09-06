@@ -82,13 +82,15 @@ async function buildPicker() {
 }
 
 // Warm the image cache for the scenario the players just committed to (Task
-// 6): every card db.bundle() pins, in one message, while they are still
-// laying out heroes. Fired from begin_setup, not pick_scenario - the spec
-// says "Begin setup prefetches", and milestone 6's Task 2 split the one act
-// in two: picking now only OPENS the Scenario overview, which a player may
-// well back out of to read another quest. Prefetching there spent the
-// bandwidth on every scenario browsed rather than the one committed to
-// (M5 final review). Fire-and-forget by design - there is no controller at
+// 6): the whole bundle db.bundle() pins - the scenario's own set AND every
+// set it gathers, not only the own-set cards the overview's Cards grid
+// shows - in one message, while they are still laying out heroes. Fired
+// from begin_setup, not pick_scenario - the spec says "Begin setup
+// prefetches", and milestone 6's Task 2 split the one act in two: picking
+// now only OPENS the Scenario overview, which a player may well back out of
+// to read another quest. Prefetching there spent the bandwidth on every
+// scenario browsed rather than the one committed to (M5 final review).
+// Fire-and-forget by design - there is no controller at
 // all on the very first load (the worker activates after this page did), the
 // browser may have no service workers, and a failure here costs a hotlink on
 // the first location picker, never a tap. Nothing awaits it.
@@ -183,11 +185,10 @@ async function handleAct(act, arg) {
   }
   if (act === "pick_scenario") {
     // Milestone 6 (Task 2): picking a scenario no longer starts the game -
-    // it opens the Scenario overview (Task 3 renders it; layout.js carries
-    // a placeholder until then) so the player sees the difficulty ladder,
-    // stages and cards before committing. ng_players/ng_threat± moved out
-    // to acts_newgame.js (ui-only, ui.picker edits) - this stays here
-    // because it awaits db.bundle().
+    // it opens the Scenario overview so the player sees the difficulty
+    // ladder, stages and cards before committing. ng_players/ng_threat±
+    // moved out to acts_newgame.js (ui-only, ui.picker edits) - this stays
+    // here because it awaits db.bundle().
     const slug = arg;
     const b = await db.bundle(slug);
     const overview = overviewFor(ui.picker.index, slug, b);
@@ -264,10 +265,10 @@ async function handleAct(act, arg) {
     // The picker's own edits (ng_source/ng_cycle/ng_players/ng_threat±,
     // acts_newgame.js) and the Scenario overview's (ov_difficulty/ov_back/
     // ov_close, acts_overview.js) are ui-only - they never touch `game` at
-    // all. They must NOT go through perform()/
-    // db.session.record(): `game` here can still be the PREVIOUS,
-    // already-finished GameState ("new_game" clears the session but does
-    // not rebind `game` - only begin_setup does), and a queued write tagged
+    // all. They must NOT go through perform()/db.session.record(): `game`
+    // here can still be the PREVIOUS, already-finished GameState ("new_game"
+    // clears the session but does not rebind `game` - only begin_setup
+    // does), and a queued write tagged
     // to it would resurrect a save the player just asked to leave behind
     // (CLAUDE.md's "the queue is tagged with its game object" hazard - a
     // rebind is what is supposed to drop it, and none has happened yet).
