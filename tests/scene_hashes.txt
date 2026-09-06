@@ -38,8 +38,8 @@ play_aw_quest_staging 103f082d9987d028
 play_aw_refresh cd00b3f9e7144e7c
 play_aw_resource 915c5a3d02c9604e
 play_aw_travel 056c7190d0151aa1
-play_combat_enemy 641d3af3949fcdc5
-play_combat_enemy_can_back 641d3af3949fcdc5
+play_combat_enemy bea916753f6e3189
+play_combat_enemy_can_back bea916753f6e3189
 play_combat_player 0a3098e06e4b6184
 play_combat_shadow eacd1b4866a79576
 play_enc_checks c5e33465c5c800d5
@@ -105,7 +105,7 @@ scenario_options_dropdown c2fd2046e2b5b7cd
 scenario_options_easy e009e9a79596bd96
 scenario_options_icons ff18cc227be17623
 scenario_options_long_pack 665c9560c4e426fc
-scenario_options_nm 81b43cd77ee8ec29
+scenario_options_nm a3daaceeb54c8035
 scenario_options_no_enrichment e1136a1e72a4721a
 scenario_options_std 4bdc94390a74520e
 scenario_source eb5d1dee689ba1ff

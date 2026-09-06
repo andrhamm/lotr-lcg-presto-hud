@@ -198,12 +198,12 @@ LOOP_FLOW = {
         ],
         "exit": "Repeat until no eligible enemies remain",
         # Trimmed to two lines: a third ran the view past the nav rule. The
-        # half that survives is the non-obvious one - defence reduces damage
+        # half that survives is the non-obvious one - defense reduces damage
         # everywhere else in the game, and here it does not.
         #
         # States what the rules do to you, not what to do about it: framework.
         "note_kind": "framework",
-        "note": "Undefended: all damage hits one hero, and defence does not "
+        "note": "Undefended: all damage hits one hero, and defense does not "
                 "reduce it.",
     },
     "combat_player": {
@@ -503,7 +503,7 @@ PROGRESS_PLACEMENT = ("Progress fills the active location first, then the "
 MODE_TIPS = {
     "Easy": "Easy: add 1 resource to each hero at setup, and remove every "
             "encounter card with a gold-bordered set icon.",
-    "Nightmare": "Nightmare: a separately sold deck: remove the cards its "
+    "Nightmare": "Nightmare: a separately sold deck. Remove the cards its "
                  "setup card lists, then shuffle it into the rest.",
 }
 

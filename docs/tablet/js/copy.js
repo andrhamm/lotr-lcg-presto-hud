@@ -45,10 +45,10 @@ export const CHROME = {
                objective: "Objectives", other: "Other" },
   // What a card prints, under its picture. The words are the game's own -
   // Learn to Play uses "engagement cost" (Encounter phase, "Engagement
-  // Checks"), "attack", "defense" (US spelling, as FFG prints it; the Rules
-  // Reference has 359 "defense" and no "defence") and "Hit Points and
-  // Damage" (p.20). The VALUES are the card's own, never a default: a null
-  // field is left out of the line entirely.
+  // Checks"), "attack", "defense" (US spelling, as FFG prints it; the parsed
+  // Rules Reference uses "defense" - 7 occurrences - and never "defence")
+  // and "Hit Points and Damage" (p.20). The VALUES are the card's own, never
+  // a default: a null field is left out of the line entirely.
   stats: { engagement: "engagement %s", threat: "threat %s", attack: "attack %s",
            defense: "defense %s", hitPoints: "hit points %s" },
   begin: "Begin",
