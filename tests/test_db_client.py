@@ -67,6 +67,26 @@ def test_data_client_rules_text_returns_none_when_absent(tmp_path, monkeypatch):
     assert client.rules_text() is None
 
 
+def test_data_client_rules_text_caches_miss_on_absent(tmp_path, monkeypatch):
+    """Calling twice with missing file should cache the miss, not re-read."""
+    monkeypatch.setattr(quest_catalog, "RULES_TEXT_PATH",
+                         str(tmp_path / "missing.json"))
+    calls = []
+    real_load = quest_catalog.load_rules_text()
+
+    def counting_load():
+        calls.append(1)
+        return real_load
+    monkeypatch.setattr(quest_catalog, "load_rules_text", counting_load)
+
+    client = db.DataClient()
+    first = client.rules_text()
+    second = client.rules_text()
+    assert first is None
+    assert second is None
+    assert len(calls) == 1        # second call hit the pinned cache
+
+
 def test_data_client_rules_text_caches_after_first_call(tmp_path, monkeypatch):
     path = tmp_path / "rules_text.json"
     path.write_text(json.dumps(RULES_FIXTURE))
@@ -102,18 +122,22 @@ globalThis.fetch = async (url) => {
 };
 const { DataClient } = await import("./db.js");
 
-const clientA = new DataClient();
-const missResult = await clientA.rulesText();
-const countAfterMiss = rulesFetchCount;
+// Test 1: Two calls on same client with missing file - should cache miss
+const clientMiss = new DataClient();
+const missFirst = await clientMiss.rulesText();
+const countAfterFirstMiss = rulesFetchCount;
+const missSecond = await clientMiss.rulesText();
+const countAfterSecondMiss = rulesFetchCount;
 
 rulesFetchCount = 0;
 mode = "ok";
-const clientB = new DataClient();
-const first = await clientB.rulesText();
-const second = await clientB.rulesText();
+// Test 2: Two calls on same client with present file - should cache hit
+const clientHit = new DataClient();
+const first = await clientHit.rulesText();
+const second = await clientHit.rulesText();
 
 console.log(JSON.stringify({
-  missResult, countAfterMiss,
+  missFirst, missSecond, countAfterFirstMiss, countAfterSecondMiss,
   first, second, countAfterTwoCalls: rulesFetchCount,
 }));
 """ % json.dumps(RULES_FIXTURE)
@@ -142,9 +166,12 @@ def js():
     return _run_js_probe()
 
 
-def test_js_rules_text_returns_null_on_404(js):
-    assert js["missResult"] is None
-    assert js["countAfterMiss"] == 1
+def test_js_rules_text_caches_miss_on_404(js):
+    assert js["missFirst"] is None
+    assert js["countAfterFirstMiss"] == 1
+    assert js["missSecond"] is None
+    # Two calls to rulesText() with 404, one fetch - the second hit the pinned cache.
+    assert js["countAfterSecondMiss"] == 1
 
 
 def test_js_rules_text_returns_parsed_body_and_caches(js):

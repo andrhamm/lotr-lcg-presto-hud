@@ -219,7 +219,7 @@ export class DataClient {
     this._index = null;
     this._icons = null;
     this._tips = null;
-    this._rules = null;
+    this._rulesText = undefined;
     this._sideQuests = null;
     this._bundles = {};
     this.keys = storageKeys(prefix);
@@ -281,8 +281,8 @@ export class DataClient {
   }
 
   async rulesText() {
-    if (this._rules === null) this._rules = await loadRulesText();
-    return this._rules;
+    if (this._rulesText === undefined) this._rulesText = await loadRulesText();
+    return this._rulesText;
   }
 
   releaseGame() { this._bundles = {}; }

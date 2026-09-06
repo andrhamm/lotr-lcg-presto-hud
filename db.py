@@ -50,6 +50,9 @@ ROLLUP_PATH = "/stats.json"     # precomputed aggregates over history
 
 DEFAULT_PREFS = {"brightness": 100, "scene": "phase"}
 
+# Sentinel for "not yet loaded" to distinguish from a loaded None (miss).
+_UNSET = object()
+
 
 # -- framing -----------------------------------------------------------------
 # 2-byte little-endian length, then the payload. Shared by every append-only
@@ -409,7 +412,7 @@ class DataClient:
         self._index = None         # index-shaped view, pinned
         self._icons = None         # pinned (38 KB, used across screens)
         self._tips = None          # pinned
-        self._rules_text = None    # pinned
+        self._rules_text = _UNSET  # pinned; None is a valid miss
         self._side_quests = None   # pinned - was re-read on EVERY tap
         self._bundles = {}         # slug -> scenario bundle, pinned per game
         self.session = Session()
@@ -489,7 +492,7 @@ class DataClient:
         return self._tips
 
     def rules_text(self):
-        if self._rules_text is None:
+        if self._rules_text is _UNSET:
             self._rules_text = quest_catalog.load_rules_text()
         return self._rules_text
 
