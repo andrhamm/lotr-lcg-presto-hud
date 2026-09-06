@@ -33,17 +33,13 @@ export function cta({ act, arg = "", label, tone = "ok", grow = true }) {
 // undo/redo pair, or a fixed availability check for first/last: when false
 // there is nowhere to move.
 //
-// Two shapes for that off state, and the difference is the surface. On the
-// strip the control sits among live play controls, so it drops to an inert,
-// unbevelled <span> - nothing for app.js's delegation to catch, exactly like
-// .step-off above. On the Game Log the transport IS the screen's instrument:
-// each glyph's act is what names it, so `keepAct` keeps the <button> and
-// marks it `disabled` instead. A disabled button fires no click event at
-// all, so delegation still never sees it - same "not a tap target" property,
-// written the way HTML already has a word for.
-export function transportButton({ act, glyph, on, title, keepAct = false }) {
+// ONE off state, on both surfaces: an inert, unbevelled <span> carrying no
+// data-act - nothing for app.js's delegation to catch, exactly like .step-off
+// above, and the same shape the log screen's own Rewind CTA uses when no row
+// is selected. A `disabled` <button> that kept its act was tried on the log
+// screen and dropped in the milestone-4 fix wave: it is a second way to say
+// the same thing, and the bevel is the client's one signal for "tappable".
+export function transportButton({ act, glyph, on, title }) {
   if (on) return h`<button type="button" class="tbtn" data-act="${act}" title="${title}">${glyph}</button>`;
-  return keepAct
-    ? h`<button type="button" class="tbtn is-off" data-act="${act}" title="${title}" disabled>${glyph}</button>`
-    : h`<span class="tbtn is-off" title="${title}">${glyph}</span>`;
+  return h`<span class="tbtn is-off" title="${title}">${glyph}</span>`;
 }

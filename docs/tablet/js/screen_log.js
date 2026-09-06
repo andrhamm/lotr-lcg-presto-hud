@@ -9,23 +9,12 @@
 import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta, transportButton } from "./primitives.js";
-import { FILTERS, matches } from "./logfilter.js";
+// isUndone/isRewindable live in logfilter.js with the filters - the rail and
+// acts_log.js ask the same two questions, and one answer means the button
+// this screen offers and the act that answers it can never disagree about
+// which rows are targets.
+import { FILTERS, matches, isUndone, isRewindable } from "./logfilter.js";
 import { fmtMs } from "../../js/gamestate.js";
-
-// The two things a row can be, written once. acts_log.js imports isRewindable
-// for "Rewind to selected line" so the button the screen offers and the act
-// that answers it can never disagree about which rows are targets.
-//
-// Undone: the row belongs to a redo future the cursor has stepped back past -
-// still in the log, greyed, until an edit truncates it (gamestate.js's
-// addDelta). Rewindable: it carries a delta index that is still in the
-// window - delta_i can go NEGATIVE after the MAX_SAVED_DELTAS front-trim
-// (gamestate.js "may go negative: not a target"), which is exactly the row
-// whose delta the journal no longer holds.
-export const isUndone = (game, e) =>
-  typeof e.delta_i === "number" && e.delta_i > game.replay_step;
-export const isRewindable = (game, e) =>
-  typeof e.delta_i === "number" && e.delta_i >= 0 && e.delta_i < game.deltas.length;
 
 // One row. Rewindable rows are bevelled <button>s because they are tappable -
 // the HUD's one chrome rule (primitives.js); a row with nowhere to rewind to
@@ -50,12 +39,12 @@ function renderFilters(log) {
 }
 
 // Six controls, where the strip carries four: the log screen is where a
-// player goes to move by ROUND, so ◀◀ / ▶▶ are here and nowhere else.
-// keepAct: an unavailable control here stays a (disabled) button rather than
-// collapsing to a span - see primitives.js's transportButton.
+// player goes to move by ROUND, so ◀◀ / ▶▶ are here and nowhere else. An
+// unavailable one drops to the same inert, unbevelled span the strip uses -
+// one off state for the whole client (see primitives.js's transportButton).
 function renderTransport(game) {
   const back = game.canUndo(), fwd = game.canRedo();
-  const b = (act, glyph, on, title) => transportButton({ act, glyph, on, title, keepAct: true });
+  const b = (act, glyph, on, title) => transportButton({ act, glyph, on, title });
   const controls = b("rw_first", "⏮", back, CHROME.rwFirst)
     + b("rw_round_back", "◀◀", back, CHROME.rwRoundBack)
     + b("rw_undo", "◀", back, CHROME.rwUndo)
@@ -85,7 +74,9 @@ function renderRounds(game) {
   }
   const items = rounds.map(r => {
     const span = r.from === null ? "" : h` · ${fmtMs(r.from)}–${fmtMs(r.to)}`;
-    return h`<li class="body">${fmt(CHROME.roundLine, r.round, r.n)}${raw(span)}</li>`;
+    const line = r.n === 1 ? fmt(CHROME.roundLineOne, r.round)
+                           : fmt(CHROME.roundLine, r.round, r.n);
+    return h`<li class="body">${line}${raw(span)}</li>`;
   }).join("");
   return items;
 }
@@ -106,8 +97,12 @@ export function renderLogScreen(game, ui) {
   // caller that renders the screen without either (a test, a resumed save
   // written by an older build), not a state the app reaches.
   const log = ui.log ?? { filter: "all", sel: null };
-  const rows = game.log.filter(e => matches(log.filter, e))
-    .map(e => renderRow(game, log, e)).join("");
+  const kept = game.log.filter(e => matches(log.filter, e));
+  // A filter that matches nothing renders one sentence rather than a blank
+  // column: an empty list and a broken screen look identical otherwise.
+  const rows = kept.length
+    ? kept.map(e => renderRow(game, log, e)).join("")
+    : h`<li><p class="body secondary">${CHROME.logEmptyFilter}</p></li>`;
 
   // The CTA is live only while the selected row is a rewind target. With no
   // selection it is an inert, unbevelled span carrying no data-act at all -

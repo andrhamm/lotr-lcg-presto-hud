@@ -2266,14 +2266,24 @@ perform(g, ui, "advance", "");                    // Phase: Planning? (phase cha
 perform(g, ui, "stg+", "");                       // Staging area threat 1
 perform(g, ui, "all_thr", "1");                   // All players threat +1
 g.setWillpower(4); g.setStaging(0);
+const before = g.log.filter(e => matches("skips", e)).map(e => e.text);
+// A real skip, taken the way a player takes one: the encounter step is where
+// skipsFrom() offers "No enemies. Skip combat." under the bands policy, and
+// acts_play.js's `skip` act is what the offer's button carries.
+g.view = "enc_checks";
+const offer = g.skipOffer();
+const took = perform(g, ui, "skip", offer.skip.id);
 const byFilter = {};
 for (const f of ["all","threat","quest","phases","skips"]) byFilter[f] = g.log.filter(e => matches(f, e)).map(e => e.text);
-console.log(JSON.stringify(byFilter));
+console.log(JSON.stringify({ ...byFilter, before, took, offered: offer.skip.id, view: g.view }));
 """)
     assert any(t.startswith("All players threat") for t in js["threat"])
     assert any(t.startswith("Staging area threat") for t in js["threat"])
     assert all(t.startswith("Phase:") for t in js["phases"]) and js["phases"]
-    assert js["skips"] == []
+    assert js["before"] == [], "nothing was skipped before the skip"
+    assert js["took"] is True and js["offered"] == "combat_empty"
+    assert len(js["skips"]) == 1 and js["skips"][0].startswith("Skipped ")
+    assert js["skips"][0] in js["all"]
     assert len(js["all"]) >= len(js["threat"])
 
 
@@ -2303,7 +2313,13 @@ console.log(JSON.stringify({
   openChip: /data-act="open_log"/.test(rail),
   isLogScreen: /class="logscreen"/.test(opened) && !/class="strip"/.test(opened),
   filters: ["all","threat","quest","phases","skips"].every(f => opened.includes(`data-arg="${f}"`)),
-  transport6: ["rw_first","rw_round_back","rw_undo","rw_redo","rw_round_fwd","rw_last"].every(a => opened.includes(`data-act="${a}"`)),
+  transport6: (opened.match(/class="tbtn/g) || []).length,
+  // Available controls are <button>s with an act; unavailable ones are the
+  // inert span the strip uses - same off state on both surfaces (C2).
+  transportOn: ["rw_first","rw_round_back","rw_undo"].every(a => opened.includes(`data-act="${a}"`)),
+  transportOffActs: ["rw_redo","rw_round_fwd","rw_last"].some(a => opened.includes(`data-act="${a}"`)),
+  transportOffSpans: (opened.match(/<span class="tbtn is-off"/g) || []).length,
+  transportDisabled: /disabled/.test(opened),
   undoneCount: (afterUndo.match(/is-undone/g) || []).length,
   rewindOff: /class="cta[^"]*is-off[^"]*"[^>]*data-act="log_rewind"/.test(afterUndo) || !/data-act="log_rewind"/.test(afterUndo),
   rewindOn: /data-act="log_rewind"/.test(selected) && /is-sel/.test(selected),
@@ -2311,7 +2327,13 @@ console.log(JSON.stringify({
   sidePanel: /class="log-side"/.test(opened), export: /data-act="export_log"/.test(opened),
 }));
 """)
-    assert js["openChip"] and js["isLogScreen"] and js["filters"] and js["transport6"]
+    assert js["openChip"] and js["isLogScreen"] and js["filters"]
+    # Six controls, always: three live (the cursor is at the end of history,
+    # so only the backward half has anywhere to go) and three inert spans
+    # carrying no act at all.
+    assert js["transport6"] == 6
+    assert js["transportOn"] and js["transportOffActs"] is False
+    assert js["transportOffSpans"] == 3 and js["transportDisabled"] is False
     assert js["undoneCount"] >= 1                     # the advance's row(s) greyed after the undos
     assert js["rewindOff"] and js["rewindOn"]
     assert js["rewound"] is True and js["step"] == 1 and js["staging"] == 2
@@ -2332,6 +2354,90 @@ console.log(JSON.stringify({ text: logText(g), hasTextarea: /<textarea[^>]*reado
 """)
     assert "Staging area threat 1" in js["text"] and js["text"].startswith("R1.")
     assert js["hasTextarea"] and js["hasCopy"] and js["inHtml"]
+
+
+def test_a_filter_that_matches_nothing_says_so():
+    """An empty filtered list and a broken screen look identical - one
+    sentence tells them apart. Driven with the Skips filter on a game that
+    never skipped anything, which is the reachable case (the transport, the
+    filter row and the side panel all still render)."""
+    js = node("""
+import { GameState } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+import { layout } from "./layout.js";
+import { CHROME } from "./copy.js";
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "stg+", ""); perform(g, ui, "open_log", "");
+const all = layout(g, ui);
+const changed = perform(g, ui, "log_filter", "skips");
+const empty = layout(g, ui);
+console.log(JSON.stringify({
+  changed, copy: CHROME.logEmptyFilter,
+  allHasRows: /data-act="log_sel"/.test(all), allHasCopy: all.includes(CHROME.logEmptyFilter),
+  emptyHasRows: /data-act="log_sel"/.test(empty), emptyHasCopy: empty.includes(CHROME.logEmptyFilter),
+  emptySentence: /<p class="body secondary">No lines match this filter\\.<\\/p>/.test(empty),
+  stillHasTransport: /class="transport"/.test(empty) && /class="log-side"/.test(empty),
+}));
+""")
+    assert js["changed"] is True and js["copy"] == "No lines match this filter."
+    assert js["allHasRows"] and not js["allHasCopy"]
+    assert not js["emptyHasRows"] and js["emptyHasCopy"] and js["emptySentence"]
+    assert js["stillHasTransport"]
+
+
+def test_log_filter_through_dispatch_validates_its_arg_and_resets_the_selection():
+    """The act, not the renderer: a valid filter changes ui.log.filter and
+    drops the selection (a row chosen under All may not be on screen under
+    Phases); the same filter again is a no-op, so app.js does not re-render or
+    journal one; an arg that is not in FILTERS changes nothing at all."""
+    js = node("""
+import { GameState } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "stg+", ""); perform(g, ui, "open_log", "");
+const row = g.log.find(e => typeof e.delta_i === "number");
+perform(g, ui, "log_sel", String(row.seq));
+const selBefore = ui.log.sel;
+const first = perform(g, ui, "log_filter", "phases");
+const after = { ...ui.log };
+const again = perform(g, ui, "log_filter", "phases");
+const bogus = perform(g, ui, "log_filter", "nonsense");
+console.log(JSON.stringify({ selBefore, first, after, again, bogus, end: { ...ui.log } }));
+""")
+    assert js["selBefore"] is not None
+    assert js["first"] is True and js["after"] == {"filter": "phases", "sel": None}
+    assert js["again"] is False, "the filter is already this one - nothing changed"
+    assert js["bogus"] is False and js["end"] == {"filter": "phases", "sel": None}
+
+
+def test_the_export_textarea_escapes_each_character_exactly_once():
+    """The export sheet interpolates logText() into a <textarea> through h``,
+    which escapes it once - and only once. A second pass (a nested h`` landing
+    in an outer template as a plain string, the bug test_no_nested_h_without_
+    raw scans for) would ship "&amp;gt;" and the player would copy that."""
+    js = node("""
+import { GameState } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+import { layout } from "./layout.js";
+import { logText } from "./logfilter.js";
+const g = new GameState(2); g.view = "travel"; const ui = newUi();
+// A location name a player typed, then a change: "Changed active location
+// (Web & <Spiders> at 0/2 discarded) -> Deep Marsh (3 quest points)" carries
+// all three characters in one real log line.
+let s = g.beginAction(); g.travelTo(2, 0, "Web & <Spiders>"); g.addDelta(s);
+s = g.beginAction(); g.changeLocation(3, 0, "Deep Marsh"); g.addDelta(s);
+perform(g, ui, "open_log", ""); perform(g, ui, "export_log", "");
+const html = layout(g, ui);
+const area = html.match(/<textarea[^>]*>([\\s\\S]*?)<\\/textarea>/)[1];
+console.log(JSON.stringify({
+  plain: logText(g).includes("(Web & <Spiders> at 0/2 discarded) -> Deep Marsh"),
+  area, ok: area.includes("(Web &amp; &lt;Spiders&gt; at 0/2 discarded) -&gt; Deep Marsh"),
+  doubled: /&amp;(gt|lt|amp);/.test(area),
+}));
+""")
+    assert js["plain"], "the model wrote the line the export is meant to carry"
+    assert js["ok"], js["area"]
+    assert js["doubled"] is False, "escaped twice: " + js["area"]
 
 
 def test_log_rewind_with_no_selection_does_nothing():

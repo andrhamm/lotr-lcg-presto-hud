@@ -179,17 +179,40 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
    LABEL to a 44px row when "Open ›" landed in it (milestone 4), and the rail
    is a fixed 1024px column with three sized zones above. The block keeps its
    four rows and its view prompt - the 31px the header cost is paid back out
-   of this block's own spacing and .column's gap, not out of a row. */
-.log-block { margin-top: auto; display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
+   of this block's own spacing and .column's gap, not out of a row.
+
+   And it is the column's one flexible member (milestone 4 fix wave): the
+   three zones are sized by their content, so on a crowded rail - three
+   players, an eliminated one, a stage name AND an active location - the
+   column ran 63px over at 1366x1024 and .column's overflow:hidden cut off
+   exactly the bottom, which is the prompt row naming the current view.
+   min-height:0 is what lets this block shrink below its content (a flex
+   item's default min-height:auto forbade it, which is why the column
+   overflowed instead), and .log-rows-clip absorbs every pixel of that
+   shrink: the block goes 188 -> 125px and its rows area 109 -> 46px.
+
+   Shrink-only (0 1) with the margin still pinning it, NOT grow-and-shrink:
+   growing would fill the slack an uncrowded rail has, which measures 146px
+   with 2 players and no location - a gap between this block's header and the
+   lines it names, and its rule line drifting up under STAGING. The ruling
+   asked for the flexible member; the grow half of it buys nothing here,
+   because there is nothing above the rows that wants the space. */
+.log-block { margin-top: auto; flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
 /* The block's name plus its one tap target, "Open ›" (milestone 4). Same
    shape and same reason as .zone-head above: a 30px header-nav chip is
    allowed only inside a row that itself clears the 44px floor. */
-.log-head-row { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.log-head-row { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .log-head-row .chip { margin-left: auto; }
-.log-row { display: flex; gap: 8px; align-items: baseline; }
+/* rail.js always renders four rows; this decides how many are SEEN. It
+   clips from the top - flex-end keeps the newest rows and the prompt row
+   glued to the bottom of the block - so what a crowded rail costs is the
+   oldest line, which is also the least useful one. */
+.log-rows-clip { flex: 1 1 auto; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; }
+.log-row { flex: 0 0 auto; display: flex; gap: 8px; align-items: baseline; }
 .log-time { flex: 0 0 auto; width: 44px; font: 600 13px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--dim); }
 .log-text { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; color: var(--muted); }
-.log-prompt { font: 600 18px/1.2 var(--serif); color: var(--gold); }
+.log-prompt { flex: 0 0 auto; font: 600 18px/1.2 var(--serif); color: var(--gold); }
 /* A line the replay cursor has stepped back past - the same greying the log
    screen's own rows use, so the two surfaces agree at a glance. */
 .log-row.is-undone { opacity: .45; }

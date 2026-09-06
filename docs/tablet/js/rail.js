@@ -8,6 +8,7 @@
 import { h, raw, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, zone } from "./primitives.js";
+import { isUndone } from "./logfilter.js";
 import { faceOf } from "./cards.js";
 import { fmtMs } from "../../js/gamestate.js";
 import { VIEW_LABELS } from "../../js/viewcopy.js";
@@ -145,20 +146,24 @@ function renderStagingZone(game) {
 // in a 44px row that carries the tap-target floor for it.
 //
 // A row whose delta the cursor has stepped back past is greyed here exactly
-// as it is on the log screen (.is-undone): the rail shows the last four
-// lines, and after an undo some of them describe a state the game is no
-// longer in.
+// as it is on the log screen - one predicate, logfilter.js's isUndone: the
+// rail shows the last four lines, and after an undo some of them describe a
+// state the game is no longer in.
+//
+// Four rows are always RENDERED; the CSS decides how many are seen. The rows
+// sit in their own container that clips from the top (.log-rows-clip), so on
+// a crowded rail - three players, an eliminated one, a stage name and an
+// active location - the oldest line is what goes, never the prompt row.
 function renderLogBlock(game) {
   const rows = game.log.slice(-4).map(e => {
     const time = typeof e.t === "number" ? fmtMs(e.t) : "";
-    const undone = typeof e.delta_i === "number" && e.delta_i > game.replay_step;
-    return h`<div class="${cx("log-row", undone && "is-undone")}"><span class="log-time">${time}</span><span class="log-text">${e.text}</span></div>`;
+    return h`<div class="${cx("log-row", isUndone(game, e) && "is-undone")}"><span class="log-time">${time}</span><span class="log-text">${e.text}</span></div>`;
   }).join("");
   const prompt = VIEW_LABELS[game.view] ?? game.view;
   const openChip = chip({ act: "open_log", label: h`${CHROME.open} ›`, tone: "tan", height: 30 });
   return h`<div class="log-block">
 <div class="log-head-row"><span class="label">${CHROME.log}</span>${raw(openChip)}</div>
-${raw(rows)}
+<div class="log-rows-clip">${raw(rows)}</div>
 <div class="log-prompt">&#9654; ${prompt}</div>
 </div>`;
 }

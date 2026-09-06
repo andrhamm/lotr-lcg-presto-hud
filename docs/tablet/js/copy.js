@@ -213,4 +213,6 @@ export const CHROME = {
   rewindExplain2: "Lines after that moment stay in the log, greyed, and Forward brings them back.",
   rewindExplain3: "The next edit you make from a rewound position drops the greyed lines for good.",
   roundLine: "Round %s · %s lines",
+  roundLineOne: "Round %s · 1 line",
+  logEmptyFilter: "No lines match this filter.",
 };

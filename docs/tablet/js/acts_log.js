@@ -6,8 +6,7 @@
 // forgotten here.
 import { afterTap } from "./actions.js";
 import { rewindToIndex } from "./acts_transport.js";
-import { FILTERS } from "./logfilter.js";
-import { isRewindable } from "./screen_log.js";
+import { FILTERS, isRewindable } from "./logfilter.js";
 
 export function handle(game, ui, act, arg) {
   if (act === "open_log") {

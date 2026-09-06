@@ -15,9 +15,11 @@ function cursorMoved(ui) {
   if (ui.screen !== "log") ui.sheet = null;
 }
 
-// A cursor move to a KNOWN index: rw_index, the strip's tick taps, and
-// acts_log.js's log_rewind all land here, so the bounds check and the ui
-// reset are written once rather than once per caller (task-3 ruling).
+// A cursor move to a KNOWN index: the strip's tick taps and acts_log.js's
+// log_rewind both land here, so the bounds check and the ui reset are written
+// once rather than once per caller (task-3 ruling). Not an act of its own -
+// an "rw_index" act existed briefly and nothing ever emitted it, because a
+// delta index is not something a rendered button knows to name.
 // index -1 is the valid "before the first delta" position, not a miss.
 export function rewindToIndex(game, ui, i) {
   const moved = Number.isInteger(i) && i >= -1 && i < game.deltas.length
@@ -27,7 +29,6 @@ export function rewindToIndex(game, ui, i) {
 }
 
 export function handle(game, ui, act, arg) {
-  if (act === "rw_index") return rewindToIndex(game, ui, Number.parseInt(arg, 10));
   if (act === "rw_tick") {
     // deltaIndexForView returns -1 for "no delta entered that view this
     // round", which is a MISS here, not a jump to the start of history -
