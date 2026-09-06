@@ -2167,3 +2167,42 @@ console.log(JSON.stringify({ moved, inert, step: g.replay_step, staging: g.stagi
     assert js["moved"] is True and js["inert"] is False
     assert js == {**js, "step": 0, "staging": 0, "view": "planning"}
     assert js["planningIsButton"] and js["futureIsNotButton"] and js["transport"] and js["readout"]
+
+
+def test_round_granularity_transport_crosses_a_round_boundary():
+    """rw_round_back / rw_round_fwd move the cursor a WHOLE round, not a tap:
+    the two acts that the strip's four-button transport does not expose but
+    the Game Log's six-control one does. Two rounds are driven under the
+    bands window policy (the client's own, app.js), with taps on both sides
+    of the boundary so a whole-round move has somewhere to land."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "stg+", "");
+perform(g, ui, "advance", "");
+perform(g, ui, "endround", "");          // round 1 -> 2
+perform(g, ui, "stg+", "");
+const atEnd = { round: g.round, step: g.replay_step };
+const back = perform(g, ui, "rw_round_back", "");
+const afterBack = { round: g.round, step: g.replay_step };
+const fwd = perform(g, ui, "rw_round_fwd", "");
+const afterFwd = { round: g.round, step: g.replay_step };
+while (perform(g, ui, "rw_round_fwd", ""));   // run the cursor to the end
+const noMore = perform(g, ui, "rw_round_fwd", "");
+console.log(JSON.stringify({ atEnd, back, afterBack, fwd, afterFwd, noMore,
+  step: g.replay_step, n: g.deltas.length, staging: g.staging }));
+""")
+    assert js["atEnd"]["round"] == 2
+    assert js["back"] is True
+    assert js["afterBack"]["round"] == 1, "one round back lands in round 1"
+    assert js["afterBack"]["step"] < js["atEnd"]["step"]
+    # Forward-by-round lands on the FIRST delta of round 2, not the last one:
+    # applyDeltasUntilRoundChange stops at the change, it does not run the
+    # round out. Round 2 is back, the cursor is ahead of where the back-step
+    # left it, and a second forward move finds no further boundary.
+    assert js["fwd"] is True and js["afterFwd"]["round"] == 2
+    assert js["afterBack"]["step"] < js["afterFwd"]["step"] <= js["atEnd"]["step"]
+    assert js["noMore"] is False, "at the last delta - nowhere forward to go"
+    assert js["step"] == js["atEnd"]["step"] and js["staging"] == 2

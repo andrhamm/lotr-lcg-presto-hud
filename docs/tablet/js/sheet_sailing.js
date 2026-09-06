@@ -5,15 +5,12 @@
 // calls game.shiftHeading(). This module only ever reads game.heading /
 // headingDesc() - it never mutates, same purity rule every other sheet_*.js
 // follows. Copy sheet_elim.js's header/body/footer shape.
-import { h, raw } from "./dom.js";
+import { h, raw, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { cta } from "./primitives.js";
 import { icon } from "../../js/icons_svg.js";
 import { HEADINGS } from "../../js/gamestate.js";
 import { WILLPOWER_GOLD } from "./palette.js";
-
-// %s/%d template fill, in order - same helper as sheet_elim.js's own fmt().
-const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); };
 
 // One wheel-count stepper: a live bevelled <button> when the draft can still
 // move that way, or - allocStep's live/off convention (pane.js) for a

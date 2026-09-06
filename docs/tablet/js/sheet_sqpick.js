@@ -9,12 +9,9 @@
 // quest" chip (open_sqpick, sheet_quest.js) via app.js, which loads
 // `ui.sideQuests` lazily before seating `ui.sheet` - see app.js's own
 // "open_sqpick" case and acts_sqpick.js's module comment.
-import { h, raw, cx } from "./dom.js";
+import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
-
-// %s/%d template fill, in order - same helper as sheet_locpick.js's local fmt().
-const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); };
 
 const NO_SPHERE = CHROME.sqpickNoSphere;
 // The five printed spheres in their usual order, then any other catalog

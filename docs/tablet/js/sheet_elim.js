@@ -13,12 +13,9 @@
 // id "7.R") for the unrelated Refresh-phase "pass P1 token" step). That
 // citation lives here, in the source, not on screen - see CLAUDE.md's iron
 // rule 4.
-import { h, raw } from "./dom.js";
+import { h, raw, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { cta } from "./primitives.js";
-
-// %s/%d template fill, in order - same helper as pane.js's local fmt().
-const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); };
 
 function step(act, arg, label) {
   return h`<button type="button" class="step step-sm" data-act="${act}" data-arg="${arg}">${label}</button>`;

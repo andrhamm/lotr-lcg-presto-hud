@@ -9,12 +9,9 @@
 // location" chip (open_locpick, back "quest") and the Travel pane's own
 // CTA (back "play") - see actions.js's openLocPick() for the shape both
 // share, and pane.js's "travel" case for the CTA.
-import { h, raw, cx } from "./dom.js";
+import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
-
-// %s/%d template fill, in order - same helper as pane.js's local fmt().
-const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); };
 
 function step(act, arg, label) {
   return h`<button type="button" class="step step-sm" data-act="${act}" data-arg="${arg}">${label}</button>`;

@@ -14,15 +14,12 @@
 // affordance into the card modal - this sheet scrolls, so every face prints
 // in full), and paginate. What it does keep is the twin's order of
 // precedence and its wording, log lines included.
-import { h, raw } from "./dom.js";
+import { h, raw, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { cta } from "./primitives.js";
 import { deriveResolveStep, backOf, branchName } from "./resolve_step.js";
 import { stagePointsShape } from "./xshape.js";
 import { NO_CARD_TEXT, QUEST_SETUP } from "../../js/viewcopy.js";
-
-// %s/%d template fill, in order - same helper as pane.js's local fmt().
-const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); };
 
 // One face's printed text under its own caption. BODY, because it is the
 // card's own sentences - the caption is the only LABEL here (design system

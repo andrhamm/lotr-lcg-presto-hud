@@ -4,7 +4,7 @@
 // it under node. Read docs/js/screen_play.js's draw() for how the twin
 // assembles the same viewcopy.js keys per view; this mirrors that assembly,
 // not the canvas layout.
-import { h, raw } from "./dom.js";
+import { h, raw, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta, counter, band } from "./primitives.js";
 import { renderLoop } from "./loops.js";
@@ -19,9 +19,6 @@ import { icon } from "../../js/icons_svg.js";
 import {
   THREAT_RED, THREAT_SHADOW, THREAT_BLACK, THREAT_BLACK_EDGE, WILLPOWER_GOLD,
 } from "./palette.js";
-
-// %s/%d template fill, in order - same helper as screen_play.js's _pendingLine.
-const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); };
 
 // The staging window's "without actions" preview: what resolveQuest() WOULD
 // do right now. gamestate.questPreview() owns the comparison; this only
