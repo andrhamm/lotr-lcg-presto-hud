@@ -1,8 +1,7 @@
 """A delta remembers the view and round it landed on, and truncating the redo
 future truncates the log rows it orphaned (with a tombstone the fold applies).
 Both twins."""
-import json, os, shutil, subprocess, sys, tempfile
-import pytest
+import os, sys
 import gamestate
 from gamestate import GameState, fold_log
 
@@ -85,3 +84,59 @@ def test_undo_alone_keeps_the_rows_and_writes_no_tombstone():
     g.undo()
     assert any(e["text"] == "Staging area threat 2" for e in g.log)
     assert not any(r.get("op") == "lt" for r in g.take_log_appends())
+
+
+def test_a_fresh_tally_after_undo_never_coalesces_onto_an_orphaned_row():
+    """logEvent/log_event coalesces a keyed tally onto the last log row when
+    (key, round, step) match - but after an undo, the last row can be an
+    ORPHANED row (its delta_i is in the discarded redo future). Rewriting an
+    orphan in place used to mean a subsequent addDelta/add_delta truncation
+    swallowed it, along with the only line the fresh action ever wrote:
+
+        tap(set_staging(1))   # delta 0, row A (key stg)
+        tap(set_willpower(5)) # delta 1, row B
+        tap(set_staging(2))   # delta 2, row C (key stg)
+        undo(); undo()        # replay_step -> 0
+        tap(set_staging(9))   # used to coalesce onto row C, then get
+                               # truncated along with it - the tap vanished
+
+    log_event/logEvent must refuse to coalesce onto a row whose delta_i is
+    past replay_step and start a fresh row instead."""
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_BANDS)
+    g = GameState(2)
+    appends = []
+
+    _tap(g, lambda: g.set_staging(1))                   # delta 0, row A (key stg)
+    appends += g.take_log_appends()
+    _tap(g, lambda: g.set_willpower(5))                 # delta 1, row B
+    appends += g.take_log_appends()
+    _tap(g, lambda: g.set_staging(2))                   # delta 2, row C (key stg)
+    appends += g.take_log_appends()
+    row_b_seq = next(e["seq"] for e in g.log
+                      if e["text"] == "Players committed 5 willpower to the quest")
+    row_c_seq = next(e["seq"] for e in g.log if e["text"] == "Staging area threat 2")
+
+    assert g.undo() and g.undo()                        # replay_step -> 0
+    appends += g.take_log_appends()                     # undo alone appends nothing
+
+    _tap(g, lambda: g.set_staging(9))                   # fresh tally after undo
+    new_appends = g.take_log_appends()
+    appends += new_appends
+
+    # The fresh tap gets its own row - it did not overwrite (and so did not
+    # go down with) the orphaned row C.
+    assert [e["text"] for e in g.log] == [
+        "Staging area threat 1", "Staging area threat 9"]
+    assert not any(e["seq"] == row_c_seq for e in g.log)
+    new_row = next(r for r in new_appends if r.get("op") != "lt")
+    assert new_row["text"] == "Staging area threat 9"
+    assert new_row["delta_i"] == 1
+
+    # Both orphaned rows (B and C - the whole discarded stretch) are
+    # tombstoned in one contiguous range; the new row is untouched by it.
+    tombstones = [r for r in new_appends if r.get("op") == "lt"]
+    assert len(tombstones) == 1
+    assert tombstones[0]["lo"] == row_b_seq
+    assert tombstones[0]["hi"] == row_c_seq
+
+    assert fold_log(appends) == g.log

@@ -673,10 +673,18 @@ class GameState:
         Coalescing is bounded by (key, round, step) on purpose. Re-opening a
         stepper later in the round starts a NEW entry, so *when* each change
         happened stays visible - which is the point of a log.
+
+        It is also bounded by orphan status: a row whose `delta_i` is past
+        `self.replay_step` belongs to a redo future an undo just discarded and
+        is about to be dropped by `_truncate_log`. Rewriting it in place would
+        let the fresh action's only log line vanish along with it, so such a
+        row is never coalesced onto - a new entry starts instead.
         """
         prev = self.log[-1] if self.log else None
         if (key is not None and prev is not None and prev.get("key") == key
-                and prev.get("round") == self.round and prev.get("step") == self.step):
+                and prev.get("round") == self.round and prev.get("step") == self.step
+                and not (isinstance(prev.get("delta_i"), int)
+                         and prev["delta_i"] > self.replay_step)):
             self._seq += 1
             prev.update({"seq": self._seq, "text": text, "t": self._now()})
             # messages feeds the delta's metadata; replace the superseded one
@@ -1961,10 +1969,9 @@ class GameState:
             # "Rewind": later entries stay greyed until an edit truncates
             # them). Rows are contiguous in seq: kept deltas' rows < the
             # orphaned rows < this action's own rows (which have no delta_i
-            # yet), so one [lo, hi] range names them all. Known limitation: a
-            # keyed tally row re-tallied inside the undone stretch had its
-            # delta_i restamped there and is dropped too, though its earlier
-            # value survives in the kept state. The log is advisory.
+            # yet), so one [lo, hi] range names them all. Orphaned rows are
+            # never coalesced onto (see log_event), so a kept action always
+            # keeps its own line here.
             self._replay_appends.append({"op": "t", "to": self.replay_step + 1})
             self._truncate_log(self.replay_step)
         self.deltas = self.deltas[:self.replay_step + 1]

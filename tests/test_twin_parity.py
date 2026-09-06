@@ -481,3 +481,83 @@ def test_delta_metadata_and_log_truncation_match_the_twin():
     assert js["live"] == [e["text"] for e in g.log]
     assert js["folded"] == js["live"] == [e["text"] for e in fold_log(appends)]
     assert js["ops"] == 1
+
+
+_ORPHAN_COALESCE_PROBE = """\
+import { GameState, foldLog, setWindowPolicy, WINDOW_POLICY_BANDS } from "./gamestate.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2);
+const tap = fn => { const s = g.beginAction(); fn(); return g.addDelta(s); };
+let appends = [];
+tap(() => g.setStaging(1));                  // delta 0, row A (key stg)
+appends = appends.concat(g.takeLogAppends());
+tap(() => g.setWillpower(5));                // delta 1, row B
+appends = appends.concat(g.takeLogAppends());
+tap(() => g.setStaging(2));                  // delta 2, row C (key stg)
+appends = appends.concat(g.takeLogAppends());
+const rowBSeq = g.log.find(e => e.text === "Players committed 5 willpower to the quest").seq;
+const rowCSeq = g.log.find(e => e.text === "Staging area threat 2").seq;
+g.undo(); g.undo();                          // replay_step -> 0
+appends = appends.concat(g.takeLogAppends());
+tap(() => g.setStaging(9));                  // fresh tally after undo
+const newAppends = g.takeLogAppends();
+appends = appends.concat(newAppends);
+const newRow = newAppends.find(r => r.op !== "lt");
+const tombstones = newAppends.filter(r => r.op === "lt");
+console.log(JSON.stringify({
+  live: g.log.map(e => e.text),
+  folded: foldLog(appends).map(e => e.text),
+  newRowDeltaI: newRow.delta_i,
+  tombstoneCount: tombstones.length,
+  tombstoneLo: tombstones.length ? tombstones[0].lo : null,
+  tombstoneHi: tombstones.length ? tombstones[0].hi : null,
+  rowBSeq, rowCSeq,
+}));
+"""
+
+
+def test_a_fresh_tally_after_undo_never_coalesces_onto_an_orphaned_row_in_either_twin():
+    """The same walk as test_a_fresh_tally_after_undo_never_coalesces_onto_an_
+    orphaned_row in test_replay_metadata.py, run under node and under Python,
+    asserting the two logs agree: a tally coalesced onto a row that an undo
+    just orphaned used to vanish entirely when the redo future was truncated
+    (logEvent/log_event rewrote the orphan in place, then _truncateLog/
+    _truncate_log dropped it). Both twins now refuse to coalesce onto an
+    orphaned row and start a fresh one instead."""
+    import gamestate
+    from gamestate import GameState, fold_log
+
+    js = _js_facts(_ORPHAN_COALESCE_PROBE)
+
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_BANDS)
+    g = GameState(2)
+    def tap(fn):
+        s = g.begin_action(); fn(); return g.add_delta(s)
+    appends = []
+    tap(lambda: g.set_staging(1))
+    appends += g.take_log_appends()
+    tap(lambda: g.set_willpower(5))
+    appends += g.take_log_appends()
+    tap(lambda: g.set_staging(2))
+    appends += g.take_log_appends()
+    row_b_seq = next(e["seq"] for e in g.log
+                      if e["text"] == "Players committed 5 willpower to the quest")
+    row_c_seq = next(e["seq"] for e in g.log if e["text"] == "Staging area threat 2")
+    assert g.undo() and g.undo()
+    appends += g.take_log_appends()
+    tap(lambda: g.set_staging(9))
+    new_appends = g.take_log_appends()
+    appends += new_appends
+
+    py_live = [e["text"] for e in g.log]
+    py_folded = [e["text"] for e in fold_log(appends)]
+    new_row = next(r for r in new_appends if r.get("op") != "lt")
+    tombstones = [r for r in new_appends if r.get("op") == "lt"]
+
+    assert js["rowBSeq"] == row_b_seq and js["rowCSeq"] == row_c_seq
+    assert js["live"] == py_live == ["Staging area threat 1", "Staging area threat 9"]
+    assert js["folded"] == py_folded == py_live
+    assert js["newRowDeltaI"] == new_row["delta_i"] == 1
+    assert js["tombstoneCount"] == len(tombstones) == 1
+    assert js["tombstoneLo"] == tombstones[0]["lo"] == row_b_seq
+    assert js["tombstoneHi"] == tombstones[0]["hi"] == row_c_seq

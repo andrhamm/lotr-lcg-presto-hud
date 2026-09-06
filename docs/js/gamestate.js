@@ -537,10 +537,17 @@ export class GameState {
   // Bounded by (key, round, step) on purpose, and broken by any intervening
   // entry - re-opening a stepper later starts a NEW row, so *when* each change
   // happened stays visible, which is the point of a log.
+  //
+  // Also bounded by orphan status: a row whose delta_i is past replay_step
+  // belongs to a redo future an undo just discarded and is about to be
+  // dropped by _truncateLog. Rewriting it in place would let the fresh
+  // action's only log line vanish along with it, so such a row is never
+  // coalesced onto - a new entry starts instead.
   logEvent(text, cat = "move", key = null) {
     const prev = this.log.length ? this.log[this.log.length - 1] : null;
     if (key !== null && prev && prev.key === key
-        && prev.round === this.round && prev.step === this.step) {
+        && prev.round === this.round && prev.step === this.step
+        && !(typeof prev.delta_i === "number" && prev.delta_i > this.replay_step)) {
       this._seq += 1;
       prev.seq = this._seq;
       prev.text = text;
@@ -1630,10 +1637,9 @@ export class GameState {
     // that future produced go with it (design spec, "Rewind": later entries
     // stay greyed until an edit truncates them). Rows are contiguous in seq:
     // kept deltas' rows < the orphaned rows < this action's own rows (which
-    // have no delta_i yet), so one [lo, hi] range names them all. Known
-    // limitation: a keyed tally row re-tallied inside the undone stretch had
-    // its delta_i restamped there and is dropped too, though its earlier value
-    // survives in the kept state. The log is advisory.
+    // have no delta_i yet), so one [lo, hi] range names them all. Orphaned
+    // rows are never coalesced onto (see logEvent), so a kept action always
+    // keeps its own line here.
     if (this.replay_step + 1 < this.deltas.length) {
       this._replay_appends.push({ op: "t", to: this.replay_step + 1 });
       this._truncateLog(this.replay_step);
