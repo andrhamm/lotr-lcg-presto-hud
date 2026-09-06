@@ -74,7 +74,13 @@ html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: n
    one, so it overflowed by exactly the insets and .app's overflow: hidden
    ate the difference. The outer owns the viewport and the OS edges; the
    inner just fills what is left. */
-#app { position: relative; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden;
+/* height: 100% of the BODY, which `position: fixed; inset: 0` above has
+   already pinned to exactly the visual viewport. That is more reliable than
+   100dvh in standalone, where the viewport units can resolve against a box
+   that includes chrome the fixed body does not - the difference shows up as
+   dead space below the bottom CTA, or as content pushed off the bottom edge.
+   100dvh/100vh stay as the fallback for a body that is somehow not fixed. */
+#app { position: relative; width: 100vw; height: 100vh; height: 100dvh; height: 100%; overflow: hidden;
   display: flex; flex-direction: column;
   padding: var(--sa-top) var(--sa-right) var(--sa-bottom) var(--sa-left); }
 .app { position: relative; flex: 1 1 0; min-height: 0; width: 100%; overflow: hidden;

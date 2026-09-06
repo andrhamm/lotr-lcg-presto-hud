@@ -411,7 +411,20 @@ root.addEventListener("click", ev => {
 // the fallback glyph (style.css's `.is-missing` pair of rules).
 root.addEventListener("error", ev => {
   const img = ev.target;
-  if (img?.tagName === "IMG") img.closest(".seticon, .card-frame")?.classList.add("is-missing");
+  if (img?.tagName !== "IMG") return;
+  // A set icon can carry a fallback chain (seticon.js's iconSlugs): the pack
+  // files a handful of sets under a different title than the one FFG prints,
+  // so a 404 on the printed name is not yet a missing icon. Shift the next
+  // candidate off data-alt and retry; only an empty chain means the glyph.
+  const alt = img.dataset?.alt;
+  if (alt) {
+    const [next, ...rest] = alt.split(",");
+    img.dataset.alt = rest.join(",");
+    if (!img.dataset.alt) delete img.dataset.alt;
+    img.src = next;
+    return;
+  }
+  img.closest(".seticon, .card-frame")?.classList.add("is-missing");
 }, true);
 
 // Gameplay touches RAM only (perform(), above); tick() drains the queue in

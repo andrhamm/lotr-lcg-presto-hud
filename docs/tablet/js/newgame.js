@@ -60,7 +60,7 @@ function cycleRow(g) {
 // apostrophes, e.g. "The Steward's Fear").
 function scenarioRow(scn, selected) {
   return h`<button type="button" class="${cx("drill-row", "drill-scenario", scn.slug === selected && "is-selected")}" data-act="pick_scenario" data-arg="${scn.slug}">
-${raw(setIcon(scn.name ?? "", 26))}
+${raw(setIcon(scn.name ?? "", 36))}
 <span class="body">${scn.name ?? ""}</span>
 </button>`;
 }
