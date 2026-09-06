@@ -719,6 +719,12 @@ def build_outputs(stream, meta=None, enrichment=None, extra_rows=None,
         source += "; hallofbeorn.com/Export/Search (sets-to-gather enrichment)"
     index = {
         "generated": meta["generated"], "source": source, "disclaimer": DISCLAIMER,
+        # Pinned beside the card TSV (tools/data/cardDb.SOURCE.txt's
+        # `image_prefix=`, task 6/R5), not fetched at build time. None when
+        # `meta` carries no imagePrefix (a legacy pin, or a test fixture) -
+        # quest_catalog.image_prefix()/imagePrefix() both read this key and
+        # treat an absent/None value the same way.
+        "imagePrefix": meta.get("imagePrefix"),
         "scenarios": sorted(index_scn, key=lambda s: (s["pack"] or "", s["name"])),
         "packs": sorted(players_index, key=lambda p: p["name"]),
         "rules": bool(rules),
@@ -728,6 +734,11 @@ def build_outputs(stream, meta=None, enrichment=None, extra_rows=None,
 
 RAW = "https://raw.githubusercontent.com/seastan/dragncards-lotrlcg-plugin/{sha}/tsvs/cardDb.tsv"
 API = "https://api.github.com/repos/seastan/dragncards-lotrlcg-plugin/commits/main"
+# Task 6 (tablet M5): the card-image URL prefix, pinned alongside the TSV sha
+# rather than fetched at build time - see the plan's ruling R5. Card records
+# carry only `image: "<id>.jpg"`; this prefix plus that id is the full URL.
+IMAGE_PREFIX_RAW = ("https://raw.githubusercontent.com/seastan/"
+                    "dragncards-lotrlcg-plugin/{sha}/jsons/imageUrlPrefix.json")
 SOURCE_FILE = os.path.join(os.path.dirname(__file__), "data", "cardDb.SOURCE.txt")
 # tools/build_hob_enrichment.py's default --out - see _load_enrichment/main.
 ENRICHMENT_FILE = os.path.join(os.path.dirname(__file__), "data", "enrichment.json")
@@ -929,11 +940,39 @@ def emit(outputs, out_dir):
     _dump(outputs["rules"], os.path.join(out_dir, "rules.json"))
 
 def _read_pin():
+    """Read (sha, image_prefix) from the pin file - one pass, one parser, so
+    a new pinned field never grows a second reader (task-6 brief: "no second
+    parser"). `image_prefix` is None for a legacy pin file that predates it;
+    `sha` is mandatory and its absence is still a hard SystemExit."""
+    sha = image_prefix = None
     with open(SOURCE_FILE, encoding="utf-8") as f:
         for line in f:
             if line.startswith("sha="):
-                return line.strip().split("=", 1)[1]
-    raise SystemExit("No sha in %s — run with --refresh once." % SOURCE_FILE)
+                sha = line.strip().split("=", 1)[1]
+            elif line.startswith("image_prefix="):
+                image_prefix = line.strip().split("=", 1)[1]
+    if sha is None:
+        raise SystemExit("No sha in %s — run with --refresh once." % SOURCE_FILE)
+    return sha, image_prefix
+
+def _fetch_image_prefix(sha):
+    """Fetch jsons/imageUrlPrefix.json at `sha` and pick the English prefix
+    (falling back to Default - see task-6 brief R5). Only called from
+    --refresh; a plain build never reaches this and makes no network call
+    for the image prefix. Raises SystemExit on any fetch/parse failure or a
+    payload with neither key, so --refresh fails loudly rather than pinning
+    a stale or empty prefix."""
+    try:
+        with urllib.request.urlopen(IMAGE_PREFIX_RAW.format(sha=sha)) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, ValueError) as e:
+        raise SystemExit("Failed to fetch image prefix at sha %s: %s" % (sha, e))
+    prefixes = data.get("imageUrlPrefix") or {}
+    prefix = prefixes.get("English") or prefixes.get("Default")
+    if not prefix:
+        raise SystemExit("imageUrlPrefix.json at sha %s has no English/Default "
+                         "prefix" % sha)
+    return prefix
 
 def _refresh_pin():
     req = urllib.request.Request(API, headers={"Accept": "application/vnd.github.sha"})
@@ -942,10 +981,11 @@ def _refresh_pin():
             sha = resp.read().decode().strip()
     except urllib.error.URLError as e:
         raise SystemExit("Failed to resolve upstream sha from %s: %s" % (API, e))
+    image_prefix = _fetch_image_prefix(sha)
     os.makedirs(os.path.dirname(SOURCE_FILE), exist_ok=True)
     with open(SOURCE_FILE, "w", encoding="utf-8") as f:
-        f.write("url=%s\nsha=%s\n" % (RAW, sha))
-    return sha
+        f.write("url=%s\nsha=%s\nimage_prefix=%s\n" % (RAW, sha, image_prefix))
+    return sha, image_prefix
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Compile DragnCards cardDb.tsv to JSON.")
@@ -965,7 +1005,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if not os.path.exists(SOURCE_FILE) and not args.refresh:
         raise SystemExit("No pin file — run once with --refresh.")
-    sha = _refresh_pin() if args.refresh else _read_pin()
+    sha, image_prefix = _refresh_pin() if args.refresh else _read_pin()
     print("Fetching cardDb.tsv at %s ..." % sha)
     try:
         with urllib.request.urlopen(RAW.format(sha=sha)) as resp:
@@ -1024,7 +1064,8 @@ def main(argv=None):
         src += "; @%s (alep branch) tsvs/*.tsv" % alep_sha
     out = build_outputs(io.StringIO(text),
                         meta={"generated": datetime.date.today().isoformat(),
-                              "source": src},
+                              "source": src,
+                              "imagePrefix": image_prefix},
                         enrichment=enrichment,
                         extra_rows=alep_rows,
                         corrections=corrections)

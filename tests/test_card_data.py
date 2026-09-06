@@ -2,6 +2,7 @@ import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 import build_card_data as b
 import json as _json
+import pytest
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "cardDb_sample.tsv")
 
@@ -435,3 +436,137 @@ def test_fold_payload_catches_strings_merged_in_after_the_row_pass():
     out = _corr.fold_payload(payload)
     assert out["scenarios"]["s"]["includedSets"] == ["Morgul Nazgul"]
     assert out["scenarios"]["s"]["quest"]["stages"][0]["advance"] == "no Nazgul"
+
+
+# --- Task 6/R5: the card-image URL prefix is pinned beside the card TSV ----
+
+def test_build_outputs_writes_image_prefix_from_meta():
+    """build_card_data.py's main() reads image_prefix from the pin file and
+    passes it through `meta`; build_outputs() copies it into index.json as
+    imagePrefix, top level beside source/generated (see quest_catalog.py's
+    image_prefix() / quest_catalog.js's imagePrefix(), which read this key
+    back)."""
+    with open(FIXTURE, encoding="utf-8") as f:
+        out = b.build_outputs(f, meta={
+            "generated": "2026-07-24", "source": "fixture",
+            "imagePrefix": "https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/"})
+    assert (out["index"]["imagePrefix"]
+            == "https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/")
+
+
+def test_build_outputs_image_prefix_defaults_to_none_without_meta():
+    """A caller that doesn't pass imagePrefix (existing fixtures, a legacy
+    pin file with no image_prefix= line) gets None rather than a missing key
+    or a crash - same absent-tolerant posture as every other optional field
+    build_outputs merges in."""
+    out = build()
+    assert out["index"]["imagePrefix"] is None
+    out2 = b.build_outputs(open(FIXTURE, encoding="utf-8"))
+    assert out2["index"]["imagePrefix"] is None
+
+
+def test_read_pin_parses_sha_and_image_prefix(tmp_path, monkeypatch):
+    pin = tmp_path / "cardDb.SOURCE.txt"
+    pin.write_text(
+        "url=https://raw.githubusercontent.com/seastan/dragncards-lotrlcg-plugin/{sha}/tsvs/cardDb.tsv\n"
+        "sha=deadbeef\n"
+        "image_prefix=https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/\n",
+        encoding="utf-8")
+    monkeypatch.setattr(b, "SOURCE_FILE", str(pin))
+    assert b._read_pin() == (
+        "deadbeef", "https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/")
+
+
+def test_read_pin_tolerates_a_legacy_file_with_no_image_prefix_line(tmp_path, monkeypatch):
+    pin = tmp_path / "cardDb.SOURCE.txt"
+    pin.write_text("url=https://example.com/{sha}\nsha=deadbeef\n", encoding="utf-8")
+    monkeypatch.setattr(b, "SOURCE_FILE", str(pin))
+    assert b._read_pin() == ("deadbeef", None)
+
+
+def test_read_pin_still_raises_when_sha_is_missing(tmp_path, monkeypatch):
+    pin = tmp_path / "cardDb.SOURCE.txt"
+    pin.write_text("url=https://example.com/{sha}\n", encoding="utf-8")
+    monkeypatch.setattr(b, "SOURCE_FILE", str(pin))
+    with pytest.raises(SystemExit):
+        b._read_pin()
+
+
+class _FakeResponse:
+    """Same shape as test_icons.py's fake urlopen response: a context
+    manager whose .read() returns the scripted bytes."""
+    def __init__(self, data):
+        self._data = data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return self._data
+
+
+def test_fetch_image_prefix_picks_english_over_default(monkeypatch):
+    payload = _json.dumps({"imageUrlPrefix": {
+        "Default": "https://example.com/cards/Default/",
+        "English": "https://example.com/cards/English/",
+    }}).encode("utf-8")
+    monkeypatch.setattr(b.urllib.request, "urlopen", lambda req: _FakeResponse(payload))
+    assert b._fetch_image_prefix("deadbeef") == "https://example.com/cards/English/"
+
+
+def test_fetch_image_prefix_falls_back_to_default_when_english_absent(monkeypatch):
+    payload = _json.dumps({"imageUrlPrefix": {
+        "Default": "https://example.com/cards/Default/",
+    }}).encode("utf-8")
+    monkeypatch.setattr(b.urllib.request, "urlopen", lambda req: _FakeResponse(payload))
+    assert b._fetch_image_prefix("deadbeef") == "https://example.com/cards/Default/"
+
+
+def test_fetch_image_prefix_raises_clean_systemexit_on_fetch_failure(monkeypatch):
+    def _boom(req):
+        raise b.urllib.error.URLError("no network")
+    monkeypatch.setattr(b.urllib.request, "urlopen", _boom)
+    with pytest.raises(SystemExit):
+        b._fetch_image_prefix("deadbeef")
+
+
+def test_fetch_image_prefix_raises_when_payload_has_neither_key(monkeypatch):
+    payload = _json.dumps({"imageUrlPrefix": {}}).encode("utf-8")
+    monkeypatch.setattr(b.urllib.request, "urlopen", lambda req: _FakeResponse(payload))
+    with pytest.raises(SystemExit):
+        b._fetch_image_prefix("deadbeef")
+
+
+def test_refresh_pin_writes_sha_and_image_prefix_and_read_pin_round_trips(tmp_path, monkeypatch):
+    """--refresh rewrites BOTH the sha= and image_prefix= lines in one pass -
+    the pin's plain (non-refresh) read makes no network call at all, only
+    --refresh does the two fetches (HEAD sha, then that sha's
+    imageUrlPrefix.json)."""
+    pin = tmp_path / "cardDb.SOURCE.txt"
+    monkeypatch.setattr(b, "SOURCE_FILE", str(pin))
+
+    def fake_urlopen(req):
+        url = req.full_url if hasattr(req, "full_url") else req
+        if "commits/main" in url:
+            return _FakeResponse(b"c0ffee" * 6)
+        if "imageUrlPrefix.json" in url:
+            return _FakeResponse(_json.dumps({"imageUrlPrefix": {
+                "Default": "https://example.com/cards/Default/",
+                "English": "https://example.com/cards/English/",
+            }}).encode("utf-8"))
+        raise AssertionError("unexpected URL: %s" % url)
+
+    monkeypatch.setattr(b.urllib.request, "urlopen", fake_urlopen)
+
+    sha, image_prefix = b._refresh_pin()
+
+    assert sha == "c0ffee" * 6
+    assert image_prefix == "https://example.com/cards/English/"
+    content = pin.read_text(encoding="utf-8")
+    assert ("sha=%s" % sha) in content
+    assert ("image_prefix=%s" % image_prefix) in content
+    # And the file it just wrote round-trips through the plain reader.
+    assert b._read_pin() == (sha, image_prefix)

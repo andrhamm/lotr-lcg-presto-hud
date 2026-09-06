@@ -699,3 +699,19 @@ def test_the_change_scenario_affordance_survives_the_longest_pack_name():
     assert subs[0].endswith(" - tap to change"), (
         "instruction was truncated instead of the pack name: %r" % subs[0])
     assert ".." in subs[0], "the pack name should be the part that got cut"
+
+
+def test_image_prefix_reads_the_pinned_key():
+    """quest_catalog.image_prefix() is a trivial reader over index.json's
+    `imagePrefix` (build_card_data.py Task 6/R5: pinned beside the card TSV,
+    copied into the compiled index) - both twins must read the identical
+    key, and this is the Python half of that parity."""
+    assert qc.image_prefix(
+        {"imagePrefix": "https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/"}
+    ) == "https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/"
+
+
+def test_image_prefix_none_when_absent():
+    assert qc.image_prefix({"generated": "2026-09-05", "source": "fixture"}) is None
+    assert qc.image_prefix({}) is None
+    assert qc.image_prefix(None) is None

@@ -807,3 +807,31 @@ def test_take_log_appends_hands_out_frozen_rows_in_both_twins():
 
     assert js["hasTrim"] is True and any(r.get("op") == "lx" for r in queued)
     assert js["liveFoldedMatch"] is True and fold_log(queued) == t.log
+
+
+_IMAGE_PREFIX_PROBE = """\
+import { imagePrefix } from "./quest_catalog.js";
+console.log(JSON.stringify({
+  withPrefix: imagePrefix({imagePrefix: "https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/"}),
+  withoutPrefix: imagePrefix({generated: "2026-09-05", source: "fixture"}),
+  emptyObject: imagePrefix({}),
+}));
+"""
+
+
+def test_image_prefix_reads_the_same_pinned_key_in_both_twins():
+    """quest_catalog.py's image_prefix() and quest_catalog.js's imagePrefix()
+    are both trivial readers over index.json's `imagePrefix` (build_card_
+    data.py Task 6/R5: the card-image URL prefix is pinned beside the card
+    TSV and copied into the compiled index, top-level beside source/
+    generated). Both must read the identical key and agree on the fallback
+    for an index that predates the field."""
+    import quest_catalog as qc
+
+    js = _js_facts(_IMAGE_PREFIX_PROBE)
+
+    prefix = "https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/"
+    assert js["withPrefix"] == qc.image_prefix({"imagePrefix": prefix}) == prefix
+    assert js["withoutPrefix"] is None
+    assert qc.image_prefix({"generated": "2026-09-05", "source": "fixture"}) is None
+    assert js["emptyObject"] is None and qc.image_prefix({}) is None

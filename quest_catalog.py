@@ -327,6 +327,16 @@ def load_scenario(slug):
         return json.load(f)
 
 
+def image_prefix(index):
+    """The card-image URL prefix build_card_data.py pinned alongside the
+    card TSV (tools/data/cardDb.SOURCE.txt's `image_prefix=`, task 6/R5) and
+    copied into index.json as `imagePrefix`. A card record carries only
+    `image: "<id>.jpg"`; this prefix plus that id is the full URL. None for
+    an index built before this field existed, or any falsy/missing input -
+    trivial by design, so both twins read the identical key."""
+    return (index or {}).get("imagePrefix")
+
+
 def side_quests(player_db):
     """Flatten every pack's cards["sideQuest"] into a name-sorted list of
     {"id","name","points","sphere","pack"} for the side-quest picker
