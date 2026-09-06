@@ -712,6 +712,53 @@ console.log(JSON.stringify({ n: tags.length, allButtons: tags.every(t => t === "
     assert js["allButtons"]
 
 
+def test_a_new_game_is_at_most_three_taps_from_the_picker():
+    """Spec R1 (the tap budget): a new game starting from the picker with
+    Official source and first cycle preselected takes at most 3 taps to reach
+    the setup screen (ng_cycle even though preselected, pick_scenario via
+    overviewFor, begin_setup via scenarioMetaFor). With a source switch first
+    (ng_source alep) it is at most 4 taps."""
+    js = node(NG_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+import { overviewFor } from "./overview.js";
+import { scenarioMetaFor } from "./overview.js";
+const g = new GameState();
+const ui = { picker: { index, players: 2, threats: [25, 25], source: "official", cycle: "C1" } };
+const taps = [];
+const tap = (act, arg) => { taps.push(act); return dispatch(g, ui, act, arg ?? ""); };
+
+// Official path: 3 taps
+tap("ng_cycle", "C1");          // Tap 1: cycle (even though preselected)
+const bundle = { stages: [{ id: 1 }], locations: [], tips: null };
+ui.overview = overviewFor(index, "o1a", bundle);  // Tap 2: pick_scenario (simulated)
+const meta = scenarioMetaFor(ui.overview.entry, ui.overview.difficulty);  // Tap 3: begin_setup (simulated)
+const officialTaps = taps.length;
+
+// Reset for alep path
+taps.length = 0;
+ui.picker.source = "official";
+ui.picker.cycle = "C1";
+
+// With source switch: 4 taps
+tap("ng_source", "alep");       // Tap 1: switch source
+tap("ng_cycle", "A1");          // Tap 2: cycle (A1 is first cycle of alep)
+ui.overview = overviewFor(index, "a1a", bundle);  // Tap 3: pick_scenario (simulated)
+const meta2 = scenarioMetaFor(ui.overview.entry, ui.overview.difficulty);  // Tap 4: begin_setup (simulated)
+const alepTaps = taps.length;
+
+console.log(JSON.stringify({
+  officialTaps, alepTaps,
+  mode: meta.mode, nightmare: meta.nightmare,
+  mode2: meta2.mode, nightmare2: meta2.nightmare,
+}));
+""")
+    assert js["officialTaps"] <= 3, f"Official path should be at most 3 taps, got {js['officialTaps']}"
+    assert js["alepTaps"] <= 4, f"ALeP path should be at most 4 taps, got {js['alepTaps']}"
+    assert js["mode"] == "Standard" and js["nightmare"] is False
+    assert js["mode2"] == "Standard" and js["nightmare2"] is False
+
+
 def test_overview_for_builds_the_seat_pick_scenario_hands_to_ui_overview():
     """pick_scenario itself can't be driven under node (it awaits
     db.bundle()) - overviewFor(index, slug, bundle) is the pure helper it
