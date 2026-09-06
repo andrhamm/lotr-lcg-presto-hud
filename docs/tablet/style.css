@@ -77,13 +77,47 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 
 /* Transport strip (Task 3): one segment per phase, one tick per flow view. */
 .strip { height: 96px; display: flex; align-items: stretch; gap: 8px; padding: 12px 18px; background: var(--well); border-bottom: 1px solid var(--border); overflow: hidden; }
-.round { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; padding: 0 14px 0 0; }
+/* `.round` was a single flex column (ROUND label, then the round-row). The
+   replay transport (Task 2, milestone 4) adds two more children - the
+   button row and its "Step n/N" readout - and there is no headroom to just
+   stack them underneath: `.strip`'s content box is 96 - 2*12(padding) =
+   72px tall, and a naive four-row stack (13 + 44 + 44 + 13, plus three 4px
+   gaps) comes to 126px. So this is a 2x2 grid instead of a column: column 1
+   keeps the existing ROUND label over the round-row, column 2 puts the new
+   readout over the transport row - two 13px LABEL rows side by side on top,
+   two 44px rows (round-row's own min-height, .tbtn's own height) side by
+   side underneath. That is 13 + 4(row-gap) + 44 = 61px, inside the 72px
+   budget with room to spare - `align-content: center` centers the block in
+   the leftover 11px, same job `justify-content: center` did on the old flex
+   column. Nothing about the strip's own 96px/12px padding changes; the fit
+   is entirely this rule's doing, at the cost of `.round` growing wider
+   (flex: 0 0 auto already lets the segs give up the width). */
+.round { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto;
+  align-items: center; align-content: center; column-gap: 16px; row-gap: 4px;
+  flex: 0 0 auto; padding: 0 14px 0 0; }
+/* The ROUND label is column 1/row 1; :first-child picks it out from
+   .transport-readout, the grid's OTHER .label (column 2/row 1) - that one
+   places itself, below. */
+.round > .label:first-child { grid-column: 1; grid-row: 1; }
 /* The round number and the "Menu ›" chip (milestone 3) share one row rather
    than stacking a third line under ROUND/num - the strip is only 96px tall.
    min-height: same reasoning as .zone-head above (review finding I4) - the
    "Menu ›" chip is 30px, so the row it sits in is the thing that has to
-   clear the 44px tap-target floor. */
-.round-row { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+   clear the 44px tap-target floor. Column 1/row 2 in `.round`'s grid. */
+.round-row { display: flex; align-items: center; gap: 8px; min-height: 44px; grid-column: 1; grid-row: 2; }
+/* The transport (Task 2): ⏮ ◀ ▶ ⏭ (primitives.js's transportButton()) -
+   bevelled like .chip when canUndo()/canRedo() says the direction is live,
+   unbevelled and dimmed (`.is-off`, a <span>, not a <button> - nothing for
+   app.js's data-act delegation to catch) when it is not. Glyph-only, so
+   min-width rather than width - a floor, not a fixed box. Column 2/row 2,
+   beside round-row. */
+.transport { display: flex; align-items: center; gap: 6px; grid-column: 2; grid-row: 2; }
+.tbtn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 44px;
+  background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
+  border-radius: 6px; font-size: 20px; color: var(--tan); }
+.tbtn.is-off { background: transparent; border-color: transparent; box-shadow: none; color: var(--dim); opacity: .4; }
+/* "Step n/N" - column 2/row 1, above .transport. */
+.transport-readout { white-space: nowrap; grid-column: 2; grid-row: 1; }
 .seg { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 8px; flex: 1 1 0; min-width: 0; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .seg.is-skippable { background: var(--card-hi); border-color: var(--amber); }
 .phase-name { font: 600 18px/1 var(--serif); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -99,6 +133,14 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .tick-window { width: 12px; height: 12px; border-radius: 50%; align-self: center; background: var(--dim); }
 .tick-window.is-done, .tick-window.is-current { background: var(--green); }
 .playhead { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--gold); }
+/* A tick a real delta entered this round (strip.js's renderTick, via
+   game.deltaIndexForView) is a rewind target - wrapped in this transparent,
+   borderless button rather than restyling the tick itself, so is-done/
+   is-current/is-future stay exactly the visual states they always were;
+   only the gold outline on :active marks this one as tappable. */
+.tick-btn { height: 44px; min-width: 28px; padding: 0 3px; background: transparent; border: 0;
+  display: inline-flex; align-items: center; justify-content: center; }
+.tick-btn:active .tick { outline: 2px solid var(--gold); }
 
 /* The rail (Task 4): three read-only zones + the log block, pinned bottom. */
 .column { width: 324px; display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--well); border-right: 1px solid var(--border); overflow: hidden; }

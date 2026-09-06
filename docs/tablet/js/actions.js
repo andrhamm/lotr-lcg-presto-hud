@@ -17,9 +17,10 @@ import { handle as elimActs } from "./acts_elim.js";
 import { handle as sqpickActs } from "./acts_sqpick.js";
 import { handle as resolveActs } from "./acts_resolve.js";
 import { handle as sailingActs } from "./acts_sailing.js";
+import { handle as transportActs } from "./acts_transport.js";
 
 const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs,
-                  sqpickActs, resolveActs, sailingActs];
+                  sqpickActs, resolveActs, sailingActs, transportActs];
 
 export const newUi = () => ({
   screen: "play", alloc: null, placed: false, picker: null,
@@ -67,6 +68,11 @@ export function dispatch(game, ui, act, arg) {
 // again and opens it then, exactly like the twin's router picking the flag
 // up on a later tick.
 export function afterTap(game, ui) {
+  // R8 (Task 3, Game Log): the log screen drives its own rewind flow and
+  // never wants an elimination/resolution sheet popping up over it - harmless
+  // today (no act reaches this screen state yet), but the guard lands with
+  // the transport rather than waiting for the screen that needs it.
+  if (ui.screen === "log") return;
   if (game.pending_elim !== null && !ui.sheet) {
     ui.sheet = { kind: "elim", i: game.pending_elim, level: game.players[game.pending_elim].elimination };
   }

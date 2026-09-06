@@ -180,4 +180,15 @@ export const CHROME = {
   sailWheelsFound: "%d wheels found - shift on-course",
   sailStepOff: "1 step off-course (card effect)",
   sailStepsOff: "%d steps off-course (card effect)",
+  // The strip's transport (Task 2, milestone 4) - ⏮ ◀ ▶ ⏭ move the replay
+  // cursor by index/single-step/round, mirrored by the Game Log's own
+  // transport (Task 3, primitives.js's transportButton). Titles, not visible
+  // labels - the glyph is the label; these are the button's `title=` only.
+  rwFirst: "First",
+  rwUndo: "Back one tap",
+  rwRedo: "Forward one tap",
+  rwLast: "Latest",
+  rwRoundBack: "Back one round",
+  rwRoundFwd: "Forward one round",
+  stepOf: "Step %s/%s",
 };

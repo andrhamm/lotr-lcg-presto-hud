@@ -61,6 +61,10 @@ export function handle(game, ui, act, arg) {
     // resolve_step.js's `sheet.forced` is what lets the quest step fire even
     // though progress has not reached the target.
     if (!game.stages.length) return false;
+    // Milestone 3 re-review, defence in depth: not reachable from the UI (the
+    // button only renders inside the quest sheet), but the handler itself
+    // should not act on another sheet's act name landing here by accident.
+    if (ui.sheet?.kind !== "quest") return false;
     ui.sheet = null;
     game.pending_resolution = "forced";
     return true;

@@ -27,3 +27,15 @@ export function zone({ name, icon, edge, ground, body, chip = "" }) {
 export function cta({ act, arg = "", label, tone = "ok", grow = true }) {
   return h`<button type="button" class="${cx("cta", "cta-" + tone, grow && "grow")}" data-act="${act}" data-arg="${arg}">${raw(label)}</button>`;
 }
+
+// The strip's transport (Task 2) and the Game Log's own copy of it (Task 3) -
+// one home so the two never drift. `on` is canUndo()/canRedo() for the
+// undo/redo pair, or a fixed availability check for first/last: when false
+// there is nowhere to move, so this renders an inert, unbevelled <span>
+// rather than a <button> with no data-act - nothing for app.js's delegation
+// to catch, exactly like .step-off above.
+export function transportButton({ act, glyph, on, title }) {
+  return on
+    ? h`<button type="button" class="tbtn" data-act="${act}" title="${title}">${glyph}</button>`
+    : h`<span class="tbtn is-off" title="${title}">${glyph}</span>`;
+}

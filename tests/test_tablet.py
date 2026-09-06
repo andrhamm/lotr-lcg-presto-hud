@@ -2116,3 +2116,54 @@ console.log(JSON.stringify({
     assert js["isCta"], "the randomize action must render as a cta"
     assert not js["isChip"]
     assert js["label"]
+
+
+def test_transport_acts_move_the_cursor_without_recording_a_delta():
+    js = node("""
+import { GameState } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "stg+", ""); perform(g, ui, "advance", ""); perform(g, ui, "stg+", "");
+const n0 = g.deltas.length;
+const undo = perform(g, ui, "rw_undo", "");
+const after = { step: g.replay_step, staging: g.staging, n: g.deltas.length };
+const redo = perform(g, ui, "rw_redo", "");
+const first = perform(g, ui, "rw_first", "");
+const atFirst = { step: g.replay_step, view: g.view, staging: g.staging };
+const last = perform(g, ui, "rw_last", "");
+const noop = perform(g, ui, "rw_redo", "");
+console.log(JSON.stringify({ n0, undo, after, redo, first, atFirst, last, noop, n1: g.deltas.length, step: g.replay_step }));
+""")
+    assert js["n0"] == 3 and js["n1"] == 3           # no cursor move became a delta
+    assert js["undo"] is True and js["after"] == {"step": 1, "staging": 1, "n": 3}
+    assert js["redo"] is True and js["first"] is True
+    assert js["atFirst"] == {"step": -1, "view": "resource", "staging": 0}
+    assert js["last"] is True and js["step"] == 2 and js["noop"] is False
+
+
+def test_a_tick_tap_rewinds_to_the_entry_of_that_view_this_round():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+import { renderStrip } from "./strip.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "advance", ""); perform(g, ui, "stg+", ""); perform(g, ui, "stg+", "");
+const before = renderStrip(g, ui);
+const moved = perform(g, ui, "rw_tick", "planning");
+const inert = perform(g, ui, "rw_tick", "combat_shadow");
+console.log(JSON.stringify({ moved, inert, step: g.replay_step, staging: g.staging, view: g.view,
+  planningIsButton: /data-act="rw_tick" data-arg="planning"/.test(before),
+  futureIsNotButton: !/data-act="rw_tick" data-arg="combat_shadow"/.test(before),
+  // Three taps in: canUndo() is true (rw_first/rw_undo are live buttons) and
+  // canRedo() is false (rw_redo/rw_last are inert .is-off spans with no
+  // data-act - transportButton()'s off case, same "not a tap target at all"
+  // shape as pane.js's allocStep()) - so this checks the transport rendered
+  // all four controls, on or off, rather than asserting a data-act that the
+  // two at-the-end ones correctly do not have.
+  transport: (before.match(/class="tbtn/g) || []).length === 4,
+  readout: /Step 3\\/3/.test(before) }));
+""")
+    assert js["moved"] is True and js["inert"] is False
+    assert js == {**js, "step": 0, "staging": 0, "view": "planning"}
+    assert js["planningIsButton"] and js["futureIsNotButton"] and js["transport"] and js["readout"]

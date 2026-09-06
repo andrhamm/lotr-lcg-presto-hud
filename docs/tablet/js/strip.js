@@ -2,9 +2,9 @@
 // round's action-window ticks, and the current playhead. Pure string
 // builder like every other tablet render function - no document/window, so
 // tests/test_tablet.py can drive it under node the way it drives the model.
-import { h, raw, cx } from "./dom.js";
+import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { chip } from "./primitives.js";
+import { chip, transportButton } from "./primitives.js";
 import {
   flowViews, VIEW_STEP, windowAfter, isActionWindow, lastWindowBefore,
   phaseViewOf,
@@ -38,13 +38,23 @@ const stateOf = (idx, curIdx) => {
 // follows it. Under "bands" the window is drawn on the view itself, but the
 // strip still shows it as a tick of its own - just never named "aw_...":
 // only the plain view id ever reaches data-view/title.
-function renderTick(v, idx, curIdx) {
+//
+// The view's own tick is a rewind target exactly when some delta actually
+// entered it this round (game.deltaIndexForView) - a future view, or one the
+// round skipped past, has nowhere to rewind TO, so it stays the plain span
+// it always was. The window tick (`aw`) is never a tap target of its own -
+// it pairs with the view that opened it, which is already the button.
+function renderTick(game, v, idx, curIdx) {
   const state = stateOf(idx, curIdx);
   const own = isOwnWindowView(v);
   const cls = cx("tick", own ? "tick-window" : "tick-framework", state);
   const label = VIEW_LABELS[v] ?? v;
   const playhead = state === "is-current" ? raw('<i class="playhead"></i>') : "";
-  let out = h`<span class="${cls}" data-view="${v}" title="${label}">${playhead}</span>`;
+  const tick = h`<span class="${cls}" data-view="${v}" title="${label}">${playhead}</span>`;
+  const canRewind = game.deltaIndexForView(game.round, v) >= 0;
+  let out = canRewind
+    ? h`<button type="button" class="tick-btn" data-act="rw_tick" data-arg="${v}" title="${label}">${raw(tick)}</button>`
+    : tick;
   const aw = windowAfter(v);
   if (aw) {
     const wstate = idx <= curIdx ? "is-done" : "is-future";
@@ -67,7 +77,7 @@ function renderSeg(game, views, seg, curIdx, skipRange, offPhase) {
   const idxs = seg.views.map(v => views.indexOf(v));
   const skippable = !!skipRange && idxs.every(i => i > skipRange.ci && i <= skipRange.li);
   const effectiveCur = (offPhase !== null && seg.phase === offPhase) ? idxs[0] : curIdx;
-  const ticks = seg.views.map((v, k) => renderTick(v, idxs[k], effectiveCur)).join("");
+  const ticks = seg.views.map((v, k) => renderTick(game, v, idxs[k], effectiveCur)).join("");
 
   const stepIds = new Set(seg.views.map(v => VIEW_STEP[v]));
   const count = game.log.filter(e => e.round === game.round && stepIds.has(e.step)).length;
@@ -133,5 +143,16 @@ export function renderStrip(game, ui) {
   // header-nav chip shape as the rail's "Edit ›" (rail.js), height:30 so it
   // sits beside the round number instead of stacking past the strip's 96px.
   const menuChip = chip({ act: "open_menu", label: h`${CHROME.menu} ›`, tone: "tan", height: 30 });
-  return h`<header class="strip"><div class="round"><span class="label">${CHROME.round}</span><div class="round-row"><span class="num num-40">${game.round}</span>${raw(menuChip)}</div></div>${raw(body)}</header>`;
+
+  // The transport (Task 2, milestone 4): ⏮ ◀ ▶ ⏭ move the replay cursor by
+  // index/single-step/round - canUndo()/canRedo() alone decide whether each
+  // end is live, exactly like Back/Redo everywhere else in this client.
+  // Placed as a second pair of rows in `.round` (style.css turns the block
+  // into a 2x2 grid so the four 44px buttons sit beside the round number
+  // instead of stacking past the strip's 96px - see the CSS comment there).
+  const canB = game.canUndo(), canF = game.canRedo();
+  const transport = h`<div class="transport">${raw(transportButton({ act: "rw_first", glyph: "⏮", on: canB, title: CHROME.rwFirst }))}${raw(transportButton({ act: "rw_undo", glyph: "◀", on: canB, title: CHROME.rwUndo }))}${raw(transportButton({ act: "rw_redo", glyph: "▶", on: canF, title: CHROME.rwRedo }))}${raw(transportButton({ act: "rw_last", glyph: "⏭", on: canF, title: CHROME.rwLast }))}</div>
+<div class="label transport-readout">${fmt(CHROME.stepOf, game.replay_step + 1, game.deltas.length)}</div>`;
+
+  return h`<header class="strip"><div class="round"><span class="label">${CHROME.round}</span><div class="round-row"><span class="num num-40">${game.round}</span>${raw(menuChip)}</div>${raw(transport)}</div>${raw(body)}</header>`;
 }
