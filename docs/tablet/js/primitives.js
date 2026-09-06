@@ -1,4 +1,5 @@
 import { h, raw, cx } from "./dom.js";
+import { CHROME } from "./copy.js";
 
 // Bevelled = tappable: the HUD's one chrome rule, kept. Every button is a
 // real <button> with a data-act; app.js delegates on it.
@@ -6,8 +7,16 @@ export function chip({ act, arg = "", label, tone = "gold", height = 44, extraCl
   return h`<button type="button" class="${cx("chip", "chip-" + tone, extraClass)}" style="height:${height}px" data-act="${act}" data-arg="${arg}">${raw(label)}</button>`;
 }
 
-export function band({ kind, text, sub = null }) {
-  return h`<div class="${cx("band", "band-" + kind)}"><div class="band-text"><p class="body">${text}</p>${sub ? raw(h`<p class="body secondary">${sub}</p>`) : ""}</div></div>`;
+// `section` (Task 3, milestone 5) is a Rules Reference section id
+// (rules_map.js's sectionsFor()) - when given, the band grows a trailing
+// "Rules §n ›" row that opens the Rules sheet (sheet_rules.js) on that
+// section. quest_setup/quest_sailing's bands never pass one (rules_map.js's
+// own comment on why), so they stay chip-less exactly as before.
+export function band({ kind, text, sub = null, section = null }) {
+  const rulesChip = section
+    ? raw(chip({ act: "open_rules", arg: section, label: h`${CHROME.rules} §${section} ›`, tone: "tan" }))
+    : "";
+  return h`<div class="${cx("band", "band-" + kind)}"><div class="band-text"><p class="body">${text}</p>${sub ? raw(h`<p class="body secondary">${sub}</p>`) : ""}${rulesChip}</div></div>`;
 }
 
 export function counter({ label, icon, value, act, arg = "" }) {

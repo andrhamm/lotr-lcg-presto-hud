@@ -15,7 +15,7 @@
 // rule 4.
 import { h, raw, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { cta } from "./primitives.js";
+import { cta, chip } from "./primitives.js";
 
 function step(act, arg, label) {
   return h`<button type="button" class="step step-sm" data-act="${act}" data-arg="${arg}">${label}</button>`;
@@ -36,6 +36,7 @@ export function renderElimSheet(game, ui) {
 <div class="esheet-choice">
 ${raw(cta({ act: "elim_confirm", label: CHROME.elimEliminate, tone: "no", grow: false }))}
 <p class="body secondary">${CHROME.elimEliminateBody}</p>
+${raw(chip({ act: "open_rules", arg: "term:Player Elimination", label: CHROME.elimRulesChip, tone: "tan" }))}
 </div>
 <div class="esheet-choice">
 ${raw(cta({ act: "elim_avert", label: CHROME.elimAvert, tone: "plain", grow: false }))}

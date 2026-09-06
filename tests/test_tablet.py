@@ -2483,3 +2483,147 @@ console.log(JSON.stringify({ moved, alloc: ui.alloc, placed: ui.placed,
     assert js["moved"] is True and js["step"] == 0 and js["staging"] == 1
     assert js["alloc"] is None and js["placed"] is False
     assert js["sheet"] == "export", "a cursor move on the log screen leaves its own sheet up"
+
+
+# -- The Rules modal (Task 3, milestone 5) -----------------------------------
+
+def test_rules_sections_map_covers_every_flow_view():
+    """sectionsFor() (rules_map.js) is the pane's own Rules Reference lookup -
+    every phase view the tablet can land on (flowViews() under the bands
+    policy, since bands is the only policy this client runs) must resolve to
+    at least one section id, except quest_setup/quest_sailing: neither has a
+    Rules Reference section of its own (stage-1A setup text and the sailing
+    test are this tracker's own affordances, not numbered book steps) - the
+    interfaces note both are chip-less for exactly that reason. flowViews()
+    under WINDOW_POLICY_BANDS never actually returns either one (they are not
+    in VIEW_ORDER at all), so the filter below is defensive documentation,
+    not a functional exclusion - see gamestate.js's own VIEW_ORDER."""
+    js = node("""
+import { setWindowPolicy, WINDOW_POLICY_BANDS, flowViews } from "../../js/gamestate.js";
+import { sectionsFor } from "./rules_map.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const views = flowViews().filter(v => v !== "quest_setup" && v !== "quest_sailing");
+console.log(JSON.stringify({
+  views,
+  covered: views.every(v => sectionsFor(v).length > 0),
+  excluded: { quest_setup: sectionsFor("quest_setup"), quest_sailing: sectionsFor("quest_sailing") },
+}));
+""")
+    assert len(js["views"]) > 0
+    assert js["covered"], "every flow view except quest_setup/quest_sailing needs a section id: %r" % js["views"]
+    assert js["excluded"] == {"quest_setup": [], "quest_sailing": []}
+
+
+def test_resource_pane_bands_carry_the_rules_chips_from_the_map():
+    """pane.js wires each of resource's two direct band() calls to
+    sectionsFor("resource")'s own ids in order - the framework band
+    (PHASE_FRAMEWORK.resource, "1.1 Beginning of the Resource phase") and the
+    window band (ACTION_WINDOW_TIPS.resource[0], "1.2-1.3 Gain resources and
+    draw cards") - rather than a hand-typed id that could drift from
+    rules_map.js's own VIEW_SECTIONS."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2); g.view = "resource";
+const html = renderPane(g, { alloc: null, placed: false });
+console.log(JSON.stringify({
+  html,
+  chips: [...html.matchAll(/data-act="open_rules" data-arg="([^"]*)"/g)].map(m => m[1]),
+}));
+""")
+    assert js["chips"] == ["1.1", "1.2"], js["html"]
+
+
+def test_rules_sheet_renders_fixture_text_verbatim_with_prev_next_chips():
+    """A fixture ui.rules (placeholder prose - never real rulebook text, per
+    CLAUDE.md's data policy on verbatim third-party content) stands in for a
+    built rules_text.json. The Official text block must show the fixture's
+    own paragraphs unchanged, the header must name the section, and the
+    Related row's prev/next chips must be rules_map.js's own STEP_ORDER
+    neighbours of "6.2" (combat_shadow's "6.1", then combat_enemy's "6.3") -
+    not anything hand-picked."""
+    js = node("""
+import { renderRulesSheet } from "./sheet_rules.js";
+const fixture = {
+  sections: {
+    "6.2": { ids: ["6.2"], title: "Deal shadow cards",
+      text: "Fixture paragraph one.\\n\\nFixture paragraph two.", see_also: ["Shadow Effect"] },
+  },
+  glossary: {}, faq: [],
+  source: { page: "https://example.test/rules", sha256: "abc", pin: "def" },
+};
+const ui = { sheet: { kind: "rules", section: "6.2" }, rules: fixture };
+const html = renderRulesSheet({}, ui);
+console.log(JSON.stringify({
+  html,
+  hasHeader: html.includes("§6.2"),
+  hasBodyText: html.includes('<p class="body">Fixture paragraph one.</p>')
+    && html.includes('<p class="body">Fixture paragraph two.</p>'),
+  chips: [...html.matchAll(/data-act="open_rules" data-arg="([^"]*)"/g)].map(m => m[1]),
+}));
+""")
+    assert js["hasHeader"], js["html"]
+    assert js["hasBodyText"], js["html"]
+    assert "6.1" in js["chips"] and "6.3" in js["chips"], js["chips"]
+
+
+def test_rules_sheet_degrades_when_rules_text_is_unavailable():
+    """ui.rules null (no rules_text.json this build - db.rulesText()'s own
+    "PROPAGATES on failure... returns null" contract) degrades the Official
+    text block to CHROME.rulesUnavailable rather than a blank sheet or a
+    crash (CLAUDE.md iron rule 4: no placeholder rules text ships). The
+    footer's Open-the-rulebook link still works, falling back to copy.js's
+    pinned page URL since there is no ui.rules.source.page to prefer."""
+    js = node("""
+import { renderRulesSheet } from "./sheet_rules.js";
+import { CHROME, rulesPageUrl } from "./copy.js";
+const ui = { sheet: { kind: "rules", section: "6.2" }, rules: null };
+const html = renderRulesSheet({}, ui);
+console.log(JSON.stringify({
+  html,
+  unavailable: html.includes(CHROME.rulesUnavailable),
+  hasLink: html.includes('href="' + rulesPageUrl + '"') && html.includes('target="_blank"'),
+}));
+""")
+    assert js["unavailable"], js["html"]
+    assert js["hasLink"], js["html"]
+
+
+def test_elim_sheet_rules_chip_opens_glossary_then_returns_to_elim():
+    """The elimination sheet's own "Rules · Player Elimination ›" chip opens
+    the Rules modal on the glossary term, REPLACING the elim sheet - fine,
+    because opening it never touches game.pending_elim, so afterTap()
+    (actions.js) re-seats the elim sheet the instant sheet_close
+    (acts_sheets.js) clears ui.sheet back to null. Same re-seat mechanism
+    sheets.js's own elim-scrim comment documents for a scrim tap; this test
+    covers reaching it via another sheet's own act instead."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, afterTap, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 45); g.advanceView(); const ui = newUi();
+ui.rules = { sections: {}, faq: [], glossary: {
+  "Player Elimination": { title: "Player Elimination", text: "Fixture glossary text.", see_also: [] },
+} };
+perform(g, ui, "thr", "0:5"); afterTap(g, ui);            // P1: 45 -> 50, crosses
+const openedElim = { kind: ui.sheet.kind, i: ui.sheet.i };
+const opened = perform(g, ui, "open_rules", "term:Player Elimination");
+afterTap(g, ui);
+const rulesSheet = { kind: ui.sheet.kind, term: ui.sheet.term };
+const glossaryShown = layout(g, ui).includes("Fixture glossary text.");
+perform(g, ui, "sheet_close", "");
+afterTap(g, ui);
+console.log(JSON.stringify({
+  openedElim, opened, rulesSheet, glossaryShown,
+  afterClose: { kind: ui.sheet && ui.sheet.kind, i: ui.sheet && ui.sheet.i },
+  pendingElim: g.pending_elim,
+}));
+""")
+    assert js["openedElim"] == {"kind": "elim", "i": 0}
+    assert js["opened"] is True
+    assert js["rulesSheet"] == {"kind": "rules", "term": "Player Elimination"}
+    assert js["glossaryShown"], "the fixture glossary text must render verbatim"
+    assert js["afterClose"] == {"kind": "elim", "i": 0}, "the elim sheet must return, flag persisted"
+    assert js["pendingElim"] == 0, "the elimination flag must survive the rules detour"

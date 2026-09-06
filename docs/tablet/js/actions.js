@@ -19,9 +19,10 @@ import { handle as resolveActs } from "./acts_resolve.js";
 import { handle as sailingActs } from "./acts_sailing.js";
 import { handle as transportActs } from "./acts_transport.js";
 import { handle as logActs } from "./acts_log.js";
+import { handle as rulesActs } from "./acts_rules.js";
 
 const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs,
-                  sqpickActs, resolveActs, sailingActs, transportActs, logActs];
+                  sqpickActs, resolveActs, sailingActs, transportActs, logActs, rulesActs];
 
 export const newUi = () => ({
   screen: "play", alloc: null, placed: false, picker: null,

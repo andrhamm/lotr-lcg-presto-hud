@@ -61,6 +61,12 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .band { display: flex; gap: 16px; align-items: center; padding: 10px 12px 10px 18px; background: var(--card); border: 1px solid var(--border); border-left: 6px solid; border-radius: 6px; }
 .band-framework { border-left-color: var(--red) } .band-window { border-left-color: var(--green) } .band-tip { border-left-color: var(--gold) }
 .band-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 0 }
+/* The band's own "Rules §n ›" chip (Task 3, milestone 5) is the last child
+   of .band-text's column - without this it inherits that column's default
+   align-items: stretch and blows up to the full width of the band, looking
+   like a second CTA instead of a chip. Same fix .esheet-choice > .cta
+   already applies to a button inside a column flex for the same reason. */
+.band-text > .chip { align-self: flex-start; }
 .counter { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; flex: 1 1 0; min-width: 0 }
 .counter-row { display: flex; align-items: center; justify-content: space-between; gap: 12px }
 .counter-value { display: flex; align-items: center; gap: 14px }
@@ -390,6 +396,10 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    set there would fight that row's own align-items:center and knock Set out
    of line with the stepper buttons beside it. */
 .esheet-choice > .cta { align-self: flex-start; }
+/* The Eliminate choice's own "Rules · Player Elimination ›" chip (Task 3,
+   milestone 5) is the same column-flex child as its .cta sibling above, and
+   needs the same fix for the same reason. */
+.esheet-choice > .chip { align-self: flex-start; }
 .esheet-lvl { display: flex; align-items: center; gap: 8px; }
 .esheet-lvl-val { display: flex; align-items: center; justify-content: center; min-width: 64px; }
 
@@ -470,3 +480,19 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .sailsheet-heading { display: flex; flex-direction: column; gap: 4px; }
 .sailsheet-stepper { display: flex; align-items: center; justify-content: center; gap: 16px; }
 .sailsheet-val { display: flex; align-items: center; gap: 10px; min-width: 72px; justify-content: center; }
+
+/* The Rules modal (Task 3, milestone 5): the official excerpt's own
+   paragraphs, this tracker's one-line summary (reusing the same band copy
+   pane.js already shows, never re-worded), and a Related row of prev/next +
+   see-also chips. .rules-section reuses .qsheet-section's spacing verbatim -
+   same LABEL-then-content stacking, different sheet. */
+.rules-section { margin-top: 2px; }
+.rules-body p.body { margin: 0 0 12px }
+.rules-body p.body:last-child { margin-bottom: 0 }
+.rules-related { display: flex; flex-wrap: wrap; gap: 8px; }
+/* .cta is a <button> everywhere else; this sheet's "Open the rulebook page"
+   footer link is a real <a> (a new tab, not an app act) wearing the same
+   class. Anchors default to inline, which .cta's own height:64px cannot
+   center content inside on its own - inline-flex fixes that without
+   touching the button rule at all. */
+a.cta { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
