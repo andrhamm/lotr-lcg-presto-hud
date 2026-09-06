@@ -427,6 +427,15 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .eng-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .eng-value { display: flex; align-items: center; gap: 8px; }
 
+/* The ?debug=1 metrics readout (app.js's debugOverlay). Fixed to the visual
+   viewport's own bottom-left, deliberately OUTSIDE #app so it reports on the
+   app rather than moving with it. LABEL-sized monospace: it is a measuring
+   instrument, not copy. */
+.debug-overlay { position: fixed; left: 8px; bottom: 8px; z-index: 999; margin: 0;
+  padding: 10px 12px; background: rgba(0,0,0,.82); border: 1px solid var(--border-gold);
+  border-radius: 6px; color: var(--gold); font: 13px/1.45 ui-monospace, Menlo, monospace;
+  white-space: pre; pointer-events: none; }
+
 /* THE APP'S OWN RELOAD (layout.js), top-right of every screen. In standalone
    or fullscreen there is no browser chrome, so this is the ONLY reload the
    app has. Quiet by default - it is a recovery, not a control anyone should

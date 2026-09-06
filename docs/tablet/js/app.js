@@ -453,4 +453,42 @@ if ("serviceWorker" in navigator) {
     .catch(() => {});
 }
 
+// A diagnostic for the one surface no inspector can reach: the app running
+// standalone on the iPad, where there is no Safari, no dev tools and no
+// remote debugging. `?debug=1` paints the numbers that decide the layout -
+// the several heights iOS can disagree about, and the safe-area insets it
+// reports - straight onto the screen, so a screenshot IS the measurement.
+//
+// Off unless asked for, appended after the app rather than inside it, and it
+// reads nothing it could change.
+function debugOverlay() {
+  if (!/(^|[?&])debug=1(&|$)/.test(location.search)) return;
+  const el = document.createElement("pre");
+  el.className = "debug-overlay";
+  const read = () => {
+    const cs = getComputedStyle(document.documentElement);
+    const box = document.getElementById("app").getBoundingClientRect();
+    const pane = document.querySelector(".pane")?.getBoundingClientRect();
+    const cta = document.querySelector(".cta-row")?.getBoundingClientRect();
+    const round = n => Math.round(n * 10) / 10;
+    el.textContent = [
+      `innerHeight        ${innerHeight}`,
+      `visualViewport     ${round(visualViewport?.height ?? -1)}`,
+      `documentElement    ${document.documentElement.clientHeight}`,
+      `body               ${round(document.body.getBoundingClientRect().height)}`,
+      `#app               ${round(box.top)} .. ${round(box.bottom)}  (h ${round(box.height)})`,
+      `.pane              ${pane ? round(pane.top) + " .. " + round(pane.bottom) : "-"}`,
+      `.cta-row           ${cta ? round(cta.top) + " .. " + round(cta.bottom) : "-"}`,
+      `sa top/right/btm/left  ${cs.getPropertyValue("--sa-top").trim()} / ${cs.getPropertyValue("--sa-right").trim()} / ${cs.getPropertyValue("--sa-bottom").trim()} / ${cs.getPropertyValue("--sa-left").trim()}`,
+      `standalone         ${!!navigator.standalone || matchMedia("(display-mode: standalone)").matches}`,
+    ].join("\n");
+  };
+  read();
+  document.body.appendChild(el);
+  addEventListener("resize", read);
+  visualViewport?.addEventListener("resize", read);
+  setInterval(read, 1000);
+}
+
 boot();
+debugOverlay();
