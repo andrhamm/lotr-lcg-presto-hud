@@ -12,7 +12,10 @@ import { CHROME } from "./copy.js";
 import { cta } from "./primitives.js";
 import { allNotes } from "./notes.js";
 
-function renderGroup(g) {
+// Exported because the Scenario overview's Notes section draws the same
+// groups (Task 3, milestone 6) - one markup, so the sheet and the overview
+// can never drift into two shapes for the same list.
+export function renderNotesGroup(g) {
   const items = g.items.map(t => h`<li class="body">${t}</li>`).join("");
   const name = g.source?.name ?? "";
   const url = g.source?.url ?? "";
@@ -28,7 +31,7 @@ ${raw(sourceLink)}
 
 export function renderNotesSheet(game, ui) {
   const groups = allNotes(ui.tips, ui.scenarioSlug);
-  const body = groups.map(renderGroup).join("");
+  const body = groups.map(renderNotesGroup).join("");
   const footer = h`<div class="cta-row">${raw(cta({ act: "sheet_close", label: CHROME.done }))}</div>`;
   return h`<h1 class="display">${CHROME.notesSheetTitle}</h1>
 ${raw(body)}

@@ -74,7 +74,15 @@ function renderPlayersZone(game) {
 function renderStagePill(game) {
   const card = game.stages[game.stage_idx]?.cards?.[game.card_idx];
   const name = faceOf(card, game.quest.side)?.name;
-  const nameRow = name ? h`<p class="body pill-name">${name}</p>` : "";
+  // Milestone 6 (Task 3): with a real scenario loaded that name is also the
+  // way back to the Scenario overview - the difficulty, the sets to gather,
+  // the stages and the cards, read-only. A bare/manual game has no scenario
+  // to open (and no seated bundle either, which is what open_overview
+  // declines on), so there it stays the plain line it has always been.
+  const nameRow = !name ? ""
+    : game.scenario?.slug
+      ? h`<button type="button" class="body pill-name pill-name-btn" data-act="open_overview">${name}</button>`
+      : h`<p class="body pill-name">${name}</p>`;
   const stageIcon = scenarioIcon(game, 20);
   return h`<div class="pill">
 <div class="pill-head">${raw(stageIcon)}<span class="label">${CHROME.stage} ${game.questLabel()}</span></div>

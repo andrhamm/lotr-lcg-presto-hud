@@ -715,10 +715,11 @@ console.log(JSON.stringify({ n: tags.length, allButtons: tags.every(t => t === "
 def test_overview_for_builds_the_seat_pick_scenario_hands_to_ui_overview():
     """pick_scenario itself can't be driven under node (it awaits
     db.bundle()) - overviewFor(index, slug, bundle) is the pure helper it
-    calls once the bundle has loaded, exported from newgame.js so this task's
-    tests can cover the shape without a live DataClient."""
+    calls once the bundle has loaded, exported from overview.js (it lived in
+    newgame.js while that screen was a placeholder) so these tests can cover
+    the shape without a live DataClient."""
     js = node(NG_FIXTURE + """
-import { overviewFor } from "./newgame.js";
+import { overviewFor } from "./overview.js";
 const bundle = { stages: [{ id: 1 }], locations: [], tips: null };
 const found = overviewFor(index, "o1a", bundle);
 const missing = overviewFor(index, "no-such-slug", bundle);
@@ -734,14 +735,15 @@ console.log(JSON.stringify({
     assert js["missingEntry"] is None
 
 
-def test_overview_placeholder_screen_renders_title_and_begin_setup():
-    """Task 3 renders the Scenario overview for real; until then layout.js
-    carries a placeholder (task-2 brief) so the picker -> overview ->
-    begin_setup flow is usable end-to-end and this task's own tests can
-    assert the screen transition landed."""
+def test_overview_screen_renders_title_and_begin_setup():
+    """The picker -> overview -> begin_setup flow, end to end, on a bundle
+    with none of the optional pieces (no scenario record, no cards, a stage
+    entry with no cards key at all): the screen still draws its title and
+    both footer CTAs rather than throwing on a missing field. Every section
+    below degrades to nothing on its own."""
     js = node(NG_FIXTURE + """
 import { GameState } from "../../js/gamestate.js";
-import { overviewFor } from "./newgame.js";
+import { overviewFor } from "./overview.js";
 import { layout } from "./layout.js";
 const bundle = { stages: [{ id: 1 }], locations: [], tips: null };
 const overview = overviewFor(index, "o1a", bundle);
@@ -755,6 +757,330 @@ console.log(JSON.stringify({
 """)
     assert js["hasTitle"]
     assert js["hasBeginSetup"] and js["hasBack"]
+
+
+# The Scenario overview's fixture (Task 3, milestone 6). The entry is the
+# index row - a scenario that prints a Hard Mode card AND has a Nightmare
+# deck, which no real scenario does (of 349, exactly 1 prints Hard and 68
+# have Nightmare, and no scenario has both) but which is what puts every rung
+# of the ladder on screen at once. The bundle is db.bundle()'s own shape:
+#   - three stages: an ordinary one with printed points, a two-alternative
+#     branch stage (named off the BACK face, like the resolution sheet's own
+#     fork list), and a condition stage whose questPointsKind is "na" - it
+#     must print NO number, never the 0 the field carries;
+#   - encounter groups holding this scenario's own two enemies (quantity 3
+#     and 2) and one location, PLUS one card from a set it merely gathers,
+#     which belongs to that set's own file and not to this scenario's grid;
+#   - a three-name gather list, two of which are therefore "shared";
+#   - tips for the slug, so the notes section has a group and a source link.
+OV_FIXTURE = """
+const entry = { slug: "ov1", name: "Overview One", pack: "Pack P", cycle: "Cycle C",
+  kind: "quest", source: "official", modes: ["Hard Mode"], hasNightmare: true,
+  stageCount: 3, maxCardThreat: 3, hasXThreat: false };
+const index = { scenarios: [entry] };
+const bundle = {
+  scenario: {
+    slug: "ov1", name: "Overview One",
+    includedSets: ["Overview One", "Gathered Set", "Other Set"],
+    modes: [{ name: "Hard Mode", faces: [{ text: "Hard mode: the printed card's own text." }] }],
+    encounter: {
+      enemy: [
+        { id: "e1", image: "e1.jpg", name: "First Enemy", encounterSet: "Overview One",
+          quantity: 3, type: "Enemy",
+          faces: [{ engagementCost: 25, threat: 2, attack: 2, defense: 1, hitPoints: 4 }] },
+        { id: "e2", image: "e2.jpg", name: "Second Enemy", encounterSet: "Overview One",
+          quantity: 2, type: "Enemy",
+          faces: [{ engagementCost: 30, threat: 3, attack: 3, defense: 2, hitPoints: 5 }] },
+        { id: "e3", image: "e3.jpg", name: "Gathered Enemy", encounterSet: "Gathered Set",
+          quantity: 4, type: "Enemy", faces: [{ engagementCost: 10 }] },
+      ],
+      location: [
+        { id: "l1", image: "l1.jpg", name: "First Location", encounterSet: "Overview One",
+          quantity: 2, type: "Location", faces: [{ threat: 1, questPoints: 3 }] },
+      ],
+    },
+  },
+  stages: [
+    { stage: 1, cards: [{ questPoints: 8,
+        faces: [{ name: "Flies Ahead", side: "A" }, { name: "Into the Wood", side: "B" }] }] },
+    { stage: 2, branch: "choice", cards: [
+      { questPoints: 13, faces: [{ name: "Through the Marsh", side: "A" }, { name: "Left Path", side: "B" }] },
+      { questPoints: 13, faces: [{ name: "Through the Marsh", side: "A" }, { name: "Right Path", side: "B" }] },
+    ] },
+    { stage: 3, questPointsKind: "na", cards: [{ questPoints: 0, questPointsKind: "na",
+        faces: [{ name: "The Last Stand", side: "A" }, { name: "Hold the Line", side: "B" }] }] },
+  ],
+  locations: [],
+  tips: { ov1: { attribution: { name: "Vision of the Palantir", url: "https://example.invalid/ov1" },
+                 general: ["Keep a location in play for the extra progress."],
+                 stages: { "1": ["The spiders come out early."] } } },
+};
+const uiFor = (over) => ({ screen: "overview", tips: bundle.tips, scenarioSlug: "ov1",
+  imagePrefix: "https://art.example.invalid/",
+  overview: { slug: "ov1", entry, bundle, difficulty: "Standard", readonly: false, ...over } });
+"""
+
+
+def test_overview_difficulty_ladder_is_easy_standard_hard_nightmare():
+    """difficulty.js is a pure port of ScenarioOptionsScreen's own
+    difficultyOptions()/_scenarioModes() (docs/js/screens_other.js): Easy and
+    Standard always (Easy is a general rule, Learn to Play p.28), the printed
+    Mode cards this scenario actually ships, then Nightmare when it has a
+    deck - and the selected rung is the gold one."""
+    js = node(OV_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { renderOverview } from "./overview.js";
+import { difficultyOptions } from "./difficulty.js";
+const html = renderOverview(new GameState(), uiFor({}));
+console.log(JSON.stringify({
+  opts: difficultyOptions(entry),
+  bare: difficultyOptions({}),
+  args: [...html.matchAll(/data-act="ov_difficulty" data-arg="([^"]+)"/g)].map(m => m[1]),
+  standardGold: /<button[^>]*data-arg="Standard"[^>]*class=|class="[^"]*chip-gold[^"]*"[^>]*data-act="ov_difficulty" data-arg="Standard"/.test(html),
+  goldArg: /class="chip chip-gold"[^>]*data-act="ov_difficulty" data-arg="([^"]+)"/.exec(html)?.[1] ?? "",
+}));
+""")
+    assert js["opts"] == ["Easy", "Standard", "Hard", "Nightmare"]
+    assert js["bare"] == ["Easy", "Standard"]      # a scenario with neither
+    assert js["args"] == ["Easy", "Standard", "Hard", "Nightmare"]
+    assert js["goldArg"] == "Standard"
+
+
+def test_overview_ov_difficulty_selects_nightmare_and_prints_the_verified_tip():
+    """The tip is viewcopy's MODE_TIPS sentence VERBATIM - the one home both
+    twins read, with the rulebook citations in viewcopy.py - never a sentence
+    this screen wrote. A printed Mode card shows its own text instead, and an
+    option the scenario does not offer is refused outright rather than
+    quietly selected."""
+    js = node(OV_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+import { renderOverview } from "./overview.js";
+import { MODE_TIPS } from "../../js/viewcopy.js";
+const g = new GameState();
+const ui = uiFor({});
+const standard = renderOverview(g, ui);
+const nightmare = dispatch(g, ui, "ov_difficulty", "Nightmare");
+const nmHtml = renderOverview(g, ui);
+const again = dispatch(g, ui, "ov_difficulty", "Nightmare");
+const bogus = dispatch(g, ui, "ov_difficulty", "Bogus");
+const hard = dispatch(g, ui, "ov_difficulty", "Hard");
+const hardHtml = renderOverview(g, ui);
+console.log(JSON.stringify({
+  nightmare, again, bogus, hard, after: ui.overview.difficulty,
+  standardTip: standard.includes(MODE_TIPS.Nightmare) || standard.includes(MODE_TIPS.Easy),
+  nmTip: nmHtml.includes(MODE_TIPS.Nightmare),
+  nmGold: /class="chip chip-gold"[^>]*data-arg="Nightmare"/.test(nmHtml),
+  hardTip: hardHtml.includes("Hard mode: the printed card&#39;s own text."),
+}));
+""")
+    assert js["nightmare"] is True and js["again"] is False
+    assert js["bogus"] is False and js["hard"] is True
+    assert js["after"] == "Hard"        # Bogus never landed
+    assert js["nmTip"] and js["nmGold"]
+    assert not js["standardTip"]        # Standard says nothing at all
+    assert js["hardTip"]                # the printed Mode card's own text
+
+
+def test_overview_stages_list_branch_alternatives_and_never_print_a_zero():
+    """R7: one row per stage, named off the back face, with the points the
+    card actually prints. A branch stage gets a row per alternative (23 of
+    the catalog's 39 forks share one front name, which is why the back is
+    what names them), and a condition stage prints nothing at all - ~137 of
+    ~400 stage cards advance on a condition, and no stage card ever prints
+    a 0 (xshape.js's stagePointsShape)."""
+    js = node(OV_FIXTURE + r"""
+import { GameState } from "../../js/gamestate.js";
+import { renderOverview } from "./overview.js";
+const html = renderOverview(new GameState(), uiFor({}));
+// Scoped to the Stages section: the Cards grid prints quest points too (a
+// location's), and this is about what the STAGE cards claim.
+const sect = /class="ov-stages">([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+console.log(JSON.stringify({
+  labels: [...sect.matchAll(/<span class="label">Stage (\d+)<\/span>/g)].map(m => m[1]),
+  hasLeft: sect.includes(">Left Path<"), hasRight: sect.includes(">Right Path<"),
+  frontNamed: sect.includes(">Through the Marsh<"),
+  points: [...sect.matchAll(/(\d+) quest points/g)].map(m => m[1]),
+  lastStage: /Stage 3<\/span>([\s\S]*?)<\/div>/.exec(sect)?.[1] ?? "",
+}));
+""")
+    assert js["labels"] == ["1", "2", "3"]
+    assert js["hasLeft"] and js["hasRight"]
+    assert not js["frontNamed"]                 # named off the BACK face
+    assert js["points"] == ["8", "13", "13"]    # the condition stage adds none
+    assert "Hold the Line" in js["lastStage"]
+    assert "0" not in js["lastStage"].replace("Hold the Line", "")
+
+
+def test_overview_cards_are_the_scenarios_own_set_with_counts_and_printed_values():
+    """R5: the scenario's own cards, grouped by type, each with how many
+    copies it ships and what it prints. A card from a set this quest merely
+    GATHERS lives in that set's own file, not in this grid - the shared-sets
+    chips are what say it is coming. Every value is the card's own; a null
+    field is absent, never a 0 the card does not print."""
+    js = node(OV_FIXTURE + r"""
+import { GameState } from "../../js/gamestate.js";
+import { renderOverview } from "./overview.js";
+const html = renderOverview(new GameState(), uiFor({}));
+const caps = [...html.matchAll(/<figcaption class="body">([^<]*)<\/figcaption>/g)].map(m => m[1]);
+console.log(JSON.stringify({
+  caps,
+  headings: [...html.matchAll(/<div class="ov-type"><div class="label">([^<]+)</g)].map(m => m[1]),
+  art: [...html.matchAll(/<img src="([^"]+)"/g)].map(m => m[1]).filter(u => u.includes("art.example")),
+}));
+""")
+    assert js["caps"] == [
+        "First Enemy · ×3 · engagement 25 · threat 2 · attack 2 · defense 1 · hit points 4",
+        "Second Enemy · ×2 · engagement 30 · threat 3 · attack 3 · defense 2 · hit points 5",
+        "First Location · ×2 · threat 1 · 3 quest points",
+    ]
+    assert js["headings"] == ["Enemies", "Locations"]
+    assert js["art"] == ["https://art.example.invalid/e1.jpg",
+                         "https://art.example.invalid/e2.jpg",
+                         "https://art.example.invalid/l1.jpg"]
+
+
+def test_overview_shared_sets_are_the_gather_list_minus_this_ones_own():
+    """Sets to gather is the whole list (the twin's _gatherSets, falling back
+    to the scenario's own name when the enrichment never covered it); Shared
+    sets is that list minus this scenario's own - the cards the grid above
+    does NOT show. Neither is tappable: nothing here is a button."""
+    js = node(OV_FIXTURE + r"""
+import { GameState } from "../../js/gamestate.js";
+import { renderOverview } from "./overview.js";
+const html = renderOverview(new GameState(), uiFor({}));
+const noSets = renderOverview(new GameState(), uiFor({
+  bundle: { ...bundle, scenario: { ...bundle.scenario, includedSets: undefined } } }));
+const gather = /class="ov-sets">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? "";
+const shared = /class="ov-chips">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? "";
+console.log(JSON.stringify({
+  gather: [...gather.matchAll(/<span class="body">([^<]+)</g)].map(m => m[1]),
+  shared: [...shared.matchAll(/<span class="body">([^<]+)</g)].map(m => m[1]),
+  sharedTappable: shared.includes("data-act"),
+  fallback: [...(/class="ov-sets">([\s\S]*?)<\/ul>/.exec(noSets)?.[1] ?? "")
+    .matchAll(/<span class="body">([^<]+)</g)].map(m => m[1]),
+  fallbackShared: noSets.includes("ov-chips"),
+}));
+""")
+    assert js["gather"] == ["Overview One", "Gathered Set", "Other Set"]
+    assert js["shared"] == ["Gathered Set", "Other Set"]
+    assert not js["sharedTappable"]
+    assert js["fallback"] == ["Overview One"]   # no enrichment: its own set
+    assert not js["fallbackShared"]             # ...and so no shared section
+
+
+def test_overview_notes_reuse_the_sheets_group_renderer_with_its_source():
+    """The notes section is notes.js's allNotes() drawn by sheet_notes.js's
+    own renderNotesGroup - one markup for both surfaces, so the sheet and the
+    overview cannot drift. General first, then each stage in numeric order,
+    each group carrying its own Source link (R9)."""
+    js = node(OV_FIXTURE + r"""
+import { GameState } from "../../js/gamestate.js";
+import { renderOverview } from "./overview.js";
+const html = renderOverview(new GameState(), uiFor({}));
+const none = renderOverview(new GameState(), uiFor({ slug: "no-tips-here" }));
+console.log(JSON.stringify({
+  scopes: [...html.matchAll(/<div class="notes-group">\s*<div class="label">([^<]+)</g)].map(m => m[1]),
+  tip: html.includes("Keep a location in play for the extra progress."),
+  link: /<a class="chip chip-tan" href="([^"]+)"[^>]*rel="noopener">([^<]+)</.exec(html)?.slice(1) ?? [],
+  noneHasNotes: none.includes("notes-group"),
+}));
+""")
+    assert js["scopes"] == ["General", "Stage 1"]
+    assert js["tip"]
+    assert js["link"][0] == "https://example.invalid/ov1"
+    assert "Vision of the Palantir" in js["link"][1]
+    assert not js["noneHasNotes"]
+
+
+def test_overview_readonly_swaps_the_ladder_for_a_badge_and_the_footer_for_close():
+    """The read-only variant (open_overview, from the QUEST zone's stage
+    pill mid-game): the difficulty is settled, so there is no ladder to tap
+    and no game to begin - a LABEL badge naming the mode, and Close."""
+    js = node(OV_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { renderOverview } from "./overview.js";
+import { MODE_TIPS } from "../../js/viewcopy.js";
+const html = renderOverview(new GameState(), uiFor({ readonly: true, difficulty: "Nightmare" }));
+console.log(JSON.stringify({
+  ladder: html.includes("ov_difficulty"),
+  badge: /<span class="ov-badge label">([^<]+)</.exec(html)?.[1] ?? "",
+  tip: html.includes(MODE_TIPS.Nightmare),
+  close: html.includes('data-act="ov_close"'),
+  begin: html.includes('data-act="begin_setup"'),
+  back: html.includes('data-act="ov_back"'),
+  stages: html.includes(">Left Path<"),
+}));
+""")
+    assert not js["ladder"]
+    assert js["badge"] == "Nightmare"
+    assert js["tip"]                      # the mode's own verified sentence stays
+    assert js["close"]
+    assert not js["begin"] and not js["back"]
+    assert js["stages"]                   # everything else is the same screen
+
+
+def test_overview_acts_open_from_the_stage_pill_and_close_back_to_play():
+    """The rail's stage pill name is the way in (a real button, so it takes
+    the 44px floor with it); open_overview flips the seat read-only at the
+    GAME's own mode, not whatever the ladder was last left on, and ov_close
+    goes back to play. ov_back - the picker's way out - is acts_overview.js's
+    now too."""
+    js = node(OV_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+import { renderRail } from "./rail.js";
+const g = new GameState(2);
+g.preloadScenario({ slug: "ov1", name: "Overview One", mode: "Nightmare", nightmare: true },
+                  bundle.stages);
+const ui = uiFor({ difficulty: "Easy" });
+ui.screen = "play";
+const rail = renderRail(g, ui);
+const opened = dispatch(g, ui, "open_overview", "");
+const afterOpen = { screen: ui.screen, readonly: ui.overview.readonly, difficulty: ui.overview.difficulty };
+const closed = dispatch(g, ui, "ov_close", "");
+const screenAfterClose = ui.screen;
+const back = dispatch(g, ui, "ov_back", "");
+const screenAfterBack = ui.screen;
+const bare = new GameState(2);
+const bareUi = { screen: "play", overview: null };
+console.log(JSON.stringify({
+  pillBtn: /<button type="button" class="body pill-name pill-name-btn" data-act="open_overview">([^<]*)</.exec(rail)?.[1] ?? "",
+  barePill: renderRail(bare, bareUi).includes("open_overview"),
+  opened, afterOpen, closed, screenAfterClose, back, screenAfterBack,
+  declined: dispatch(bare, bareUi, "open_overview", ""),
+}));
+""")
+    assert js["pillBtn"] == "Flies Ahead"
+    assert not js["barePill"]        # no scenario, no way in
+    assert js["opened"] is True
+    assert js["afterOpen"] == {"screen": "overview", "readonly": True, "difficulty": "Nightmare"}
+    assert js["closed"] is True and js["screenAfterClose"] == "play"
+    assert js["back"] is True and js["screenAfterBack"] == "newgame"
+    assert js["declined"] is False
+
+
+def test_scenario_meta_for_carries_the_ladder_pick_into_the_game():
+    """begin_setup's own meta, as a pure helper (app.js can't be driven under
+    node): the ladder's pick becomes the game's `mode`, and only "Nightmare"
+    sets the `nightmare` flag. maxCardThreat/hasXThreat ride along untouched
+    - the staging estimate reads them, and losing them would cost the
+    estimate silently rather than crash."""
+    js = node(OV_FIXTURE + """
+import { scenarioMetaFor } from "./overview.js";
+console.log(JSON.stringify({
+  nm: scenarioMetaFor(entry, "Nightmare"),
+  easy: scenarioMetaFor(entry, "Easy"),
+  none: scenarioMetaFor(null, "Standard"),
+}));
+""")
+    assert js["nm"] == {
+        "slug": "ov1", "name": "Overview One", "pack": "Pack P", "cycle": "Cycle C",
+        "source": "official", "kind": "quest", "nightmare": True, "mode": "Nightmare",
+        "maxCardThreat": 3, "hasXThreat": False,
+    }
+    assert js["easy"]["nightmare"] is False and js["easy"]["mode"] == "Easy"
+    assert js["none"]["mode"] == "Standard" and js["none"]["nightmare"] is False
 
 
 def test_catalog_paths_resolve_beside_the_module_not_the_page():

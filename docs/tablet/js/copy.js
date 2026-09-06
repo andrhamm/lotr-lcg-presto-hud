@@ -19,10 +19,38 @@ export const CHROME = {
   cycles: "Cycles",
   scenarios: "Scenarios",
   stagesCount: "%s stages",
-  // The Scenario overview (Task 2 placeholder; Task 3 builds the real
-  // screen) - its two footer CTAs.
+  // The Scenario overview (Task 3, milestone 6) - its section headings, its
+  // footer CTAs and the two templates its rows fill in. "Close" is the Game
+  // Log screen's own key below (the read-only variant's footer says exactly
+  // that word); "Stage n" is composed from `stage` the way the rail's stage
+  // pill composes it; "%s quest points" is branchPoints below, shared rather
+  // than duplicated (the same convention manualEntry follows across the two
+  // pickers). Every SENTENCE this screen shows comes from somewhere else:
+  // the mode tips from viewcopy's MODE_TIPS/MODE_TIPS_FALLBACK, the card and
+  // stage text from the catalog, the notes from tips.json. Nothing here
+  // makes a claim about the game.
   beginSetup: "Begin setup",
   backToScenarios: "‹ Scenarios",
+  difficulty: "Difficulty",
+  setsToGather: "Sets to gather",
+  stages: "Stages",
+  cards: "Cards",
+  sharedSets: "Shared sets",
+  copies: "×%s",
+  // The card grid's type headings. `enemies`/`locations` below are the
+  // STAGING zone's pill captions - two surfaces that happen to want the same
+  // word, kept apart so either can be reworded without touching the other
+  // (the same reason `filters.all` and `all` are two keys).
+  cardTypes: { enemy: "Enemies", location: "Locations", treachery: "Treacheries",
+               objective: "Objectives", other: "Other" },
+  // What a card prints, under its picture. The words are the game's own -
+  // Learn to Play uses "engagement cost" (Encounter phase, "Engagement
+  // Checks"), "attack", "defense" (US spelling, as FFG prints it; the Rules
+  // Reference has 359 "defense" and no "defence") and "Hit Points and
+  // Damage" (p.20). The VALUES are the card's own, never a default: a null
+  // field is left out of the line entirely.
+  stats: { engagement: "engagement %s", threat: "threat %s", attack: "attack %s",
+           defense: "defense %s", hitPoints: "hit points %s" },
   begin: "Begin",
   eliminated: "Eliminated",
   noLocation: "no active location",
@@ -168,6 +196,8 @@ export const CHROME = {
   firstPlayerChooses: "First player chooses",
   randomPath: "Random",
   randomize: "Randomize for me",
+  // Also the Scenario overview's stage and location points line (Task 3,
+  // milestone 6) - one "%s quest points" string, not two.
   branchPoints: "%s quest points",
   questCleared: "Quest %s cleared",
   underfilled: "Progress hasn't reached target - confirm",

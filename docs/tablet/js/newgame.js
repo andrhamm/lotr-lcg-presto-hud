@@ -11,6 +11,11 @@
 // path here yet - a resumed save skips this screen entirely, straight to
 // "play"; review finding M11 deleted a resume chip that a save flag never
 // actually set.)
+//
+// Picking a scenario no longer starts the game: it opens the Scenario
+// overview, which is overview.js's - including `overviewFor`, the pure seat
+// app.js hands ui.overview, which lived here while that screen was still a
+// placeholder (Task 3).
 import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, counter } from "./primitives.js";
@@ -18,17 +23,6 @@ import { cyclesFor, groupByCycle } from "../../js/quest_catalog.js";
 import { icon } from "../../js/icons_svg.js";
 import { setIcon } from "./seticon.js";
 import { THREAT_RED, THREAT_SHADOW } from "./palette.js";
-
-// Picking a scenario used to start the game outright; now it opens the
-// Scenario overview (Task 3 renders it for real) so the player sees the
-// difficulty ladder, stages and cards before committing. Pure - app.js's
-// `pick_scenario` calls this once the bundle has loaded, and
-// tests/test_tablet.py drives it directly since pick_scenario itself can't
-// be driven under node (it awaits db.bundle()).
-export function overviewFor(index, slug, bundle) {
-  const entry = (index?.scenarios ?? []).find(s => s.slug === slug) ?? null;
-  return { slug, entry, bundle, difficulty: "Standard", readonly: false };
-}
 
 function sourceToggle(source) {
   const chips = [
@@ -62,7 +56,7 @@ function scenarioRow(scn) {
   return h`<button type="button" class="scenario-row" data-act="pick_scenario" data-arg="${scn.slug}">
 <div class="scenario-head">${raw(setIcon(scn.name ?? "", 28))}<span class="body">${scn.name ?? ""}</span></div>
 <span class="body secondary">${scn.pack ?? ""}</span>
-<span class="label">${raw(fmt(CHROME.stagesCount, scn.stageCount ?? 0))}</span>
+<span class="label">${fmt(CHROME.stagesCount, scn.stageCount ?? 0)}</span>
 </button>`;
 }
 

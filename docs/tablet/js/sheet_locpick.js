@@ -29,9 +29,9 @@ function replacing(game, sheet) {
 
 // Catalog rows grouped by their encounter set, in the order sets first
 // appear (locationsFor's own byName sort already orders rows inside each
-// set) - same shape newgame.js's scenarioGroups gives cycles, just without
-// the extra cycle-rank sort (there is no printed release order for
-// encounter sets to sort by).
+// set) - same shape quest_catalog.js's groupByCycle gives the picker's cycle
+// column (newgame.js), just without the extra cycle-rank sort (there is no
+// printed release order for encounter sets to sort by).
 function groupBySet(entries) {
   const groups = new Map();
   for (const e of entries) {

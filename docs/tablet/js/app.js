@@ -20,7 +20,7 @@ import { perform, dispatch, newUi, afterTap } from "./actions.js";
 import { logText } from "./logfilter.js";
 import { imagePrefix, cyclesFor } from "../../js/quest_catalog.js";
 import { imageUrls } from "./cardimage.js";
-import { overviewFor } from "./newgame.js";
+import { overviewFor, scenarioMetaFor } from "./overview.js";
 
 // A finished game is appended to history once. Reset wherever `game` is
 // rebound (new game / a fresh scenario pick) - mirrors main.js's own
@@ -59,14 +59,18 @@ function render() {
 
 // db.index() PROPAGATES on failure (a docs/data/ build that was never run) -
 // db.js's own contract, deliberately, per its "PROPAGATES on failure"
-// comment. Caught here so a missing catalog lands the player on a working
-// picker with the CATALOG_UNAVAILABLE line instead of a blank page.
+// comment. Caught here, once, so a missing catalog costs the player the
+// picker's rows (and the overview's metadata) rather than the whole page.
+// db.index() caches, so every caller below shares the one read.
+async function catalogIndex() {
+  try { return await db.index(); }
+  catch (e) { console.error("tablet: quest catalog unavailable", e); return null; }
+}
+
 async function buildPicker() {
-  let index = null;
-  try { index = await db.index(); }
-  catch (e) { console.error("tablet: quest catalog unavailable", e); }
+  const index = await catalogIndex();
   // The card-art prefix rides along with the index the picker already had to
-  // read - see seatImagePrefix() for the resume path, which has no picker.
+  // read - the resume path (boot()) reads the same one for itself.
   ui.imagePrefix = imagePrefix(index);
   // Milestone 6 (Task 2): the tablet-density picker starts on the Official
   // source, its first cycle selected - cyclesFor() degrades to [] for a
@@ -75,17 +79,6 @@ async function buildPicker() {
   const cycle = index ? (cyclesFor(index, source)[0]?.cycle ?? null) : null;
   return { index, players: 2, threats: [25, 25], source, cycle,
            error: index ? null : CATALOG_UNAVAILABLE };
-}
-
-// The pinned card-image URL prefix (Task 6). Needed on BOTH boot paths: a
-// resumed game never builds a picker, but it can still open the location
-// picker mid-round, and that is where the card art shows. db.index()
-// PROPAGATES on failure (db.js's contract), and it caches, so this is one
-// read shared with buildPicker() - caught here the same way, because a
-// catalog that will not load must cost the player captions, not the app.
-async function seatImagePrefix() {
-  try { ui.imagePrefix = imagePrefix(await db.index()); }
-  catch (e) { ui.imagePrefix = null; }
 }
 
 // Warm the image cache for the scenario the players just committed to (Task
@@ -132,7 +125,23 @@ async function boot() {
     // "no panel" contract as an absent tips.json.
     ui.tips = b?.tips ?? null;
     ui.scenarioSlug = game.scenario?.slug ?? null;
-    await seatImagePrefix();
+    // The pinned card-image URL prefix (M5, Task 6) is needed on BOTH boot
+    // paths: a resumed game never builds a picker, but it can still open the
+    // location picker mid-round, and that is where the card art shows.
+    const index = await catalogIndex();
+    ui.imagePrefix = imagePrefix(index);
+    // The read-only Scenario overview (M6, Task 3) the QUEST zone's stage
+    // pill opens mid-game. Seated HERE, at boot, for the same reason the
+    // bundle's other pieces are: opening a reference screen must not cost a
+    // catalog read mid-round. `entry` is null when the index failed to load
+    // - the render falls back to the save's own scenario name - and the seat
+    // is skipped entirely for a bare/manual game with no bundle at all,
+    // which is what open_overview declines on.
+    if (b && game.scenario?.slug) {
+      ui.overview = overviewFor(index, game.scenario.slug, b, {
+        difficulty: game.scenario.mode ?? "Standard", readonly: true,
+      });
+    }
     // A save can land exactly between a successful "resolve" and
     // "apply_alloc" (pending_budget > 0, nothing placed yet). ui.alloc is
     // never part of the save (it is UI state, not game state), and pane.js
@@ -201,15 +210,10 @@ async function handleAct(act, arg) {
     // this is where the game object itself is actually created, so this is
     // where the queue gets cleared/tagged - see CLAUDE.md's "queue is tagged
     // with its game object" rule. ui.overview.difficulty is the Scenario
-    // overview's own ladder pick (Task 3; "Standard" until then, seated by
-    // overviewFor()).
+    // overview's own ladder pick (Task 3), and scenarioMetaFor() - pure, in
+    // overview.js - is what turns it into the game's own `nightmare`/`mode`.
     const { entry, bundle, difficulty } = ui.overview;
-    const scenarioMeta = {
-      slug: entry.slug, name: entry.name, pack: entry.pack, cycle: entry.cycle,
-      source: entry.source, kind: entry.kind,
-      nightmare: difficulty === "Nightmare", mode: difficulty,
-      maxCardThreat: entry.maxCardThreat, hasXThreat: entry.hasXThreat,
-    };
+    const scenarioMeta = scenarioMetaFor(entry, difficulty);
     const players = ui.picker.players;
     const threats = ui.picker.threats;
     db.session.clear();
@@ -252,9 +256,10 @@ async function handleAct(act, arg) {
     return;
   }
   if (ui.screen === "newgame" || ui.screen === "overview") {
-    // The picker's own edits (ng_source/ng_cycle/ng_players/ng_threat±) and
-    // the overview placeholder's ov_back are ui-only (acts_newgame.js) -
-    // never touch `game` at all. They must NOT go through perform()/
+    // The picker's own edits (ng_source/ng_cycle/ng_players/ng_threat±,
+    // acts_newgame.js) and the Scenario overview's (ov_difficulty/ov_back/
+    // ov_close, acts_overview.js) are ui-only - they never touch `game` at
+    // all. They must NOT go through perform()/
     // db.session.record(): `game` here can still be the PREVIOUS,
     // already-finished GameState ("new_game" clears the session but does
     // not rebind `game` - only begin_setup does), and a queued write tagged

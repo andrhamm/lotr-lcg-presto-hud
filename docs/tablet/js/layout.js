@@ -8,22 +8,9 @@ import { renderStrip } from "./strip.js";
 import { renderRail } from "./rail.js";
 import { renderPane } from "./pane.js";
 import { renderNewGame } from "./newgame.js";
+import { renderOverview } from "./overview.js";
 import { renderSheet } from "./sheets.js";
 import { renderLogScreen } from "./screen_log.js";
-
-// Milestone 6 (Task 2): a placeholder for the Scenario overview - Task 3
-// renders the real thing (difficulty ladder, sets, stages, cards, notes).
-// This exists only so the picker -> overview -> begin_setup flow is usable
-// end-to-end before Task 3 lands, and so this task's own tests can assert
-// the screen transition. `ov_back`/`begin_setup` are real acts already
-// (acts_newgame.js / app.js) - only the body is a stand-in.
-function renderOverviewPlaceholder(ui) {
-  const entry = ui.overview?.entry ?? {};
-  return h`<main class="pane overview">
-<h1 class="display">${entry.name ?? ""}</h1>
-<div class="cta-row">${raw(cta({ act: "ov_back", label: CHROME.backToScenarios, tone: "plain" }))}${raw(cta({ act: "begin_setup", label: CHROME.beginSetup, tone: "ok" }))}</div>
-</main>`;
-}
 
 function renderGameOver(game) {
   const over = game.game_over ?? {};
@@ -45,7 +32,12 @@ function renderGameOver(game) {
 export function layout(game, ui) {
   if (ui.screen === "gameover") return renderGameOver(game);
   if (ui.screen === "newgame") return h`<div class="app">${raw(renderNewGame(ui))}</div>`;
-  if (ui.screen === "overview") return h`<div class="app">${raw(renderOverviewPlaceholder(ui))}</div>`;
+  // The Scenario overview (Task 3, milestone 6) is a whole screen on both of
+  // its paths: chosen from the picker before a game exists, and opened
+  // read-only from the QUEST zone's stage pill mid-game - overview.js draws
+  // both, so `game` travels with `ui` here (a resumed game whose catalog
+  // never loaded is where its name comes from).
+  if (ui.screen === "overview") return h`<div class="app">${raw(renderOverview(game, ui))}</div>`;
   // The Game Log is a whole screen, not an overlay: it replaces the strip,
   // the rail and the pane (it has its own transport and its own log block).
   // The sheet layer still rides on top of it - that is where its export

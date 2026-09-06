@@ -58,8 +58,11 @@ def _button_heights_of(css):
     # log-line is the Game Log's row (milestone 4): a rewindable row is a
     # <button>, so it carries the same floor. cycle-row (milestone 6, Task 2)
     # is the tablet-density picker's cycle list, sized like scenario-row.
+    # pill-name-btn (milestone 6, Task 3) is the rail's stage-pill name, now
+    # the way into the read-only Scenario overview - it sits inside the
+    # 324px rail, which is exactly where a tap target gets quietly shrunk.
     for m in re.finditer(
-        r"\.(chip|cta|step|scenario-row|cycle-row|step-sm|locpick-row|sqpick-row|rsheet-row|tbtn|tick-btn|log-line)(?![\w-])[^{]*\{([^}]*)\}",
+        r"\.(chip|cta|step|scenario-row|cycle-row|step-sm|locpick-row|sqpick-row|rsheet-row|tbtn|tick-btn|log-line|pill-name-btn)(?![\w-])[^{]*\{([^}]*)\}",
         css,
     ):
         hm = re.search(r"(?:min-)?height\s*:\s*(\d+)px", m.group(2))

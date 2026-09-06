@@ -1,8 +1,8 @@
 // The new-game picker's ui-only acts (Task 2, milestone 6): the source
-// toggle, the cycle list, the player-count/threat steppers, and the
-// Scenario overview's own Back button. Split out the same way every other
-// screen's acts are (actions.js's dispatch() tries each per-area handler in
-// order, `handle` returning null for any act it does not own) - these never
+// toggle, the cycle list and the player-count/threat steppers. Split out the
+// same way every other screen's acts are (actions.js's dispatch() tries each
+// per-area handler in order, `handle` returning null for any act it does not
+// own) - these never
 // touch the network or create a game, which is what keeps pick_scenario/
 // begin_setup in app.js instead of here.
 //
@@ -44,15 +44,7 @@ export function handle(game, ui, act, arg) {
     ui.picker.threats[i] = after;
     return after !== before;
   }
-  // The Scenario overview's Back button (Task 3 may move this into
-  // acts_overview.js once that module exists - for now it lives here since
-  // layout.js's placeholder is this task's own responsibility). Keeps the
-  // picker's own state (source/cycle/players/threats) exactly as the player
-  // left it - only pick_scenario mutates ui.overview, and a fresh pick
-  // overwrites it wholesale, so there is nothing to clean up here.
-  if (act === "ov_back") {
-    ui.screen = "newgame";
-    return true;
-  }
+  // ov_back moved to acts_overview.js with Task 3 - that module now owns
+  // every act the Scenario overview raises, this one owns the picker's.
   return null;
 }

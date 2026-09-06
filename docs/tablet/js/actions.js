@@ -22,10 +22,11 @@ import { handle as logActs } from "./acts_log.js";
 import { handle as rulesActs } from "./acts_rules.js";
 import { handle as notesActs } from "./acts_notes.js";
 import { handle as newgameActs } from "./acts_newgame.js";
+import { handle as overviewActs } from "./acts_overview.js";
 
 const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs,
                   sqpickActs, resolveActs, sailingActs, transportActs, logActs, rulesActs,
-                  notesActs, newgameActs];
+                  notesActs, newgameActs, overviewActs];
 
 export const newUi = () => ({
   screen: "play", alloc: null, placed: false, picker: null,
@@ -58,9 +59,12 @@ export const newUi = () => ({
   // here rather than only by open_log so every renderer can read it without
   // a guard, and re-seated by open_log so a fresh visit starts clean.
   log: { filter: "all", sel: null },
-  // Milestone 6 (Task 2): the Scenario overview's own seat - null until
-  // pick_scenario builds one (newgame.js's overviewFor()). Task 3 renders it
-  // for real; this task's layout.js placeholder just needs `entry.name`.
+  // Milestone 6: the Scenario overview's own seat - {slug, entry, bundle,
+  // difficulty, readonly}, built by overview.js's overviewFor(). Seated by
+  // pick_scenario (editable, the difficulty ladder live) and by boot()'s
+  // resume branch (readonly, at the difficulty the game was started with);
+  // null for a bare/manual game with no scenario at all, which is what
+  // open_overview declines on.
   overview: null,
 });
 

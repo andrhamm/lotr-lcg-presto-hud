@@ -589,3 +589,73 @@ a.chip { text-decoration: none; min-height: 44px; }
    card border - the sheet's .sheet already frames the whole thing. */
 .notes-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .notes-group:last-child { margin-bottom: 0; }
+
+/* The Scenario overview (Task 3, milestone 6): everything the players decide
+   before setup, and the same page again read-only mid-game (the QUEST zone's
+   stage pill). Two columns - the scenario itself on the left (60%: header,
+   difficulty, sets to gather, stages, cards), the context beside it on the
+   right (40%: shared sets, notes) - with the footer CTAs spanning both. The
+   split is 3fr/2fr rather than percentages so the gap comes out of the two
+   tracks instead of overflowing them; minmax(0, ...) is what lets a long set
+   name or a wide card grid shrink instead of pushing the grid wider than the
+   pane. .pane already scrolls (overflow-y: auto), so this screen inherits it
+   rather than opening a second scrolling region. */
+.overview { gap: 16px; }
+.ov-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 24px; align-items: start; }
+.ov-main, .ov-side { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.ov-head { display: flex; align-items: center; gap: 14px; }
+.ov-head-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ov-section { display: flex; flex-direction: column; gap: 10px; }
+.ov-ladder { display: flex; gap: 10px; flex-wrap: wrap; }
+/* The read-only variant's difficulty: what the players already committed to,
+   so there is nothing to tap. No bevel - bevelled means tappable, this
+   client's one chrome rule - just the gold outline a chip-gold would have
+   had, at the same 44px so the row does not jump between the two variants. */
+.ov-badge { display: inline-flex; align-items: center; align-self: flex-start;
+  height: 44px; padding: 0 14px; color: var(--gold);
+  border: 1px solid var(--border-gold); border-radius: 6px; }
+.ov-sets { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.ov-set { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ov-stages { display: flex; flex-direction: column; gap: 8px; }
+.ov-stage { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+/* A branch stage's alternatives, stacked under the one "Stage n" label: each
+   is a separate card the quest deck might turn up, so each gets its own name
+   and its own points, separated rather than run together. */
+.ov-alt { display: flex; flex-direction: column; gap: 4px; padding-top: 8px;
+  border-top: 1px solid var(--border); }
+.ov-alt:first-of-type { padding-top: 0; border-top: 0; }
+.ov-types { display: flex; flex-direction: column; gap: 16px; }
+.ov-type { display: flex; flex-direction: column; gap: 8px; }
+/* The card grid: .card-frame's thumbnails (cardimage.js), wrapped. The
+   caption under each is the card's name plus everything it prints, which is
+   a much longer line than the picker's - at .card-frame's own 96px
+   "engagement 25" alone wrapped onto three lines, so the frame is widened
+   here (the picture keeps its 5:7 aspect either way). Tops aligned so a
+   caption that still runs long does not shove its neighbours down. */
+.ov-cards { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.ov-cards .card-frame { width: 150px; }
+.ov-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+/* A shared set: icon + name, chip-shaped but not a chip - same no-bevel rule
+   as .ov-badge above, because there is nothing to tap. */
+.ov-chip { display: inline-flex; align-items: center; gap: 8px; height: 44px;
+  padding: 0 12px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; min-width: 0; }
+/* The footer spans both columns and sticks to the bottom of the scroll: on
+   a screen this long (a scenario with 30 cards runs well past one viewport)
+   Begin setup would otherwise be a scroll away from the ladder that decides
+   what it starts. The --bg ground is what keeps the cards from showing
+   through it as they pass under - and the -16px/16px pair is .pane's own
+   bottom padding: sticky bottoms out at the padding box, so at bottom: 0 a
+   16px band of card art still scrolled past underneath the buttons. */
+.ov-foot { grid-column: 1 / -1; position: sticky; bottom: -16px;
+  padding: 12px 0 16px; background: var(--bg); }
+/* The rail's stage pill name is the way into the read-only overview
+   (open_overview), so it is a real button and takes the bevel and the 44px
+   floor with it. It keeps .pill-name's single-line ellipsis: the pill is
+   324px of rail, not a place for a wrapping title. */
+.pill-name-btn { display: flex; align-items: center; width: 100%; min-height: 44px;
+  padding: 0 8px; text-align: left; background: var(--btn);
+  border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d);
+  border-right-color: var(--bevel-d); border-radius: 6px; }
