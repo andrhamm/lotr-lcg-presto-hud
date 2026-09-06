@@ -277,3 +277,22 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
   border-radius: 6px; }
 .locpick-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
 .locpick-manual { display: flex; flex-direction: column; gap: 10px; }
+
+/* The side-quest picker (Task 6): a sphere list, then that sphere's quests -
+   rows are bevelled the same way as .scenario-row/.locpick-row (a name a
+   player reads, plus its count/points as BODY secondary) rather than a
+   chip's ALL-CAPS LABEL (design system rule 3b covers sphere names and side
+   quest names alike). Unlike .locpick-row's single flex line, .sqpick-row is
+   a column: a side quest's own printed text, when the catalog has one,
+   stacks as a second BODY secondary line below its name/points row. */
+.sqpick-list { display: flex; flex-direction: column; gap: 10px; }
+.sqpick-row { display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  width: 100%; min-height: 56px; padding: 8px 16px; text-align: left;
+  background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
+  border-radius: 6px; }
+.sqpick-row-head { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; }
+.sqpick-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
+/* This sheet scrolls (like every other milestone-3 sheet) but still pages -
+   CLAUDE.md rule 3b's "page it" is the prescribed move for a list that can
+   run long, not a viewport limit the way the twin's fixed canvas needed. */
+.sqpick-pager { display: flex; align-items: center; gap: 12px; }

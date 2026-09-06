@@ -149,6 +149,18 @@ async function handleAct(act, arg) {
     render();
     return;
   }
+  if (act === "open_sqpick") {
+    // Lazy, like ui.locations above - db.sideQuests() caches after its first
+    // call (DataClient's own _sideQuests), so a second "+ Side quest" tap
+    // never refetches. loadPlayerSideQuests() degrades to [] on any catalog
+    // failure rather than throwing, so this never leaves the sheet unopened
+    // - only the picker's rows are empty and its Manual entry chip is the
+    // one way forward (sheet_sqpick.js's own empty-catalog branch).
+    ui.sideQuests = await db.sideQuests();
+    ui.sheet = { kind: "sqpick", sphere: null, selected: null, page: 0 };
+    render();
+    return;
+  }
   const changed = perform(game, ui, act, arg);
   if (!changed) return;
   // Auto-opens the elimination sheet (Task 3) / resolution sheet (Task 7)

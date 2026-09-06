@@ -92,4 +92,25 @@ export const CHROME = {
   pickContribution: "Threat contribution",
   contributionNote: "Its threat leaves the staging area while it is active.",
   locpickStats: "threat %s · %s quest points",
+  // The side-quest picker (Task 6) - SideQuestPickModal is its canvas-modal
+  // reference (docs/js/screens.js), minus pagination-by-canvas-space (this
+  // sheet still pages, sheet_sqpick.js's own PER_PAGE, but scrolls too) and
+  // its "manual" footer button behaves the same in both: no steppers, an
+  // instant zero-point placeholder logged and left for the quest sheet's own
+  // steppers to fill in.
+  sqpickTitle: "Add Side Quest",
+  sqpickEmpty: "No side-quest catalog data available.",
+  sqpickEmptyHint: "Use Manual entry below.",
+  sqpickPickSphere: "Pick a sphere - or enter manually.",
+  sqpickPickOne: "%s - pick one, then Add.",
+  sqpickBack: "‹ Spheres",
+  sqpickManual: "Manual entry",
+  sqpickAdd: "Add",
+  sqpickNoSphere: "No sphere",
+  sqpickOneQuest: "1 quest",
+  sqpickManyQuests: "%d quests",
+  sqpickPts: "%d pts",
+  sqpickPrev: "‹ Prev",
+  sqpickNext: "Next ›",
+  sqpickPage: "%d/%d",
 };

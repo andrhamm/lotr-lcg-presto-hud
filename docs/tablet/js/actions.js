@@ -2,7 +2,7 @@
 // the DOM: that is what lets tests/test_tablet.py walk a round under node
 // and count the taps.
 //
-// dispatch() itself is just a dispatch table now - the acts live in six
+// dispatch() itself is just a dispatch table now - the acts live in seven
 // per-area modules (review finding 6, task-4 fix round 1: this file was 413
 // lines and three more sheets were coming). Each exports `handle(game, ui,
 // act, arg)` returning null when it does not own the act, a boolean
@@ -14,8 +14,9 @@ import { handle as locpickActs } from "./acts_locpick.js";
 import { handle as questActs } from "./acts_quest.js";
 import { handle as playerActs } from "./acts_players.js";
 import { handle as elimActs } from "./acts_elim.js";
+import { handle as sqpickActs } from "./acts_sqpick.js";
 
-const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs];
+const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs, sqpickActs];
 
 export const newUi = () => ({
   screen: "play", alloc: null, placed: false, picker: null,

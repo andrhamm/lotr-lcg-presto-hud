@@ -12,8 +12,9 @@ import { renderMenuSheet } from "./sheet_menu.js";
 import { renderElimSheet } from "./sheet_elim.js";
 import { renderQuestSheet } from "./sheet_quest.js";
 import { renderLocPickSheet } from "./sheet_locpick.js";
+import { renderSqPickSheet } from "./sheet_sqpick.js";
 
-// Unknown kinds render nothing (not an error) - Tasks 6-7 add "sqpick"/
+// Unknown kinds render nothing (not an error) - Task 7 still adds
 // "resolve", and so on through the milestone. A sheet kind not yet wired up
 // here is a no-op overlay, never a crash.
 const RENDERERS = {
@@ -23,6 +24,7 @@ const RENDERERS = {
   elim: renderElimSheet,
   quest: renderQuestSheet,
   locpick: renderLocPickSheet,
+  sqpick: renderSqPickSheet,
 };
 
 export function renderSheet(game, ui) {

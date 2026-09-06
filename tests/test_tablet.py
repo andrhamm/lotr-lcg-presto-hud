@@ -983,6 +983,128 @@ console.log(JSON.stringify({
     assert js["manualClosed"]
 
 
+def test_side_quest_picker_pick_sphere_row_add_appends_and_reopens_quest():
+    """Task-6 brief step 1. SideQuestPickModal's own two-step flow (pick a
+    sphere, then a quest inside it) mirrored as a sheet - onButton "add"
+    (docs/js/screens.js) pushes {points, progress:0, name} and logs the
+    verbatim "Side quest added: ..." line, then _leave() reopens the
+    progress modal (here, ui.sheet {kind:"quest"}). Two entries in two
+    different spheres means picking "Neutral" only ever has one candidate
+    row - acts_sqpick.js's own sqpick_sphere pre-selects it, and the
+    explicit "row" tap below re-confirms the same id."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+const ui = newUi();
+ui.sideQuests = [
+  { id: "a", name: "Fortune or Fate", points: 3, sphere: "Neutral" },
+  { id: "b", name: "A Test of Wills", points: 2, sphere: "Spirit" },
+];
+ui.sheet = { kind: "sqpick", sphere: null, selected: null, page: 0 };
+perform(g, ui, "sqpick_sphere", "Neutral");
+perform(g, ui, "sqpick_row", "a");
+perform(g, ui, "sqpick_add", "");
+console.log(JSON.stringify({
+  count: g.side_quests.length,
+  name: g.side_quests[0]?.name,
+  points: g.side_quests[0]?.points,
+  progress: g.side_quests[0]?.progress,
+  logged: g.log.some(e => e.text === "Side quest added: Fortune or Fate (3 pts, progress view)"),
+  sheetKind: ui.sheet?.kind,
+}));
+""")
+    assert js["count"] == 1
+    assert js["name"] == "Fortune or Fate"
+    assert js["points"] == 3
+    assert js["progress"] == 0
+    assert js["logged"]
+    assert js["sheetKind"] == "quest"
+
+
+def test_side_quest_picker_manual_back_cancel_and_render_shape():
+    """Manual entry skips the sphere/quest picker entirely (onButton
+    "manual", verbatim log line) and, like every other exit, reopens the
+    quest sheet - no stepper editor, unlike the location picker's manual
+    mode: points/progress start at 0 for the quest sheet's own sPts± to fill
+    in later. Back undoes a sphere pick without leaving the picker; Cancel
+    leaves without adding anything. Also checks the render shape: an entry
+    with no printed sphere buckets under "No sphere" (SideQuestPickModal's
+    own NO_SPHERE), a side quest's own printed text renders as a second BODY
+    secondary line under its name/points row, and the pager is absent when
+    everything already fits on one page."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+const ui = newUi();
+ui.sideQuests = [
+  { id: "a", name: "Fortune or Fate", points: 3, sphere: "Neutral", text: "Draw the top card of the encounter deck." },
+  { id: "b", name: "Unaligned Quest", points: 1 },
+];
+ui.sheet = { kind: "sqpick", sphere: null, selected: null, page: 0 };
+const sphereHtml = layout(g, ui);
+perform(g, ui, "sqpick_sphere", "Neutral");
+const questHtml = layout(g, ui);
+const autoSelected = ui.sheet.selected;
+perform(g, ui, "sqpick_back", "");
+const backSphere = ui.sheet.sphere;
+perform(g, ui, "sqpick_cancel", "");
+console.log(JSON.stringify({
+  noSphereRow: sphereHtml.includes("No sphere") && sphereHtml.includes('data-act="sqpick_sphere"') && sphereHtml.includes('data-arg="No sphere"'),
+  noPager: !sphereHtml.includes("sqpick-pager") && !sphereHtml.includes('data-act="sqpick_page"'),
+  autoSelected,
+  name: questHtml.includes("Fortune or Fate"),
+  pts: questHtml.includes("3 pts"),
+  text: questHtml.includes("Draw the top card of the encounter deck."),
+  selectedClass: questHtml.includes("is-selected"),
+  backSphere,
+  cancelKind: ui.sheet?.kind,
+  cancelCount: g.side_quests.length,
+}));
+""")
+    assert js["noSphereRow"], "an entry with no printed sphere must bucket under \"No sphere\""
+    assert js["noPager"], "two rows on one page must not draw a pager"
+    assert js["autoSelected"] == "a", "a sphere with exactly one quest is pre-selected, ready for Add"
+    assert js["name"] and js["pts"]
+    assert js["text"], "the card's own printed text must render, not be dropped"
+    assert js["selectedClass"]
+    assert js["backSphere"] is None, "Back returns to the sphere step"
+    assert js["cancelKind"] == "quest"
+    assert js["cancelCount"] == 0, "Cancel must not add anything"
+
+
+def test_side_quest_picker_manual_entry_pushes_zero_point_placeholder():
+    """The Manual entry chip is offered even with no sphere picked (or no
+    catalog at all) - it pushes {points:0, progress:0} straight away, with
+    no manual stepper screen in between."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+const ui = newUi();
+ui.sideQuests = [];
+ui.sheet = { kind: "sqpick", sphere: null, selected: null, page: 0 };
+perform(g, ui, "sqpick_manual", "");
+console.log(JSON.stringify({
+  count: g.side_quests.length,
+  points: g.side_quests[0]?.points,
+  progress: g.side_quests[0]?.progress,
+  logged: g.log.some(e => e.text === "Side quest added manually (progress view)"),
+  sheetKind: ui.sheet?.kind,
+}));
+""")
+    assert js["count"] == 1
+    assert js["points"] == 0
+    assert js["progress"] == 0
+    assert js["logged"]
+    assert js["sheetKind"] == "quest"
+
+
 def test_chip_labels_are_composed_with_h():
     """chip()/cta() in primitives.js insert `label` via raw() (see
     test_h_escapes_interpolations_but_not_raw above), so a label built from
