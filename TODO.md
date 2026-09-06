@@ -51,6 +51,15 @@ across columns, and surface blockers here.
 - [ ] ALeP X states are still unverified
   - notes: 8 of the distilled location formulas are on ALeP cards, absent from the official TSV, so their X-vs-`-`-vs-blank state was never checked against a source. `build_card_data.py` now merges ALeP with markers, so the check is possible — re-run the marker gate against the ALeP branch TSVs specifically.
 
+- [ ] Presto/web resolution modal prints "0 qp" on condition stages
+  - notes: `ResolutionModal._drawReveal` (docs/js/screens.js) and its Python twin print `Flip to Side B -> 0 qp` for a stage whose card prints no number (`questPointsKind` "na", or blank upstream - 48 catalog faces). The tablet gates this on `stagePointsShape` (docs/tablet/js/xshape.js, 676ca36); port the same gate to both twins' reveal step. Iron rule 4.
+
+- [ ] Side-quest picker: carry the card's printed text (both twins)
+  - notes: `sideQuests()` (docs/js/quest_catalog.js) / `side_quests()` (quest_catalog.py) emit `{id, name, points, sphere, pack}` - no `text`. The tablet's picker (docs/tablet/js/sheet_sqpick.js) renders the printed text when present, so today that branch is dead. Add `text` from the compiled player DB in both twins, with a parity test.
+
+- [ ] Decide what a blank quest-points field means (parse_marker)
+  - notes: `tools/build_card_data.py` `parse_marker("")` returns None, so 48 stage faces land as `questPoints: 0` with no kind (e.g. Passage Through Mirkwood 3B "Don't Leave the Path!", The Nin-in-Eilph "Fleeing from Tharbad"); `flipToB` then treats them as points-mode 0 instead of condition-mode. Check each face's printed text before mapping blank -> "na" (it flips 48 stages to condition mode in both twins). The tablet already renders no number for them.
+
 ## In Progress
 * Notes for in progress overhaul of location/quest "progress":
 	* [these four are UNADDRESSED — the plan below shipped first. They are
