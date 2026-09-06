@@ -20,7 +20,9 @@ export function handle(game, ui, act, arg) {
     return true;
   }
   if (act === "elim_lvl") {
-    ui.sheet.level = Math.max(20, Math.min(99, ui.sheet.level + Number(arg)));
+    const next = Math.max(20, Math.min(99, ui.sheet.level + Number(arg)));
+    if (next === ui.sheet.level) return false;
+    ui.sheet.level = next;
     return true;
   }
   if (act === "elim_setlvl") {

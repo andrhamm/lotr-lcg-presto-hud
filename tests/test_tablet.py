@@ -744,6 +744,7 @@ perform(g, ui, "elim_lvl", "-100");                       // clamps down to 20
 const clampedLow = ui.sheet.level;
 perform(g, ui, "elim_lvl", "500");                        // clamps up to 99
 const clampedHigh = ui.sheet.level;
+const noopAtCeiling = perform(g, ui, "elim_lvl", "500");  // already 99: clamp is a no-op
 perform(g, ui, "elim_lvl", "-49");                        // 99 -> 50, back where it crossed
 perform(g, ui, "elim_setlvl", "");                        // still >= 50: stays eliminated
 const stillElim = { level: g.players[1].elimination, eliminated: g.players[1].eliminated,
@@ -758,7 +759,7 @@ const revived = { level: g.players[2].elimination, eliminated: g.players[2].elim
 console.log(JSON.stringify({ opened, sheet: html.includes('class="sheet sheet-elim"'),
   buttons: ["elim_confirm", "elim_avert", "elim_lvl", "elim_setlvl"].every(a => html.includes(`data-act="${a}"`)),
   title: html.includes("P1") && html.includes("50"),
-  confirmed, clampedLow, clampedHigh, stillElim, revived }));
+  confirmed, clampedLow, clampedHigh, noopAtCeiling, stillElim, revived }));
 """)
     assert js["opened"] == {"kind": "elim", "i": 0, "level": 50}
     assert js["sheet"] and js["buttons"] and js["title"]
@@ -768,6 +769,7 @@ console.log(JSON.stringify({ opened, sheet: html.includes('class="sheet sheet-el
     }
     assert js["clampedLow"] == 20
     assert js["clampedHigh"] == 99
+    assert js["noopAtCeiling"] is False, "already at the 99 ceiling: elim_lvl must report no change"
     assert js["stillElim"] == {
         "level": 50, "eliminated": True, "pendingElim": None, "sheet": None,
         "log": ["P2 elimination level set to 50", "P2 eliminated (threat 50 >= level 50)"],
@@ -1627,7 +1629,7 @@ const paneHtml = layout(g, ui);
 
 perform(g, ui, "open_sailing", "");
 const opened = { ...ui.sheet };
-perform(g, ui, "sail_d", "1");
+const inRangeChanged = perform(g, ui, "sail_d", "1");
 perform(g, ui, "sail_d", "1");
 const draftV = ui.sheet.v;
 const sheetHtml = layout(g, ui);
@@ -1640,28 +1642,49 @@ perform(g, ui, "sail_d", "-1");
 perform(g, ui, "sail_cancel", "");
 const afterCancel = { heading: g.heading, sheet: ui.sheet, log: g.log.at(-1).text };
 
-// The floor: nudge to -3, then past it - the draft holds and the stepper
-// renders step-off instead of a live button.
+// The floor: nudge to -3, then past it - the draft holds, the stepper
+// renders step-off instead of a live button, and perform() must report the
+// 4th tap (already pinned at -3) as no real change so it never reaches
+// game.addDelta().
 perform(g, ui, "open_sailing", "");
-for (let i = 0; i < 4; i++) perform(g, ui, "sail_d", "-1");
+let pastFloorChanged;
+for (let i = 0; i < 4; i++) pastFloorChanged = perform(g, ui, "sail_d", "-1");
 const floored = ui.sheet.v;
 const flooredHtml = layout(g, ui);
+
+// The ceiling: the same no-op guard at the other end (8) - 8 taps reach it,
+// the 9th is pinned and must report false.
+perform(g, ui, "open_sailing", "");
+let pastCeilingChanged;
+for (let i = 0; i < 9; i++) pastCeilingChanged = perform(g, ui, "sail_d", "1");
+const ceilinged = ui.sheet.v;
 
 console.log(JSON.stringify({
   preHeading,
   paneHasCta: paneHtml.includes('data-act="open_sailing"'),
   opened,
+  inRangeChanged,
   draftV,
   sheetHasSheet: sheetHtml.includes('class="sheet sheet-sailing"'),
+  sheetHasResult: sheetHtml.includes("On-course (Sunny)"),
+  sheetHasSubline: sheetHtml.includes("2 wheels found - shift on-course"),
   afterApply, afterCancel,
   floored, flooredHasStepOff: flooredHtml.includes('step step-sm step-off'),
+  pastFloorChanged,
+  ceilinged, pastCeilingChanged,
 }));
 """)
     assert js["preHeading"] == 1
     assert js["paneHasCta"]
     assert js["opened"] == {"kind": "sailing", "v": 0}
+    assert js["inRangeChanged"] is True, "an in-range nudge is a real change"
     assert js["draftV"] == 2
     assert js["sheetHasSheet"]
+    # RESULT preview (sheet_sailing.js's headingLine()) and the sub-line
+    # (subLine(), CHROME.sailWheelsFound) for the +2-wheels draft: heading 1
+    # (Off-course/Cloudy) minus 2 clamps to HEADINGS[0] (On-course/Sunny).
+    assert js["sheetHasResult"], "RESULT preview must show 'On-course (Sunny)' for the +2 draft"
+    assert js["sheetHasSubline"], "sub-line must show '2 wheels found - shift on-course'"
     assert js["afterApply"] == {
         "heading": 0, "sheet": None,
         "log": "Sailing: heading Off-course (Cloudy) -> On-course (Sunny) "
@@ -1672,6 +1695,9 @@ console.log(JSON.stringify({
     assert js["afterCancel"]["log"] == js["afterApply"]["log"], "cancel must not log"
     assert js["floored"] == -3
     assert js["flooredHasStepOff"]
+    assert js["pastFloorChanged"] is False, "clamped at the floor: sail_d must report no change"
+    assert js["ceilinged"] == 8
+    assert js["pastCeilingChanged"] is False, "clamped at the ceiling: sail_d must report no change"
 
 
 def test_chip_labels_are_composed_with_h():

@@ -19,7 +19,9 @@ export function handle(game, ui, act, arg) {
   }
   if (act === "sail_d") {
     if (ui.sheet?.kind !== "sailing") return false;
-    ui.sheet.v = Math.max(-3, Math.min(8, ui.sheet.v + Number(arg)));
+    const next = Math.max(-3, Math.min(8, ui.sheet.v + Number(arg)));
+    if (next === ui.sheet.v) return false;
+    ui.sheet.v = next;
     return true;
   }
   if (act === "sail_apply") {
