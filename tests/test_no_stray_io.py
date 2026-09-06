@@ -134,6 +134,6 @@ def test_the_twins_expose_the_same_client_surface():
     for py, jsname in [("index", "index"), ("scenario", "scenario"),
                        ("bundle", "bundle"), ("locations", "locations"),
                        ("side_quests", "sideQuests"), ("icons", "icons"),
-                       ("tips", "tips")]:
+                       ("tips", "tips"), ("rules_text", "rulesText")]:
         assert hasattr(db.DataClient, py), "db.py DataClient lacks %s" % py
         assert jsname + "(" in js, "db.js DataClient lacks %s" % jsname

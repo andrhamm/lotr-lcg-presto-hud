@@ -429,3 +429,18 @@ export async function loadTips() {
     return {};
   }
 }
+
+// Read the parsed Rules Reference excerpts (tools/build_rules_text.py's
+// docs/data/rules_text.json - book, sections, glossary, faq). Thin fetch
+// wrapper, not host-tested - on ANY failure (data/ not built yet,
+// rules_text.json wasn't generated this build, a corrupt file, ...) returns
+// null so callers treat rules lookup as unavailable rather than erroring
+// (same "optional at runtime" contract as loadTips()).
+export async function loadRulesText() {
+  try {
+    return await (await fetch(dataUrl("rules_text.json"))).json();
+  } catch (e) {
+    console.error("quest catalog: loadRulesText failed - rules text unavailable", e);
+    return null;
+  }
+}

@@ -8,7 +8,7 @@
 // frames length-prefixed binary records into files, this keeps one array per
 // key, and both feed the identical foldLog/foldReplay.
 import { foldLog, foldReplay } from "./gamestate.js";
-import { loadIndex, loadScenario, loadIcons, loadTips, loadLocations,
+import { loadIndex, loadScenario, loadIcons, loadTips, loadRulesText, loadLocations,
          loadPlayerSideQuests } from "./quest_catalog.js";
 
 // Two clients share this origin (docs/ and docs/tablet/), so every key is
@@ -219,6 +219,7 @@ export class DataClient {
     this._index = null;
     this._icons = null;
     this._tips = null;
+    this._rules = null;
     this._sideQuests = null;
     this._bundles = {};
     this.keys = storageKeys(prefix);
@@ -277,6 +278,11 @@ export class DataClient {
   async tips() {
     if (this._tips === null) this._tips = await loadTips();
     return this._tips;
+  }
+
+  async rulesText() {
+    if (this._rules === null) this._rules = await loadRulesText();
+    return this._rules;
   }
 
   releaseGame() { this._bundles = {}; }

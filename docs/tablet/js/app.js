@@ -67,6 +67,11 @@ async function buildPicker() {
 }
 
 async function boot() {
+  // Rules text is static catalog data, not per-game state - scenario-
+  // independent, so it is seated once here regardless of which branch
+  // below runs, the same way db.bundle()'s pieces are seated per-game.
+  // Degrades to null on any catalog failure (db.rulesText()'s contract).
+  ui.rules = await db.rulesText();
   const saved = db.session.loadState();
   if (saved) {
     game = GameState.fromDict(saved.state);

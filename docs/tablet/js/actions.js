@@ -29,6 +29,11 @@ export const newUi = () => ({
   // catalog lists two sheets need lazily (locations for the location picker,
   // side quests for its picker) - loaded by app.js, read here only.
   sheet: null, locations: [], sideQuests: [],
+  // Milestone 5: the parsed Rules Reference excerpts (db.rulesText()),
+  // seated once at boot alongside the rest of the static catalog data -
+  // null when the build has no rules_text.json (same optional-at-runtime
+  // contract as tips/icons/locations).
+  rules: null,
   // Milestone 4: the Game Log screen's own two pieces of state - which filter
   // is showing, and the `seq` of the selected row (null for none). Seated
   // here rather than only by open_log so every renderer can read it without

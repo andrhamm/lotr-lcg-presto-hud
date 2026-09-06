@@ -40,6 +40,7 @@ PLAYERS_PACK_PATH = "/data/players/%s.json"
 PLAYERS_SIDE_QUESTS_PATH = "/data/players/side_quests.json"
 ICONS_PATH = "/data/icons.json"
 TIPS_PATH = "/data/tips.json"
+RULES_TEXT_PATH = "/data/rules_text.json"
 
 _REPEAT_HYPHENS = re.compile(r"-{2,}")
 _NON_ALNUM_RUN = re.compile(r"[^a-z0-9]+")
@@ -611,3 +612,18 @@ def load_tips():
             return json.load(f).get("scenarios", {})
     except Exception:
         return {}
+
+
+def load_rules_text():
+    """Read the parsed Rules Reference excerpts from flash
+    (tools/build_rules_text.py's docs/data/rules_text.json - book, sections,
+    glossary, faq). Thin wrapper, not host-tested (see the module
+    docstring) - on ANY failure (no /data/ deploy yet, rules_text.json
+    wasn't generated this build, a corrupt file, ...) returns None so
+    callers treat rules lookup as unavailable rather than erroring (same
+    "optional at runtime" contract as load_tips())."""
+    try:
+        with open(RULES_TEXT_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return None
