@@ -130,7 +130,16 @@ html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: n
    app.js's delegated `error` listener adds .is-missing here exactly as it
    does for .seticon above. The --well ground is what the box shows while the
    picture is still arriving, so a list of rows does not reflow as they land. */
-.card-frame { width: 96px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+/* The frame is a <button> wherever there is art to enlarge (cardimage.js) and
+   an inert <figure> where there is not, so both shapes are styled here. It is
+   deliberately NOT bevelled: a grid of bevelled thumbnails reads as a row of
+   controls rather than as cards, and the card itself is the affordance. The
+   press state is a gold edge instead. */
+.card-frame { width: 96px; margin: 0; padding: 0; display: flex; flex-direction: column;
+  gap: 8px; background: none; border: 0; text-align: left; }
+button.card-frame img { border: 1px solid transparent; }
+button.card-frame:active { transform: none; }
+button.card-frame:active img { border-color: var(--gold); }
 .card-frame img { width: 100%; aspect-ratio: 5/7; object-fit: cover;
   background: var(--well); border-radius: 4px; display: block; }
 .card-frame.is-missing img { display: none; }
@@ -659,6 +668,23 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .setup-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;
   gap: 28px; padding-top: 8px; }
 .setup-block { display: flex; flex-direction: column; gap: 12px; }
+
+/* THE CARD QUICK VIEW (sheet_card.js). Every card the client draws opens it:
+   a 96px thumbnail is an identifier, not something you can read, and the
+   printed text on the card is the authority for what the card does.
+   The art is sized off the viewport height rather than given a fixed width,
+   so the whole card is visible without scrolling on any screen this runs on -
+   a card you have to scroll is not a quick view. */
+.sheet-card { width: auto; max-width: 92vw; align-items: center; }
+.cardview-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 24px; width: 100%; }
+.cardview-head .display { margin: 0; }
+.cardview-tools { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+.cardview-art { height: min(68vh, 720px); width: auto; aspect-ratio: 5/7;
+  object-fit: contain; border-radius: 10px; background: var(--well);
+  border: 1px solid var(--border-gold); display: block; }
+.cardview-art.is-missing { display: flex; align-items: center; justify-content: center;
+  padding: 24px; text-align: center; }
 
 /* The sheet framework (milestone 3, Task 2): a modal overlay - .scrim covers
    the app, .sheet is the panel itself. Every sheet's own content (title,

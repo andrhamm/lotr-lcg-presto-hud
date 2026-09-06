@@ -60,9 +60,14 @@ function locRow(e, selected, prefix) {
   const ePoints = e.pointsKind === "x" ? "X" : (e.points ?? 0);
   const frame = cardImage({ prefix, id: e.id, image: e.image, name: e.name ?? "",
                             caption: fmt(CHROME.locpickStats, eThreat, ePoints) });
-  return h`<button type="button" class="${cx("locpick-row", selected && "is-selected")}" data-act="locpick_row" data-arg="${e.id}">
+  // The row is a DIV, not a button, because the card inside it is one: every
+  // card on screen opens the quick view, and a <button> inside a <button> is
+  // invalid markup that iOS resolves however it likes. app.js delegates on
+  // closest("[data-act]"), so the inner card wins its own taps and the rest of
+  // the row still selects the location - which is what a row is for.
+  return h`<div class="${cx("locpick-row", selected && "is-selected")}" data-act="locpick_row" data-arg="${e.id}" role="button">
 ${raw(frame)}
-</button>`;
+</div>`;
 }
 
 function renderList(game, ui) {

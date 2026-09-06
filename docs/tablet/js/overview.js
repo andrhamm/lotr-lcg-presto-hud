@@ -214,7 +214,7 @@ function cardCaption(key, card) {
 function cardsSection(groups, prefix) {
   const blocks = groups.map(g => {
     const figures = g.cards.map(c => cardImage({
-      prefix, id: c.id, image: c.image, name: c.name,
+      prefix, id: c.id, image: c.image, name: c.name, faces: c.faces,
       caption: cardCaption(g.key, c),
     })).join("");
     return h`<div class="ov-type"><div class="label">${CHROME.cardTypes[g.key]}</div>

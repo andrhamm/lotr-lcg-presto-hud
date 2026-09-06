@@ -33,6 +33,11 @@ export function handle(game, ui, act, arg) {
   // the cycle you are already in is still a state change, because the list
   // you are looking at is the cycle list.
   if (act === "ng_cycle") {
+    // Already inside this cycle? Nothing to change. dispatch()'s false is what
+    // stops app.js re-rendering, and a re-render here is not free: the whole
+    // DOM is replaced, so every icon and card <img> is torn down and
+    // re-resolved - the flash you get from tapping what is already selected.
+    if (ui.picker.drill === "scenarios" && ui.picker.cycle === arg) return false;
     ui.picker.cycle = arg;
     ui.picker.drill = "scenarios";
     return true;

@@ -295,6 +295,11 @@ async function boot() {
 // It awaits db.bundle(), which is why it lives here and not in
 // acts_newgame.js with the rest of the chooser's ui-only acts.
 async function seatScenario(slug) {
+  // Already showing this one? Then this tap changed nothing, and re-seating it
+  // would still cost a full render - root.innerHTML is replaced wholesale, so
+  // every card and icon <img> is torn down and re-resolved, which is the flash
+  // you see when you tap the row that is already selected.
+  if (ui.picker?.slug === slug && ui.overview?.slug === slug) return true;
   const b = await db.bundle(slug);
   const overview = overviewFor(ui.picker.index, slug, b);
   if (!b || !overview.entry) {
@@ -327,7 +332,10 @@ async function seatScenario(slug) {
 
 // The tap. Seating is separate because boot() restores a pick without one.
 async function pickScenario(slug) {
-  await seatScenario(slug);
+  const before = ui.picker?.slug;
+  const seated = await seatScenario(slug);
+  // Nothing moved: same scenario, same seat, no error to show.
+  if (seated && before === ui.picker?.slug && !ui.picker?.error) return;
   render();
 }
 
@@ -506,6 +514,18 @@ root.addEventListener("click", ev => {
   const btn = ev.target.closest("[data-act]");
   if (stop && (!btn || !stop.contains(btn))) return;
   if (!btn) return;
+  // The card quick view is the one act that needs more than an act and an
+  // arg: it carries the card's face image FILENAMES, so the modal needs no
+  // lookup table and every render function stays pure. Read off the element
+  // that was tapped rather than threaded through a seat nothing else wants.
+  if (btn.dataset.act === "open_card") {
+    const files = (btn.dataset.files ?? "").split(",").filter(Boolean);
+    if (!files.length) return;
+    ui.sheet = { kind: "card", name: btn.dataset.arg ?? "",
+                 caption: btn.dataset.caption ?? "", files, face: 0 };
+    render();
+    return;
+  }
   handleAct(btn.dataset.act, btn.dataset.arg ?? "");
 });
 

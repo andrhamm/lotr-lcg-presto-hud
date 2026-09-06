@@ -760,6 +760,88 @@ console.log(JSON.stringify({
     assert js["threats"] == [26, 25, 25]
 
 
+def test_every_card_with_art_opens_the_quick_view_and_two_sided_cards_flip():
+    """A 96px thumbnail is an identifier, not something you can read, so every
+    card the client draws opens a quick view of the printed card - which is
+    the authority for what it does (iron rule 4), so this shows it rather than
+    describing it.
+
+    The face image FILENAMES ride in the element's dataset: 198 catalog
+    encounter cards carry two DIFFERENT ones ("<id>.jpg" and "<id>.B.jpg"), so
+    the flip is real rather than a control that shows one picture twice, and a
+    one-sided card is offered no flip at all. app.js reads them off the tapped
+    element, so the modal needs no card index and the renderers stay pure."""
+    js = node("""
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+import { cardImage, faceFiles } from "./cardimage.js";
+import { renderCardSheet } from "./sheet_card.js";
+const prefix = "https://art.example.invalid/";
+const twoSided = { id: "x", image: "x.jpg", name: "The Watcher",
+  faces: [{ image: "x.jpg" }, { image: "x.B.jpg" }] };
+const oneSided = { id: "y", image: "y.jpg", name: "Forest Spider", faces: [{ image: "y.jpg" }] };
+const noArt = { name: "Hand-typed" };
+const g = new GameState();
+const ui = { imagePrefix: prefix,
+  sheet: { kind: "card", name: "The Watcher", caption: "×1", files: ["x.jpg", "x.B.jpg"], face: 0 } };
+const front = renderCardSheet(g, ui);
+const flipped = dispatch(g, ui, "card_flip", "");
+const back = renderCardSheet(g, ui);
+const wrapped = dispatch(g, ui, "card_flip", "");   // wraps, never clamps
+const oneUi = { imagePrefix: prefix,
+  sheet: { kind: "card", name: "Forest Spider", files: ["y.jpg"], face: 0 } };
+console.log(JSON.stringify({
+  twoFiles: faceFiles(twoSided), oneFile: faceFiles(oneSided), noFiles: faceFiles(noArt),
+  twoMarkup: cardImage({ prefix, ...twoSided }),
+  noArtMarkup: cardImage({ prefix, ...noArt }),
+  frontSrc: /class="cardview-art" src="([^"]+)"/.exec(front)?.[1],
+  backSrc: /class="cardview-art" src="([^"]+)"/.exec(back)?.[1],
+  flipped, wrapped, faceAfterWrap: ui.sheet.face,
+  twoHasFlip: front.includes('data-act="card_flip"'),
+  oneHasFlip: renderCardSheet(g, oneUi).includes('data-act="card_flip"'),
+}));
+""")
+    assert js["twoFiles"] == ["x.jpg", "x.B.jpg"]
+    assert js["oneFile"] == ["y.jpg"]
+    assert js["noFiles"] == []
+    # The card is a button carrying its own faces...
+    assert 'data-act="open_card"' in js["twoMarkup"]
+    assert 'data-files="x.jpg,x.B.jpg"' in js["twoMarkup"]
+    # ...and a card with no art is inert: nothing to enlarge.
+    assert 'data-act="open_card"' not in js["noArtMarkup"]
+    assert "<figure" in js["noArtMarkup"]
+    # The flip really changes the picture, and wraps back round.
+    assert js["frontSrc"].endswith("x.jpg") and js["backSrc"].endswith("x.B.jpg")
+    assert js["flipped"] is True and js["wrapped"] is True
+    assert js["faceAfterWrap"] == 0
+    # Offered only where there is a second side to see.
+    assert js["twoHasFlip"] and not js["oneHasFlip"]
+
+
+def test_retapping_what_is_already_selected_changes_nothing():
+    """render() replaces the whole DOM, so a re-render tears down and
+    re-resolves every icon and card <img> - the flash you get from tapping the
+    row that is already selected. The acts that could do that now return false
+    for a no-op, which is what stops app.js re-rendering at all."""
+    js = node(NG_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+const g = new GameState();
+const ui = { screen: "newgame",
+  picker: { index, source: "official", cycle: "C1", drill: "scenarios", slug: "o1a", stage: "2" } };
+console.log(JSON.stringify({
+  sameCycle: dispatch(g, ui, "ng_cycle", "C1"),      // already inside it
+  otherCycle: dispatch(g, ui, "ng_cycle", "C2"),     // a real move
+  sameStage: dispatch(g, { ...ui, picker: { ...ui.picker, stage: "2" } }, "ng_stage", "2"),
+  otherStage: dispatch(g, { ...ui, picker: { ...ui.picker, stage: "2" } }, "ng_stage", "1"),
+  sameSource: dispatch(g, ui, "ng_source", "official"),
+}));
+""")
+    assert js["sameCycle"] is False and js["otherCycle"] is True
+    assert js["sameStage"] is False and js["otherStage"] is True
+    assert js["sameSource"] is False
+
+
 def test_clearing_the_cycle_clears_everything_downstream_of_it():
     """Deselecting the cycle used to leave the chosen scenario loaded under a
     list that no longer contained it: its stages still in the rail, its detail
@@ -1184,7 +1266,7 @@ def test_overview_cards_are_the_scenarios_own_set_with_counts_and_printed_values
 import { GameState } from "../../js/gamestate.js";
 import { renderOverview } from "./overview.js";
 const html = renderOverview(new GameState(), uiFor({}));
-const caps = [...html.matchAll(/<figcaption class="body">([^<]*)<\/figcaption>/g)].map(m => m[1]);
+const caps = [...html.matchAll(/<span class="body card-cap">([^<]*)<\/span>/g)].map(m => m[1]);
 console.log(JSON.stringify({
   caps,
   headings: [...html.matchAll(/<div class="ov-type"><div class="label">([^<]+)</g)].map(m => m[1]),
@@ -4008,7 +4090,14 @@ function pick(prefix) {
 console.log(JSON.stringify({ withArt: pick("%s"), noPrefix: pick(null) }));
 """ % (_CARD_ID, _CARD_ID, _PREFIX))
     art = js["withArt"]
-    assert '<figure class="card-frame">' in art
+    # A card with art is a BUTTON now: every card on screen opens the quick
+    # view. The row around it is a plain div for the same reason - a <button>
+    # inside a <button> is invalid, and app.js delegates on the closest
+    # [data-act], so the card takes its own taps and the rest of the row still
+    # selects the location.
+    assert '<button type="button" class="card-frame" data-act="open_card"' in art
+    assert 'class="locpick-row" data-act="locpick_row"' in art
+    assert '<button type="button" class="locpick-row"' not in art
     assert 'src="%s%s.jpg"' % (_PREFIX, _CARD_ID) in art
     assert 'loading="lazy"' in art and 'alt=""' in art
     # The printed filename wins over "<id>.jpg" - a back-face location must
@@ -4019,14 +4108,19 @@ console.log(JSON.stringify({ withArt: pick("%s"), noPrefix: pick(null) }));
     # losing its picture.
     assert 'src="%sno-image-field.jpg"' % _PREFIX in art
     # An entry with neither is caption-only - no <img> to 404.
+    # An entry with neither is caption-only - no <img> to 404, and nothing to
+    # enlarge either, so it stays an inert <figure>. A control that opens an
+    # empty modal is worse than no control.
     assert '<figure class="card-frame"><figcaption class="body">Hand-typed' in art
     # The caption is the name plus the numbers the row has always shown.
-    assert ">Old Forest Road · threat 1 · 3 quest points</figcaption>" in art
+    assert ">Old Forest Road · threat 1 · 3 quest points</span>" in art
 
     # No pinned prefix (an index built before the pin, or a catalog that
     # would not load): not one card <img> anywhere, and the rows still read.
     # (The set-group header's own icon is a separate <img>; it is unaffected.)
-    assert '<figure class="card-frame"><img' not in js["noPrefix"]
+    assert 'class="card-frame"><img' not in js["noPrefix"]
+    # With no prefix there is no URL to enlarge, so no card is tappable.
+    assert 'data-act="open_card"' not in js["noPrefix"]
     assert '<figure class="card-frame"><figcaption' in js["noPrefix"]
     assert "Old Forest Road · threat 1 · 3 quest points" in js["noPrefix"]
 

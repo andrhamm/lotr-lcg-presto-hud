@@ -14,6 +14,16 @@ export function handle(game, ui, act, arg) {
   if (act === "open_staging") { ui.sheet = { kind: "staging" }; return true; }
   if (act === "open_menu") { ui.sheet = { kind: "menu" }; return true; }
   if (act === "open_quest") { ui.sheet = { kind: "quest" }; return true; }
+  // The quick view's flip. It wraps rather than clamping, so a two-sided card
+  // is one repeated tap to compare its faces - which is how you read a quest
+  // card at the table.
+  if (act === "card_flip") {
+    if (ui.sheet?.kind !== "card") return false;
+    const n = (ui.sheet.files ?? []).length;
+    if (n < 2) return false;
+    ui.sheet.face = ((ui.sheet.face ?? 0) + 1) % n;
+    return true;
+  }
   if (act === "sheet_close") {
     // The quest sheet's scrim is a plain dismiss for every other sheet, but
     // leaving THIS one by tapping outside it skipped the same resolution

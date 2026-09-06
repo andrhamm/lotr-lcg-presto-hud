@@ -36,14 +36,48 @@ export function cardUrl(prefix, card) {
   return prefix ? prefix + file : null;
 }
 
-// <figure class="card-frame"> for one card. `caption` is appended to the
-// name after a middot - the picker passes the printed threat/quest points
-// its rows have always shown, so the one caption carries both the card's
-// identity and its numbers whether or not the art loads.
-export function cardImage({ prefix, id, image, name, caption }) {
+// Every image filename this card can show, front first, deduped. A card's
+// `faces` each carry their own `image` and 198 encounter cards in the catalog
+// have two DIFFERENT ones (a two-sided card: "<id>.jpg" and "<id>.B.jpg"), so
+// this is what makes a flip real rather than a control that shows the same
+// picture twice. Falls back to the record's own `image`/`id` for a caller
+// that has no faces (the location picker's flattened entries).
+export function faceFiles(card) {
+  const out = [];
+  for (const f of card?.faces ?? []) {
+    if (f?.image && !out.includes(f.image)) out.push(f.image);
+  }
+  if (!out.length) {
+    const one = card?.image || (card?.id ? card.id + ".jpg" : null);
+    if (one) out.push(one);
+  }
+  return out;
+}
+
+// One card. `caption` is appended to the name after a middot - the picker
+// passes the printed threat/quest points its rows have always shown, so the
+// one caption carries both the card's identity and its numbers whether or not
+// the art loads.
+//
+// It is a BUTTON, not a figure: every card on screen opens the quick view, and
+// this client's rule is that a thing you can tap is a real <button> with a
+// data-act for app.js to delegate on. The files ride along in the dataset so
+// the modal needs no lookup table and the renderers stay pure - app.js reads
+// them off the element it was handed.
+//
+// A card with no art at all stays an inert <figure>: there is nothing to
+// enlarge, and a control that opens an empty modal is worse than no control.
+// The caption is what the player reads in that case (see the module header),
+// which is exactly why it is never optional.
+export function cardImage({ prefix, id, image, name, caption, faces = null }) {
+  const files = faceFiles({ id, image, faces });
   const src = cardUrl(prefix, { id, image });
   const img = src ? h`<img src="${src}" alt="" loading="lazy">` : "";
-  return h`<figure class="card-frame">${raw(img)}<figcaption class="body">${name ?? ""}${caption ? " · " + caption : ""}</figcaption></figure>`;
+  const label = h`${name ?? ""}${caption ? " · " + caption : ""}`;
+  if (!files.length || !prefix) {
+    return h`<figure class="card-frame">${raw(img)}<figcaption class="body">${raw(label)}</figcaption></figure>`;
+  }
+  return h`<button type="button" class="card-frame" data-act="open_card" data-arg="${name ?? ""}" data-files="${files.join(",")}" data-caption="${caption ?? ""}">${raw(img)}<span class="body card-cap">${raw(label)}</span></button>`;
 }
 
 // Every card picture the scenario `bundle` can put on screen, each URL once,

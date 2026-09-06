@@ -54,14 +54,17 @@ export function layout(game, ui) {
   // Setup is two steps: the scenario chooser (master/detail - the same
   // scenario detail the in-game route shows, embedded beside a drill-in
   // list), then the players.
-  if (ui.screen === "newgame") return h`<div class="app">${raw(reloadButton())}${raw(renderNewGame(game, ui))}</div>`;
-  if (ui.screen === "players") return h`<div class="app">${raw(reloadButton())}${raw(renderPlayersSetup(ui))}</div>`;
+  // The sheet layer rides on the setup screens too, not just on play: the
+  // card quick view opens from the chooser's own card grid, and a seat that
+  // nothing draws is a tap that silently does nothing.
+  if (ui.screen === "newgame") return h`<div class="app">${raw(reloadButton())}${raw(renderNewGame(game, ui))}${raw(renderSheet(game, ui))}</div>`;
+  if (ui.screen === "players") return h`<div class="app">${raw(reloadButton())}${raw(renderPlayersSetup(ui))}${raw(renderSheet(game, ui))}</div>`;
   // The Scenario overview (Task 3, milestone 6) is a whole screen on both of
   // its paths: chosen from the picker before a game exists, and opened
   // read-only from the QUEST zone's stage pill mid-game - overview.js draws
   // both, so `game` travels with `ui` here (a resumed game whose catalog
   // never loaded is where its name comes from).
-  if (ui.screen === "overview") return h`<div class="app">${raw(reloadButton())}${raw(renderOverview(game, ui))}</div>`;
+  if (ui.screen === "overview") return h`<div class="app">${raw(reloadButton())}${raw(renderOverview(game, ui))}${raw(renderSheet(game, ui))}</div>`;
   // The Game Log is a whole screen, not an overlay: it replaces the strip,
   // the rail and the pane (it has its own transport and its own log block).
   // The sheet layer still rides on top of it - that is where its export
