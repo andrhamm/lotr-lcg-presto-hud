@@ -404,7 +404,10 @@ ships fonts/product images we don't want). Refresh the pin with
 local directory instead of fetching (useful offline); either source degrades
 gracefully to an empty `icons.json` (missing local dir) or a friendly
 `SystemExit` (fetch/rasterize failure) rather than a crash — icon slots just
-fall back to their placeholder glyph. Rasterizing needs Pillow plus either
+fall back to their placeholder glyph. The same run also writes the pack's
+SVGs verbatim to `docs/data/icons/svg/<slug>.svg` (gitignored, same pin) for
+the tablet client; `--svg-out` overrides the directory, and `--svg-out ""`
+disables the export. Rasterizing needs Pillow plus either
 `cairosvg` or the `rsvg-convert` CLI. Runs alongside `build_card_data.py` in
 both delivery paths: CI builds it in `.github/workflows/pages.yml` (marked
 `continue-on-error` — icons are optional, card data is the critical

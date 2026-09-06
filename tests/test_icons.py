@@ -190,6 +190,76 @@ def test_fetch_and_build_writes_source_naming_repo_and_sha(tmp_path, monkeypatch
     assert "deadbeef" * 5 in data["source"]
 
 
+# --- --svg-out: exporting the pack's SVGs alongside icons.json --------
+
+def test_svg_out_writes_verbatim_copy_alongside_icons_json(tmp_path):
+    # Directory names ("encounter sets" / "expansion symbols", with a
+    # space) match _iter_local_svgs's expected subtrees, same as every
+    # other --assets fixture above.
+    assets = tmp_path / "assets"
+    (assets / "encounter sets").mkdir(parents=True)
+    (assets / "expansion symbols").mkdir(parents=True)
+    (assets / "encounter sets" / "passage_through_mirkwood.svg").write_bytes(SQUARE)
+    out = tmp_path / "icons.json"
+    svg_out = tmp_path / "svg"
+
+    summary = build_icons.build(str(assets), str(out), svg_out=str(svg_out))
+
+    assert summary["count"] == 1
+    written = svg_out / "passage-through-mirkwood.svg"
+    assert written.exists()
+    assert written.read_bytes() == SQUARE  # byte-identical to the source
+    assert out.exists()
+    import json
+    assert "passage-through-mirkwood" in json.loads(out.read_text())["icons"]
+
+
+def test_svg_out_mirrors_encounter_set_collision_winner(tmp_path):
+    # Same slug in both namespaces, encounter sets iterated second so they
+    # win in icons.json (see test_build_encounter_set_wins_collision) - the
+    # exported .svg file must reflect the same winner, not the loser.
+    assets = tmp_path / "assets"
+    (assets / "encounter sets" / "core").mkdir(parents=True)
+    (assets / "expansion symbols").mkdir(parents=True)
+    (assets / "encounter sets" / "core" / "clash.svg").write_bytes(HALF)
+    (assets / "expansion symbols" / "clash.svg").write_bytes(SQUARE)
+    out = tmp_path / "icons.json"
+    svg_out = tmp_path / "svg"
+
+    build_icons.build(str(assets), str(out), svg_out=str(svg_out), size=8)
+
+    assert (svg_out / "clash.svg").read_bytes() == HALF
+
+
+def test_svg_out_flag_empty_disables_export(tmp_path, monkeypatch):
+    assets = tmp_path / "assets"
+    (assets / "encounter sets").mkdir(parents=True)
+    (assets / "expansion symbols").mkdir(parents=True)
+    (assets / "encounter sets" / "passage_through_mirkwood.svg").write_bytes(SQUARE)
+    out = tmp_path / "icons.json"
+
+    # Run through main() so the CLI flag itself is exercised, not just the
+    # underlying function default; chdir so DEFAULT_SVG_OUT (a relative
+    # docs/data/icons/svg path) can't land outside this tmp_path if the
+    # empty-string override were ever ignored.
+    monkeypatch.chdir(tmp_path)
+    rc = build_icons.main(["--assets", str(assets), "--out", str(out), "--svg-out", ""])
+
+    assert rc == 0
+    assert out.exists()
+    assert not (tmp_path / "docs").exists()
+
+
+def test_svg_out_writes_nothing_when_assets_missing(tmp_path):
+    out = tmp_path / "icons.json"
+    svg_out = tmp_path / "svg"
+
+    summary = build_icons.build(str(tmp_path / "no-such-pack"), str(out), svg_out=str(svg_out))
+
+    assert summary["count"] == 0
+    assert not svg_out.exists()
+
+
 def test_fetch_and_build_raises_clean_systemexit_on_fetch_failure(tmp_path, monkeypatch):
     import urllib.error
 

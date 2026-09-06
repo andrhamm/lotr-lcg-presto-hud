@@ -19,7 +19,13 @@ a bad sha) or a rasterization failure (neither Pillow nor a usable SVG
 backend installed) raises a friendly SystemExit instead of a traceback; the
 Pages workflow marks that build step continue-on-error since icons are
 optional (card data is the critical artifact - see CLAUDE.md's Card data
-section)."""
+section).
+
+The same pass over the source (tarball or --assets dir) also writes every
+SVG verbatim to --svg-out (default docs/data/icons/svg/<slug>.svg, same
+gitignored/regenerated posture, same collision rule as icons.json) for
+consumers that want the vector art directly instead of the rasterized
+mask; --svg-out "" disables the export."""
 import argparse
 import datetime
 import glob
@@ -43,6 +49,7 @@ except ImportError:  # pragma: no cover - exercised only where Pillow is absent
     Image = None
 
 DEFAULT_OUT = os.path.join("docs", "data", "icons.json")
+DEFAULT_SVG_OUT = os.path.join("docs", "data", "icons", "svg")
 SIZE = 24
 
 REPO = "KevBelisle/lotr-lcg-assets"
@@ -197,15 +204,26 @@ def _iter_tarball_svgs(tar_bytes):
             yield category, rel, extracted.read()
 
 
-def _assemble(svg_sources, size):
+def _assemble(svg_sources, size, svg_out=None):
     """Consume a (category, name, svg_bytes) iterable - see
     _iter_local_svgs / _iter_tarball_svgs - into an icons dict + counts.
     Encounter-set and expansion-symbol icons share one flat slug namespace;
     whichever source is iterated second for a given slug wins a collision
     (logged either way) - both iterators order expansion symbols first so
-    encounter sets always win, matching the pre-existing behavior."""
+    encounter sets always win, matching the pre-existing behavior.
+
+    `svg_out`, when given, is a directory that also receives each source
+    SVG's raw bytes verbatim as `<slug>.svg` - written in this same single
+    pass over `svg_sources`, so a collision resolves to the identical
+    winner as the icons.json mask (the later source for a slug overwrites
+    both the dict entry and the file). Never iterates svg_sources twice."""
     icons = {}
     counts = {"encounter_sets": 0, "expansion_symbols": 0, "collisions": 0}
+    if svg_out:
+        try:
+            os.makedirs(svg_out, exist_ok=True)
+        except OSError as e:
+            raise SystemExit("Failed to create SVG output directory %r: %s" % (svg_out, e))
     for category, name, svg_bytes in svg_sources:
         slug = _slug(name)
         if slug in icons:
@@ -214,6 +232,12 @@ def _assemble(svg_sources, size):
                   "namespaces (%s wins)" % (slug, category))
         icons[slug] = svg_to_mask(svg_bytes, size=size)
         counts[category] += 1
+        if svg_out:
+            try:
+                with open(os.path.join(svg_out, slug + ".svg"), "wb") as f:
+                    f.write(svg_bytes)
+            except OSError as e:
+                raise SystemExit("Failed to write SVG %r to %r: %s" % (slug, svg_out, e))
     return icons, counts
 
 
@@ -232,13 +256,18 @@ def _write(out_path, icons, size, source):
         json.dump(out, f, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def build(assets_root, out_path=DEFAULT_OUT, size=SIZE, source=None):
+def build(assets_root, out_path=DEFAULT_OUT, size=SIZE, source=None, svg_out=None):
     """Rasterize every encounter-set + expansion-symbol SVG under the local
     directory `assets_root` into a docs/data/icons.json-shaped dict, write
     it to `out_path`, and return a summary dict (counts). Never raises on a
     missing/unreadable asset pack - see the module docstring. This is the
     --assets PATH override path; the normal (no --assets) run instead goes
-    through fetch_and_build()."""
+    through fetch_and_build().
+
+    `svg_out`, when truthy, also writes each source SVG verbatim to
+    `svg_out/<slug>.svg` in the same pass (see _assemble) - falsy (None or
+    "") disables the export entirely, and nothing is written when
+    `assets_root` doesn't exist (there's nothing to export)."""
     if source is None:
         source = ("local pack at %s (icons/encounter sets + icons/expansion symbols)"
                    % assets_root)
@@ -248,20 +277,24 @@ def build(assets_root, out_path=DEFAULT_OUT, size=SIZE, source=None):
         icons, counts = {}, {"encounter_sets": 0, "expansion_symbols": 0, "collisions": 0}
     else:
         try:
-            icons, counts = _assemble(_iter_local_svgs(assets_root), size)
+            icons, counts = _assemble(_iter_local_svgs(assets_root), size, svg_out=svg_out)
         except RuntimeError as e:
             raise SystemExit("Failed to rasterize icon pack at %r: %s" % (assets_root, e))
     _write(out_path, icons, size, source)
     return {"count": len(icons), **counts}
 
 
-def fetch_and_build(sha, out_path=DEFAULT_OUT, size=SIZE):
+def fetch_and_build(sha, out_path=DEFAULT_OUT, size=SIZE, svg_out=None):
     """Download the pinned upstream tarball at `sha` and rasterize its SVGs
     straight out of memory (_iter_tarball_svgs) into docs/data/icons.json.
     Mirrors tools/build_card_data.py's fetch convention exactly: a failed
     download or an unreadable archive raises SystemExit with a friendly
     one-line message (no traceback) rather than crashing; the Pages workflow
-    marks this build step continue-on-error since icons are optional."""
+    marks this build step continue-on-error since icons are optional.
+
+    `svg_out`, when truthy, also writes each source SVG verbatim to
+    `svg_out/<slug>.svg` in the same pass over the tarball (see _assemble) -
+    the tarball is never iterated twice."""
     url = TARBALL.format(sha=sha)
     print("Fetching icon pack at %s ..." % sha)
     try:
@@ -271,7 +304,7 @@ def fetch_and_build(sha, out_path=DEFAULT_OUT, size=SIZE):
         raise SystemExit("Failed to fetch icon pack at sha %s: %s\nTry --refresh to "
                           "re-pin, or pass --assets for a local copy." % (sha, e))
     try:
-        icons, counts = _assemble(_iter_tarball_svgs(tar_bytes), size)
+        icons, counts = _assemble(_iter_tarball_svgs(tar_bytes), size, svg_out=svg_out)
     except tarfile.TarError as e:
         raise SystemExit("Failed to read icon pack tarball at sha %s: %s" % (sha, e))
     except RuntimeError as e:
@@ -312,22 +345,31 @@ def main(argv=None):
                           "the pinned upstream tarball (tools/data/icons.SOURCE.txt)")
     ap.add_argument("--refresh", action="store_true", help="re-pin to upstream HEAD sha")
     ap.add_argument("--out", default=DEFAULT_OUT)
+    ap.add_argument("--svg-out", default=DEFAULT_SVG_OUT,
+                     help="directory to also write each source SVG verbatim as "
+                          "<slug>.svg, same run and same collision rule as "
+                          "icons.json (encounter sets win); pass an empty string "
+                          "to disable the export entirely")
     args = ap.parse_args(argv)
 
     if args.refresh:
         _refresh_pin()
 
+    svg_out = args.svg_out or None
+
     if args.assets:
-        summary = build(args.assets, args.out)
+        summary = build(args.assets, args.out, svg_out=svg_out)
     else:
         if not os.path.exists(SOURCE_FILE):
             raise SystemExit("No pin file — run once with --refresh.")
         sha = _read_pin()
-        summary = fetch_and_build(sha, args.out)
+        summary = fetch_and_build(sha, args.out, svg_out=svg_out)
 
     print("Wrote %d icons (%d encounter sets, %d expansion symbols, %d collisions) to %s"
           % (summary["count"], summary["encounter_sets"], summary["expansion_symbols"],
              summary["collisions"], args.out))
+    if svg_out:
+        print("Wrote SVGs to %s" % svg_out)
     return 0
 
 
