@@ -2289,9 +2289,12 @@ perform(g, ui, "stg+", ""); perform(g, ui, "stg+", ""); perform(g, ui, "advance"
 const rail = renderRail(g, ui);
 perform(g, ui, "open_log", "");
 const opened = layout(g, ui);
-perform(g, ui, "rw_undo", "");
+perform(g, ui, "rw_undo", ""); perform(g, ui, "rw_undo", "");
 const afterUndo = layout(g, ui);
-const target = g.log.find(e => e.delta_i === 0);
+// The two stepper taps are ONE row, and it belongs to the second of them
+// (gamestate.js restamps a coalesced row - milestone 4 fix wave, F1), so
+// rewinding to it lands on the staging value the row actually states.
+const target = g.log.find(e => e.text === "Staging area threat 2");
 perform(g, ui, "log_sel", String(target.seq));
 const selected = layout(g, ui);
 const rewound = perform(g, ui, "log_rewind", "");
@@ -2309,9 +2312,9 @@ console.log(JSON.stringify({
 }));
 """)
     assert js["openChip"] and js["isLogScreen"] and js["filters"] and js["transport6"]
-    assert js["undoneCount"] >= 1                     # the advance's row(s) greyed after one undo
+    assert js["undoneCount"] >= 1                     # the advance's row(s) greyed after the undos
     assert js["rewindOff"] and js["rewindOn"]
-    assert js["rewound"] is True and js["step"] == 0 and js["staging"] == 1
+    assert js["rewound"] is True and js["step"] == 1 and js["staging"] == 2
     assert js["screen"] == "play" and js["sidePanel"] and js["export"]
 
 
@@ -2362,7 +2365,7 @@ def test_log_rewind_goes_through_the_one_cursor_path():
 import { GameState } from "../../js/gamestate.js";
 import { newUi, perform } from "./actions.js";
 const g = new GameState(2); g.view = "resource"; const ui = newUi();
-perform(g, ui, "stg+", ""); perform(g, ui, "stg+", "");
+perform(g, ui, "stg+", ""); perform(g, ui, "advance", "");
 perform(g, ui, "open_log", "");
 perform(g, ui, "export_log", "");
 ui.alloc = { quest: 3, side: {} }; ui.placed = true;

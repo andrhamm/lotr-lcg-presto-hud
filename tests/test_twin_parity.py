@@ -561,3 +561,166 @@ def test_a_fresh_tally_after_undo_never_coalesces_onto_an_orphaned_row_in_either
     assert js["tombstoneCount"] == len(tombstones) == 1
     assert js["tombstoneLo"] == tombstones[0]["lo"] == row_b_seq
     assert js["tombstoneHi"] == tombstones[0]["hi"] == row_c_seq
+
+
+_TALLY_RESTAMP_PROBE = """\
+import { GameState, foldLog, setWindowPolicy, WINDOW_POLICY_BANDS } from "./gamestate.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const tap = (g, fn) => { const s = g.beginAction(); fn(); return g.addDelta(s); };
+// db.js serializes each record as it leaves takeLogAppends(); the live rows
+// keep being edited afterwards, so freeze here the same way it does.
+const drain = g => g.takeLogAppends().map(r => JSON.parse(JSON.stringify(r)));
+function tallyGame(n) {
+  const g = new GameState(2);
+  let appends = [];
+  for (let v = 1; v <= n; v++) { tap(g, () => g.setStaging(v)); appends = appends.concat(drain(g)); }
+  return [g, appends];
+}
+const [g, _a] = tallyGame(5);
+const row = g.log.find(e => e.key === "stg");
+const rowDeltaI = row.delta_i;
+g.undo(); g.undo(); g.undo();
+const undone = row.delta_i > g.replay_step;
+const stepAfterUndos = g.replay_step, stagingAfterUndos = g.staging;
+g.stepThrough({ size: "index", index: row.delta_i });
+const stagingAfterRewind = g.staging;
+
+const folds = [];
+{ const [h, ap0] = tallyGame(3); let ap = ap0;
+  h.undo(); ap = ap.concat(drain(h));
+  tap(h, () => h.setWillpower(3)); ap = ap.concat(drain(h));
+  h.undo(); ap = ap.concat(drain(h));
+  tap(h, () => h.setStaging(8)); ap = ap.concat(drain(h));
+  folds.push([h.log.map(e => e.text), foldLog(ap).map(e => e.text)]); }
+{ const [h, ap0] = tallyGame(3); let ap = ap0;
+  h.undo(); h.undo(); ap = ap.concat(drain(h));
+  tap(h, () => h.setStaging(9)); ap = ap.concat(drain(h));
+  folds.push([h.log.map(e => e.text), foldLog(ap).map(e => e.text)]); }
+{ const [h, ap0] = tallyGame(5); let ap = ap0;
+  tap(h, () => h.setWillpower(2)); ap = ap.concat(drain(h));
+  h.undo(); h.undo(); ap = ap.concat(drain(h));
+  tap(h, () => h.setStaging(7)); ap = ap.concat(drain(h));
+  folds.push([h.log.map(e => e.text), foldLog(ap).map(e => e.text)]); }
+{ const [h, ap0] = tallyGame(3); let ap = ap0;
+  while (h.undo()) {}
+  ap = ap.concat(drain(h));
+  tap(h, () => h.setStaging(6)); ap = ap.concat(drain(h));
+  folds.push([h.replay_step, h.log.map(e => e.text), foldLog(ap).map(e => e.text)]); }
+
+// The MAX_SAVED_DELTAS front trim, driven at full size: the constant is a
+// `const` export, so there is nothing to lower from a probe - and 501 taps
+// under node cost milliseconds.
+const t = new GameState(2);
+let tAppends = [];
+for (let i = 0; i <= 500; i++) {
+  tap(t, () => (i % 2 ? t.setStaging(i % 9 + 1) : t.setWillpower(i % 9 + 1)));
+  tAppends = tAppends.concat(drain(t));
+}
+const trims = tAppends.filter(r => r.op === "lx");
+const stamped = t.log.filter(e => "delta_i" in e).map(e => e.delta_i);
+console.log(JSON.stringify({
+  rowText: row.text, rowDeltaI, undone, stepAfterUndos, stagingAfterUndos,
+  stagingAfterRewind, folds,
+  trimCount: trims.length, trimN: trims.length ? trims[0].n : null,
+  nDeltas: t.deltas.length, trimStep: t.replay_step,
+  firstStamped: stamped[0], lastStamped: stamped[stamped.length - 1],
+  trimFolded: JSON.stringify(foldLog(tAppends)) === JSON.stringify(t.log),
+}));
+"""
+
+
+def test_a_coalesced_tally_row_is_restamped_and_the_trim_is_journalled_in_both_twins():
+    """F1 + F3 of the milestone-4 fix wave, run under node and under Python.
+
+    F1: a run of taps on one stepper is ONE log row, and that row belongs to
+    the LAST tap - the coalesce path rewrites it in place, so it has to join
+    _action_entries or add_delta's stamp loop leaves it carrying the first
+    tap's delta index (greying under-fires; a rewind to the row lands on the
+    wrong tap).
+
+    F3: the MAX_SAVED_DELTAS front trim renumbers delta_i in RAM, and the log
+    store hears about it as {"op":"lx","n":drop} - both folds apply it.
+    """
+    import json as _json
+    import gamestate
+    from gamestate import GameState, fold_log
+
+    js = _js_facts(_TALLY_RESTAMP_PROBE)
+
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_BANDS)
+
+    def tap(g, fn):
+        s = g.begin_action(); fn(); return g.add_delta(s)
+
+    def drain(g):
+        return [_json.loads(_json.dumps(r)) for r in g.take_log_appends()]
+
+    def tally_game(n):
+        g = GameState(2)
+        appends = []
+        for v in range(1, n + 1):
+            tap(g, lambda v=v: g.set_staging(v))
+            appends += drain(g)
+        return g, appends
+
+    g, _ = tally_game(5)
+    row = next(e for e in g.log if e.get("key") == "stg")
+    assert js["rowText"] == row["text"] == "Staging area threat 5"
+    assert js["rowDeltaI"] == row["delta_i"] == 4
+    g.undo(); g.undo(); g.undo()
+    assert js["undone"] is (row["delta_i"] > g.replay_step) is True
+    assert js["stepAfterUndos"] == g.replay_step == 1
+    assert js["stagingAfterUndos"] == g.staging == 2
+    g.step_through({"size": "index", "index": row["delta_i"]})
+    assert js["stagingAfterRewind"] == g.staging == 5
+
+    folds = []
+    h, ap = tally_game(3)
+    h.undo(); ap += drain(h)
+    tap(h, lambda: h.set_willpower(3)); ap += drain(h)
+    h.undo(); ap += drain(h)
+    tap(h, lambda: h.set_staging(8)); ap += drain(h)
+    folds.append([[e["text"] for e in h.log], [e["text"] for e in fold_log(ap)]])
+    assert fold_log(ap) == h.log
+
+    h, ap = tally_game(3)
+    h.undo(); h.undo(); ap += drain(h)
+    tap(h, lambda: h.set_staging(9)); ap += drain(h)
+    folds.append([[e["text"] for e in h.log], [e["text"] for e in fold_log(ap)]])
+    assert fold_log(ap) == h.log
+
+    h, ap = tally_game(5)
+    tap(h, lambda: h.set_willpower(2)); ap += drain(h)
+    h.undo(); h.undo(); ap += drain(h)
+    tap(h, lambda: h.set_staging(7)); ap += drain(h)
+    folds.append([[e["text"] for e in h.log], [e["text"] for e in fold_log(ap)]])
+    assert fold_log(ap) == h.log
+
+    h, ap = tally_game(3)
+    while h.undo():
+        pass
+    ap += drain(h)
+    tap(h, lambda: h.set_staging(6)); ap += drain(h)
+    folds.append([h.replay_step, [e["text"] for e in h.log],
+                  [e["text"] for e in fold_log(ap)]])
+    assert fold_log(ap) == h.log
+
+    assert js["folds"] == folds
+    for f in folds[:3]:
+        assert f[0] == f[1]
+
+    t = GameState(2)
+    t_appends = []
+    for i in range(gamestate.MAX_SAVED_DELTAS + 1):
+        tap(t, (lambda i=i: t.set_staging(i % 9 + 1)) if i % 2
+               else (lambda i=i: t.set_willpower(i % 9 + 1)))
+        t_appends += drain(t)
+    trims = [r for r in t_appends if r.get("op") == "lx"]
+    stamped = [e["delta_i"] for e in t.log if "delta_i" in e]
+    assert js["trimCount"] == len(trims) == 1
+    assert js["trimN"] == trims[0]["n"] == 1
+    assert js["nDeltas"] == len(t.deltas) == gamestate.MAX_SAVED_DELTAS
+    assert js["trimStep"] == t.replay_step == gamestate.MAX_SAVED_DELTAS - 1
+    assert js["firstStamped"] == stamped[0] == -1
+    assert js["lastStamped"] == stamped[-1] == gamestate.MAX_SAVED_DELTAS - 1
+    assert js["trimFolded"] is True and fold_log(t_appends) == t.log

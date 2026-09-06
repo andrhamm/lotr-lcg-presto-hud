@@ -1,6 +1,7 @@
 """A delta remembers the view and round it landed on, and truncating the redo
 future truncates the log rows it orphaned (with a tombstone the fold applies).
 Both twins."""
+import json
 import os, sys
 import gamestate
 from gamestate import GameState, fold_log
@@ -139,4 +140,106 @@ def test_a_fresh_tally_after_undo_never_coalesces_onto_an_orphaned_row():
     assert tombstones[0]["lo"] == row_b_seq
     assert tombstones[0]["hi"] == row_c_seq
 
+    assert fold_log(appends) == g.log
+
+
+def _drain(g):
+    """The records the store would have written, frozen at drain time.
+
+    db.py serializes each record as it leaves take_log_appends(); the live row
+    dicts keep being edited afterwards (a later tally rewrites one, the front
+    trim renumbers them all), so a test that kept references would be folding
+    over history that had quietly rewritten itself. Freeze, and the fold has
+    to earn its result from the ops.
+    """
+    return [json.loads(json.dumps(r)) for r in g.take_log_appends()]
+
+
+def _tally_game(n=5):
+    """`n` separate taps on the same stepper - one coalesced row, `n` deltas."""
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_BANDS)
+    g = GameState(2)
+    appends = []
+    for v in range(1, n + 1):
+        _tap(g, lambda v=v: g.set_staging(v))
+        appends += _drain(g)
+    return g, appends
+
+
+def test_a_coalesced_tally_row_belongs_to_the_tap_that_last_wrote_it():
+    """Five taps on one stepper are one log row - and that row is the FIFTH
+    tap's, not the first's. The coalesce path rewrites the row in place, so it
+    has to join _action_entries too or add_delta's stamp loop never sees it:
+    the row kept delta_i 0, so it stayed ungreyed until four undos, and a
+    rewind to it landed on "staging 1" while the row said "staging 5"."""
+    g, _ = _tally_game()
+    rows = [e for e in g.log if e.get("key") == "stg"]
+    assert len(rows) == 1 and rows[0]["text"] == "Staging area threat 5"
+    assert rows[0]["delta_i"] == 4                  # the fifth tap, not the first
+
+    assert g.undo() and g.undo() and g.undo()
+    assert g.replay_step == 1 and g.staging == 2
+    assert rows[0]["delta_i"] > g.replay_step       # greyed: it describes the future
+
+    assert g.step_through({"size": "index", "index": rows[0]["delta_i"]})
+    assert g.staging == 5                           # the row's own tap, not tap one
+
+
+def test_fold_reproduces_the_live_log_across_the_coalesce_and_undo_corners():
+    """Four walks that each put the restamped row and the truncation
+    tombstone in a different order. The fold has no replay_step, so it
+    coalesces where the live log_event would have refused - it comes out
+    right anyway because `seq` is monotonic (see fold_log)."""
+    # undo / edit / undo / edit
+    g, appends = _tally_game(3)
+    g.undo(); appends += _drain(g)
+    _tap(g, lambda: g.set_willpower(3)); appends += _drain(g)
+    g.undo(); appends += _drain(g)
+    _tap(g, lambda: g.set_staging(8)); appends += _drain(g)
+    assert fold_log(appends) == g.log
+
+    # two undos, then a tally edit that lands on an orphaned tally row
+    g, appends = _tally_game(3)
+    g.undo(); g.undo(); appends += _drain(g)
+    _tap(g, lambda: g.set_staging(9)); appends += _drain(g)
+    assert fold_log(appends) == g.log
+
+    # a tally run, an undo INTO it, then an edit
+    g, appends = _tally_game(5)
+    _tap(g, lambda: g.set_willpower(2)); appends += _drain(g)
+    g.undo(); g.undo(); appends += _drain(g)
+    _tap(g, lambda: g.set_staging(7)); appends += _drain(g)
+    assert fold_log(appends) == g.log
+
+    # all the way back to -1, then an edit
+    g, appends = _tally_game(3)
+    while g.undo():
+        pass
+    assert g.replay_step == -1
+    appends += _drain(g)
+    _tap(g, lambda: g.set_staging(6)); appends += _drain(g)
+    assert fold_log(appends) == g.log
+
+
+def test_the_front_trim_shifts_delta_i_in_the_store_too():
+    """MAX_SAVED_DELTAS taps and one more. The trim drops the oldest delta and
+    renumbers every row's delta_i in RAM; the store hears about it as
+    {"op":"lx","n":drop}, or a resumed game comes back with every row pointing
+    one delta too high - a rewind target off by one, for good."""
+    gamestate.set_window_policy(gamestate.WINDOW_POLICY_BANDS)
+    g = GameState(2)
+    appends = []
+    for i in range(gamestate.MAX_SAVED_DELTAS + 1):
+        # Alternate two steppers so no tap coalesces onto the previous row:
+        # one row per delta is what makes the shift visible.
+        _tap(g, (lambda i=i: g.set_staging(i % 9 + 1)) if i % 2
+                else (lambda i=i: g.set_willpower(i % 9 + 1)))
+        appends += _drain(g)
+
+    trims = [r for r in appends if r.get("op") == "lx"]
+    assert len(trims) == 1 and trims[0]["n"] == 1
+    assert len(g.deltas) == gamestate.MAX_SAVED_DELTAS
+    stamped = [e["delta_i"] for e in g.log if "delta_i" in e]
+    assert stamped[0] == -1                 # the dropped delta: no longer a target
+    assert stamped[-1] == g.replay_step == gamestate.MAX_SAVED_DELTAS - 1
     assert fold_log(appends) == g.log

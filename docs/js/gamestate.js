@@ -229,12 +229,30 @@ export function foldReplay(ops) {
 // whose (key, round, step) matches the last retained row REPLACES it - or the
 // same run comes back as eight rows. Mirror of gamestate.py's fold_log; kept
 // beside logEvent because the two rules must agree.
+//
+// Two ops, both for things the store cannot un-append: {op:"lt",lo,hi} an
+// undo-truncation dropping the rows whose seq falls in that range, and
+// {op:"lx",n} the MAX_SAVED_DELTAS front trim, which shifts every retained
+// row's delta_i down by n (addDelta emits it AHEAD of the rows it queued in
+// the same batch - those are drained already shifted).
+//
+// The coalesce here is orphan-blind - the fold has no replay_step - and it
+// self-corrects because `seq` is monotonic: it may merge a fresh record onto
+// a row the live logEvent refused to touch, but the merged row then carries
+// the FRESH seq, always outside the tombstone's [lo, hi], so the "lt" that
+// follows drops exactly what the live truncation dropped.
 export function foldLog(records) {
   const out = [];
   for (const r of records) {
     if (r.op === "lt") {
       const keep = out.filter(e => !(e.seq >= r.lo && e.seq <= r.hi));
       out.length = 0; out.push(...keep);
+      continue;
+    }
+    if (r.op === "lx") {
+      for (const e of out) {
+        if (typeof e.delta_i === "number") e.delta_i -= r.n;
+      }
       continue;
     }
     const prev = out.length ? out[out.length - 1] : null;
@@ -555,6 +573,14 @@ export class GameState {
       if (this.messages.length) this.messages[this.messages.length - 1] = text;
       else this.messages.push(text);
       this._log_appends.push(prev);
+      // The row now belongs to THIS tap, so it has to be restamped: addDelta
+      // stamps every entry in _action_entries with the new delta index, and a
+      // coalesced row that never reached that list kept the FIRST tap's index
+      // - so a five-tap stepper run stayed greyed until five undos, and a
+      // rewind to the row landed on tap one. Only a non-orphan row is ever
+      // coalesced onto (the guard above), so restamping can never pull a row
+      // out of the undone future.
+      if (!this._action_entries.includes(prev)) this._action_entries.push(prev);
       return prev;
     }
     this._seq += 1;
@@ -1636,10 +1662,13 @@ export class GameState {
     // cannot un-append, so record the truncation instead - and the log rows
     // that future produced go with it (design spec, "Rewind": later entries
     // stay greyed until an edit truncates them). Rows are contiguous in seq:
-    // kept deltas' rows < the orphaned rows < this action's own rows (which
-    // have no delta_i yet), so one [lo, hi] range names them all. Orphaned
-    // rows are never coalesced onto (see logEvent), so a kept action always
-    // keeps its own line here.
+    // kept deltas' rows < the orphaned rows < the rows this action wrote (not
+    // stamped yet), so one [lo, hi] range names them all. A row this action
+    // RE-TALLIED moves with that last group rather than staying put, because
+    // logEvent bumps a coalesced row's seq to the newest one - so it sits
+    // above hi and the range still names only orphans. Orphaned rows are
+    // never coalesced onto (see logEvent), so a kept action always keeps its
+    // own line here.
     if (this.replay_step + 1 < this.deltas.length) {
       this._replay_appends.push({ op: "t", to: this.replay_step + 1 });
       this._truncateLog(this.replay_step);
@@ -1661,6 +1690,12 @@ export class GameState {
       for (const e of this.log) {
         if ("delta_i" in e) e.delta_i -= drop;   // may go negative: not a target
       }
+      // Journal the same shift for foldLog, or a reload past delta 500 comes
+      // back with every row's delta_i 500 too high. It goes at the FRONT of
+      // this action's batch: the rows queued above are drained AFTER the
+      // shift has been applied to them, so an op sitting behind them in the
+      // stream would shift them a second time.
+      this._log_appends.unshift({ op: "lx", n: drop });
       this._replay_appends.push({ op: "x", n: drop });
     }
     this._replay_appends.push({ op: "s", i: this.replay_step });

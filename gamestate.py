@@ -297,11 +297,32 @@ def fold_log(records):
 
     Keeping the fold here, beside log_event, is deliberate: the two rules must
     agree, and agreement is easier to hold when they are adjacent.
+
+    Two ops, both for things the store cannot un-append:
+
+        {"op": "lt", "lo": a, "hi": b}   an undo-truncation dropped the rows
+                                         whose seq falls in [a, b]
+        {"op": "lx", "n": k}             the MAX_SAVED_DELTAS front trim shifted
+                                         every retained row's delta_i down by k
+                                         (add_delta emits it AHEAD of the rows
+                                         it queued in the same batch - those are
+                                         drained already shifted)
+
+    The coalesce here is orphan-blind - the fold has no replay_step - and it
+    self-corrects because `seq` is monotonic: it may merge a fresh record onto
+    a row the live log_event refused to touch, but the merged row then carries
+    the FRESH seq, always outside the tombstone's [lo, hi], so the "lt" that
+    follows drops exactly what the live truncation dropped.
     """
     out = []
     for r in records:
         if r.get("op") == "lt":
             out = [e for e in out if not (r["lo"] <= e.get("seq", -1) <= r["hi"])]
+            continue
+        if r.get("op") == "lx":
+            for e in out:
+                if isinstance(e.get("delta_i"), int):
+                    e["delta_i"] -= r["n"]
             continue
         prev = out[-1] if out else None
         if (r.get("key") is not None and prev is not None
@@ -694,6 +715,16 @@ class GameState:
             else:
                 self.messages.append(text)
             self._log_appends.append(prev)
+            # The row now belongs to THIS tap, so it has to be restamped:
+            # add_delta stamps every entry in _action_entries with the new
+            # delta index, and a coalesced row that never reached that list
+            # kept the FIRST tap's index - so a five-tap stepper run stayed
+            # greyed until five undos, and a rewind to the row landed on tap
+            # one. Only a non-orphan row is ever coalesced onto (the guard
+            # above), so restamping can never pull a row out of the undone
+            # future.
+            if not any(e is prev for e in self._action_entries):
+                self._action_entries.append(prev)
             return prev
         self._seq += 1
         entry = {"seq": self._seq, "round": self.round, "step": self.step,
@@ -1968,10 +1999,13 @@ class GameState:
             # the log rows that future produced go with it (design spec,
             # "Rewind": later entries stay greyed until an edit truncates
             # them). Rows are contiguous in seq: kept deltas' rows < the
-            # orphaned rows < this action's own rows (which have no delta_i
-            # yet), so one [lo, hi] range names them all. Orphaned rows are
-            # never coalesced onto (see log_event), so a kept action always
-            # keeps its own line here.
+            # orphaned rows < the rows this action wrote (not stamped yet),
+            # so one [lo, hi] range names them all. A row this action
+            # RE-TALLIED moves with that last group rather than staying put,
+            # because log_event bumps a coalesced row's seq to the newest one
+            # - so it sits above hi and the range still names only orphans.
+            # Orphaned rows are never coalesced onto (see log_event), so a
+            # kept action always keeps its own line here.
             self._replay_appends.append({"op": "t", "to": self.replay_step + 1})
             self._truncate_log(self.replay_step)
         self.deltas = self.deltas[:self.replay_step + 1]
@@ -1993,6 +2027,12 @@ class GameState:
             for e in self.log:
                 if "delta_i" in e:
                     e["delta_i"] -= drop      # may go negative: not a target
+            # Journal the same shift for fold_log, or a reload past delta 500
+            # comes back with every row's delta_i 500 too high. It goes at the
+            # FRONT of this action's batch: the rows queued above are drained
+            # AFTER the shift has been applied to them, so an op sitting
+            # behind them in the stream would shift them a second time.
+            self._log_appends.insert(0, {"op": "lx", "n": drop})
             self._replay_appends.append({"op": "x", "n": drop})
         self._replay_appends.append({"op": "s", "i": self.replay_step})
         return True
