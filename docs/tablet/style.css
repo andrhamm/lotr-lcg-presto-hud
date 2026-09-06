@@ -504,14 +504,41 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
   text-align: center; color: var(--dim); text-transform: none; letter-spacing: .02em; }
 
 /* THE SETUP FLOW (newgame.js step 1, players_setup.js step 2). Both steps
-   wear setup_head.js's header - title, step stamp, one instruction sentence,
-   Back - so a player always knows where they are and what this step wants.
-   The screen itself does not scroll; the regions inside it do. */
-.setup { gap: 16px; overflow: hidden; }
-.setup-head { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto;
-  padding-right: 56px; }
-.setup-head-nav { display: flex; align-items: center; gap: 14px; }
-.setup-head .display { margin: 0; }
+   wear setup_head.js's app bar. The screen itself does not scroll; the
+   regions inside it do.
+   The pane carries no padding of its own here: the bar is a full-bleed band,
+   and the pane's padding would inset it and break the one thing the band is
+   for. Everything below the bar puts its own padding back. */
+.setup { gap: 0; overflow: hidden; padding: 0; }
+.setup > .setup-grid { padding: 14px 18px 16px; min-height: 0; }
+.setup > .setup-body { padding: 8px 18px 0; }
+.setup > .cta-row { margin: 0 18px 16px; }
+
+/* THE APP BAR. One fixed chrome band across the top of every setup screen -
+   same vocabulary as the play screen's .strip (a --well ground, a bottom
+   border, a fixed height), so every screen in this client has the same thing
+   at the top and its content starts in the same place.
+   Three zones, one job each: NAVIGATION (where you came from, how far
+   through), the SUBJECT (what this screen is about - and the only DISPLAY on
+   the screen), and an ASIDE for the current selection.
+   This replaced a stack of four competing pieces: a DISPLAY wizard title that
+   went stale the moment you picked something, a second DISPLAY in the pane
+   below, an ALL-CAPS breadcrumb that put the most important text on the
+   screen in the treatment this system uses to DEMOTE things, and a step stamp
+   - all four at the same rank as each other or as the rail's own headers.
+   The right padding clears the corner reload, which floats above everything. */
+.appbar { flex: 0 0 auto; display: flex; align-items: center; gap: 24px;
+  height: 84px; padding: 0 66px 0 18px; background: var(--well);
+  border-bottom: 1px solid var(--border); }
+.appbar-nav { display: flex; align-items: center; gap: 14px; flex: 0 0 auto; }
+/* The subject takes the slack and truncates rather than wrapping: the band is
+   a fixed height, and a title that wrapped would push its own metadata out of
+   the box. */
+.appbar-subject { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 0; }
+.appbar-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.appbar-text .display, .appbar-text .label { margin: 0; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.appbar-aside { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 /* Master/detail: the drill-in list at a fixed width (a list of names does not
    want to grow), the scenario's own detail taking everything else. Each side
    scrolls independently - min-height: 0 is load-bearing on a grid item that

@@ -73,14 +73,18 @@ export function scenarioMetaFor(entry, difficulty) {
 // reference has no list to read it off) but it is context, not the subject.
 // Each piece is dropped when the catalog has nothing for it rather than
 // leaving a stranded separator.
-function header(name, entry, stageCount, subject) {
+function header(name, entry, stageCount) {
   const stagesLabel = stageCount
     ? (stageCount === 1 ? CHROME.stagesCountOne : fmt(CHROME.stagesCount, stageCount))
     : "";
-  const crumb = [name, entry.pack, entry.cycle, stagesLabel]
-    .filter(Boolean).join(" · ");
+  // The pack is dropped when the cycle already contains it ("Core Set" inside
+  // "Core Set (Mirkwood Paths)") - printing both is how the breadcrumb this
+  // replaces came to be four items long with two of them the same words.
+  const cycle = entry.cycle ?? "";
+  const pack = entry.pack && !cycle.includes(entry.pack) ? entry.pack : "";
+  const meta = [pack, cycle, stagesLabel].filter(Boolean).join(" · ");
   return h`<header class="ov-head">${raw(setIcon(name, 44))}
-<div class="ov-head-text"><p class="label">${crumb}</p><h1 class="display">${subject}</h1></div>
+<div class="ov-head-text"><h1 class="display">${name}</h1><p class="label">${meta}</p></div>
 </header>`;
 }
 
@@ -340,8 +344,10 @@ export function renderScenarioDetail(game, ui) {
     // to pull off the shelf, what its cards look like, and the tips that are
     // not about any single stage. NO stage list - that is the left column's
     // job now, and three repeated blocks of it here is what this replaced.
+    // No heading here: the app bar above names the subject, and a screen with
+    // one subject gets one title. (The chooser's bar is newgame.js's; the
+    // in-game reference brings its own - renderOverview below.)
     return h`<div class="ov-grid">
-${raw(header(name, entry, entry.stageCount ?? stages.length, CHROME.overview))}
 ${raw(difficultySection(ov, entry, data, difficulty))}
 ${raw(setsSection(sets))}
 ${raw(tipsSection(ui, ov.slug, null))}
@@ -360,16 +366,7 @@ ${raw(cardsSection(cardGroups(data, name), ui.imagePrefix))}</div>`;
   // label that claims more than the data says. Deck-wide counts belong to the
   // overview.
   const n = stage.stage ?? sel;
-  const cards = stage.cards ?? [];
-  // The subject line names the stage AND what it is called, so the heading is
-  // the answer to "what am I looking at" on its own. A branch stage names its
-  // count instead: which alternative the quest deck turns up is not knowable
-  // here, and picking one would be a claim.
-  const subject = cards.length === 1
-    ? fmt(CHROME.stageSubject, n, branchName(cards[0]))
-    : fmt(CHROME.stageSubjectBranch, n, cards.length);
   return h`<div class="ov-grid">
-${raw(header(name, entry, entry.stageCount ?? stages.length, subject))}
 ${raw(stageDetail(stage))}
 ${raw(tipsSection(ui, ov.slug, n))}</div>`;
 }
@@ -378,5 +375,13 @@ ${raw(tipsSection(ui, ov.slug, n))}</div>`;
 // chooser's host is newgame.js, which embeds the same detail beside its
 // list rather than replacing the screen with it.
 export function renderOverview(game, ui) {
-  return h`<main class="pane overview">${raw(renderScenarioDetail(game, ui))}${raw(footer())}</main>`;
+  const ov = ui.overview ?? {};
+  const entry = ov.entry ?? {};
+  const name = entry.name ?? ov.bundle?.scenario?.name ?? game?.scenario?.name ?? "";
+  const stages = ov.bundle?.stages ?? [];
+  // This host has no app bar - it is a reference screen opened over the game,
+  // not a step in a flow - so the heading lives here rather than in a band.
+  // It is the ONE title on this screen, same rule as the chooser's.
+  const head = header(name, entry, entry.stageCount ?? stages.length);
+  return h`<main class="pane overview">${raw(head)}${raw(renderScenarioDetail(game, ui))}${raw(footer())}</main>`;
 }

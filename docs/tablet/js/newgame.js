@@ -141,14 +141,54 @@ function emptyDetail() {
   return h`<div class="detail-empty"><p class="body secondary">${CHROME.chooseScenarioEmpty}</p></div>`;
 }
 
+// What the app bar says on this screen. Before a pick there is nothing to
+// name but the task; after it, the scenario is the subject and the stage is a
+// chip beside it - never concatenated into the title, so the title element
+// stays one thing that changes rather than a string that grows.
+//
+// The metadata line drops the pack when the cycle already contains it ("Core
+// Set" inside "Core Set (Mirkwood Paths)"): the breadcrumb printed both, which
+// is how it came to be four items long and two of them the same words.
+function barFor(ui, picked) {
+  if (!picked) return { title: CHROME.chooseScenarioTitle };
+  const ov = ui.overview ?? {};
+  const entry = ov.entry ?? {};
+  const name = entry.name ?? ov.bundle?.scenario?.name ?? "";
+  const count = entry.stageCount ?? (ov.bundle?.stages ?? []).length;
+  const stagesLabel = count
+    ? (count === 1 ? CHROME.stagesCountOne : fmt(CHROME.stagesCount, count)) : "";
+  const cycle = entry.cycle ?? "";
+  const pack = entry.pack && !cycle.includes(entry.pack) ? entry.pack : "";
+  return {
+    title: name, icon: name,
+    meta: [pack, cycle, stagesLabel].filter(Boolean).join(" · "),
+  };
+}
+
+// The selected stage, as the band's right-hand chip. It is a chip and not part
+// of the title because it is a SELECTION - the same thing the left rail is
+// showing - and because a title that grows a clause per selection is how the
+// old heading ended up saying the scenario twice.
+function stageChip(ui, stages) {
+  const sel = ui.picker?.stage ?? "overview";
+  if (sel === "overview") return "";
+  const st = stages.find((s, i) => String(s.stage ?? i + 1) === String(sel));
+  if (!st) return "";
+  const cards = st.cards ?? [];
+  const label = cards.length === 1
+    ? fmt(CHROME.stageSubject, sel, branchName(cards[0]))
+    : fmt(CHROME.stageSubjectBranch, sel, cards.length);
+  return chip({ act: "ng_stage", arg: "overview", label: h`${label} ✕`, tone: "gold", height: 40 });
+}
+
 export function renderNewGame(game, ui) {
   const p = ui.picker ?? {};
-  const head = setupHead({ step: 1, title: CHROME.chooseScenarioTitle, back: "go_home" });
 
   // A catalog that never loaded costs the player the rows, not the screen:
   // the error goes where the quests would have been, and the detail side
   // keeps its own empty state rather than showing the failure twice.
   if (p.error) {
+    const head = setupHead({ step: 1, title: CHROME.chooseScenarioTitle, back: "go_home" });
     return h`<main class="pane setup">${raw(head)}<div class="setup-grid">
 <div class="setup-list"><div class="well"><p class="body">${p.error}</p></div></div>
 <div class="setup-detail">${raw(emptyDetail())}</div>
@@ -174,6 +214,10 @@ export function renderNewGame(game, ui) {
 
   const stages = picked ? (ui.overview?.bundle?.stages ?? []) : [];
   const stageList = picked ? stagesSection(stages, p.stage ?? "overview") : "";
+  const head = setupHead({
+    step: 1, back: "go_home", ...barFor(ui, picked),
+    aside: picked ? stageChip(ui, stages) : "",
+  });
 
   return h`<main class="pane setup">${raw(head)}<div class="setup-grid">
 <div class="setup-list">${raw(drillList({ ...p, source, cycle }, cycles, scenarios))}${raw(stageList)}</div>
