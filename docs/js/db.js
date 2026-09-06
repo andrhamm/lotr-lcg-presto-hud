@@ -9,7 +9,7 @@
 // key, and both feed the identical foldLog/foldReplay.
 import { foldLog, foldReplay } from "./gamestate.js";
 import { loadIndex, loadScenario, loadIcons, loadTips, loadRulesText, loadLocations,
-         loadPlayerSideQuests } from "./quest_catalog.js";
+         loadScenarioMedia, loadPlayerSideQuests } from "./quest_catalog.js";
 
 // Two clients share this origin (docs/ and docs/tablet/), so every key is
 // prefixed. The default is the web twin's historical prefix, so its saves
@@ -249,10 +249,15 @@ export class DataClient {
     if (have) return have;
     let scn;
     try { scn = await loadScenario(slug); } catch { return null; }
+    // locations and images share the same gathered-pack reads (Task 6b:
+    // Begin setup prefetches the gathered sets too), so they come from one
+    // loadScenarioMedia() call rather than two separate ones.
+    const { locations, images } = await loadScenarioMedia(scn);
     const b = {
       scenario: scn,
       stages: scn?.quest?.stages ?? [],
-      locations: await loadLocations(slug),
+      locations,
+      images,
       tips: await this.tips(),
     };
     this._bundles = { [slug]: b };   // one scenario at a time

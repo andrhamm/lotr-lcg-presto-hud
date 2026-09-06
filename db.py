@@ -460,9 +460,15 @@ class DataClient:
             scn = quest_catalog.load_scenario(slug)
         except Exception:
             return None
+        # locations and images share the same gathered-pack reads (Task 6b:
+        # Begin setup prefetches the gathered sets too), so they come from
+        # one load_scenario_media() call rather than two separate ones - the
+        # Presto ignores "images", the tablet twin is the reader.
+        locations, images = quest_catalog.load_scenario_media(scn)
         b = {"scenario": scn,
              "stages": ((scn or {}).get("quest") or {}).get("stages") or [],
-             "locations": quest_catalog.load_locations(slug),
+             "locations": locations,
+             "images": images,
              "tips": self.tips()}
         # One scenario at a time: the picked scenario cannot change mid-game,
         # and holding several would grow the live set for no reader.

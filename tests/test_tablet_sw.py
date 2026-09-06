@@ -191,6 +191,31 @@ console.log(JSON.stringify({
     assert js["isImage"] and not js["shellClaimed"]
 
 
+BACK_FACE_IMG = PREFIX + "02ba32c6-9442-4a69-b89b-b2ec4ee24be2.B.jpg"
+
+
+def test_a_back_face_location_is_served_cache_first_too():
+    """Regression (Task 6b finding 1): 18-24 catalog locations print on the
+    BACK of a two-sided card and carry "<id>.B.jpg" (cardimage.js's cardUrl/
+    locationsFor carry the recorded `image` filename rather than rebuilding
+    "<id>.jpg" from the id). The old isImage() regex required a bare hex uuid
+    right before ".jpg" and never matched that shape, so every back-face
+    location silently fell through to `fetch` on every single reload."""
+    js = node("""
+const first = await (async () => {
+  const h = harness();
+  const r1 = await h.request("%s");
+  const r2 = await h.request("%s");
+  return { calls: h.calls.length, entries: h.cached(h.self.IMAGE_CACHE),
+           isImage: h.self.isImage("%s") };
+})();
+console.log(JSON.stringify(first));
+""" % (BACK_FACE_IMG, BACK_FACE_IMG, BACK_FACE_IMG))
+    assert js["isImage"], "a <id>.B.jpg back-face url must match isImage()"
+    assert js["calls"] == 1, "the second look must be served from cache, not refetched"
+    assert js["entries"] == [BACK_FACE_IMG]
+
+
 def test_an_opaque_no_cors_response_is_cached_as_a_success():
     """The art host sends no CORS headers, so every card image comes back
     opaque: ok === false, type === "opaque". Treating that as a failure would
@@ -367,6 +392,30 @@ console.log(JSON.stringify({
     assert js["foreignJson"] and js["foreignPage"] and js["otherPage"]
     assert js["postNotClaimed"]
     assert js["calls"] == 0, "an unclaimed request must not be fetched by the worker either"
+
+
+def test_a_dead_network_on_a_cold_cache_rejects_cleanly_and_caches_nothing():
+    """(f) Task 6b finding 4: cacheFirst has no try/catch around `fetch` - a
+    cold cache plus a dead network means the `await fetch(...)` inside it
+    throws, so the promise handed to respondWith rejects too (a real browser
+    turns a rejected respondWith into a network error for the page, exactly
+    as if no worker were installed). The probe wraps its own await in
+    try/catch, the same way a real caller of a rejecting respondWith would
+    never crash the page - this only asserts the harness sees a clean
+    rejection, not a hang or an unhandled-rejection crash, and that nothing
+    half-written lands in the cache."""
+    js = node("""
+const h = harness({ routes: { ["%s"]: "error" } });
+let rejected = false;
+try {
+  await h.request("%s");
+} catch (e) {
+  rejected = true;
+}
+console.log(JSON.stringify({ rejected, entries: h.cached(h.self.IMAGE_CACHE) }));
+""" % (IMG, IMG))
+    assert js["rejected"] is True
+    assert js["entries"] == []
 
 
 def test_the_worker_is_a_classic_script_with_no_module_syntax():

@@ -51,32 +51,39 @@ export function cardImage({ prefix, id, image, name, caption }) {
 // to a scenario. [] for a null prefix (nothing to build a URL from) - the
 // worker is then never asked to warm a cache it could not fill.
 //
-// The union is the same one locationsFor() makes and for the same reason: a
-// scenario's own scenarios/<slug>.json holds only cards whose encounterSet
-// IS its set, so Passage Through Mirkwood's own file has 2 of its 6
-// locations. Here it is taken in two pieces because that is the shape
-// db.bundle() actually pins (db.js): `scenario` is the scenario's own file,
-// every `encounter.*` group of it, all card types; `locations` is
-// loadLocations()'s already-flattened union ACROSS the gather list. Between
-// them that is exactly the set of cards this client can render - the bundle
-// deliberately does not keep the gathered packs' other card types resident,
-// and warming a cache for cards no screen can show would be wasted bytes.
+// `bundle.images` is db.bundle()'s pinned list (quest_catalog's
+// cardImagesFor()/card_images_for()): every card, every type, across the
+// scenario's own set AND its gathered sets (Task 6b's ruling - "Begin setup
+// prefetches the scenario's own set and its gathered sets"). A bundle from
+// before that field existed (an old save, or a twin mid-upgrade) has no
+// `images` key at all, so `oldUnion()` rebuilds the narrower set this
+// function used to cover on its own: `scenario`'s own file (every
+// `encounter.*` group, all card types) plus `locations`, the picker's
+// already-flattened union across the gather list - purely additive, so
+// nothing that rendered before stops rendering.
 //
-// Absolute hotlinks are skipped: they are not under `prefix`, so sw.js's
-// isImage() never matches them and the image cache could never serve one.
+// Absolute hotlinks are skipped either way: they are not under `prefix`, so
+// sw.js's isImage() never matches them and the image cache could never serve
+// one.
+function oldUnion(bundle) {
+  const cards = [];
+  for (const group of Object.values(bundle?.scenario?.encounter ?? {})) {
+    if (Array.isArray(group)) cards.push(...group);
+  }
+  cards.push(...(bundle?.locations ?? []));
+  return cards;
+}
+
 export function imageUrls(bundle, prefix) {
   if (!prefix) return [];
+  const cards = bundle?.images ?? oldUnion(bundle);
   const out = [];
   const seen = new Set();
-  const add = card => {
+  for (const card of cards) {
     const url = cardUrl(prefix, card);
-    if (!url || !url.startsWith(prefix) || seen.has(url)) return;
+    if (!url || !url.startsWith(prefix) || seen.has(url)) continue;
     seen.add(url);
     out.push(url);
-  };
-  for (const group of Object.values(bundle?.scenario?.encounter ?? {})) {
-    if (Array.isArray(group)) group.forEach(add);
   }
-  for (const loc of bundle?.locations ?? []) add(loc);
   return out;
 }

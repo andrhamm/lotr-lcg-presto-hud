@@ -877,6 +877,59 @@ def test_locations_carry_the_card_art_filename_in_both_twins():
     assert "image" not in py[2] and "image" not in js[2]
 
 
+_CARD_IMAGES_PROBE = """\
+import { cardImagesFor } from "./quest_catalog.js";
+const scenario = { slug: "own-set",
+                    includedSets: ["Own Set", "Gathered Set", "Missing Set"] };
+const packs = {
+  "own-set": { encounter: {
+    location: [{ id: "own-loc", image: "own-loc.jpg" }],
+    enemy: [{ id: "own-enemy", image: "own-enemy.jpg" }],
+  } },
+  "gathered-set": { encounter: {
+    location: [{ id: "gathered-loc", image: "gathered-loc.B.jpg" }],
+    treachery: [{ id: "gathered-treachery" }],
+  } },
+  // "missing-set" is deliberately absent - a gather name with no file.
+};
+console.log(JSON.stringify(cardImagesFor(scenario, packs)));
+"""
+
+
+def test_card_images_for_unions_the_gathered_sets_in_both_twins():
+    """Task 6b's ruling: Begin setup prefetches the scenario's own set and its
+    gathered sets, so quest_catalog.py's card_images_for() and docs/js/
+    quest_catalog.js's cardImagesFor() have to agree on the union, on every
+    encounter group (not just location), and on skipping a gather name with
+    no file - the same three things locations_for()/locationsFor() already
+    had to get right for the picker."""
+    import quest_catalog as qc
+
+    scenario = {"slug": "own-set",
+                "includedSets": ["Own Set", "Gathered Set", "Missing Set"]}
+    packs = {
+        "own-set": {"encounter": {
+            "location": [{"id": "own-loc", "image": "own-loc.jpg"}],
+            "enemy": [{"id": "own-enemy", "image": "own-enemy.jpg"}],
+        }},
+        "gathered-set": {"encounter": {
+            "location": [{"id": "gathered-loc", "image": "gathered-loc.B.jpg"}],
+            "treachery": [{"id": "gathered-treachery"}],
+        }},
+    }
+    py = qc.card_images_for(scenario, packs)
+    js = _js_facts(_CARD_IMAGES_PROBE)
+
+    expect_ids = {"own-loc", "own-enemy", "gathered-loc", "gathered-treachery"}
+    py_by_id = {c["id"]: c for c in py}
+    js_by_id = {c["id"]: c for c in js}
+    assert set(py_by_id) == set(js_by_id) == expect_ids
+    for cid in expect_ids:
+        assert py_by_id[cid].get("image") == js_by_id[cid].get("image")
+    assert "image" not in py_by_id["gathered-treachery"]
+    assert "image" not in js_by_id["gathered-treachery"]
+
+
 _MODE_TIPS_PROBE = """\
 import { ScenarioOptionsScreen } from "./screens_other.js";
 const scenario = { modes: ["Hard Mode"], hasNightmare: true };

@@ -298,6 +298,53 @@ export function locationsFor(scenario, packs) {
   return out.sort(byName);
 }
 
+// Every card picture `scenario` can put on screen (Task 6b's ruling: Begin
+// setup prefetches the scenario's own set AND its gathered sets, not just
+// the picker's locations), as a list of {id, image} deduped by id. Mirrors
+// quest_catalog.py's card_images_for() verbatim - keep the two in lockstep.
+//
+// Same union locationsFor() makes and for the same reason - a scenario's own
+// scenarios/<slug>.json holds only cards whose encounterSet IS its own set,
+// so the rest of the pictures live in the gather list (locationSetSlugs(),
+// same fallback to the scenario's own slug when it has no gather list). This
+// walks EVERY encounter group (enemy, location, treachery, objectiveAlly,
+// ...) rather than just location, because every one of those types can end
+// up on screen. `image` is omitted when the card has none, the same rule
+// locationsFor() uses, so cardUrl()'s "<id>.jpg" fallback still applies.
+export function cardImagesFor(scenario, packs) {
+  const bySlug = packs ?? {};
+  const out = [];
+  const seen = new Set();
+  for (const slug of locationSetSlugs(scenario)) {
+    const pack = bySlug[slug];
+    if (!pack) continue;
+    for (const group of Object.values(pack.encounter ?? {})) {
+      if (!Array.isArray(group)) continue;
+      for (const card of group) {
+        if (seen.has(card.id)) continue;
+        seen.add(card.id);
+        const entry = { id: card.id };
+        if (card.image) entry.image = card.image;
+        out.push(entry);
+      }
+    }
+  }
+  return out;
+}
+
+// Fetch scenario `scenario`'s own card file plus every file on its gather
+// list, keyed by slug. Shared by loadLocations() and loadScenarioMedia() so
+// a bundle() read loads every gathered pack ONCE rather than once per caller.
+async function loadGatheredPacks(scenario) {
+  const packs = {};
+  await Promise.all(locationSetSlugs(scenario).map(setSlug =>
+    fetch(dataUrl("scenarios/" + setSlug + ".json"))
+      .then(r => r.ok ? r.json() : null)
+      .then(pack => { if (pack) packs[setSlug] = pack; })
+      .catch(() => {})));
+  return packs;
+}
+
 // Fetch scenario `slug`'s own card file plus every file on its gather list,
 // and flatten via locationsFor(). Thin fetch wrapper, not host-tested - on
 // ANY failure (data/ not built yet, an unpicked or uncatalogued quest, a
@@ -310,16 +357,28 @@ export async function loadLocations(slug) {
   if (!slug) return [];
   try {
     const scenario = await loadScenario(slug);
-    const packs = {};
-    await Promise.all(locationSetSlugs(scenario).map(setSlug =>
-      fetch(dataUrl("scenarios/" + setSlug + ".json"))
-        .then(r => r.ok ? r.json() : null)
-        .then(pack => { if (pack) packs[setSlug] = pack; })
-        .catch(() => {})));
+    const packs = await loadGatheredPacks(scenario);
     return locationsFor(scenario, packs);
   } catch (e) {
     console.error("quest catalog: loadLocations failed - falling back to manual entry", e);
     return [];
+  }
+}
+
+// Fetch `scenario`'s own card file plus every file on its gather list ONCE,
+// and flatten into both locationsFor() and cardImagesFor() - the pair
+// db.bundle() pins together. Takes the already-loaded scenario record
+// (bundle() has it in hand) rather than a slug, so this is the one place
+// that does NOT re-fetch it. Same failure story as loadLocations(): on ANY
+// failure both come back empty so the bundle still assembles rather than
+// erroring.
+export async function loadScenarioMedia(scenario) {
+  try {
+    const packs = await loadGatheredPacks(scenario);
+    return { locations: locationsFor(scenario, packs), images: cardImagesFor(scenario, packs) };
+  } catch (e) {
+    console.error("quest catalog: loadScenarioMedia failed - falling back to manual entry", e);
+    return { locations: [], images: [] };
   }
 }
 

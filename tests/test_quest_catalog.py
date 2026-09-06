@@ -440,6 +440,77 @@ def test_locations_for_returns_empty_when_there_are_no_locations():
     assert qc.locations_for(None, LOC_PACKS) == []
 
 
+# Card images (Task 6b) - db.bundle()'s prefetch list ("Begin setup
+# prefetches the scenario's own set and its gathered sets"). Same union
+# location_set_slugs() makes for locations_for(), but over EVERY encounter
+# group (enemy, treachery, ...), not just location - the quest sheet and the
+# engaged-enemy tracker draw those cards' art too.
+def _card(card_id, image=None):
+    entry = {"id": card_id}
+    if image is not None:
+        entry["image"] = image
+    return entry
+
+
+IMG_PACKS = {
+    "passage-through-mirkwood": {"encounter": {
+        "location": [_card("own-loc", "own-loc.jpg")],
+        "enemy": [_card("own-enemy", "own-enemy.jpg")],
+    }},
+    "dol-guldur-orcs": {"encounter": {
+        "location": [_card("gathered-loc", "gathered-loc.B.jpg")],
+        "treachery": [_card("gathered-treachery")],      # no image field
+    }},
+    # "spiders-of-mirkwood" is on PASSAGE's gather list (below) but has no
+    # entry here at all - a set with no file, same as the real catalog's 14
+    # unresolved gather names.
+    #
+    # Present in `packs` but NOT in Passage's gather list - must not leak in.
+    "escape-from-dol-guldur": {"encounter": {
+        "enemy": [_card("outside-gather", "outside-gather.jpg")],
+    }},
+}
+
+
+def test_card_images_for_unions_every_encounter_group_across_the_gather_list():
+    # THE gate: own set (both its location and its enemy) plus the one
+    # gathered set that has a file, unioned - not just the location group.
+    out = qc.card_images_for(PASSAGE, IMG_PACKS)
+    assert {c["id"] for c in out} == {
+        "own-loc", "own-enemy", "gathered-loc", "gathered-treachery"}
+    by_id = {c["id"]: c for c in out}
+    assert by_id["own-loc"]["image"] == "own-loc.jpg"
+    assert by_id["gathered-loc"]["image"] == "gathered-loc.B.jpg"
+    assert "image" not in by_id["gathered-treachery"]
+
+
+def test_card_images_for_ignores_packs_outside_the_gather_list():
+    ids = {c["id"] for c in qc.card_images_for(PASSAGE, IMG_PACKS)}
+    assert "outside-gather" not in ids
+
+
+def test_card_images_for_skips_gather_names_with_no_card_file():
+    # "Spiders of Mirkwood" is in PASSAGE's gather list but IMG_PACKS has no
+    # entry for it - it must drop out silently, not raise or produce a hole.
+    out = qc.card_images_for(PASSAGE, IMG_PACKS)
+    assert len(out) == 4
+
+
+def test_card_images_for_dedupes_by_id():
+    packs = {"q": {"encounter": {
+        "location": [_card("dup", "first.jpg")],
+        "enemy": [_card("dup", "second.jpg")],
+    }}}
+    out = qc.card_images_for({"slug": "q"}, packs)
+    assert len(out) == 1 and out[0]["image"] == "first.jpg"
+
+
+def test_card_images_for_returns_empty_when_there_is_nothing_to_gather():
+    assert qc.card_images_for(PASSAGE, {}) == []
+    assert qc.card_images_for({"slug": "q"}, {"q": {"encounter": {}}}) == []
+    assert qc.card_images_for(None, IMG_PACKS) == []
+
+
 # --------------------------------------------------------------------------
 # Resume: rebuilding the picker screens from a saved game
 # --------------------------------------------------------------------------

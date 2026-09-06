@@ -36,11 +36,15 @@ self.IMAGE_CACHE = "lotr-tablet-images-v1";
 // no-cors opaque response reports no size at all.
 self.IMAGE_CACHE_MAX = 400;
 
-// The pinned card-art host lays every scan out as /cards/<Language>/<id>.jpg
+// The pinned card-art host lays every scan out as /cards/<Language>/<file>.jpg
 // (tools/data/cardDb.SOURCE.txt's image_prefix=). Matching on the shape
 // rather than on the host keeps this working if the pin is refreshed to a
 // different bucket, and keeps it from claiming anything else the page loads.
-self.isImage = url => /\/cards\/[A-Za-z]+\/[0-9a-f-]+\.jpg$/.test(url);
+// `<file>` is not always the bare uuid: 18-24 catalog locations print on a
+// card's BACK and carry "<id>.B.jpg" (see cardimage.js's cardUrl/locationsFor
+// - the filename is the card's recorded `image`, never rebuilt from the id),
+// so this matches any single filename segment, not just a hex uuid.
+self.isImage = url => /\/cards\/[A-Za-z]+\/[^\/]+\.jpg$/.test(url);
 
 // The shell and the compiled catalog: this client's own files under
 // /tablet/, plus the shared /js/ modules and /data/ card files it imports -
@@ -68,6 +72,12 @@ self.trimCache = async (cache, max) => {
 // pictures. `no-cors` because the art host sends no CORS headers: the
 // opaque response cannot be read by script but caches and renders fine, so
 // `res.type === "opaque"` is a SUCCESS here, not a fallback.
+//
+// The flip side is accepted, not fixed: an opaque response also hides a 404
+// (script cannot read its status either), so a genuinely missing card gets
+// cached as if it were a hit and stays that way until it ages out. The
+// `.is-missing` caption (app.js's delegated `error` listener) still covers
+// the render either way, so a dead url just looks the same both times.
 self.cacheFirst = async (name, req, max) => {
   const c = await caches.open(name);
   const hit = await c.match(req);

@@ -501,6 +501,59 @@ def locations_for(scenario, packs):
     return out
 
 
+def card_images_for(scenario, packs):
+    """Every card picture `scenario` can put on screen (Task 6b's ruling:
+    Begin setup prefetches the scenario's own set AND its gathered sets, not
+    just the picker's locations), as a list of {"id","image"} deduped by id.
+    Mirrors docs/js/quest_catalog.js's cardImagesFor() verbatim - keep the
+    two in lockstep.
+
+    Same union locations_for() makes and for the same reason - a scenario's
+    own scenarios/<slug>.json holds only cards whose encounterSet IS its own
+    set, so the rest of the pictures live in the gather list
+    (location_set_slugs(), same fallback to the scenario's own slug when it
+    has no gather list). This walks EVERY encounter group (enemy, location,
+    treachery, objectiveAlly, ...) rather than just location, because every
+    one of those types can end up on screen. "image" is omitted when the
+    card has none, the same rule locations_for() uses, so cardUrl()'s
+    "<id>.jpg" fallback still applies."""
+    packs = packs or {}
+    out = []
+    seen = set()
+    for slug in location_set_slugs(scenario):
+        pack = packs.get(slug)
+        if not pack:
+            continue
+        for group in (pack.get("encounter") or {}).values():
+            if not isinstance(group, list):
+                continue
+            for card in group:
+                cid = card.get("id")
+                if cid in seen:
+                    continue
+                seen.add(cid)
+                entry = {"id": cid}
+                if card.get("image"):
+                    entry["image"] = card["image"]
+                out.append(entry)
+    return out
+
+
+def _load_gathered_packs(scenario):
+    """Read `scenario`'s own card file plus every file on its gather list
+    from flash, keyed by slug. Shared by load_locations() and
+    load_scenario_media() so a bundle() read loads every gathered pack ONCE
+    rather than once per caller."""
+    packs = {}
+    for set_slug in location_set_slugs(scenario):
+        try:
+            with open(SCENARIO_PATH % set_slug) as f:
+                packs[set_slug] = json.load(f)
+        except Exception:
+            continue
+    return packs
+
+
 def load_locations(slug):
     """Read scenario `slug`'s own card file plus every file on its gather
     list from flash, and flatten via locations_for(). Thin flash-read
@@ -516,17 +569,32 @@ def load_locations(slug):
         scenario = load_scenario(slug)
     except Exception:
         return []
-    packs = {}
-    for set_slug in location_set_slugs(scenario):
-        try:
-            with open(SCENARIO_PATH % set_slug) as f:
-                packs[set_slug] = json.load(f)
-        except Exception:
-            continue
+    packs = _load_gathered_packs(scenario)
     try:
         return locations_for(scenario, packs)
     except Exception:
         return []
+
+
+def load_scenario_media(scenario):
+    """Read `scenario`'s own card file plus every file on its gather list
+    from flash ONCE, and flatten into both locations_for() and
+    card_images_for() - the pair db.bundle() pins together. Takes the
+    already-loaded scenario record (bundle() has it in hand) rather than a
+    slug, so this is the one place that does NOT re-read it. Mirrors
+    docs/js/quest_catalog.js's loadScenarioMedia(); same failure story as
+    load_locations(): on any failure both come back empty so the bundle
+    still assembles rather than erroring."""
+    packs = _load_gathered_packs(scenario)
+    try:
+        locations = locations_for(scenario, packs)
+    except Exception:
+        locations = []
+    try:
+        images = card_images_for(scenario, packs)
+    except Exception:
+        images = []
+    return locations, images
 
 
 def normalize_icon_key(slug):

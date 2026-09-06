@@ -3171,12 +3171,16 @@ console.log(JSON.stringify({ withArt: pick("%s"), noPrefix: pick(null) }));
 
 def test_card_image_urls_cover_the_scenario_and_every_set_it_gathers():
     """`imageUrls(bundle, prefix)` is what app.js posts to the service worker
-    when the players commit to a scenario. It has to span the same union
-    locationsFor() does - a scenario's own scenarios/<slug>.json holds only
-    cards whose encounterSet IS its set, so Passage Through Mirkwood's own
-    file has 2 of its 6 locations - which db.bundle() pins in two pieces: the
-    scenario's own file (every encounter.* group, all card types) and
-    `locations`, the already-flattened union across the gather list.
+    when the players commit to a scenario. This is the FALLBACK path - a
+    bundle with no `images` key at all, an old save or a twin mid-upgrade -
+    which has to keep covering the same union locationsFor() does - a
+    scenario's own scenarios/<slug>.json holds only cards whose encounterSet
+    IS its set, so Passage Through Mirkwood's own file has 2 of its 6
+    locations - which db.bundle() used to pin in two pieces: the scenario's
+    own file (every encounter.* group, all card types) and `locations`, the
+    already-flattened union across the gather list. See
+    test_card_image_urls_prefers_the_pinned_images_list_when_present for the
+    new bundle.images fast path this now falls back FROM.
 
     Each url once, and [] with no prefix so the worker is never asked to warm
     a cache it could not fill."""
@@ -3218,3 +3222,39 @@ console.log(JSON.stringify({
     assert js["idFallback"] == p + "plain.jpg"
     assert js["absoluteKept"] == "https://elsewhere.test/a.jpg"
     assert js["nothing"] is None
+
+
+def test_card_image_urls_prefers_the_pinned_images_list_when_present():
+    """Task 6b's ruling: db.bundle() now pins `images` itself - every card,
+    every type, across the scenario's own set AND its gathered sets
+    (quest_catalog's cardImagesFor()/card_images_for()) - computed in the
+    same pass that reads the gathered packs for `locations`, rather than
+    imageUrls() reassembling a narrower union from `scenario`/`locations`
+    after the fact. When `images` is present it is what wins outright, even
+    if `scenario`/`locations` disagree with it - there is nothing left for
+    imageUrls() to reconstruct."""
+    js = node("""
+import { imageUrls } from "./cardimage.js";
+const bundle = {
+  images: [
+    { id: "own-1", image: "own-1.jpg" },
+    { id: "gathered-1", image: "gathered-1.B.jpg" },
+    { id: "gathered-1", image: "gathered-1.B.jpg" },  // duplicate: once only
+    { id: "no-art" },                                 // no image field
+    { id: "hotlink", image: "https://s3.amazonaws.com/hallofbeorn/x.jpg" },
+  ],
+  // Deliberately does NOT list "own-1"/"gathered-1" - proves images wins
+  // outright rather than being unioned with the old scenario/locations shape.
+  scenario: { encounter: { location: [{ id: "stale-only-here", image: "stale.jpg" }] } },
+  locations: [],
+};
+console.log(JSON.stringify({
+  urls: imageUrls(bundle, "%s"),
+  noPrefix: imageUrls(bundle, null),
+}));
+""" % _PREFIX)
+    p = _PREFIX
+    assert js["urls"] == [p + "own-1.jpg", p + "gathered-1.B.jpg", p + "no-art.jpg"]
+    assert "stale.jpg" not in " ".join(js["urls"]), \
+        "images present must win outright, not merge with the old union"
+    assert js["noPrefix"] == []
