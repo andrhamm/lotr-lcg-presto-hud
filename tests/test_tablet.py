@@ -812,6 +812,47 @@ console.log(JSON.stringify({
     assert not js["ovPlural"]
 
 
+def test_icon_slug_chain_covers_the_three_ways_the_pack_diverges():
+    """setIcon emits a CHAIN of candidate slugs, not one - the community icon
+    pack does not always file a set under the name FFG prints. Three rules,
+    and the order matters: the printed name first, so a set the pack files
+    correctly never pays for anyone else's divergence.
+
+    The alias entry is the only one that is a list rather than a rule, and it
+    is cited in the module: Learn to Play names the Core Set's second
+    scenario and its encounter set "Journey Down the Anduin"; the pack ships
+    the symbol as journey-along-the-anduin.svg."""
+    js = node("""
+import { iconSlugs, setIcon } from "./seticon.js";
+console.log(JSON.stringify({
+  plain: iconSlugs("Passage Through Mirkwood"),
+  apostrophe: iconSlugs("Sauron's Reach"),
+  curly: iconSlugs("Sauron\u2019s Reach"),
+  article: iconSlugs("Crossings of Poros"),
+  alias: iconSlugs("Journey Down the Anduin"),
+  markup: setIcon("Crossings of Poros", 36),
+}));
+""")
+    # The printed name is always tried first.
+    assert js["plain"][0] == "passage-through-mirkwood"
+    assert js["apostrophe"][0] == "sauron-s-reach"
+    assert js["article"][0] == "crossings-of-poros"
+    assert js["alias"][0] == "journey-down-the-anduin"
+    # ...then each rule's alternate, and no duplicates anywhere.
+    assert "saurons-reach" in js["apostrophe"]
+    assert js["curly"] == js["apostrophe"]      # a curly apostrophe too
+    assert "the-crossings-of-poros" in js["article"]
+    assert "journey-along-the-anduin" in js["alias"]
+    for key, chain in js.items():
+        if key == "markup":
+            continue
+        assert len(chain) == len(set(chain)), "%s repeats a slug: %s" % (key, chain)
+    # The markup carries the rest of the chain for app.js's error listener to
+    # walk, and the placeholder glyph behind it.
+    assert 'src="' in js["markup"] and "crossings-of-poros.svg" in js["markup"]
+    assert 'data-alt="' in js["markup"] and "the-crossings-of-poros.svg" in js["markup"]
+
+
 def test_a_new_game_is_at_most_five_taps_from_the_landing_screen():
     """Spec R1 (the tap budget), re-counted for the M7 flow. The budget grew
     by two deliberate taps and the reason is worth holding onto:

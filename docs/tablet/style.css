@@ -20,7 +20,11 @@
   --serif: 'Alegreya', Georgia, 'Times New Roman', serif;
   --sans: 'Alegreya Sans', 'Gill Sans', 'Trebuchet MS', system-ui, sans-serif;
 }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tan); font: 20px/1.35 var(--sans); }
+/* No height here on purpose - `position: fixed; inset: 0` just below is what
+   defines both boxes, and a `height: 100%` alongside it would OVERRIDE the
+   bottom inset (a specified height wins over `bottom`), reintroducing exactly
+   the percentage chain #app was pinned to escape. */
+html, body { margin: 0; background: var(--bg); color: var(--tan); font: 20px/1.35 var(--sans); }
 /* The page is STRICTLY FIXED. A drag anywhere on the app must never scroll
    the document, rubber-band it, or arm Safari's pull-to-refresh - this is a
    board-side HUD sitting flat on a table, and an accidental refresh mid-round
@@ -51,38 +55,41 @@ html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: n
    export's textarea is the one place selection IS the feature. */
 .app { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .export-text { user-select: text; -webkit-user-select: text; }
-/* 100vh first as the fallback for a browser with no dvh support; 100dvh
-   after it wins wherever it is supported, so the app shrinks with the
-   on-screen chrome (Safari's URL bar) instead of being covered by it.
-   The safe-area padding on ALL FOUR sides is what keeps the app clear of the
-   OS: the status bar (clock left, radios right) across the top, the home
-   indicator along the bottom, and the rounded/notched edges in landscape.
-   It is padding rather than a smaller height on purpose - the app's own
-   ground still paints edge to edge behind the status bar, so the screen
-   reads as full-bleed while nothing lands underneath the OS.
-   Everything between is the content area: .app is a flex column, the strip
-   and the rail are fixed-height, and the pane takes the rest (flex: 1 1 0),
-   so a bottom CTA sits on the real bottom edge - .cta-row's margin-top:auto
-   pins it just inside the home-indicator padding, never past it.
-   position: relative anchors .scrim's inset:0 to the app, not the viewport -
-   same visual result at this size but the correct containing block.
+/* THE ROOT IS PINNED TO THE VIEWPORT EDGES, NOT SIZED BY A UNIT.
+   #app declares no width and no height at all: it is `position: fixed` with
+   all four insets set, so its box is DERIVED from the viewport's own edges.
+   A fixed element's containing block is the viewport, so there is no
+   percentage chain to resolve, no vh/dvh to be stale, and no way for the app
+   to end up shorter than the screen - which is what "space outside the
+   layout" always was.
+   Every earlier attempt sized it instead, and each was wrong somewhere:
+   100vh (ignores browser chrome), 100dvh (in standalone can resolve against
+   a box that includes chrome the app does not have), then height: 100% of
+   the fixed body (a percentage chain, and a specified height silently
+   overrides the body's own bottom inset). On the iPad in standalone that
+   surfaced as ~70px of dead space below the bottom CTA.
+   The safe-area insets are the inset VALUES here rather than padding, so the
+   app is pinned to the usable rectangle directly: the status bar (clock
+   left, radios right) across the top, the home indicator along the bottom,
+   and the rounded/notched edges in landscape. `body` still paints the ground
+   edge to edge behind the status bar, so the screen reads full-bleed while
+   nothing lands underneath the OS.
+   Everything inside is then a strict fill: .app is flex: 1 1 0 of #app, the
+   strip and the rail are fixed-height, the pane takes the rest, and a bottom
+   CTA (.cta-row's margin-top: auto) sits on the real bottom edge.
 
-   TWO elements, one padding. #app is the host div index.html ships; .app is
+   TWO elements, one inset. #app is the host div index.html ships; .app is
    what layout() renders inside it, once per screen. They used to share one
    rule, which applied the inset TWICE (24px of status bar became 48px of
-   gap) and gave the inner box a full 100dvh inside an already-padded outer
-   one, so it overflowed by exactly the insets and .app's overflow: hidden
-   ate the difference. The outer owns the viewport and the OS edges; the
-   inner just fills what is left. */
-/* height: 100% of the BODY, which `position: fixed; inset: 0` above has
-   already pinned to exactly the visual viewport. That is more reliable than
-   100dvh in standalone, where the viewport units can resolve against a box
-   that includes chrome the fixed body does not - the difference shows up as
-   dead space below the bottom CTA, or as content pushed off the bottom edge.
-   100dvh/100vh stay as the fallback for a body that is somehow not fixed. */
-#app { position: relative; width: 100vw; height: 100vh; height: 100dvh; height: 100%; overflow: hidden;
-  display: flex; flex-direction: column;
-  padding: var(--sa-top) var(--sa-right) var(--sa-bottom) var(--sa-left); }
+   gap) and gave the inner box a full height inside an already-inset outer
+   one, so it overflowed by exactly the insets and overflow: hidden ate the
+   difference. The outer owns the viewport and the OS edges; the inner just
+   fills what is left - and its position: relative is what anchors .scrim's
+   inset: 0 to the app rather than to the viewport. */
+#app { position: fixed;
+  top: var(--sa-top); right: var(--sa-right);
+  bottom: var(--sa-bottom); left: var(--sa-left);
+  overflow: hidden; display: flex; flex-direction: column; }
 .app { position: relative; flex: 1 1 0; min-height: 0; width: 100%; overflow: hidden;
   display: flex; flex-direction: column; }
 .body-row { flex: 1 1 0; min-height: 0; display: flex; overflow: hidden; }

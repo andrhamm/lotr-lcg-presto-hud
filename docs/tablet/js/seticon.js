@@ -24,9 +24,17 @@
 //      The Dream-chaser's Fleet, The King's Quest, The Steward's Fear, The
 //      Wizard's Quest, Ulchor's Guard. A rule, so it needs no list.
 //
-//   2. ONE NAME THE PACK SPELLS DIFFERENTLY (below). A rule cannot reach it,
-//      so it is a table, and the table has to earn each entry with a
-//      citation.
+//   2. THE DEFINITE ARTICLE RULE. The catalog drops a leading "The" that the
+//      pack keeps: "Crossings of Poros" against the-crossings-of-poros.
+//      Recovers 5 - Crossings of Poros, Fords of Isen, Foundations of Stone,
+//      Nazgul, Temple of Doom. The same divergence CLAUDE.md already records
+//      for the Vision of the Palantir corpus ("VotP prefixes a definite
+//      article the catalog omits"), so it is a known trait of these names
+//      rather than a coincidence. Tried both ways round; only adding one
+//      ever matches today, and dropping one costs nothing to try.
+//
+//   3. ONE NAME THE PACK SPELLS DIFFERENTLY (below). No rule reaches it, so
+//      it is a table, and the table has to earn each entry with a citation.
 //
 // Everything else the pack simply does not carry (201 of the catalog's 401
 // names, nearly all of them "X - Nightmare" variants) and those fall back to
@@ -66,9 +74,15 @@ export function iconSlugs(name) {
   const out = [primary];
   const alias = PACK_ALIASES[primary];
   if (alias) out.push(alias);
+  const push = s => { if (s && !out.includes(s)) out.push(s); };
   // The apostrophe rule: strip them rather than let slugify hyphenate them.
   const noApos = slugify(String(name ?? "").replace(/['\u2019]/g, ""));
-  if (noApos && !out.includes(noApos)) out.push(noApos);
+  push(noApos);
+  // The definite-article rule, applied to each spelling so far - both
+  // directions, since the divergence is in the names, not in one pack.
+  for (const s of [...out]) {
+    push(s.startsWith("the-") ? s.slice(4) : "the-" + s);
+  }
   return out;
 }
 
