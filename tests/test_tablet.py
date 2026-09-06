@@ -126,6 +126,7 @@ g.quest.points = 20;                   // room enough that the walk never clears
 const ui = newUi();
 const taps = [];
 const tap = (act, arg) => { taps.push(act); return dispatch(g, ui, act, arg ?? ""); };
+const threatsBefore = g.players.map(p => p.threat);
 tap("advance");                        // resource -> planning
 tap("advance");                        // planning -> quest_commit
 tap("wp-");                            // 11 -> 10, detached total
@@ -139,30 +140,36 @@ tap("advance");                        // -> travel
 tap("advance");                        // -> enc_optional
 tap("advance");                        // -> enc_checks
 tap("advance");                        // -> combat_shadow
+tap("open_players");
+tap("all_thr", "1");
+tap("sheet_close");
 tap("advance");                        // -> combat_enemy
 tap("advance");                        // -> combat_player
 tap("advance");                        // -> refresh
 tap("advance");                        // -> round_end
+const threatsAfter = g.players.map(p => p.threat);
+const threatRoseByAtLeastOne = threatsAfter.every((t, i) => t >= threatsBefore[i] + 1);
 """
 # _WALK prints nothing; each test appends the one console.log it wants.
 
 
-def test_the_m2_walk_reaches_round_end_in_17_taps():
-    """The HUD's tap-budget walk minus the shadow-effect threat edits (those
-    need the players sheet, milestone 3). 31 taps on the HUD for the whole
-    walk; 17 here for this part of it, and the count is the gate."""
+def test_the_common_round_costs_at_most_20_taps():
+    """The spec's full common round walk: includes the players sheet threat
+    edits after combat_shadow. 20 taps total."""
     js = node(_WALK + """
+const unknown = dispatch(g, ui, "nope", "");
 console.log(JSON.stringify({ taps: taps.length, view: g.view, round: g.round,
   willpower: g.willpower, staging: g.staging, budget, placed,
-  unknown: dispatch(g, ui, "nope", ""), first: g.first_player }));
+  unknown, first: g.first_player, threatRoseByAtLeastOne }));
 """)
     assert js["view"] == "round_end"
     assert js["round"] == 1
-    assert js["taps"] <= 17
+    assert js["taps"] <= 20
     assert js["willpower"] == 10 and js["staging"] == 3
     assert js["budget"] == 7 and js["placed"] == 7
     assert js["first"] == 1              # the token passed on arrival at refresh
     assert js["unknown"] is False
+    assert js["threatRoseByAtLeastOne"]  # every player's threat rose by at least 1
 
 
 def test_endround_starts_the_next_round():
