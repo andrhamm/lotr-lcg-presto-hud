@@ -6,10 +6,31 @@
        no double-tap zoom, and (with the manifest's display: standalone) no
        browser chrome once it is added to the Home Screen, which is what
        removes pull-to-refresh at the source. style.css holds the rest of the
-       fixed-page rules. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+       fixed-page rules.
+
+       NO viewport-fit=cover, deliberately. `cover` is what opts a page INTO
+       the unsafe area - the OS stops letterboxing, hands you the whole
+       screen, and you are then responsible for stepping around the status bar
+       and the home indicator using env(safe-area-inset-*). That contract only
+       works if those values are right, and on iPadOS they are not: measured
+       off this app running standalone on an iPad Pro 12.9, the vertical edges
+       came back as 33px top and 61.5px bottom for a status bar and home
+       indicator that together want about 45 - so 77px of screen below the
+       bottom CTA belonged to nothing. (Reported more generally for iPadOS 26:
+       env(safe-area-inset-*) and viewport-fit "not functioning properly",
+       leaving a black gap between the viewport and the window edge.)
+
+       Without `cover` the OS letterboxes the page into the safe area itself
+       and every env(safe-area-inset-*) resolves to 0. The app then fills
+       exactly the rectangle it was given, with no inset arithmetic of our own
+       to be wrong - which is the whole ask: a full-height layout with nothing
+       unaccounted for. The cost is that the status-bar band is painted by the
+       OS rather than by our own ground, which is why the style below is
+       `black` (the app's ground is rgb(16,12,9)) rather than
+       `black-translucent` - translucent only means anything under `cover`. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="LOTR Tracker">
   <meta name="theme-color" content="#100c09">
   <link rel="manifest" href="manifest.webmanifest">

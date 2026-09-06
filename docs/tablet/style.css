@@ -13,10 +13,21 @@
      app's own job. Held as variables rather than inlined so a test (and a
      screenshot) can override them with real numbers; env() itself reports 0
      everywhere except a device that actually has an inset. */
-  --sa-top: env(safe-area-inset-top, 0px);
-  --sa-right: env(safe-area-inset-right, 0px);
-  --sa-bottom: env(safe-area-inset-bottom, 0px);
-  --sa-left: env(safe-area-inset-left, 0px);
+  /* CLAMPED, because env() is not always the number you want. Measured off a
+     device screenshot of this app running standalone on an iPad Pro 12.9
+     (2732x2048, so exactly 1366x1024 CSS at @2x): the horizontal geometry was
+     perfect to the pixel - the CTA's left edge landed at 399, which is
+     18 (.pane) + 360 (.setup-list) + 20 (grid gap) + 1 - while the VERTICAL
+     edges came out at 33 top and 61.5 bottom. 94.5px of screen reserved for a
+     status bar and a home indicator that together want about 45.
+     A status bar is 24 and a home indicator 21, so 24 is the most either edge
+     can legitimately need. Clamping cannot make the app overlap the OS by
+     more than a hair, and it does stop a single over-reported inset from
+     eating 6% of the screen. */
+  --sa-top: min(env(safe-area-inset-top, 0px), 24px);
+  --sa-right: min(env(safe-area-inset-right, 0px), 24px);
+  --sa-bottom: min(env(safe-area-inset-bottom, 0px), 24px);
+  --sa-left: min(env(safe-area-inset-left, 0px), 24px);
   --serif: 'Alegreya', Georgia, 'Times New Roman', serif;
   --sans: 'Alegreya Sans', 'Gill Sans', 'Trebuchet MS', system-ui, sans-serif;
 }
@@ -68,11 +79,13 @@ html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: n
    the fixed body (a percentage chain, and a specified height silently
    overrides the body's own bottom inset). On the iPad in standalone that
    surfaced as ~70px of dead space below the bottom CTA.
-   The safe-area insets are the inset VALUES here rather than padding, so the
-   app is pinned to the usable rectangle directly: the status bar (clock
-   left, radios right) across the top, the home indicator along the bottom,
-   and the rounded/notched edges in landscape. `body` still paints the ground
-   edge to edge behind the status bar, so the screen reads full-bleed while
+   `inset: 0` and the OS clearance as PADDING, not as inset values: the box is
+   then the whole screen no matter what env() reports, and only its CONTENT
+   steps in for the status bar (clock left, radios right), the home indicator,
+   and the rounded/notched edges in landscape. An over-reported inset can then
+   cost a strip of content at one edge; it can no longer shorten the app
+   itself. The clamp on --sa-* above is the other half of that. `body` paints
+   the ground edge to edge either way, so the screen reads full-bleed while
    nothing lands underneath the OS.
    Everything inside is then a strict fill: .app is flex: 1 1 0 of #app, the
    strip and the rail are fixed-height, the pane takes the rest, and a bottom
@@ -86,9 +99,8 @@ html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: n
    difference. The outer owns the viewport and the OS edges; the inner just
    fills what is left - and its position: relative is what anchors .scrim's
    inset: 0 to the app rather than to the viewport. */
-#app { position: fixed;
-  top: var(--sa-top); right: var(--sa-right);
-  bottom: var(--sa-bottom); left: var(--sa-left);
+#app { position: fixed; inset: 0;
+  padding: var(--sa-top) var(--sa-right) var(--sa-bottom) var(--sa-left);
   overflow: hidden; display: flex; flex-direction: column; }
 .app { position: relative; flex: 1 1 0; min-height: 0; width: 100%; overflow: hidden;
   display: flex; flex-direction: column; }
