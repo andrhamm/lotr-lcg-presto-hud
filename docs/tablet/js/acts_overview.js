@@ -25,15 +25,9 @@ export function handle(game, ui, act, arg) {
     ui.overview.difficulty = arg;
     return true;
   }
-  if (act === "ov_back") {
-    // Back to the picker, with its state (source/cycle/players/threats)
-    // exactly as the player left it - only pick_scenario writes ui.overview,
-    // and a fresh pick overwrites it wholesale, so there is nothing to clean
-    // up here. (Moved from acts_newgame.js, which owned it while layout.js
-    // still carried a placeholder screen.)
-    ui.screen = "newgame";
-    return true;
-  }
+  // (`ov_back` is gone with M7: the overview is no longer a screen you leave
+  // the picker for. The chooser embeds renderScenarioDetail() beside its own
+  // list, so there is nothing to go back FROM - the list never left.)
   if (act === "ov_close") {
     // The read-only variant's only way out: back to the game it was opened
     // over. It never touches the game, so there is nothing to confirm.

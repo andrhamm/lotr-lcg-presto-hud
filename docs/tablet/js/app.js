@@ -27,6 +27,34 @@ import { overviewFor, scenarioMetaFor } from "./overview.js";
 // `recordedGameOver` (main.js ~127, ~338, ~433).
 let recordedGameOver = false;
 
+// Where "Resume game" goes: the screen boot() would have landed on before the
+// landing screen existed. Held here rather than recomputed from `game` at tap
+// time so the two can never disagree about a game that ended in the save.
+let resumeTarget = "play";
+
+// The app is meant to fill the iPad. Two routes, and neither is a meta tag
+// that Safari reads for a plain tab (there isn't one):
+//
+//   - Add to Home Screen. The manifest's `display: standalone` and
+//     `apple-mobile-web-app-capable` are what make that launch chrome-free;
+//     iOS reads them when the icon is added, so an icon added before they
+//     shipped keeps the old behaviour until it is re-added.
+//   - Element.requestFullscreen(), supported on arbitrary elements in Safari
+//     on iPadOS 16.4+ (not on iPhone, where only <video> may go fullscreen).
+//     It needs a user gesture, which is why this is called from the landing
+//     screen's own CTA rather than at boot.
+//
+// Best-effort throughout: a browser without the API, a gesture the engine
+// declines to honour, or a user who leaves fullscreen again all just leave
+// the app running in the chrome it has. Nothing here may throw into a tap.
+function goFullscreen() {
+  try {
+    const el = document.documentElement;
+    if (document.fullscreenElement || !document.fullscreenEnabled) return;
+    (el.requestFullscreen ?? el.webkitRequestFullscreen)?.call(el)?.catch?.(() => {});
+  } catch { /* not available; the app is unaffected */ }
+}
+
 setWindowPolicy(WINDOW_POLICY_BANDS);
 setBoardTracking(true);
 
@@ -77,7 +105,12 @@ async function buildPicker() {
   // null/empty index, same as every other catalog-optional read here.
   const source = "official";
   const cycle = index ? (cyclesFor(index, source)[0]?.cycle ?? null) : null;
+  // `drill`/`slug` are the master/detail chooser's own state (M7): which of
+  // the left column's two lists is showing, and which quest the detail on
+  // the right belongs to. A fresh picker starts at the top of the drill-in
+  // with nothing selected, so the detail side shows its instruction.
   return { index, players: 2, threats: [25, 25], source, cycle,
+           drill: "cycles", slug: null,
            error: index ? null : CATALOG_UNAVAILABLE };
 }
 
@@ -162,16 +195,40 @@ async function boot() {
     // (actions.js), never on boot. Seat it before the first render, exactly
     // like every other tap does.
     afterTap(game, ui);
-    ui.screen = game.game_over ? "gameover" : "play";
-    if (game.game_over) recordedGameOver = true;
+    // M7: a save no longer lands straight in the game. The landing screen
+    // shows it as "Resume game" with a stamp saying which quest and how far
+    // in - a player who wants a different game had no way to say so before,
+    // and one coming back to this one loses a single tap.
+    resumeTarget = game.game_over ? "gameover" : "play";
+    ui.home = { resume: {
+      name: game.scenario?.name ?? null,
+      round: game.round,
+      savedAt: saved.saved_at ?? null,
+    } };
   } else {
-    ui.screen = "newgame";
-    ui.picker = await buildPicker();
+    ui.home = { resume: null };
   }
+  ui.screen = "home";
   render();
 }
 
 async function handleAct(act, arg) {
+  // The landing screen's two ways in. Both are the first real tap of the
+  // session, which is what makes them the right place to ask for fullscreen:
+  // the Fullscreen API requires a user gesture, and this is the only gesture
+  // guaranteed to happen before the player is looking at the board.
+  if (act === "home_new" || act === "home_resume") {
+    goFullscreen();
+    if (act === "home_resume") {
+      ui.screen = resumeTarget;
+      render();
+      return;
+    }
+    ui.picker = await buildPicker();
+    ui.screen = "newgame";
+    render();
+    return;
+  }
   // "new_game_confirm" is the Menu sheet's confirmed choice (sheet_menu.js) -
   // handled exactly like the game-over screen's "new_game" (task-2 brief).
   if (act === "new_game" || act === "new_game_confirm") {
@@ -206,7 +263,13 @@ async function handleAct(act, arg) {
     ui.scenarioSlug = overview.entry.slug;
     ui.overview = overview;
     ui.sheet = null;
-    ui.screen = "overview";
+    // M7: picking no longer LEAVES the chooser. The detail fills the right
+    // two thirds of the same screen, so a player comparing three quests in a
+    // cycle taps three rows rather than three rows and three Backs.
+    // ui.picker.slug is what marks the selected row and what gates the
+    // Continue CTA - newgame.js will not draw a detail whose slug the picker
+    // is not actually pointing at.
+    ui.picker.slug = overview.entry.slug;
     render();
     return;
   }
@@ -261,7 +324,8 @@ async function handleAct(act, arg) {
     render();
     return;
   }
-  if (ui.screen === "newgame" || ui.screen === "overview") {
+  if (ui.screen === "home" || ui.screen === "players"
+      || ui.screen === "newgame" || ui.screen === "overview") {
     // The picker's own edits (ng_source/ng_cycle/ng_players/ng_threat±,
     // acts_newgame.js) and the Scenario overview's (ov_difficulty/ov_back/
     // ov_close, acts_overview.js) are ui-only - they never touch `game` at

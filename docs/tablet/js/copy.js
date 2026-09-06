@@ -10,6 +10,32 @@ export const CHROME = {
   round: "Round",
   newGame: "New game",
   scenario: "Scenario",
+  // The landing screen (home.js). The wordmark is set in our own type and
+  // says what this is - a tracker for the game, never the game's own logo,
+  // and the disclaimer says the same thing in the one place a public web
+  // build should say it. "Fullscreen" is the iPadOS 16.4+ Fullscreen API
+  // affordance (app.js): Safari's chrome cannot be hidden for a plain tab
+  // by any metadata, so this is the in-tab route, and Add to Home Screen
+  // (the manifest's display: standalone) is the other.
+  wordmark: "The Lord of the Rings",
+  wordmarkSub: "The Card Game · Tracker",
+  resumeGame: "Resume game",
+  fullscreen: "Fullscreen",
+  disclaimer: "An unofficial fan-made tracker. Not affiliated with, or endorsed by, Fantasy Flight Games or Middle-earth Enterprises.",
+  // The setup flow's shared header (setup_head.js). One header on both
+  // steps, so "no header, no instruction at all" is answered once rather
+  // than per screen. Each step's instruction is one sentence naming what to
+  // do on THIS step - never a description of the screen.
+  setupStep: "Step %s of 2",
+  chooseScenarioTitle: "Choose a scenario",
+  chooseScenarioHint: "Pick a cycle, then a quest. Its details open on the right.",
+  choosePlayersTitle: "Set up the players",
+  choosePlayersHint: "How many are playing, and each player's starting threat.",
+  chooseScenarioEmpty: "Choose a quest on the left to see its encounter sets, stages and cards.",
+  allCycles: "‹ All cycles",
+  startingThreat: "Starting threat",
+  continueToPlayers: "Continue ›",
+  back: "‹ Back",
   // The tablet-density picker's three columns (Task 2, milestone 6) - a
   // source toggle, the cycle list, the scenario list. "scenario" above is
   // still the singular used elsewhere (e.g. resume state); this is the

@@ -240,14 +240,28 @@ function notesSection(ui, slug) {
 ${raw(groups.map(renderNotesGroup).join(""))}</section>`;
 }
 
-function footer(readonly) {
-  if (readonly) {
-    return h`<div class="cta-row ov-foot">${raw(cta({ act: "ov_close", label: CHROME.close, tone: "plain" }))}</div>`;
-  }
-  return h`<div class="cta-row ov-foot">${raw(cta({ act: "ov_back", label: CHROME.backToScenarios, tone: "plain" }))}${raw(cta({ act: "begin_setup", label: CHROME.beginSetup, tone: "ok" }))}</div>`;
+// The whole-screen host has exactly one way out, because it now has exactly
+// one caller: the in-game reference (open_overview, always read-only). It
+// used to double as the pre-game step between the picker and setup, with a
+// Back and a Begin setup - that job belongs to the chooser now, which embeds
+// renderScenarioDetail() directly and brings its own Continue.
+function footer() {
+  return h`<div class="cta-row ov-foot">${raw(cta({ act: "ov_close", label: CHROME.close, tone: "plain" }))}</div>`;
 }
 
-export function renderOverview(game, ui) {
+// Everything this screen KNOWS about a scenario, with no opinion about where
+// it is being shown. Two hosts embed it and there must never be a third
+// version of any of it:
+//
+//   - the scenario chooser (newgame.js), in the detail column beside the
+//     drill-in list, with the difficulty ladder live;
+//   - the in-game reference the QUEST zone's stage pill opens
+//     (open_overview), read-only, at the difficulty the game committed to.
+//
+// The chooser used to be a separate SCREEN you left the picker for, which is
+// what made "the same content" a thing that could drift. It cannot now: the
+// chooser and the in-game reference call this one function.
+export function renderScenarioDetail(game, ui) {
   const ov = ui.overview ?? {};
   const entry = ov.entry ?? {};
   const data = ov.bundle?.scenario ?? {};
@@ -265,5 +279,12 @@ ${raw(setsSection(sets))}
 ${raw(stagesSection(stages))}
 ${raw(cardsSection(cardGroups(data, name), ui.imagePrefix))}</div>`;
   const right = h`<div class="ov-side">${raw(sharedSection(sets, name))}${raw(notesSection(ui, ov.slug))}</div>`;
-  return h`<main class="pane overview"><div class="ov-grid">${raw(left)}${raw(right)}${raw(footer(ov.readonly))}</div></main>`;
+  return h`<div class="ov-grid">${raw(left)}${raw(right)}</div>`;
+}
+
+// The whole-screen host: the read-only reference opened mid-game. The
+// chooser's host is newgame.js, which embeds the same detail beside its
+// list rather than replacing the screen with it.
+export function renderOverview(game, ui) {
+  return h`<main class="pane overview">${raw(renderScenarioDetail(game, ui))}${raw(footer())}</main>`;
 }

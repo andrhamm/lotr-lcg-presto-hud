@@ -598,86 +598,145 @@ const index = { scenarios: [
 """
 
 
-def test_new_game_picker_default_lists_officials_first_cycle_and_its_two_scenarios():
-    """renderNewGame(ui) at tablet density (Task 2) is three columns -
-    Players (unchanged), Cycles and Scenarios - built from quest_catalog.js's
-    own groupByCycle/cyclesFor rather than a second copy of that filtering.
-    With no source/cycle seated yet the renderer defaults to Official and
-    that source's first cycle, and only THAT cycle's two scenarios show -
-    not the sibling cycle's, not the other source's, and never the
-    "- Nightmare" row or the zero-stage row planted alongside them."""
+def test_new_game_chooser_opens_on_the_cycle_list_for_the_official_source():
+    """renderNewGame(game, ui) is master/detail (M7): a DRILL-IN list on the
+    left, the chosen scenario's own detail on the right. The list opens on
+    the cycles - grouped by quest_catalog.js's own cyclesFor rather than a
+    second copy of that filtering - and shows no scenario rows at all until
+    one is entered. The community cycles stay out of the official list."""
     js = node(NG_FIXTURE + """
 import { renderNewGame } from "./newgame.js";
-const html = renderNewGame({ picker: { index, players: 2, threats: [25, 25] } });
+const html = renderNewGame(null, { picker: { index, drill: "cycles" } });
 const officialChip = /<button[^>]*data-act="ng_source" data-arg="official"[^>]*>/.exec(html)[0];
 const communityChip = /<button[^>]*data-act="ng_source" data-arg="alep"[^>]*>/.exec(html)[0];
-const c1Row = /<button[^>]*data-act="ng_cycle" data-arg="C1"[^>]*>/.exec(html)[0];
-const c2Row = /<button[^>]*data-act="ng_cycle" data-arg="C2"[^>]*>/.exec(html)[0];
 console.log(JSON.stringify({
   officialGold: officialChip.includes("chip-gold"),
   communityTan: communityChip.includes("chip-tan"),
-  c1Selected: c1Row.includes("is-selected"),
-  c2Selected: c2Row.includes("is-selected"),
-  hasA1: html.includes('data-arg="A1"'), hasC2: html.includes('data-arg="C2"'),
-  hasO1a: html.includes('data-arg="o1a"'), hasO1b: html.includes('data-arg="o1b"'),
-  hasO1nm: html.includes('data-arg="o1nm"'), hasO1z: html.includes('data-arg="o1z"'),
-  hasO2a: html.includes('data-arg="o2a"'), hasA1a: html.includes('data-arg="a1a"'),
+  hasC1: html.includes('data-arg="C1"'), hasC2: html.includes('data-arg="C2"'),
+  hasA1: html.includes('data-arg="A1"'),
+  anyScenarioRow: html.includes('data-act="pick_scenario"'),
+  hasEmptyState: html.includes("detail-empty"),
 }));
 """)
     assert js["officialGold"] and js["communityTan"]
-    assert js["c1Selected"] and not js["c2Selected"]
-    assert js["hasC2"]              # the sibling cycle is still LISTED...
-    assert not js["hasA1"]           # ...but never a community cycle
-    assert js["hasO1a"] and js["hasO1b"]
-    assert not js["hasO1nm"] and not js["hasO1z"]
-    assert not js["hasO2a"]          # C2's own scenarios aren't shown either
-    assert not js["hasA1a"]
+    assert js["hasC1"] and js["hasC2"]   # both official cycles are listed...
+    assert not js["hasA1"]                # ...and no community one
+    assert not js["anyScenarioRow"]       # nothing drilled into yet
+    assert js["hasEmptyState"]            # so the detail side says what to do
 
 
-def test_new_game_picker_ng_source_switches_and_preselects_first_cycle():
-    """ng_source (acts_newgame.js) is ui-only and dispatch()-routed (Task 2):
+def test_new_game_chooser_ng_source_resets_the_drill_and_the_selection():
+    """ng_source (acts_newgame.js) is ui-only and dispatch()-routed:
     switching source resets ui.picker.cycle to THAT source's own first
-    cycle, since the two catalogs never share a cycle name."""
+    cycle, since the two catalogs never share a cycle name - and with M7
+    also resets the drill to the cycle list and drops the selected slug,
+    which belongs to a quest the new list does not contain."""
     js = node(NG_FIXTURE + """
 import { GameState } from "../../js/gamestate.js";
 import { dispatch } from "./actions.js";
 import { renderNewGame } from "./newgame.js";
 const g = new GameState();
-const ui = { picker: { index, players: 2, threats: [25, 25], source: "official", cycle: "C1" } };
+const ui = { picker: { index, source: "official", cycle: "C1", drill: "scenarios", slug: "o1a" } };
 const changed = dispatch(g, ui, "ng_source", "alep");
-const html = renderNewGame(ui);
+const entered = dispatch(g, ui, "ng_cycle", "A1");
+const html = renderNewGame(g, ui);
 console.log(JSON.stringify({
-  changed, source: ui.picker.source, cycle: ui.picker.cycle,
+  changed, entered, source: ui.picker.source, cycle: ui.picker.cycle,
+  drillReset: ui.picker.drill, slug: ui.picker.slug,
   hasA1a: html.includes('data-arg="a1a"'), hasA1b: html.includes('data-arg="a1b"'),
   hasO1a: html.includes('data-arg="o1a"'),
 }));
 """)
-    assert js["changed"] is True
+    assert js["changed"] is True and js["entered"] is True
     assert js["source"] == "alep" and js["cycle"] == "A1"
+    # The reset lands before the re-entry, so what it wrote is observable in
+    # ui.picker.slug alone; ui.picker.drill is back at "scenarios" by now.
+    assert js["slug"] is None
     assert js["hasA1a"] and js["hasA1b"]
     assert not js["hasO1a"]
 
 
-def test_new_game_picker_ng_cycle_switches_the_scenario_column():
+def test_new_game_chooser_ng_cycle_drills_in_and_ng_cycles_comes_back_up():
+    """The left column has two states and one act each way. Entering a cycle
+    lists ITS quests and only those - never the sibling cycle's, never the
+    other source's, and never the "- Nightmare" row or the zero-stage row
+    planted alongside them (groupByCycle's own exclusions). Coming back up
+    puts the cycles back."""
     js = node(NG_FIXTURE + """
 import { GameState } from "../../js/gamestate.js";
 import { dispatch } from "./actions.js";
 import { renderNewGame } from "./newgame.js";
 const g = new GameState();
-const ui = { picker: { index, players: 2, threats: [25, 25], source: "official", cycle: "C1" } };
-const changed = dispatch(g, ui, "ng_cycle", "C2");
-const noop = dispatch(g, ui, "ng_cycle", "C2");   // reselecting is a no-op
-const html = renderNewGame(ui);
+const ui = { picker: { index, source: "official", cycle: "C1", drill: "cycles" } };
+const entered = dispatch(g, ui, "ng_cycle", "C1");
+const inC1 = renderNewGame(g, ui);
+const switched = dispatch(g, ui, "ng_cycle", "C2");
+const inC2 = renderNewGame(g, ui);
+const up = dispatch(g, ui, "ng_cycles", "");
+const upNoop = dispatch(g, ui, "ng_cycles", "");
+const atTop = renderNewGame(g, ui);
 console.log(JSON.stringify({
-  changed, noop, cycle: ui.picker.cycle,
-  hasO2a: html.includes('data-arg="o2a"'), hasO2b: html.includes('data-arg="o2b"'),
-  hasO1a: html.includes('data-arg="o1a"'),
+  entered, switched, up, upNoop, drill: ui.picker.drill,
+  c1HasO1a: inC1.includes('data-arg="o1a"'), c1HasO1b: inC1.includes('data-arg="o1b"'),
+  c1HasO1nm: inC1.includes('data-arg="o1nm"'), c1HasO1z: inC1.includes('data-arg="o1z"'),
+  c1HasO2a: inC1.includes('data-arg="o2a"'), c1HasA1a: inC1.includes('data-arg="a1a"'),
+  c2HasO2a: inC2.includes('data-arg="o2a"'), c2HasO1a: inC2.includes('data-arg="o1a"'),
+  backUpHasCycles: atTop.includes('data-act="ng_cycle"'),
+  backUpHasScenarios: atTop.includes('data-act="pick_scenario"'),
 }));
 """)
-    assert js["changed"] is True and js["noop"] is False
-    assert js["cycle"] == "C2"
-    assert js["hasO2a"] and js["hasO2b"]
-    assert not js["hasO1a"]
+    assert js["entered"] is True and js["switched"] is True
+    assert js["up"] is True and js["upNoop"] is False   # already at the top
+    assert js["drill"] == "cycles"
+    assert js["c1HasO1a"] and js["c1HasO1b"]
+    assert not js["c1HasO1nm"] and not js["c1HasO1z"]
+    assert not js["c1HasO2a"] and not js["c1HasA1a"]
+    assert js["c2HasO2a"] and not js["c2HasO1a"]
+    assert js["backUpHasCycles"] and not js["backUpHasScenarios"]
+
+
+def test_new_game_chooser_continue_appears_only_once_a_quest_is_picked():
+    """The Continue CTA is gated on ui.picker.slug, and the detail beside it
+    is gated on ui.overview being the seat for THAT slug: ui.overview
+    survives a game (boot seats it read-only for a resumed save), so
+    rendering it on the strength of its mere existence would show the last
+    game's quest under a fresh picker."""
+    js = node(NG_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+import { overviewFor } from "./overview.js";
+import { renderNewGame } from "./newgame.js";
+const g = new GameState();
+const bundle = { stages: [{ id: 1 }], locations: [], tips: null };
+const base = { index, source: "official", cycle: "C1", drill: "scenarios" };
+const noPick = renderNewGame(g, { picker: { ...base } });
+// A stale seat from an earlier game, with nothing picked in THIS picker.
+const stale = renderNewGame(g, { picker: { ...base }, overview: overviewFor(index, "o1b", bundle) });
+const picked = renderNewGame(g, { picker: { ...base, slug: "o1a" },
+                                  overview: overviewFor(index, "o1a", bundle) });
+const ui = { screen: "newgame", picker: { ...base, slug: "o1a" } };
+const wentOn = dispatch(g, ui, "go_players", "");
+const blocked = dispatch(g, { screen: "newgame", picker: { ...base, slug: null } }, "go_players", "");
+console.log(JSON.stringify({
+  noPickCta: noPick.includes('data-act="go_players"'),
+  staleCta: stale.includes('data-act="go_players"'),
+  // The LIST names every quest in the cycle either way - what must not
+  // appear is the stale seat's DETAIL, so this looks for the detail grid,
+  // not for the name.
+  staleShowsOther: stale.includes("ov-grid"),
+  staleEmpty: stale.includes("detail-empty"),
+  pickedCta: picked.includes('data-act="go_players"'),
+  pickedTitle: picked.includes(">Official 1A<"),
+  pickedSelectedRow: /data-act="pick_scenario" data-arg="o1a"/.test(picked)
+    && /class="[^"]*is-selected[^"]*"[^>]*data-arg="o1a"/.test(picked),
+  wentOn, screen: ui.screen, blocked,
+}));
+""")
+    assert not js["noPickCta"]
+    assert not js["staleCta"] and not js["staleShowsOther"] and js["staleEmpty"]
+    assert js["pickedCta"] and js["pickedTitle"] and js["pickedSelectedRow"]
+    assert js["wentOn"] is True and js["screen"] == "players"
+    assert js["blocked"] is False
 
 
 def test_new_game_picker_players_and_threat_acts_still_work_through_dispatch():
@@ -701,14 +760,15 @@ console.log(JSON.stringify({
     assert js["threats"] == [26, 25, 25]
 
 
-def test_new_game_picker_cycle_and_scenario_rows_are_real_buttons():
+def test_new_game_chooser_drill_rows_are_real_buttons():
     js = node(NG_FIXTURE + """
 import { renderNewGame } from "./newgame.js";
-const html = renderNewGame({ picker: { index, players: 2, threats: [25, 25] } });
-const tags = [...html.matchAll(/<(\\w+)[^>]*class="[^"]*(?:cycle-row|scenario-row)(?![\\w-])[^"]*"/g)].map(m => m[1]);
+const cycles = renderNewGame(null, { picker: { index, drill: "cycles" } });
+const scenarios = renderNewGame(null, { picker: { index, cycle: "C1", drill: "scenarios" } });
+const tags = [...(cycles + scenarios).matchAll(/<(\\w+)[^>]*class="[^"]*drill-row(?![\\w-])[^"]*"/g)].map(m => m[1]);
 console.log(JSON.stringify({ n: tags.length, allButtons: tags.every(t => t === "button") }));
 """)
-    assert js["n"] >= 4      # 2 cycle rows + 2 scenario rows, at least
+    assert js["n"] >= 5      # 2 cycle rows + a back row + 2 scenario rows
     assert js["allButtons"]
 
 
@@ -725,7 +785,7 @@ const oneStageIndex = { scenarios: [
   { slug: "one-stage", name: "One Stage Quest", pack: "P", cycle: "C1",
     kind: "quest", source: "official", order: 1, stageCount: 1, releaseDate: "2011-01" },
 ] };
-const pickerHtml = renderNewGame({ picker: { index: oneStageIndex, players: 2, threats: [25, 25] } });
+const pickerHtml = renderNewGame(null, { picker: { index: oneStageIndex, cycle: "C1", drill: "scenarios" } });
 const ovHtml = renderOverview(new GameState(),
   uiFor({ entry: { ...entry, stageCount: 1 } }));
 console.log(JSON.stringify({
@@ -815,28 +875,45 @@ console.log(JSON.stringify({
     assert js["missingEntry"] is None
 
 
-def test_overview_screen_renders_title_and_begin_setup():
-    """The picker -> overview -> begin_setup flow, end to end, on a bundle
-    with none of the optional pieces (no scenario record, no cards, a stage
-    entry with no cards key at all): the screen still draws its title and
-    both footer CTAs rather than throwing on a missing field. Every section
-    below degrades to nothing on its own."""
+def test_scenario_detail_is_one_renderer_on_both_of_its_hosts():
+    """The chooser's detail column and the in-game reference screen are the
+    same function (renderScenarioDetail), on a bundle with none of the
+    optional pieces (no scenario record, no cards, a stage entry with no
+    cards key at all): both draw the title rather than throwing on a missing
+    field, and every section degrades to nothing on its own.
+
+    What differs is only the host's own footer. The whole-screen host has
+    exactly one way out (Close) because it has exactly one caller - the
+    in-game reference; the chooser brings Continue instead, and never the
+    overview's own footer."""
     js = node(NG_FIXTURE + """
 import { GameState } from "../../js/gamestate.js";
 import { overviewFor } from "./overview.js";
 import { layout } from "./layout.js";
 const bundle = { stages: [{ id: 1 }], locations: [], tips: null };
-const overview = overviewFor(index, "o1a", bundle);
-const ui = { screen: "overview", overview };
-const html = layout(new GameState(), ui);
+const overview = overviewFor(index, "o1a", bundle, { readonly: true });
+const screenHtml = layout(new GameState(), { screen: "overview", overview });
+const chooserHtml = layout(new GameState(), {
+  screen: "newgame",
+  picker: { index, source: "official", cycle: "C1", drill: "scenarios", slug: "o1a" },
+  overview,
+});
 console.log(JSON.stringify({
-  hasTitle: html.includes(">Official 1A<"),
-  hasBeginSetup: html.includes('data-act="begin_setup"'),
-  hasBack: html.includes('data-act="ov_back"'),
+  screenTitle: screenHtml.includes(">Official 1A<"),
+  screenClose: screenHtml.includes('data-act="ov_close"'),
+  screenBeginSetup: screenHtml.includes('data-act="begin_setup"'),
+  screenBack: screenHtml.includes('data-act="ov_back"'),
+  chooserTitle: chooserHtml.includes(">Official 1A<"),
+  chooserContinue: chooserHtml.includes('data-act="go_players"'),
+  chooserOvFoot: chooserHtml.includes("ov-foot"),
 }));
 """)
-    assert js["hasTitle"]
-    assert js["hasBeginSetup"] and js["hasBack"]
+    assert js["screenTitle"] and js["screenClose"]
+    # The pre-game footer is gone with the pre-game SCREEN: setup starts from
+    # the players step now, and there is nothing to go "back" from.
+    assert not js["screenBeginSetup"] and not js["screenBack"]
+    assert js["chooserTitle"] and js["chooserContinue"]
+    assert not js["chooserOvFoot"]
 
 
 # The Scenario overview's fixture (Task 3, milestone 6). The entry is the
@@ -1110,8 +1187,8 @@ def test_overview_acts_open_from_the_stage_pill_and_close_back_to_play():
     """The rail's stage pill name is the way in (a real button, so it takes
     the 44px floor with it); open_overview flips the seat read-only at the
     GAME's own mode, not whatever the ladder was last left on, and ov_close
-    goes back to play. ov_back - the picker's way out - is acts_overview.js's
-    now too."""
+    goes back to play. ov_back is gone with M7: the overview is no longer a
+    screen you leave the picker for, so there is nothing to go back from."""
     js = node(OV_FIXTURE + """
 import { GameState } from "../../js/gamestate.js";
 import { dispatch } from "./actions.js";
@@ -1142,7 +1219,7 @@ console.log(JSON.stringify({
     assert js["opened"] is True
     assert js["afterOpen"] == {"screen": "overview", "readonly": True, "difficulty": "Nightmare"}
     assert js["closed"] is True and js["screenAfterClose"] == "play"
-    assert js["back"] is True and js["screenAfterBack"] == "newgame"
+    assert js["back"] is False and js["screenAfterBack"] == "play"
     assert js["declined"] is False
 
 

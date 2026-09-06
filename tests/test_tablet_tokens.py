@@ -15,7 +15,13 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSS = os.path.join(ROOT, "docs", "tablet", "style.css")
 SCALE = {34, 26, 20, 18, 13}            # DISPLAY, small numerals, BODY, secondary, LABEL
-NUMERAL_ALLOW = {84, 64, 56, 48, 40, 36, 30, 26, 22}   # widget-owned numerals and glyph sizes
+# Widget-owned numerals and glyph sizes, plus the one WORDMARK: the design
+# system reserves everything above DISPLAY for "numerals and wordmarks",
+# chosen by the widget that owns them and never at a call site. 52 is the
+# landing screen's title (home.js/.home-wordmark), which is a wordmark in
+# exactly that sense - it is the app's name on an otherwise empty screen,
+# not a heading in a document. A sentence may never use it.
+NUMERAL_ALLOW = {84, 64, 56, 52, 48, 40, 36, 30, 26, 22}
 
 
 def _strip_comments(css):
@@ -57,12 +63,13 @@ def _button_heights_of(css):
     # regression cover so a future rewrite can't quietly drop below 44.
     # log-line is the Game Log's row (milestone 4): a rewindable row is a
     # <button>, so it carries the same floor. cycle-row (milestone 6, Task 2)
-    # is the tablet-density picker's cycle list, sized like scenario-row.
+    # drill-row (M7) is the scenario chooser's drill-in list - cycles and
+    # the quests inside one, the same row either way.
     # pill-name-btn (milestone 6, Task 3) is the rail's stage-pill name, now
     # the way into the read-only Scenario overview - it sits inside the
     # 324px rail, which is exactly where a tap target gets quietly shrunk.
     for m in re.finditer(
-        r"\.(chip|cta|step|scenario-row|cycle-row|step-sm|locpick-row|sqpick-row|rsheet-row|tbtn|tick-btn|log-line|pill-name-btn)(?![\w-])[^{]*\{([^}]*)\}",
+        r"\.(chip|cta|step|drill-row|drill-back|step-sm|locpick-row|sqpick-row|rsheet-row|tbtn|tick-btn|log-line|pill-name-btn)(?![\w-])[^{]*\{([^}]*)\}",
         css,
     ):
         hm = re.search(r"(?:min-)?height\s*:\s*(\d+)px", m.group(2))

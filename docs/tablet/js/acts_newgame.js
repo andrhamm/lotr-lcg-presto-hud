@@ -20,11 +20,42 @@ export function handle(game, ui, act, arg) {
     // never share a cycle name), so the previous cycle would otherwise
     // point at a group the new source doesn't have.
     ui.picker.cycle = cyclesFor(ui.picker.index ?? {}, source)[0]?.cycle ?? null;
+    // Back to the top of the drill-in, and no selection: the catalogs are
+    // disjoint, so a quest picked from the other source is not in this list
+    // at all - leaving it selected would show its detail beside a list that
+    // does not contain it.
+    ui.picker.drill = "cycles";
+    ui.picker.slug = null;
     return true;
   }
+  // The left column is a drill-in (M7): a cycle row does not just select a
+  // cycle, it ENTERS it - the list becomes that cycle's quests. Re-tapping
+  // the cycle you are already in is still a state change, because the list
+  // you are looking at is the cycle list.
   if (act === "ng_cycle") {
-    if (ui.picker.cycle === arg) return false;
     ui.picker.cycle = arg;
+    ui.picker.drill = "scenarios";
+    return true;
+  }
+  if (act === "ng_cycles") {
+    if (ui.picker.drill !== "scenarios") return false;
+    ui.picker.drill = "cycles";
+    return true;
+  }
+  // The two ways between the setup steps. Both are ui-only: `begin_setup` is
+  // the one act that creates a game, and it stays in app.js (it rebinds
+  // `game`, which clears the tagged write queue with it).
+  if (act === "go_players") {
+    if (!ui.picker.slug) return false;
+    ui.screen = "players";
+    return true;
+  }
+  if (act === "go_scenario") {
+    ui.screen = "newgame";
+    return true;
+  }
+  if (act === "go_home") {
+    ui.screen = "home";
     return true;
   }
   if (act === "ng_players") {

@@ -10,6 +10,36 @@
   --sans: 'Alegreya Sans', 'Gill Sans', 'Trebuchet MS', system-ui, sans-serif;
 }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tan); font: 20px/1.35 var(--sans); }
+/* The page is STRICTLY FIXED. A drag anywhere on the app must never scroll
+   the document, rubber-band it, or arm Safari's pull-to-refresh - this is a
+   board-side HUD sitting flat on a table, and an accidental refresh mid-round
+   is the worst thing the browser can do to it.
+   Three mechanisms, because no one of them holds everywhere:
+   - `position: fixed` on the body is the only thing that reliably stops iOS
+     Safari's document-level bounce; overscroll-behavior on the document is
+     honoured there for pull-to-refresh but not for the bounce itself.
+   - `overscroll-behavior: none` covers every other engine, and stops scroll
+     chaining out of a region that has hit its end.
+   - `touch-action: none` refuses the pan gesture before it starts.
+   Every scrolling region opts back in explicitly, just below. Anything new
+   that scrolls must join that list or it will simply not scroll on a touch
+   device - which is the failure mode we want (visible immediately), rather
+   than a page that quietly bounces. */
+html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; touch-action: none; }
+/* The regions that DO scroll. `pan-y` because every one of them is a vertical
+   list - a horizontal drag has nothing to do here and reads as a slip.
+   `overscroll-behavior: contain` keeps a flick that reaches the end of the
+   list from travelling on to whatever is behind it (the sheet scrim, the
+   document). */
+.pane, .sheet, .log-rows, .log-side, .newgame-col, .drill-list, .detail-scroll,
+.ov-main, .ov-side, .export-text {
+  touch-action: pan-y; overscroll-behavior: contain;
+}
+/* Nothing here is prose to be selected, and a long-press that starts a
+   selection (or raises iOS's callout) eats the tap that was meant. The log
+   export's textarea is the one place selection IS the feature. */
+.app { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.export-text { user-select: text; -webkit-user-select: text; }
 /* 100vh first as the fallback for a browser with no dvh support; 100dvh
    after it wins wherever it is supported, so the app shrinks with the
    on-screen chrome (Safari's URL bar) instead of being covered by it. The
@@ -362,46 +392,95 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .eng-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .eng-value { display: flex; align-items: center; gap: 8px; }
 
-/* The new-game / picker screen at tablet density (Task 2, milestone 6):
-   three independently-scrolling columns - Players, Cycles, Scenarios -
-   instead of the phone-era stacked sections (docs/tablet/js/newgame.js). */
-.newgame { gap: 20px; }
-.newgame-grid { display: grid; grid-template-columns: 300px 320px 1fr; gap: 18px; height: 100%; }
-/* min-height: 0 is load-bearing on a grid/flex item that must itself scroll -
-   without it the column refuses to shrink below its content's natural
-   height and the grid just grows past the pane instead of clipping each
-   column to its own scrollbar. */
-.newgame-col { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; }
+/* THE LANDING SCREEN (home.js). Full-bleed, centred, and deliberately almost
+   empty: two things to do, and the name of the app. `.home-art` is the layer
+   the Presto fills with box art - left empty here on purpose (the data
+   policy: verbatim third-party content never ships in a web build), waiting
+   for royalty-free or community art. Until then the wordmark carries it, so
+   the wordmark is set at a real display size rather than at .display's. */
+.home { flex: 1 1 0; position: relative; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 28px; padding: 48px; overflow: hidden; }
+.home-art { position: absolute; inset: 0; pointer-events: none; }
+.home-plate { position: relative; display: flex; flex-direction: column;
+  align-items: center; gap: 12px; width: 520px; max-width: 100%; }
+.home-wordmark { margin: 0; font: 600 52px/1.05 var(--serif); color: var(--gold);
+  text-align: center; text-wrap: balance; }
+.home-sub { color: var(--muted); letter-spacing: .16em; }
+/* The actions stack rather than sit side by side: they are not a pair of
+   equal choices - one of them is what you came to do. Full width at .cta's
+   own 64px, so the primary is a target you cannot miss on a table. */
+.home-actions { display: flex; flex-direction: column; gap: 12px;
+  width: 100%; margin-top: 20px; }
+/* flex: none so the 64px buttons keep their height in a COLUMN - the shared
+   .cta rule sizes them, this only stops the flex algorithm from renegotiating
+   it. (.cta.grow's `flex: 1 1 0` is the horizontal .cta-row's contract; used
+   here it makes 64px a flex-basis on the wrong axis and both buttons collapse
+   to their line height. home.js passes grow: false for the same reason.) */
+.home-actions .cta { width: 100%; flex: none; }
+.home-stamp { margin: -2px 0 6px; text-align: center; }
+/* The disclaimer sits at the foot of the screen, LABEL, muted: it is chrome
+   that has to be there, not something a player reads on the way in. */
+.home-foot { position: absolute; left: 48px; right: 48px; bottom: 28px;
+  text-align: center; color: var(--dim); text-transform: none; letter-spacing: .02em; }
+
+/* THE SETUP FLOW (newgame.js step 1, players_setup.js step 2). Both steps
+   wear setup_head.js's header - title, step stamp, one instruction sentence,
+   Back - so a player always knows where they are and what this step wants.
+   The screen itself does not scroll; the regions inside it do. */
+.setup { gap: 16px; overflow: hidden; }
+.setup-head { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.setup-head-nav { display: flex; align-items: center; gap: 14px; }
+.setup-head .display { margin: 0; }
+/* Master/detail: the drill-in list at a fixed width (a list of names does not
+   want to grow), the scenario's own detail taking everything else. Each side
+   scrolls independently - min-height: 0 is load-bearing on a grid item that
+   must itself scroll, without it the track refuses to shrink below its
+   content and the grid grows past the pane instead. */
+.setup-grid { flex: 1 1 0; min-height: 0; display: grid;
+  grid-template-columns: 360px minmax(0, 1fr); gap: 20px; }
+.setup-list { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.setup-detail { display: flex; flex-direction: column; min-height: 0;
+  overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain;
+  padding-right: 4px; }
+/* The detail's own footer, sticky to the bottom of that column: on a long
+   scenario the Continue button would otherwise be a full scroll away from
+   the difficulty ladder that decides what it starts. */
+.detail-foot { position: sticky; bottom: 0; margin-top: auto;
+  padding: 12px 0 4px; background: var(--bg); }
+.detail-empty { display: flex; align-items: center; justify-content: center;
+  height: 100%; padding: 40px; text-align: center; }
+.detail-empty .body { max-width: 42ch; }
+/* The drill-in list: cycles, or one cycle's quests. One scrolling region
+   holding both states, so entering a cycle does not move the scrollbar to a
+   different element. */
+.drill-list { display: flex; flex-direction: column; gap: 8px;
+  min-height: 0; overflow-y: auto; padding-right: 4px; }
+.drill-row { display: flex; align-items: center; gap: 12px; width: 100%;
+  min-height: 60px; padding: 8px 16px; text-align: left; background: var(--btn);
+  border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d);
+  border-right-color: var(--bevel-d); border-radius: 6px; }
+/* The name takes the slack; its metadata and chevron sit hard right. */
+.drill-row .body { flex: 1 1 auto; min-width: 0; }
+.drill-row .label { flex: 0 0 auto; }
+.drill-chev { flex: 0 0 auto; color: var(--dim); font-size: 22px; line-height: 1; }
+.drill-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
+/* The way back up out of a cycle, and the name of the cycle you are in. The
+   heading is not a row - nothing to tap - so it takes no bevel. */
+.drill-back { min-height: 52px; color: var(--muted); }
+.drill-heading { padding: 6px 4px 2px; color: var(--gold); }
 .player-chips { display: flex; gap: 10px; }
 /* Player-count chips are single digits in an otherwise ALL-CAPS chip row -
    without a floor they pinch down to the glyph's own width and read as a
    different, smaller control than every other chip on the screen. */
 .chip-square { min-width: 56px; }
 .threat-row { display: flex; gap: 12px; flex-wrap: wrap; }
-/* The Official/Community toggle heading the Cycles column. */
+/* The Official/Community toggle heading the drill-in list. */
 .source-toggle { display: flex; gap: 10px; }
-.cycle-list { display: flex; flex-direction: column; gap: 8px; }
-/* A cycle name is BODY (a name a player reads), its scenario count/year is
-   LABEL (dense tabular metadata) - same distinction .scenario-row draws
-   below. Bevelled and full-width like every other tappable row on this
-   screen; .is-selected swaps the bevel for the card_hi/gold treatment
-   .locpick-row's own selected state uses. */
-.cycle-row { display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; width: 100%; min-height: 56px; padding: 8px 16px; text-align: left;
-  background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
-  border-radius: 6px; }
-.cycle-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
-.scenario-list { display: flex; flex-direction: column; gap: 8px; }
-/* A scenario name is BODY (a name a player reads), not a chip's ALL-CAPS
-   LABEL - so the row is its own beveled, full-width button (same raised
-   look as .chip, just left-aligned and roomy enough for its set icon, a
-   two-line name + pack, and its stage count) rather than a chip glued to a
-   separate label span. */
-.scenario-row { display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
-  gap: 2px; width: 100%; min-height: 56px; padding: 8px 16px; text-align: left;
-  background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
-  border-radius: 6px; }
-.scenario-head { display: flex; align-items: center; gap: 8px; }
+/* Step 2's own blocks: a labelled group per decision, stacked, with the CTA
+   pinned at the foot of the pane by .cta-row's margin-top: auto. */
+.setup-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;
+  gap: 28px; padding-top: 8px; }
+.setup-block { display: flex; flex-direction: column; gap: 12px; }
 
 /* The sheet framework (milestone 3, Task 2): a modal overlay - .scrim covers
    the app, .sheet is the panel itself. Every sheet's own content (title,
@@ -652,7 +731,11 @@ a.chip { text-decoration: none; min-height: 44px; }
    through it as they pass under - and the -16px/16px pair is .pane's own
    bottom padding: sticky bottoms out at the padding box, so at bottom: 0 a
    16px band of card art still scrolled past underneath the buttons. */
-.ov-foot { grid-column: 1 / -1; position: sticky; bottom: -16px;
+/* (The footer is a sibling of .ov-grid, not a cell in it: renderOverview
+   wraps the shared renderScenarioDetail() and adds its own footer, so the
+   detail can be embedded in the chooser - which brings its own CTA row -
+   without carrying this one along.) */
+.ov-foot { position: sticky; bottom: -16px; margin-top: auto;
   padding: 12px 0 16px; background: var(--bg); }
 /* The rail's stage pill name is the way into the read-only overview
    (open_overview), so it is a real button and takes the bevel and the 44px

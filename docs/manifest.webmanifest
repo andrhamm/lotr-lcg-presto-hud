@@ -1,0 +1,11 @@
+{
+  "name": "LOTR LCG Tracker",
+  "short_name": "LOTR Tracker",
+  "description": "A companion tracker for The Lord of the Rings: The Card Game.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#100c09",
+  "theme_color": "#100c09"
+}

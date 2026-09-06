@@ -7,7 +7,9 @@ import { cta } from "./primitives.js";
 import { renderStrip } from "./strip.js";
 import { renderRail } from "./rail.js";
 import { renderPane } from "./pane.js";
+import { renderHome } from "./home.js";
 import { renderNewGame } from "./newgame.js";
+import { renderPlayersSetup } from "./players_setup.js";
 import { renderOverview } from "./overview.js";
 import { renderSheet } from "./sheets.js";
 import { renderLogScreen } from "./screen_log.js";
@@ -31,7 +33,15 @@ function renderGameOver(game) {
 
 export function layout(game, ui) {
   if (ui.screen === "gameover") return renderGameOver(game);
-  if (ui.screen === "newgame") return h`<div class="app">${raw(renderNewGame(ui))}</div>`;
+  // The landing screen (M7): the first thing shown on every launch, save or
+  // no save. Nothing else is on it - no strip, no rail - so it is its own
+  // branch rather than a pane.
+  if (ui.screen === "home") return h`<div class="app">${raw(renderHome(ui))}</div>`;
+  // Setup is two steps: the scenario chooser (master/detail - the same
+  // scenario detail the in-game route shows, embedded beside a drill-in
+  // list), then the players.
+  if (ui.screen === "newgame") return h`<div class="app">${raw(renderNewGame(game, ui))}</div>`;
+  if (ui.screen === "players") return h`<div class="app">${raw(renderPlayersSetup(ui))}</div>`;
   // The Scenario overview (Task 3, milestone 6) is a whole screen on both of
   // its paths: chosen from the picker before a game exists, and opened
   // read-only from the QUEST zone's stage pill mid-game - overview.js draws
