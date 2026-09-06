@@ -7,8 +7,8 @@
 // loadScenario are thin fetch wrappers and are NOT host-tested.
 
 // The compiled card data lives beside this module's directory (docs/data/),
-// not beside the page: the web twin's page is docs/index.html but the
-// tablet's is docs/tablet/index.html. Resolving against import.meta.url
+// not beside the page: the tablet's page is docs/index.html but the web
+// twin's is docs/presto/index.html. Resolving against import.meta.url
 // makes both clients fetch docs/data/ regardless of the page they load from.
 export const dataUrl = path => new URL("../data/" + path, import.meta.url).href;
 

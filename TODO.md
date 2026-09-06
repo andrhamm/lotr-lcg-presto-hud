@@ -67,7 +67,7 @@ across columns, and surface blockers here.
   - notes: `docs/tablet/js/copy.js` `rulesPageUrl` (and `page=` in `tools/data/rules.SOURCE.txt`) point at FFG's product page; nothing verifies it resolves and it is the only thing the modal offers when `rules_text.json` is absent. Open it on the iPad during the soak; pin the direct PDF `url=` if FFG exposes one.
 
 - [ ] Service worker: sweep superseded caches on activate
-  - notes: `docs/tablet/sw.js` names `lotr-tablet-shell-v1` / `lotr-tablet-images-v1` and never deletes older names; harmless with one version, a leak the first time either bumps to -v2. Add the sweep (and a test in `tests/test_tablet_sw.py`) before the first version bump.
+  - notes: `docs/sw.js` (moved from `docs/tablet/sw.js` in the hosting-plan Task 1) names `lotr-tablet-shell-v1` / `lotr-tablet-images-v1` and never deletes older names; harmless with one version, a leak the first time either bumps to -v2. Add the sweep (and a test in `tests/test_tablet_sw.py`) before the first version bump.
 
 - [ ] Rules text: "Spheres of Influence" picks up a diagram caption as See-also terms
   - notes: `tools/build_rules_text.py`'s See-also continuation reads the sphere-icon legend that liteparse renders as prose right after the entry's See-also line (corpus artifact). Cosmetic (three spurious `see_also` entries, `text` clean). Stop continuation at a line without a comma, or special-case the entry.

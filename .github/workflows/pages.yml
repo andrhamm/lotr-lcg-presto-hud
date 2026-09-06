@@ -110,6 +110,19 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs
+      - name: Publish to Cloudflare Pages
+        # The second host (Task 1 of the hosting plan): lotrlcg.app, same
+        # docs/ artifact this job just built for GitHub Pages, no separate
+        # build. main-only so a PR preview build never publishes to the
+        # live project; --commit-dirty=true because this checkout isn't a
+        # clean clone from wrangler's own perspective (build steps above
+        # wrote generated files into docs/ that git doesn't track).
+        if: github.ref == 'refs/heads/main'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy docs --project-name=lotrlcg --branch=main --commit-dirty=true
   deploy:
     needs: build
     runs-on: ubuntu-latest

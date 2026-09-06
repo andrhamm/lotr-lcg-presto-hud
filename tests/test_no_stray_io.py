@@ -124,12 +124,13 @@ FETCH_OWNERS = {
     # The catalog READER db.js delegates to - the exact JS twin of the
     # quest_catalog.py exception in STORAGE_OWNERS above.
     os.path.join("docs", "js", "quest_catalog.js"),
-    # The tablet's service worker IS the network (Task 6): its whole contract
-    # is to intercept requests and re-issue them, and the client's own reads
-    # are among the requests passing through it. It also runs in a worker
-    # global with no module graph at all, so it could not import the client
-    # even if the layering allowed it.
-    os.path.join("docs", "tablet", "sw.js"),
+    # The service worker IS the network (Task 6; moved to the site root in
+    # the hosting-plan Task 1 so its scope covers both clients): its whole
+    # contract is to intercept requests and re-issue them, and the client's
+    # own reads are among the requests passing through it. It also runs in a
+    # worker global with no module graph at all, so it could not import the
+    # client even if the layering allowed it.
+    os.path.join("docs", "sw.js"),
 }
 
 # `fetch(` in code, not in prose - several comments in docs/js discuss "a
@@ -163,6 +164,24 @@ def test_the_browser_twins_keep_fetch_in_the_catalog_reader_and_the_worker():
                             continue
                         if FETCH_CALL.search(line):
                             offenders.append("%s:%d" % (rel, i))
+    # sw.js now lives at the site root (Task 1 of the hosting plan moved it
+    # out from under docs/tablet/, so its scope could cover both clients) -
+    # scanned directly rather than widening the walk above into every
+    # unrelated docs/ subtree (data/, screenshots/, presto/'s markup, ...).
+    docs_root = os.path.join(ROOT, "docs")
+    for fn in sorted(os.listdir(docs_root)):
+        path = os.path.join(docs_root, fn)
+        if not (fn.endswith(".js") and os.path.isfile(path)):
+            continue
+        rel = os.path.relpath(path, ROOT)
+        if rel in FETCH_OWNERS:
+            continue
+        with open(path) as f:
+            for i, line in enumerate(f, 1):
+                if line.strip().startswith("//"):
+                    continue
+                if FETCH_CALL.search(line):
+                    offenders.append("%s:%d" % (rel, i))
     assert not offenders, (
         "fetch outside %s at %s - route it through the client"
         % (sorted(FETCH_OWNERS), offenders))

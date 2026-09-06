@@ -1,6 +1,6 @@
-// The tablet's network layer: shell + data served from cache with a network
-// refresh behind it; card images cache-first in their own cache, newest-N
-// kept.
+// The site's network layer (tablet client at the root, Presto web twin at
+// /presto/): shell + data served from cache with a network refresh behind
+// it; card images cache-first in their own cache, newest-N kept.
 //
 // CLASSIC worker - importScripts-style globals, no `import`, no
 // `importScripts` either (there is nothing to pull in). Plan ruling R7: the
@@ -46,16 +46,28 @@ self.IMAGE_CACHE_MAX = 400;
 // so this matches any single filename segment, not just a hex uuid.
 self.isImage = url => /\/cards\/[A-Za-z]+\/[^\/]+\.jpg$/.test(url);
 
-// The shell and the compiled catalog: this client's own files under
-// /tablet/, plus the shared /js/ modules and /data/ card files it imports -
-// same-origin only, so a hotlink is never swept in here by accident. The
-// path tests are relative because the site is not at the origin root on
-// GitHub Pages (/lotr-lcg-presto-hud/tablet/), so a leading-anchor test
-// would match nothing there.
+// The shell and the compiled catalog: the tablet client at the site root
+// (/, /index.html, /tablet/*), the Presto web twin alongside it (/presto/*),
+// and the shared /js/ modules, /data/ card files and /style.css both import -
+// same-origin only, so a hotlink is never swept in here by accident.
+//
+// sw.js itself now lives at the SITE ROOT (Task 1 of the hosting plan moved
+// it there, out from under /tablet/, precisely so its scope could cover
+// both clients - a worker's scope can never be broader than its own
+// directory). `self.location` is that script's own URL, so the directory
+// holding it - `new URL("./", self.location.href)` - IS the site root on
+// either host: "/" on lotrlcg.app, "/lotr-lcg-presto-hud/" on the GitHub
+// Pages mirror. app.js's registration derives the registration SCOPE the
+// same way from the same swUrl, so the two can never disagree about where
+// the site root is.
 self.isShellOrData = url => {
   const u = new URL(url);
-  return u.origin === self.location.origin
-    && (/\/tablet\//.test(u.pathname) || /\/js\/|\/data\//.test(u.pathname));
+  if (u.origin !== self.location.origin) return false;
+  const dir = new URL("./", self.location.href).pathname;
+  if (!u.pathname.startsWith(dir)) return false;
+  const rest = u.pathname.slice(dir.length);
+  return rest === "" || rest === "index.html" || rest === "style.css"
+    || /^(presto|tablet|js|data)\//.test(rest);
 };
 
 // Drop the OLDEST entries past `max`. Cache.keys() is insertion-ordered and

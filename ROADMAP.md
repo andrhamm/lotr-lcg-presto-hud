@@ -8,7 +8,7 @@ Public roadmap for the LOTR LCG Presto HUD. Have an idea or a vote? Open a
 - **M1 — Offline HUD** (firmware): guided round, per-player threat, quest &
   location & side-quest progress, sailing/heading, timestamped log, LEDs.
 - **Web twin** on GitHub Pages: pixel-faithful, plays in the browser with
-  localStorage persistence — [try it](https://andrhamm.com/lotr-lcg-presto-hud/).
+  localStorage persistence — [try it](https://andrhamm.com/lotr-lcg-presto-hud/presto/).
 
 ## Planned
 

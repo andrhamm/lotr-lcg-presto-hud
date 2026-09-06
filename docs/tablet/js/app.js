@@ -329,15 +329,20 @@ window.addEventListener("pagehide", () => db.session.flush(game));
 
 // The service worker (Task 6): this client's offline shell and its card-image
 // cache. Registered from here rather than from index.html so the SCOPE is
-// derived instead of written down - GitHub Pages serves the site under
-// /lotr-lcg-presto-hud/tablet/, not /tablet/, and a hard-coded "/tablet/"
-// would be rejected there (a worker's scope can never be broader than its
-// own directory). new URL("./", swUrl) IS that directory, on either host.
+// derived instead of written down. sw.js lives at the SITE ROOT (Task 1 of
+// the hosting plan moved it there - a worker's scope can never be broader
+// than its own directory, and the root is what lets it also cover /presto/,
+// the Presto web twin, alongside this client). That root is either the
+// origin itself (lotrlcg.app) or a subpath (GitHub Pages serves the mirror
+// under /lotr-lcg-presto-hud/) - new URL("./", swUrl) IS that directory on
+// either host, which is why the scope is derived rather than written down.
+// docs/sw.js's isShellOrData mirrors this same derivation from self.location
+// so the two agree on what "the site directory" means.
 // Every failure is swallowed: no service worker support, an insecure origin,
 // a file:// preview - the client works exactly as it did before, just
 // without a cache.
 if ("serviceWorker" in navigator) {
-  const swUrl = new URL("../sw.js", import.meta.url);
+  const swUrl = new URL("../../sw.js", import.meta.url);
   navigator.serviceWorker.register(swUrl, { scope: new URL("./", swUrl).href })
     .catch(() => {});
 }

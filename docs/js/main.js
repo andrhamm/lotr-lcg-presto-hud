@@ -92,7 +92,12 @@ function main() {
   const prefs = db.loadPrefs();
 
   const bootImg = new Image();
-  bootImg.src = "assets/boot_bg.png";
+  // Resolved against this module's own URL, not the page's - same reason as
+  // quest_catalog.js's dataUrl(): docs/assets/ lives beside docs/js/, not
+  // beside whichever page loads this module (docs/presto/index.html since
+  // the hosting-plan Task 1 move), so a page-relative "assets/..." would
+  // 404 there.
+  bootImg.src = new URL("../assets/boot_bg.png", import.meta.url).href;
   bootImg.onload = () => { dirty = true; };
 
   const screens = {

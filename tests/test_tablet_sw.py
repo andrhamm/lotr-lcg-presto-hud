@@ -1,4 +1,4 @@
-"""docs/tablet/sw.js, driven under node against a stub platform.
+"""docs/sw.js, driven under node against a stub platform.
 
 A service worker cannot be imported: it has no exports, it runs in its own
 global scope, and the browser is the only thing that ever fires its events.
@@ -26,7 +26,7 @@ import tempfile
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SW = os.path.join(ROOT, "docs", "tablet", "sw.js")
+SW = os.path.join(ROOT, "docs", "sw.js")
 
 PREFIX = "https://dragncards-lotrlcg.s3.amazonaws.com/cards/English/"
 ORIGIN = "https://andrhamm.github.io"
@@ -80,7 +80,7 @@ class Req {
 }
 const keyOf = r => (typeof r === "string" ? r : r.url);
 
-function harness({ routes = {} } = {}) {
+function harness({ routes = {}, href } = {}) {
   const calls = [];
   const store = new Map();                 // cache name -> Map(url -> Response)
   const cacheFor = name => {
@@ -105,8 +105,12 @@ function harness({ routes = {} } = {}) {
     return new Res(url, spec || {});
   };
   const handlers = {};
+  // sw.js now lives at the SITE ROOT (Task 1 of the hosting plan), so its
+  // real href on the GitHub Pages mirror is .../lotr-lcg-presto-hud/sw.js,
+  // not .../tablet/sw.js - `href` lets a probe override this to exercise a
+  // root deployment (lotrlcg.app: ORIGIN + "/sw.js") too.
   const self = {
-    location: { origin: ORIGIN, href: ORIGIN + "/lotr-lcg-presto-hud/tablet/sw.js" },
+    location: { origin: ORIGIN, href: href || (ORIGIN + "/lotr-lcg-presto-hud/sw.js") },
     addEventListener: (type, fn) => { (handlers[type] = handlers[type] || []).push(fn); },
     skipWaiting: () => { self._skipWaiting = true; },
     clients: { claim: async () => { self._claimed = true; } },
@@ -262,6 +266,42 @@ console.log(JSON.stringify({
     assert js["noopUnderCap"] == 400
 
 
+def test_is_shell_or_data_covers_the_site_directory_on_both_hosts():
+    """Task 1 of the hosting plan moved sw.js to the site root so one worker
+    can cover both clients (the tablet at /, the Presto web twin at
+    /presto/). isShellOrData derives "the site directory" from self.location
+    the same way app.js derives the registration scope, so this must hold
+    under BOTH a root deployment (lotrlcg.app, self.location.href ends in
+    "/sw.js") and the GitHub Pages subpath mirror (".../lotr-lcg-presto-hud/
+    sw.js") - a regression here would mean the two hosts disagree about what
+    the worker owns."""
+    js = node("""
+function probe(href, base) {
+  const h = harness({ href });
+  const url = p => base + p;
+  return {
+    js: h.self.isShellOrData(url("js/app.js")),
+    presto: h.self.isShellOrData(url("presto/index.html")),
+    tablet: h.self.isShellOrData(url("tablet/js/app.js")),
+    data: h.self.isShellOrData(url("data/index.json")),
+    root: h.self.isShellOrData(base) || h.self.isShellOrData(url("index.html")),
+    foreign: h.self.isShellOrData("https://other.test/js/app.js"),
+  };
+}
+console.log(JSON.stringify({
+  rootHost: probe(ORIGIN + "/sw.js", ORIGIN + "/"),
+  subpathHost: probe(ORIGIN + "/lotr-lcg-presto-hud/sw.js", ORIGIN + "/lotr-lcg-presto-hud/"),
+}));
+""")
+    for name, deployment in js.items():
+        assert deployment["js"], name
+        assert deployment["presto"], name
+        assert deployment["tablet"], name
+        assert deployment["data"], name
+        assert deployment["root"], name
+        assert not deployment["foreign"], name
+
+
 def test_shell_and_data_answer_from_cache_and_refresh_behind_it():
     """(c) stale-while-revalidate over this client's own files: the first
     request is a plain network fetch, the second is answered from cache
@@ -381,9 +421,9 @@ const post = h.request(ORIGIN + "/lotr-lcg-presto-hud/tablet/js/app.js", { metho
 console.log(JSON.stringify({
   foreignJson: h.request("https://other.test/api/thing.json") === null,
   foreignPage: h.request("https://other.test/") === null,
-  // Same origin but outside this client and the shared data it reads (the
-  // web twin's own page, say) - not ours to cache.
-  otherPage: h.request(ORIGIN + "/lotr-lcg-presto-hud/index.html") === null,
+  // Same origin, under the site directory, but not any of the shell's own
+  // paths (a screenshot in docs/screenshots/, say) - not ours to cache.
+  otherPage: h.request(ORIGIN + "/lotr-lcg-presto-hud/screenshots/boot.png") === null,
   // A non-GET never goes through the shell cache (Cache.put rejects one).
   postNotClaimed: post === null,
   calls: h.calls.length,

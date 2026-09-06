@@ -5,8 +5,11 @@ implementations:
 
 - **Firmware** (MicroPython, Pimoroni Presto): `gamestate.py`, `phases.py`,
   `ui/`, `main.py`. Deploy with `mpremote` (device auto-runs `main.py`).
-- **Web twin** (`docs/`, GitHub Pages: https://andrhamm.com/lotr-lcg-presto-hud/):
-  ES-module mirror, same screens/protocol/metrics, localStorage persistence.
+- **Web twin** (`docs/`): ES-module mirror, same screens/protocol/metrics,
+  localStorage persistence. Two hosts, same layout — root (`docs/index.html`)
+  is the tablet client, `/presto/` (`docs/presto/index.html`) is this web
+  twin: **lotrlcg.app** (Cloudflare Pages) and the GitHub Pages mirror at
+  https://andrhamm.com/lotr-lcg-presto-hud/.
 
 ## Iron rules
 
@@ -338,7 +341,7 @@ builds, one explicit local act to move the pin.
 
 Nothing downloads the art. The tablet hotlinks `prefix + card.image`
 (`docs/tablet/js/cardimage.js`'s `cardUrl`) and lets its **service worker**
-cache the result (`docs/tablet/sw.js`, cache-first in its own image cache,
+cache the result (`docs/sw.js`, cache-first in its own image cache,
 newest-N trimmed) — so no picture is committed, and none is copied into
 `docs/data/` or onto the device. Two details `cardUrl` exists to get right:
 the filename comes off the record's own `image`, never rebuilt from the id
