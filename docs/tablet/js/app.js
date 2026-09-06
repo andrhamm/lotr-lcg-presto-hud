@@ -17,6 +17,7 @@ import { DataClient } from "../../js/db.js";
 import { CATALOG_UNAVAILABLE } from "../../js/viewcopy.js";
 import { layout } from "./layout.js";
 import { perform, newUi, afterTap } from "./actions.js";
+import { logText } from "./logfilter.js";
 
 // A finished game is appended to history once. Reset wherever `game` is
 // rebound (new game / a fresh scenario pick) - mirrors main.js's own
@@ -39,6 +40,18 @@ const ui = newUi();
 
 function render() {
   root.innerHTML = layout(game, ui);
+  // The Game Log's row list is the one scrolling region whose position is not
+  // implied by the markup, and innerHTML rebuilds it from scratch on every
+  // render, so it comes back at scrollTop 0 every time. Opening the log
+  // should land on the NEWEST lines (the bottom); once a row is selected,
+  // that row is what the player is working with, so it is what stays in
+  // view - it may be hundreds of rows up.
+  if (ui.screen !== "log") return;
+  const rows = root.querySelector(".log-rows");
+  if (!rows) return;
+  const sel = rows.querySelector(".is-sel");
+  if (sel) sel.scrollIntoView({ block: "center" });
+  else rows.scrollTop = rows.scrollHeight;
 }
 
 // db.index() PROPAGATES on failure (a docs/data/ build that was never run) -
@@ -153,6 +166,16 @@ async function handleAct(act, arg) {
     ui.screen = "play";
     db.session.saveState(game);
     render();
+    return;
+  }
+  if (act === "copy_log") {
+    // The clipboard is the only browser API this client asks the platform
+    // for, so it is handled here rather than as an act: acts_*.js are pure.
+    // A refusal (no permission, an insecure origin, a browser with no
+    // navigator.clipboard at all) is swallowed and nothing re-renders - the
+    // readonly textarea right beside the button still holds the text to
+    // select by hand, which is the fallback the sheet was built around.
+    navigator.clipboard?.writeText(logText(game)).catch(() => {});
     return;
   }
   if (act === "open_sqpick") {

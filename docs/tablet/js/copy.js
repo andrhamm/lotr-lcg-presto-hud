@@ -191,4 +191,26 @@ export const CHROME = {
   rwRoundBack: "Back one round",
   rwRoundFwd: "Forward one round",
   stepOf: "Step %s/%s",
+  // The Game Log screen (Task 3, milestone 4). Everything here is about the
+  // TRACKER, not the game: rewinding is an app feature, so the three
+  // explainer sentences describe what this client does with its own delta
+  // journal and make no rules claim at all (iron rule 4). The screen's title
+  // is `log` above - the rail block's header and this screen name the same
+  // thing, so they share the one string.
+  open: "Open",
+  close: "Close",
+  // The filter row. `all` above is the players sheet's "All -1/+1" (every
+  // PLAYER); this one is "every line". Two strings that happen to be spelled
+  // the same, kept apart so either can be reworded without touching the
+  // other.
+  filters: { all: "All", threat: "Threat", quest: "Quest", phases: "Phases", skips: "Skips" },
+  rewindTo: "Rewind to selected line",
+  exportLog: "Export",
+  copyLog: "Copy",
+  rewinding: "Rewinding",
+  rounds: "Rounds",
+  rewindExplain1: "Rewinding puts the tracker back to the moment after an earlier tap. Nothing is deleted yet.",
+  rewindExplain2: "Lines after that moment stay in the log, greyed, and Forward brings them back.",
+  rewindExplain3: "The next edit you make from a rewound position drops the greyed lines for good.",
+  roundLine: "Round %s · %s lines",
 };

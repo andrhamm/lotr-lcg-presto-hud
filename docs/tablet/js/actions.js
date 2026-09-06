@@ -18,9 +18,10 @@ import { handle as sqpickActs } from "./acts_sqpick.js";
 import { handle as resolveActs } from "./acts_resolve.js";
 import { handle as sailingActs } from "./acts_sailing.js";
 import { handle as transportActs } from "./acts_transport.js";
+import { handle as logActs } from "./acts_log.js";
 
 const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs,
-                  sqpickActs, resolveActs, sailingActs, transportActs];
+                  sqpickActs, resolveActs, sailingActs, transportActs, logActs];
 
 export const newUi = () => ({
   screen: "play", alloc: null, placed: false, picker: null,
@@ -28,6 +29,11 @@ export const newUi = () => ({
   // catalog lists two sheets need lazily (locations for the location picker,
   // side quests for its picker) - loaded by app.js, read here only.
   sheet: null, locations: [], sideQuests: [],
+  // Milestone 4: the Game Log screen's own two pieces of state - which filter
+  // is showing, and the `seq` of the selected row (null for none). Seated
+  // here rather than only by open_log so every renderer can read it without
+  // a guard, and re-seated by open_log so a fresh visit starts clean.
+  log: { filter: "all", sel: null },
 });
 
 // Lazily seat ui.alloc the first time an alloc act runs against a resolved

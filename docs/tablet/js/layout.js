@@ -9,6 +9,7 @@ import { renderRail } from "./rail.js";
 import { renderPane } from "./pane.js";
 import { renderNewGame } from "./newgame.js";
 import { renderSheet } from "./sheets.js";
+import { renderLogScreen } from "./screen_log.js";
 
 function renderGameOver(game) {
   const over = game.game_over ?? {};
@@ -30,5 +31,10 @@ function renderGameOver(game) {
 export function layout(game, ui) {
   if (ui.screen === "gameover") return renderGameOver(game);
   if (ui.screen === "newgame") return h`<div class="app">${raw(renderNewGame(ui))}</div>`;
+  // The Game Log is a whole screen, not an overlay: it replaces the strip,
+  // the rail and the pane (it has its own transport and its own log block).
+  // The sheet layer still rides on top of it - that is where its export
+  // overlay lands.
+  if (ui.screen === "log") return h`<div class="app">${raw(renderLogScreen(game, ui))}${raw(renderSheet(game, ui))}</div>`;
   return h`<div class="app">${raw(renderStrip(game, ui))}<div class="body-row">${raw(renderRail(game, ui))}${raw(renderPane(game, ui))}</div>${raw(renderSheet(game, ui))}</div>`;
 }

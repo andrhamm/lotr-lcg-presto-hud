@@ -64,7 +64,12 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .counter { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; flex: 1 1 0; min-width: 0 }
 .counter-row { display: flex; align-items: center; justify-content: space-between; gap: 12px }
 .counter-value { display: flex; align-items: center; gap: 14px }
-.zone { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 10px; border: 1px solid var(--border); border-top: 3px solid; border-radius: 8px; min-width: 0 }
+/* gap/padding trimmed by 2px each when the log block's header row grew to
+   44px (milestone 4's "Open ›"): the rail is a fixed-height column that
+   CLIPS (overflow: hidden), and the thing at the bottom edge to lose is the
+   view prompt. 12px back across the three zones, 20px more out of the log
+   block's own spacing below - the block keeps all four rows. */
+.zone { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 8px; border: 1px solid var(--border); border-top: 3px solid; border-radius: 8px; min-width: 0 }
 /* min-height: the spec allows a 30-36px header chip (the "Edit ->" chip
    below) only inside a row that is itself >=44px tall - the row carries the
    tap-target floor, not the chip (review finding I4). */
@@ -143,7 +148,7 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .tick-btn:active .tick { outline: 2px solid var(--gold); }
 
 /* The rail (Task 4): three read-only zones + the log block, pinned bottom. */
-.column { width: 324px; display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--well); border-right: 1px solid var(--border); overflow: hidden; }
+.column { width: 324px; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--well); border-right: 1px solid var(--border); overflow: hidden; }
 .player-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .player-cell { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--card-hi); border-radius: 6px; min-width: 0; }
 .player-cell.is-eliminated { opacity: .6; }
@@ -170,11 +175,77 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
    icon at the rail's 324px width. */
 .staging-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 
-.log-block { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border); }
+/* gap/padding are tight on purpose: the header row went from a bare 13px
+   LABEL to a 44px row when "Open ›" landed in it (milestone 4), and the rail
+   is a fixed 1024px column with three sized zones above. The block keeps its
+   four rows and its view prompt - the 31px the header cost is paid back out
+   of this block's own spacing and .column's gap, not out of a row. */
+.log-block { margin-top: auto; display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
+/* The block's name plus its one tap target, "Open ›" (milestone 4). Same
+   shape and same reason as .zone-head above: a 30px header-nav chip is
+   allowed only inside a row that itself clears the 44px floor. */
+.log-head-row { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.log-head-row .chip { margin-left: auto; }
 .log-row { display: flex; gap: 8px; align-items: baseline; }
 .log-time { flex: 0 0 auto; width: 44px; font: 600 13px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--dim); }
 .log-text { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; color: var(--muted); }
 .log-prompt { font: 600 18px/1.2 var(--serif); color: var(--gold); }
+/* A line the replay cursor has stepped back past - the same greying the log
+   screen's own rows use, so the two surfaces agree at a glance. */
+.log-row.is-undone { opacity: .45; }
+
+/* The Game Log screen (milestone 4, Task 3). Two columns: the rows and their
+   transport on the left, the explainer plus the per-round index on the right.
+   The right column is reference text read WHILE choosing a line, which is
+   exactly what a modal could not be. 360px because the explainer's three
+   sentences want ~45 characters a line at BODY. */
+.logscreen { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: auto 1fr;
+  height: 100%; min-height: 0; overflow: hidden; }
+.log-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; min-height: 44px; padding: 12px 20px; background: var(--well); border-bottom: 1px solid var(--border); }
+.log-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 20px 16px; }
+.filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* The one scrolling region on the screen; app.js scrolls it to the selected
+   row (or the bottom) after every render. */
+.log-rows { flex: 1 1 0; min-height: 0; overflow-y: auto; margin: 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 4px; }
+.log-rows > li { list-style: none; }
+/* stamp | time | message. The two fixed columns are the widest each can be
+   ("R12.6.1" at LABEL, "12:04" tabular) so the message column's left edge
+   never moves as the round rolls over. */
+.log-line { display: grid; grid-template-columns: 72px 56px 1fr; gap: 10px; align-items: center;
+  width: 100%; min-height: 44px; padding: 0 12px; text-align: left; border-radius: 6px; }
+/* Bevelled = tappable, the same rule .scenario-row follows: only a row that
+   is a rewind target is a button, and only a button is bevelled. */
+button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
+  border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d); }
+.log-line .log-stamp { color: var(--dim); }
+/* .log-time is the rail block's 44px-wide flex cell; inside the grid the
+   track sets the width. */
+.log-line .log-time { width: auto; }
+.log-line .log-msg { min-width: 0; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-line.is-undone { opacity: .45; }
+.log-line.is-sel { box-shadow: inset 0 0 0 2px var(--gold); }
+.log-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-top: 12px; border-top: 1px solid var(--border); }
+/* .transport/.transport-readout are the strip's own (they carry grid-column/
+   grid-row for .round's 2x2 grid, inert in this flex row). The readout is
+   pushed away from the six controls, and the two footer actions to the far
+   right. */
+.log-foot .transport-readout { margin-right: auto; }
+.log-side { grid-column: 2; min-height: 0; overflow-y: auto; padding: 16px;
+  border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.log-side .label { color: var(--gold); }
+.round-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+/* The gold CTA (the log screen's "Rewind to selected line"): gold ink on the
+   button ground, the same pair .chip-gold already ships. Its off state is a
+   <span> with no data-act at all - see screen_log.js. */
+.cta-gold { background: var(--btn); color: var(--gold); border-color: var(--border-gold); }
+.cta.is-off { opacity: .4; }
+/* The export sheet's text box: readonly, selectable, and scrollable on its
+   own so a 200-line log never stretches the sheet past its max-height. */
+.export-text { width: 100%; font: 18px/1.35 var(--sans); color: var(--tan); background: var(--well);
+  border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; resize: none; }
 
 /* The phase panes (Task 5): one view per <main class="pane">, a common
    title row, and a bottom-pinned cta-row shared by every view. */

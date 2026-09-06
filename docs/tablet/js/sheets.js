@@ -15,6 +15,7 @@ import { renderLocPickSheet } from "./sheet_locpick.js";
 import { renderSqPickSheet } from "./sheet_sqpick.js";
 import { renderResolveSheet } from "./sheet_resolve.js";
 import { renderSailingSheet } from "./sheet_sailing.js";
+import { renderExportSheet } from "./sheet_export.js";
 
 // Unknown kinds render nothing (not an error): a sheet kind not wired up
 // here is a no-op overlay, never a crash.
@@ -28,6 +29,7 @@ const RENDERERS = {
   sqpick: renderSqPickSheet,
   resolve: renderResolveSheet,
   sailing: renderSailingSheet,
+  export: renderExportSheet,
 };
 
 export function renderSheet(game, ui) {

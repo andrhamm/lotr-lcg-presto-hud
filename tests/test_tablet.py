@@ -359,6 +359,7 @@ const html = renderRail(g, newUi());
 console.log(JSON.stringify({ zones: (html.match(/class="zone /g) || []).length,
   cells: (html.match(/player-cell/g) || []).length, danger: html.includes("bar-danger"),
   buttons: (html.match(/<button/g) || []).length, log: html.includes("P1 threat 25 -&gt; 26"),
+  openLog: html.slice(html.indexOf("log-head-row")),
   prompt: html.includes("Resource"), staging: />5</.test(html) && />2</.test(html),
   captions: html.includes("Enemies") && html.includes("Locations"),
   grid: html.includes("staging-grid") }));
@@ -366,8 +367,10 @@ console.log(JSON.stringify({ zones: (html.match(/class="zone /g) || []).length,
     assert js["zones"] == 3 and js["cells"] == 3
     assert js["danger"]                # P3 at 41 is within 10 of elimination
     # The rail's only controls are the three zones' own "Edit ›" chips
-    # (milestone 3) - the player cells/pills underneath stay pure status.
-    assert js["buttons"] == 3
+    # (milestone 3) plus the log block's "Open ›" (milestone 4, Task 3) - the
+    # player cells/pills underneath stay pure status.
+    assert js["buttons"] == 4
+    assert 'data-act="open_log"' in js["openLog"]
     assert js["log"] and js["prompt"] and js["staging"]
     assert js["captions"]
     assert js["grid"]                  # the three staging pills are a grid, not a row
@@ -2206,3 +2209,134 @@ console.log(JSON.stringify({ atEnd, back, afterBack, fwd, afterFwd, noMore,
     assert js["afterBack"]["step"] < js["afterFwd"]["step"] <= js["atEnd"]["step"]
     assert js["noMore"] is False, "at the last delta - nowhere forward to go"
     assert js["step"] == js["atEnd"]["step"] and js["staging"] == 2
+
+
+# --- The Game Log screen (milestone 4, Task 3) -------------------------------
+# Every one of these drives the MODEL and reads its real log strings back,
+# rather than asserting against a fixture: the filters are text predicates
+# (logfilter.js's own comment), so a reworded log line has to fail here.
+#
+# WINDOW_POLICY_BANDS is this client's own policy (app.js sets it at boot) and
+# these three need it for the same reason the sibling transport tests do: the
+# default policy walks the aw_ window views, and a window is deliberately not
+# logged as a phase - "advance" out of `resource` would land on aw_resource
+# and write no "Phase:" line at all.
+def test_log_filters_sort_real_log_lines():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+import { matches } from "./logfilter.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "advance", "");                    // Phase: Planning? (phase change logs)
+perform(g, ui, "stg+", "");                       // Staging area threat 1
+perform(g, ui, "all_thr", "1");                   // All players threat +1
+g.setWillpower(4); g.setStaging(0);
+const byFilter = {};
+for (const f of ["all","threat","quest","phases","skips"]) byFilter[f] = g.log.filter(e => matches(f, e)).map(e => e.text);
+console.log(JSON.stringify(byFilter));
+""")
+    assert any(t.startswith("All players threat") for t in js["threat"])
+    assert any(t.startswith("Staging area threat") for t in js["threat"])
+    assert all(t.startswith("Phase:") for t in js["phases"]) and js["phases"]
+    assert js["skips"] == []
+    assert len(js["all"]) >= len(js["threat"])
+
+
+def test_log_screen_greys_undone_rows_selects_and_rewinds():
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { newUi, perform, afterTap } from "./actions.js";
+import { layout } from "./layout.js";
+import { renderRail } from "./rail.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "stg+", ""); perform(g, ui, "stg+", ""); perform(g, ui, "advance", "");
+const rail = renderRail(g, ui);
+perform(g, ui, "open_log", "");
+const opened = layout(g, ui);
+perform(g, ui, "rw_undo", "");
+const afterUndo = layout(g, ui);
+const target = g.log.find(e => e.delta_i === 0);
+perform(g, ui, "log_sel", String(target.seq));
+const selected = layout(g, ui);
+const rewound = perform(g, ui, "log_rewind", "");
+perform(g, ui, "log_close", "");
+console.log(JSON.stringify({
+  openChip: /data-act="open_log"/.test(rail),
+  isLogScreen: /class="logscreen"/.test(opened) && !/class="strip"/.test(opened),
+  filters: ["all","threat","quest","phases","skips"].every(f => opened.includes(`data-arg="${f}"`)),
+  transport6: ["rw_first","rw_round_back","rw_undo","rw_redo","rw_round_fwd","rw_last"].every(a => opened.includes(`data-act="${a}"`)),
+  undoneCount: (afterUndo.match(/is-undone/g) || []).length,
+  rewindOff: /class="cta[^"]*is-off[^"]*"[^>]*data-act="log_rewind"/.test(afterUndo) || !/data-act="log_rewind"/.test(afterUndo),
+  rewindOn: /data-act="log_rewind"/.test(selected) && /is-sel/.test(selected),
+  rewound, step: g.replay_step, staging: g.staging, screen: ui.screen,
+  sidePanel: /class="log-side"/.test(opened), export: /data-act="export_log"/.test(opened),
+}));
+""")
+    assert js["openChip"] and js["isLogScreen"] and js["filters"] and js["transport6"]
+    assert js["undoneCount"] >= 1                     # the advance's row(s) greyed after one undo
+    assert js["rewindOff"] and js["rewindOn"]
+    assert js["rewound"] is True and js["step"] == 0 and js["staging"] == 1
+    assert js["screen"] == "play" and js["sidePanel"] and js["export"]
+
+
+def test_export_sheet_carries_the_log_as_plain_text():
+    js = node("""
+import { GameState } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+import { layout } from "./layout.js";
+import { logText } from "./logfilter.js";
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "stg+", ""); perform(g, ui, "open_log", ""); perform(g, ui, "export_log", "");
+const html = layout(g, ui);
+console.log(JSON.stringify({ text: logText(g), hasTextarea: /<textarea[^>]*readonly/.test(html),
+  hasCopy: /data-act="copy_log"/.test(html), inHtml: html.includes("Staging area threat 1") }));
+""")
+    assert "Staging area threat 1" in js["text"] and js["text"].startswith("R1.")
+    assert js["hasTextarea"] and js["hasCopy"] and js["inHtml"]
+
+
+def test_log_rewind_with_no_selection_does_nothing():
+    """The CTA is only live while a rewindable row is selected, so this is the
+    act's own guard rather than a reachable tap - but "returns false" is what
+    keeps app.js from re-rendering and Session.record()ing a no-op, and what
+    keeps a stale ui.log.sel (a row a truncation dropped) from moving the
+    cursor somewhere arbitrary."""
+    js = node("""
+import { GameState } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "stg+", ""); perform(g, ui, "open_log", "");
+const noSel = perform(g, ui, "log_rewind", "");
+ui.log.sel = 9999;                                   // a row that is not in the log
+const staleSel = perform(g, ui, "log_rewind", "");
+console.log(JSON.stringify({ noSel, staleSel, step: g.replay_step, staging: g.staging }));
+""")
+    assert js["noSel"] is False and js["staleSel"] is False
+    assert js["step"] == 0 and js["staging"] == 1     # the cursor never moved
+
+
+def test_log_rewind_goes_through_the_one_cursor_path():
+    """rewindToIndex() (acts_transport.js) is the single code path for a
+    cursor move to a known index, so log_rewind inherits the ui reset every
+    other transport act does: a rewind past the point where progress was
+    allocated must not leave ui.alloc describing a state that no longer
+    exists. The export sheet is the deliberate exception - the cursor moving
+    under it is what its transport is for."""
+    js = node("""
+import { GameState } from "../../js/gamestate.js";
+import { newUi, perform } from "./actions.js";
+const g = new GameState(2); g.view = "resource"; const ui = newUi();
+perform(g, ui, "stg+", ""); perform(g, ui, "stg+", "");
+perform(g, ui, "open_log", "");
+perform(g, ui, "export_log", "");
+ui.alloc = { quest: 3, side: {} }; ui.placed = true;
+const target = g.log.find(e => e.delta_i === 0);
+const moved = perform(g, ui, "log_sel", String(target.seq)) && perform(g, ui, "log_rewind", "");
+console.log(JSON.stringify({ moved, alloc: ui.alloc, placed: ui.placed,
+  sheet: ui.sheet && ui.sheet.kind, step: g.replay_step, staging: g.staging }));
+""")
+    assert js["moved"] is True and js["step"] == 0 and js["staging"] == 1
+    assert js["alloc"] is None and js["placed"] is False
+    assert js["sheet"] == "export", "a cursor move on the log screen leaves its own sheet up"

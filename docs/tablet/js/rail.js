@@ -139,15 +139,25 @@ function renderStagingZone(game) {
 // null in tests (no clock wired up) - render an empty time cell then rather
 // than fmtMs(null). Four, not five: bumping .log-text/.log-time off the
 // 13px floor (finding 5) grew each row, and the rail's fixed-height zones
-// above leave no room in the 1024px-tall viewport for a fifth.
+// above leave no room in the 1024px-tall viewport for a fifth. The header is
+// a row now (milestone 4): the block's name plus "Open ›", the one way into
+// the Game Log screen - same 30px header-nav chip as every zone's "Edit ›",
+// in a 44px row that carries the tap-target floor for it.
+//
+// A row whose delta the cursor has stepped back past is greyed here exactly
+// as it is on the log screen (.is-undone): the rail shows the last four
+// lines, and after an undo some of them describe a state the game is no
+// longer in.
 function renderLogBlock(game) {
   const rows = game.log.slice(-4).map(e => {
     const time = typeof e.t === "number" ? fmtMs(e.t) : "";
-    return h`<div class="log-row"><span class="log-time">${time}</span><span class="log-text">${e.text}</span></div>`;
+    const undone = typeof e.delta_i === "number" && e.delta_i > game.replay_step;
+    return h`<div class="${cx("log-row", undone && "is-undone")}"><span class="log-time">${time}</span><span class="log-text">${e.text}</span></div>`;
   }).join("");
   const prompt = VIEW_LABELS[game.view] ?? game.view;
+  const openChip = chip({ act: "open_log", label: h`${CHROME.open} ›`, tone: "tan", height: 30 });
   return h`<div class="log-block">
-<div class="label">${CHROME.log}</div>
+<div class="log-head-row"><span class="label">${CHROME.log}</span>${raw(openChip)}</div>
 ${raw(rows)}
 <div class="log-prompt">&#9654; ${prompt}</div>
 </div>`;

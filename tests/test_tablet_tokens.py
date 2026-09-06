@@ -55,8 +55,10 @@ def _button_heights_of(css):
     # locpick-row/sqpick-row/rsheet-row (review finding I4) join the same
     # gate as chip/cta/step: they are min-height:56px today, and this is
     # regression cover so a future rewrite can't quietly drop below 44.
+    # log-line is the Game Log's row (milestone 4): a rewindable row is a
+    # <button>, so it carries the same floor.
     for m in re.finditer(
-        r"\.(chip|cta|step|scenario-row|step-sm|locpick-row|sqpick-row|rsheet-row|tbtn|tick-btn)(?![\w-])[^{]*\{([^}]*)\}",
+        r"\.(chip|cta|step|scenario-row|step-sm|locpick-row|sqpick-row|rsheet-row|tbtn|tick-btn|log-line)(?![\w-])[^{]*\{([^}]*)\}",
         css,
     ):
         hm = re.search(r"(?:min-)?height\s*:\s*(\d+)px", m.group(2))
