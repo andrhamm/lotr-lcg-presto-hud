@@ -59,18 +59,25 @@ export function xShape(loc) {
 }
 
 // A stage card's own printed-points predicate, for the resolution sheet
-// (sheet_resolve.js/resolve_step.js) - mirrors flipToB's own three-way read
-// of questPointsKind/questPointsX verbatim (docs/js/gamestate.js
-// ~1303-1313), so a branch row or a flip CTA never draws a number the card
-// does not carry (review finding 1: 33 of 116 branch alternatives in the
-// catalog have falsy questPoints - 32 print no target at all, one prints a
-// coded X - and "0 quest points" is a lie for either).
-//   "number" a real printed target - draw it
+// (sheet_resolve.js/resolve_step.js). DELIBERATELY WIDER than flipToB's own
+// three-way read of questPointsKind/questPointsX (docs/js/gamestate.js
+// ~1303-1313): flipToB only treats questPointsKind "na" as "no target", but
+// 48 stage faces catalog-wide have questPoints: 0 with NO questPointsKind at
+// all - the upstream TSV field was simply blank (tools/build_card_data.py's
+// parse_marker("") returns None) - and no LOTR stage card ever prints "0"
+// (CLAUDE.md: a 0-point stage advances by a condition, not by placing
+// progress). Of the 116 branch alternatives in the catalog, 26 print "na",
+// 1 prints a coded X, and 6 are this same blank shape; all 33 must draw
+// nothing, not "0 quest points" (review finding 1, fix round 1) or a lie for
+// the 6 blank ones (re-review, fix round 2). This predicate stays wider than
+// flipToB on purpose - do not narrow it back to match; the model's own
+// blank-kind handling (gamestate.js/parse_marker) is a separate, tracked
+// fix, not this render predicate.
+//   "number" a real, positive printed target - draw it
 //   "x"      the card's own text carries the formula (questPointsX.text)
-//   "none"   no target exists - draw nothing
+//   "none"   no target exists - na, blank, or a literal 0 - draw nothing
 export function stagePointsShape(card) {
   if (card?.questPointsX) return "x";
-  const kind = card?.questPointsKind;
-  if (kind === "na" || (!card?.questPoints && kind)) return "none";
+  if (!card?.questPoints) return "none";
   return "number";
 }

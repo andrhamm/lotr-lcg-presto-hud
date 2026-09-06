@@ -148,19 +148,22 @@ tap("advance");                        // -> combat_player
 tap("advance");                        // -> refresh
 tap("advance");                        // -> round_end
 const threatsAfter = g.players.map(p => p.threat);
-const threatRoseByAtLeastOne = threatsAfter.every((t, i) => t >= threatsBefore[i] + 1);
 """
 # _WALK prints nothing; each test appends the one console.log it wants.
 
 
 def test_the_common_round_costs_at_most_20_taps():
     """The spec's full common round walk: includes the players sheet threat
-    edits after combat_shadow. 20 taps total."""
+    edits after combat_shadow. 20 taps total. Threat must rise by EXACTLY 2
+    per player over the walk: the walk's own "all_thr 1" tap (players sheet)
+    plus applyRefresh()'s own +1 (7.3, threat_per_round defaults to 1) - not
+    merely "at least one", which would still pass if either bump silently
+    dropped or one ran twice."""
     js = node(_WALK + """
 const unknown = dispatch(g, ui, "nope", "");
 console.log(JSON.stringify({ taps: taps.length, view: g.view, round: g.round,
   willpower: g.willpower, staging: g.staging, budget, placed,
-  unknown, first: g.first_player, threatRoseByAtLeastOne }));
+  unknown, first: g.first_player, threatsBefore, threatsAfter }));
 """)
     assert js["view"] == "round_end"
     assert js["round"] == 1
@@ -169,7 +172,10 @@ console.log(JSON.stringify({ taps: taps.length, view: g.view, round: g.round,
     assert js["budget"] == 7 and js["placed"] == 7
     assert js["first"] == 1              # the token passed on arrival at refresh
     assert js["unknown"] is False
-    assert js["threatRoseByAtLeastOne"]  # every player's threat rose by at least 1
+    before, after = js["threatsBefore"], js["threatsAfter"]
+    assert len(before) == len(after) == 4
+    # all_thr 1 + the refresh phase's own +1, exactly, for every player.
+    assert all(after[i] - before[i] == 2 for i in range(len(before))), (before, after)
 
 
 def test_endround_starts_the_next_round():
@@ -1567,6 +1573,84 @@ console.log(JSON.stringify({
     assert js["xFlip"], "an X stage's flip CTA names the shape, not a number"
     assert js["xNoZero"]
     assert js["numFlip"], "a real numeric stage keeps its own qp suffix"
+
+
+def test_resolution_sheet_branch_row_omits_points_for_a_blank_zero_alternative():
+    """Fix round 2 (re-review of round 1's finding 1): stagePointsShape only
+    special-cased questPointsKind "na" and "x", but 48 stage faces
+    catalog-wide - and 6 of the 116 branch alternatives, e.g. Passage Through
+    Mirkwood's stage 3 "Don't Leave the Path!" - have questPoints: 0 with NO
+    questPointsKind at all (the upstream TSV field was simply blank). Those
+    six fell through to "number" and printed "0 quest points", a target the
+    card never carries. Shaped exactly like the real catalog entry: one
+    branch alternative with `questPoints: 0` and neither questPointsKind nor
+    questPointsX, alongside a numeric sibling that must keep rendering its
+    own real points."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { deriveResolveStep } from "./resolve_step.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const STAGES = [
+  { stage: 1, cards: [{ questPoints: 1, faces: [
+      { side: "A", name: "Setting Out", text: "Setup: shuffle the encounter deck." },
+      { side: "B", name: "Setting Out", text: null }] }] },
+  { stage: 2, branch: "choice", cards: [
+      { questPoints: 0, faces: [
+          { side: "A", name: "Don't Leave the Path!", text: null },
+          { side: "B", name: "Off the Path", text: "This stage advances when the last enemy is defeated." }] },
+      { questPoints: 6, faces: [
+          { side: "A", name: "Don't Leave the Path!", text: "When Revealed: add 1 enemy to staging." },
+          { side: "B", name: "On the Path", text: "Progress may be placed here." }] }] },
+];
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, STAGES);
+g.view = "quest_setup";
+const ui = newUi();
+perform(g, ui, "flip_to_b", "");
+g.quest.progress = g.quest.points;                // clear stage 1 without the full alloc walk
+ui.sheet = { kind: "resolve", forced: false, branchPick: null, skippedSide: [] };
+const step = deriveResolveStep(g, ui);
+const html = layout(g, ui);
+console.log(JSON.stringify({ kind: step.kind, html }));
+""")
+    assert js["kind"] == "branch"
+    html = js["html"]
+    assert "This stage advances when the last enemy is defeated." in html, (
+        "the blank alternative's own card text still prints")
+    assert "Progress may be placed here." in html
+    assert "6 quest points" in html, "the numeric sibling still renders its real points"
+    assert "0 quest points" not in html, (
+        "a blank questPointsKind with questPoints: 0 must draw no number, like a printed dash")
+
+
+def test_resolution_sheet_reveal_flip_cta_omits_qp_for_a_blank_zero_stage():
+    """The reveal-step half of the same fix: a single-card stage (the far
+    more common shape - 42 of the 48 blank-0 faces are single-card reveals,
+    e.g. The Nin-in-Eilph's "Fleeing from Tharbad") with `questPoints: 0` and
+    no questPointsKind must flip with a bare "Flip to Side B", never
+    "-> 0 qp" - same predicate, same CTA gating as the na/x cases already
+    covered above."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, [{ stage: 1, cards: [{ questPoints: 0, faces: [
+  { side: "A", name: "Fleeing from Tharbad", text: "Setup: search the encounter deck." },
+  { side: "B", name: "Fleeing from Tharbad", text: "This stage advances when the party disengages." }] }] }]);
+g.view = "quest_setup";
+const ui = newUi();
+ui.sheet = { kind: "resolve", forced: false, branchPick: null, skippedSide: [] };
+const html = layout(g, ui);
+console.log(JSON.stringify({ html }));
+""")
+    html = js["html"]
+    assert ">Flip to Side B<" in html, "no printed target - a bare flip CTA, no arrow, no qp suffix"
+    assert "→ 0 qp" not in html
+    assert "0 quest points" not in html
 
 
 def test_resolution_sheet_reveal_prints_one_line_for_a_card_blank_on_both_faces():
