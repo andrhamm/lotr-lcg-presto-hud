@@ -120,7 +120,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy docs --project-name=lotrlcg --branch=main --commit-dirty=true
   deploy:
