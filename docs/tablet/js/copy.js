@@ -9,7 +9,6 @@ export const CHROME = {
   log: "Game log",
   round: "Round",
   newGame: "New game",
-  resume: "Resume",
   scenario: "Scenario",
   begin: "Begin",
   eliminated: "Eliminated",
@@ -38,16 +37,23 @@ export const CHROME = {
   edit: "Edit",
   menu: "Menu",
   all: "All",
-  elimAt: "elimination at",
   done: "Done",
   cancel: "Cancel",
+  // elimAt ("· elimination at N", a game-wide header figure) was deleted
+  // with the sheet_players.js title fix, review finding M9 - each row
+  // already prints its OWN distance to elimination, and a single game-wide
+  // number was wrong the instant any one row's level was recalibrated.
   playersSheetFooter: "Every change is logged as it happens. Done just closes the sheet.",
   newGameWarning: "The current game is saved until you start a new one.",
   // The elimination sheet (Task 3). "%d" is the fmt() placeholder used the
   // same way OUTCOME's templates are (docs/js/viewcopy.js) - see
   // sheet_elim.js. The only rules claim in elimEliminateBody is "threat at
   // or above the elimination level eliminates the player" - Rules Reference,
-  // "Elimination" (7.4); nothing here invents a card example beyond that.
+  // "Player Elimination" (review finding M7: an alphabetized glossary entry
+  // with no section number of its own - "(7.4)" here used to cite this
+  // repo's OWN phases.py step LABEL ("7.2-7.4 Ready cards, raise threat,
+  // pass P1 token", id "7.R") instead, a different rule entirely); nothing
+  // here invents a card example beyond that.
   elimTitle: "P%d reaches %d",
   elimEliminate: "Eliminated",
   elimEliminateBody: "Threat at or above the elimination level eliminates the player.",

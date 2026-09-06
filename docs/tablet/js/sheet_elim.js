@@ -7,8 +7,12 @@
 // {level}", not "eliminated?"), but the rule underneath is the same one the
 // twin encodes and the only rules claim either UI makes: a player whose
 // threat is at or above their elimination level is eliminated (Rules
-// Reference, "Elimination", 7.4). That citation lives here, in the source,
-// not on screen - see CLAUDE.md's iron rule 4.
+// Reference, "Player Elimination" - review finding M7: that glossary entry
+// carries no section number; "7.4" formerly cited here is this repo's own
+// phases.py step LABEL ("7.2-7.4 Ready cards, raise threat, pass P1 token",
+// id "7.R") for the unrelated Refresh-phase "pass P1 token" step). That
+// citation lives here, in the source, not on screen - see CLAUDE.md's iron
+// rule 4.
 import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { cta } from "./primitives.js";

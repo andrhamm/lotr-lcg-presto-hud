@@ -16,7 +16,7 @@
 // precedence and its wording, log lines included.
 import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { chip, cta } from "./primitives.js";
+import { cta } from "./primitives.js";
 import { deriveResolveStep, backOf, branchName } from "./resolve_step.js";
 import { stagePointsShape } from "./xshape.js";
 import { NO_CARD_TEXT, QUEST_SETUP } from "../../js/viewcopy.js";
@@ -120,8 +120,13 @@ function renderBranch(st) {
   // .rsheet-dice, not .qsheet-add (review finding 5) - this file is
   // .rsheet-* throughout; the quest sheet's namespace just happened to have
   // the right flex-wrap values, so the rule moved rather than being copied.
+  //
+  // A cta, not a chip (design system rule 3b, review finding "Rule 3b"): a
+  // 13px ALL-CAPS chip is chrome that NAMES a slot, but "Randomize for me" is
+  // a sentence offering an action, the same shape as every branch row above
+  // it - it just was not one when this file first shipped.
   const dice = st.mode === "random"
-    ? h`<div class="rsheet-dice">${raw(chip({ act: "res_random", label: CHROME.randomize, tone: "tan" }))}</div>`
+    ? h`<div class="rsheet-dice">${raw(cta({ act: "res_random", label: CHROME.randomize, tone: "plain", grow: false }))}</div>`
     : "";
   return h`<h1 class="display">${CHROME.choosePath}</h1>
 <div class="label">${mode}</div>

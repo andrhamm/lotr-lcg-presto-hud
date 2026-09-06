@@ -35,5 +35,12 @@ export function renderSheet(game, ui) {
   const render = RENDERERS[ui.sheet.kind];
   if (!render) return "";
   const body = render(game, ui);
-  return h`<div class="scrim" data-act="sheet_close"><section class="${cx("sheet", "sheet-" + ui.sheet.kind)}" data-stop>${raw(body)}</section></div>`;
+  // Elimination is a required one-tap prompt, not an editor (review finding
+  // M5) - its scrim carries no data-act, so a tap outside the sheet does
+  // nothing. With data-act="sheet_close" here, that tap closed the sheet and
+  // afterTap (actions.js) re-seated it from pending_elim in the very same
+  // tap, which looked - and cost as much - as doing nothing, but logged
+  // nothing and gave no feedback either.
+  const scrimAct = ui.sheet.kind === "elim" ? "" : ` data-act="sheet_close"`;
+  return h`<div class="scrim"${raw(scrimAct)}><section class="${cx("sheet", "sheet-" + ui.sheet.kind)}" data-stop>${raw(body)}</section></div>`;
 }

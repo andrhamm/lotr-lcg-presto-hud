@@ -24,6 +24,15 @@ export function handle(game, ui, act, arg) {
     }
     return next !== before;
   }
-  if (act === "all_thr") { game.adjustAllThreat(Number(arg)); return true; }
+  if (act === "all_thr") {
+    // Review finding M8: this always reported a change even when every
+    // living player was already clamped (0 threat, a negative tap) - a
+    // no-op tap that still recorded a delta/re-render. adjustAllThreat()
+    // itself always logs (each press reads as its own event, per the
+    // players-sheet brief), so the actual-change check has to happen here.
+    const before = game.players.map(p => p.threat);
+    game.adjustAllThreat(Number(arg));
+    return game.players.some((p, i) => p.threat !== before[i]);
+  }
   return null;
 }

@@ -1,11 +1,13 @@
 // The new-game / picker screen (Task 6): pick a player count, a starting
-// threat per player, and a scenario from the official quest catalog - or
-// resume a save already on disk. Pure string builder like every other
-// tablet render function - no document/window, so tests/test_tablet.py can
-// drive it under node. app.js owns every catalog fetch and the async
-// new_game/ng_players/ng_threat/pick_scenario acts; this module only reads
-// what it is handed via `ui.picker = { index, players, threats, hasSave,
-// error }` and never touches storage or the network itself.
+// threat per player, and a scenario from the official quest catalog. Pure
+// string builder like every other tablet render function - no
+// document/window, so tests/test_tablet.py can drive it under node. app.js
+// owns every catalog fetch and the async new_game/ng_players/ng_threat/
+// pick_scenario acts; this module only reads what it is handed via
+// `ui.picker = { index, players, threats, error }` and never touches
+// storage or the network itself. (There is no resume path here yet - a
+// resumed save skips this screen entirely, straight to "play"; review
+// finding M11 deleted a resume chip that a save flag never actually set.)
 import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, counter } from "./primitives.js";
@@ -98,14 +100,11 @@ export function renderNewGame(ui) {
   const p = ui.picker ?? {};
   const players = p.players ?? 2;
   const threats = p.threats ?? Array(players).fill(25);
-  const resumeChip = p.hasSave
-    ? raw(chip({ act: "resume", label: CHROME.resume, tone: "gold" }))
-    : "";
   const catalog = p.error
     ? h`<div class="well"><p class="body">${p.error}</p></div>`
     : scenarioGroups(p.index).map(scenarioGroup).join("");
   return h`<main class="pane newgame">
-<div class="newgame-head"><h1 class="display">${CHROME.newGame}</h1>${resumeChip}</div>
+<div class="newgame-head"><h1 class="display">${CHROME.newGame}</h1></div>
 <div class="newgame-section"><div class="label">${CHROME.players}</div>${raw(playerChips(players))}${raw(threatCounters(threats))}</div>
 <div class="newgame-section"><div class="label">${CHROME.scenario}</div>${raw(catalog)}</div>
 </main>`;

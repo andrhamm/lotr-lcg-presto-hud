@@ -65,7 +65,10 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .counter-row { display: flex; align-items: center; justify-content: space-between; gap: 12px }
 .counter-value { display: flex; align-items: center; gap: 14px }
 .zone { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 10px; border: 1px solid var(--border); border-top: 3px solid; border-radius: 8px; min-width: 0 }
-.zone-head { display: flex; align-items: center; gap: 8px } .zone-head .label { color: var(--gold) }
+/* min-height: the spec allows a 30-36px header chip (the "Edit ->" chip
+   below) only inside a row that is itself >=44px tall - the row carries the
+   tap-target floor, not the chip (review finding I4). */
+.zone-head { display: flex; align-items: center; gap: 8px; min-height: 44px } .zone-head .label { color: var(--gold) }
 /* The zone's one tap target (milestone 3): "Edit ›", pushed to the header's
    far right. */
 .zone-head .chip { margin-left: auto }
@@ -76,8 +79,11 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .strip { height: 96px; display: flex; align-items: stretch; gap: 8px; padding: 12px 18px; background: var(--well); border-bottom: 1px solid var(--border); overflow: hidden; }
 .round { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; padding: 0 14px 0 0; }
 /* The round number and the "Menu ›" chip (milestone 3) share one row rather
-   than stacking a third line under ROUND/num - the strip is only 96px tall. */
-.round-row { display: flex; align-items: center; gap: 8px; }
+   than stacking a third line under ROUND/num - the strip is only 96px tall.
+   min-height: same reasoning as .zone-head above (review finding I4) - the
+   "Menu ›" chip is 30px, so the row it sits in is the thing that has to
+   clear the 44px tap-target floor. */
+.round-row { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .seg { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 8px; flex: 1 1 0; min-width: 0; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .seg.is-skippable { background: var(--card-hi); border-color: var(--amber); }
 .phase-name { font: 600 18px/1 var(--serif); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

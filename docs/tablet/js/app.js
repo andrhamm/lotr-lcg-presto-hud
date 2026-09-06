@@ -49,7 +49,7 @@ async function buildPicker() {
   let index = null;
   try { index = await db.index(); }
   catch (e) { console.error("tablet: quest catalog unavailable", e); }
-  return { index, players: 2, threats: [25, 25], hasSave: false,
+  return { index, players: 2, threats: [25, 25],
            error: index ? null : CATALOG_UNAVAILABLE };
 }
 
@@ -76,6 +76,12 @@ async function boot() {
     // resuming into that window would skip straight to the outcome pane and
     // strand the pending progress. Reseed it the same way "resolve" does.
     if (game.pending_budget > 0) ui.alloc = game.autoSplit(game.pending_budget);
+    // pending_elim/pending_resolution are part of the saved state (review
+    // finding M6) - a save that landed with one unanswered showed no prompt
+    // at all on resume, because afterTap only ran after a live tap
+    // (actions.js), never on boot. Seat it before the first render, exactly
+    // like every other tap does.
+    afterTap(game, ui);
     ui.screen = game.game_over ? "gameover" : "play";
     if (game.game_over) recordedGameOver = true;
   } else {

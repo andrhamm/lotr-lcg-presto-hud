@@ -576,27 +576,28 @@ def test_new_game_screen_lists_scenarios_and_players():
     chips, a starting-threat counter per player, and the official quest
     catalog (kind=="quest" only - "n" here is kind "nightmare" and must not
     surface, and a "quest"-kind row named "<Scenario> - Nightmare" - a
-    Nightmare deck's replacement quest card - must not surface either),
-    plus a resume chip whenever the caller says there is a save."""
+    Nightmare deck's replacement quest card - must not surface either).
+    No resume chip: review finding M11 deleted it (no handler ever answered
+    its tap, and app.js never actually set the hasSave flag it read)."""
     js = node("""
 import { renderNewGame } from "./newgame.js";
 const html = renderNewGame({ picker: { index: { scenarios: [
   { slug: "a", name: "A", pack: "P", cycle: "C", kind: "quest", order: 1, source: "official" },
   { slug: "n", name: "N", pack: "P", cycle: "C", kind: "nightmare", order: 2, source: "official" },
   { slug: "a-nm", name: "A - Nightmare", pack: "P", cycle: "C", kind: "quest", order: 3, source: "official" },
-] }, players: 3, threats: [25, 25, 30], hasSave: true } });
+] }, players: 3, threats: [25, 25, 30] } });
 console.log(JSON.stringify({
   counters: (html.match(/class="counter"/g) || []).length,
   hasA: html.includes(">A<"),
   hasN: html.includes(">N<"),
   hasANightmare: html.includes('data-arg="a-nm"'),
-  resume: html.includes('data-act="resume"'),
+  noResume: !html.includes('data-act="resume"'),
 }));
 """)
     assert js["counters"] == 3
     assert js["hasA"] and not js["hasN"]
     assert not js["hasANightmare"]
-    assert js["resume"]
+    assert js["noResume"]
 
 
 def test_catalog_paths_resolve_beside_the_module_not_the_page():
@@ -1999,3 +2000,119 @@ console.log(JSON.stringify({
     assert js["progress"] == 3
     assert js["closed"]
     assert js["pending"] == "auto"
+
+
+def test_elim_sheet_scrim_carries_no_dismiss_act():
+    """M5: elimination is a required one-tap prompt, not an editor - every
+    other sheet's scrim is a plain dismiss (data-act="sheet_close"), but a
+    tap outside the elim sheet used to close it only for afterTap to
+    re-seat pending_elim in the very same tap (actions.js): the scrim now
+    renders with no data-act at all for kind "elim"."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, afterTap, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView(); const ui = newUi();
+perform(g, ui, "thr", "0:25"); afterTap(g, ui);   // 25 -> 50, crosses
+const elimHtml = layout(g, ui);
+perform(g, ui, "elim_confirm", "");
+perform(g, ui, "open_staging", "");
+const stagingHtml = layout(g, ui);
+console.log(JSON.stringify({
+  elimScrimNoAct: elimHtml.includes('<div class="scrim"><section class="sheet sheet-elim"'),
+  stagingScrimHasAct: stagingHtml.includes('<div class="scrim" data-act="sheet_close"><section class="sheet sheet-staging"'),
+}));
+""")
+    assert js["elimScrimNoAct"], "the elim sheet's scrim must carry no data-act"
+    assert js["stagingScrimHasAct"], "every other sheet keeps its dismissible scrim"
+
+
+def test_all_thr_reports_no_change_when_every_living_player_is_clamped():
+    """M8: all_thr always reported a change, even when nudging every living
+    player's threat left every one of them exactly where they started (all
+    already at the threat floor, tapping -1) - a no-op tap that still
+    recorded a delta and forced a re-render."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { dispatch, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 0); g.advanceView();   // both players already at threat 0
+const ui = newUi();
+const noop = dispatch(g, ui, "all_thr", "-1");    // clamped: stays 0 for both
+const real = dispatch(g, ui, "all_thr", "1");     // 0 -> 1 for both: a real change
+console.log(JSON.stringify({ noop, real, threats: g.players.map(p => p.threat) }));
+""")
+    assert js["noop"] is False, "every living player already clamped at 0: all_thr must report no change"
+    assert js["real"] is True
+    assert js["threats"] == [1, 1]
+
+
+def test_players_sheet_title_carries_no_stale_game_wide_elimination_figure():
+    """M9: the title used to print game.elimination_threat - the GAME's
+    default level - while elim_setlvl recalibrates a level PER PLAYER
+    (p.elimination). Recalibrating one player's level away from the default
+    left a header figure that named a level no row on screen still used;
+    each row already prints its own "N to M", so the title carries no
+    number of its own now."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, afterTap, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 45); g.advanceView(); const ui = newUi();
+perform(g, ui, "thr", "0:5"); afterTap(g, ui);                       // P1: 45 -> 50, crosses
+perform(g, ui, "elim_lvl", "10"); perform(g, ui, "elim_setlvl", ""); // P1's own level -> 60
+perform(g, ui, "open_players", "");
+const html = layout(g, ui);
+console.log(JSON.stringify({
+  title: html.includes('<h1 class="display">Players</h1>'),
+  noStaleFigure: !html.includes("elimination at"),
+  p1Row: html.includes("10 to 60"),
+  p2Row: html.includes("5 to 50"),
+}));
+""")
+    assert js["title"]
+    assert js["noStaleFigure"]
+    assert js["p1Row"], "P1's own recalibrated level (60), 10 short of it"
+    assert js["p2Row"], "P2 stays at the untouched default level (50)"
+
+
+def test_randomize_row_is_a_body_cta_not_a_label_chip():
+    """Rule 3b review finding: "Randomize for me" is a sentence offering an
+    action, the same shape as the branch rows above it in the same step -
+    not a 13px ALL-CAPS chip naming a slot (design system rule 3b)."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const STAGES = [
+  { stage: 1, cards: [{ questPoints: 1, faces: [
+      { side: "A", name: "On the Trail", text: null },
+      { side: "B", name: "On the Trail", text: null }] }] },
+  { stage: 2, branch: "random", cards: [
+      { questPoints: 2, faces: [
+          { side: "A", name: "On the Trail", text: null },
+          { side: "B", name: "Path One", text: "Path one text." }] },
+      { questPoints: 3, faces: [
+          { side: "A", name: "On the Trail", text: null },
+          { side: "B", name: "Path Two", text: "Path two text." }] }] },
+];
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, STAGES);
+g.view = "quest_setup";
+const ui = newUi();
+perform(g, ui, "flip_to_b", "");
+g.quest.progress = g.quest.points;
+ui.sheet = { kind: "resolve", forced: false, branchPick: null, skippedSide: [] };
+const html = layout(g, ui);
+console.log(JSON.stringify({
+  isCta: /<button type="button" class="cta cta-plain"[^>]*data-act="res_random"/.test(html),
+  isChip: /class="chip[^"]*"[^>]*data-act="res_random"/.test(html),
+  label: html.includes("Randomize for me"),
+}));
+""")
+    assert js["isCta"], "the randomize action must render as a cta"
+    assert not js["isChip"]
+    assert js["label"]

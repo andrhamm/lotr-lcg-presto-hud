@@ -80,7 +80,12 @@ ${raw(renderEngBlock(i, p.engaged))}
 
 export function renderPlayersSheet(game, ui) {
   const rows = game.players.map((p, i) => renderPlayerRow(p, i)).join("");
-  return h`<h1 class="display">${CHROME.players} · ${CHROME.elimAt} ${game.elimination_threat}</h1>
+  // No game-wide elimination figure in the title (review finding M9): each
+  // row already prints its OWN player's distance to elimination
+  // ("N to M", above), and elim_setlvl edits that level per player - a
+  // single game.elimination_threat here was the wrong number the instant
+  // any one row's level was recalibrated away from the default.
+  return h`<h1 class="display">${CHROME.players}</h1>
 ${raw(renderEveryoneRow())}
 <div class="psheet-list">${raw(rows)}</div>
 <p class="body secondary">${CHROME.playersSheetFooter}</p>

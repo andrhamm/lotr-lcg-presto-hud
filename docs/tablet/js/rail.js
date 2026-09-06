@@ -85,8 +85,10 @@ function renderLocationPill(game) {
 </div>`;
 }
 
-// Side quests get their own pills in milestone 3; for now this is always
-// the dashed "+ side quest" affordance, per the task-4 brief.
+// Side quests do not get their own rail pills - that is unscoped for now,
+// not a milestone-3 promise this comment used to make. The rail's own row is
+// always this fixed dashed "+ side quest" affordance (per the task-4 brief);
+// the quest sheet (sheet_quest.js) is what actually lists every side quest.
 function renderSideQuestSlot() {
   return h`<div class="pill pill-dashed"><p class="body secondary">${CHROME.sideQuest}</p></div>`;
 }

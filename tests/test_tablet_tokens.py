@@ -52,7 +52,13 @@ def test_every_font_size_is_on_the_scale_or_a_numeral():
 def _button_heights_of(css):
     css = _strip_comments(css)
     out = []
-    for m in re.finditer(r"\.(chip|cta|step|scenario-row|step-sm)(?![\w-])[^{]*\{([^}]*)\}", css):
+    # locpick-row/sqpick-row/rsheet-row (review finding I4) join the same
+    # gate as chip/cta/step: they are min-height:56px today, and this is
+    # regression cover so a future rewrite can't quietly drop below 44.
+    for m in re.finditer(
+        r"\.(chip|cta|step|scenario-row|step-sm|locpick-row|sqpick-row|rsheet-row)(?![\w-])[^{]*\{([^}]*)\}",
+        css,
+    ):
         hm = re.search(r"(?:min-)?height\s*:\s*(\d+)px", m.group(2))
         if hm:
             out.append((m.group(1), int(hm.group(1))))
@@ -63,6 +69,24 @@ def test_buttons_are_at_least_44px():
     # every rule that sets a height on a button-ish class must be >= 44
     for cls, px in _button_heights_of(_css()):
         assert px >= 44, "%s is %spx tall" % (cls, px)
+
+
+def _min_height_of(css, selector):
+    css = _strip_comments(css)
+    m = re.search(r"\." + re.escape(selector) + r"(?![\w-])[^{]*\{([^}]*)\}", css)
+    assert m, "no rule found for .%s" % selector
+    hm = re.search(r"min-height\s*:\s*(\d+)px", m.group(1))
+    return int(hm.group(1)) if hm else None
+
+
+@pytest.mark.parametrize("selector", ["zone-head", "round-row"])
+def test_header_chip_rows_clear_the_44px_floor(selector):
+    # rail.js's "Edit ->" chip and strip.js's "Menu ->" chip are 30px header
+    # nav chips, not a sheet's own 44px tap target - the spec allows that
+    # ONLY inside a row that is itself >= 44px tall (review finding I4), so
+    # the row - .zone-head / .round-row - is what has to carry the floor.
+    px = _min_height_of(_css(), selector)
+    assert px is not None and px >= 44, ".%s has no min-height >= 44px" % selector
 
 
 def test_font_regex_does_not_cross_braces():
