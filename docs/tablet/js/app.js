@@ -83,7 +83,12 @@ async function buildPicker() {
 
 // Warm the image cache for the scenario the players just committed to (Task
 // 6): every card db.bundle() pins, in one message, while they are still
-// laying out heroes. Fire-and-forget by design - there is no controller at
+// laying out heroes. Fired from begin_setup, not pick_scenario - the spec
+// says "Begin setup prefetches", and milestone 6's Task 2 split the one act
+// in two: picking now only OPENS the Scenario overview, which a player may
+// well back out of to read another quest. Prefetching there spent the
+// bandwidth on every scenario browsed rather than the one committed to
+// (M5 final review). Fire-and-forget by design - there is no controller at
 // all on the very first load (the worker activates after this page did), the
 // browser may have no service workers, and a failure here costs a hotlink on
 // the first location picker, never a tap. Nothing awaits it.
@@ -198,7 +203,6 @@ async function handleAct(act, arg) {
     // since a fresh pick never goes through boot()'s branch at all.
     ui.tips = b.tips ?? null;
     ui.scenarioSlug = overview.entry.slug;
-    prefetchCardImages(b);
     ui.overview = overview;
     ui.sheet = null;
     ui.screen = "overview";
@@ -227,6 +231,7 @@ async function handleAct(act, arg) {
     game.logEvent(`New game: ${players} players, threat ${threats.join("/")}, first P1`);
     game.preloadScenario(scenarioMeta, bundle.stages);
     game.view = "quest_setup";
+    prefetchCardImages(bundle);
     ui.sheet = null;
     ui.screen = "play";
     db.session.saveState(game);

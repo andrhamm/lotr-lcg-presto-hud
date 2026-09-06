@@ -322,6 +322,32 @@ builds it in CI (`.github/workflows/pages.yml` — one pass, no fetch steps); th
 device gets it at deploy:
 `python3 tools/build_card_data.py && mpremote cp -r docs/data/ :/data/`.
 
+**The card-image prefix is pinned, not fetched.** Card records carry only a
+filename (`image: "<id>.jpg"`), so the tablet client needs a URL prefix to
+build a picture out of one. That prefix is pinned beside the TSV url and sha
+in `tools/data/cardDb.SOURCE.txt` as `image_prefix=`, and `build_card_data.py`
+copies it verbatim into `index.json` as `imagePrefix` (read by
+`quest_catalog.image_prefix()` / `quest_catalog.js`'s `imagePrefix()`,
+`None`/`null` for a legacy index that predates the pin). **A plain build makes
+no network call for it** — only `--refresh` does, re-reading the plugin's
+`jsons/imageUrlPrefix.json` at the newly-resolved sha and taking its
+`English` key (falling back to `Default`); a fetch/parse failure or a payload
+with neither key is a loud `SystemExit`, so `--refresh` never pins a stale or
+empty prefix. Same posture as every other pin here: deterministic ordinary
+builds, one explicit local act to move the pin.
+
+Nothing downloads the art. The tablet hotlinks `prefix + card.image`
+(`docs/tablet/js/cardimage.js`'s `cardUrl`) and lets its **service worker**
+cache the result (`docs/tablet/sw.js`, cache-first in its own image cache,
+newest-N trimmed) — so no picture is committed, and none is copied into
+`docs/data/` or onto the device. Two details `cardUrl` exists to get right:
+the filename comes off the record's own `image`, never rebuilt from the id
+(24 of 1016 catalog locations print on the BACK of a two-sided card and carry
+`<id>.B.jpg`), and an `image` that is already an absolute URL (2 locations
+carry a Hall of Beorn hotlink) is returned untouched. With no prefix, no
+`image`, or an offline cold cache, the **figcaption** is what the player
+reads — a missing picture is a first-class state, not an error path.
+
 `tools/alep.py` adds the fan-made **A Long Extended Party** packs to that same
 build (~23 pickable scenarios, `source: "alep"` — the Scenario Source screen's
 Community option, which the UI has always had and which had no data until
@@ -404,13 +430,18 @@ ships fonts/product images we don't want). Refresh the pin with
 local directory instead of fetching (useful offline); either source degrades
 gracefully to an empty `icons.json` (missing local dir) or a friendly
 `SystemExit` (fetch/rasterize failure) rather than a crash — icon slots just
-fall back to their placeholder glyph. The same run also writes the pack's
+fall back to their placeholder glyph. The same run can also write the pack's
 SVGs — recoloured from `currentColor` to the palette gold both twins use for
 set icons (`rgb(214,180,110)`, `pal.gold` in `docs/js/ui.js`), since a
 tablet `<img>` can't inherit `currentColor` from the page the way an inline
-SVG can — to `docs/data/icons/svg/<slug>.svg` (gitignored, same pin) for
-the tablet client; `--svg-out` overrides the directory, and `--svg-out ""`
-disables the export. Rasterizing needs Pillow plus either
+SVG can — to `--svg-out/<slug>.svg` (gitignored, same pin) for the tablet
+client. **`--svg-out` defaults OFF**, and must stay that way: the export is
+~2.0 MB of tablet-only vector art, `docs/data/` is what the device deploy
+copies wholesale, and nothing on the Presto reads an SVG. Only the Pages
+build asks for it, explicitly — `python3 tools/build_icons.py --svg-out
+docs/data/icons/svg` in `.github/workflows/pages.yml`. **The device deploy
+one-liner below is unchanged and copies nothing new.** Rasterizing needs
+Pillow plus either
 `cairosvg` or the `rsvg-convert` CLI. Runs alongside `build_card_data.py` in
 both delivery paths: CI builds it in `.github/workflows/pages.yml` (marked
 `continue-on-error` — icons are optional, card data is the critical

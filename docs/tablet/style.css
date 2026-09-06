@@ -50,7 +50,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tan); 
 .card-frame img { width: 100%; aspect-ratio: 5/7; object-fit: cover;
   background: var(--well); border-radius: 4px; display: block; }
 .card-frame.is-missing img { display: none; }
-.card-frame figcaption { font-size: 18px; }
+/* The caption is a card NAME - a player reads it as a name, so it is BODY at
+   the tablet's own 20px (CLAUDE.md iron rule 3b). It carried a font-size:
+   18px override until the M5 final review; 18 is .secondary's size, and
+   "running out of room is never a reason to shrink text". */
 .num { font-family: var(--sans); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--gold); }
 .num-26 { font-size: 26px } .num-34 { font-size: 34px } .num-36 { font-size: 36px } .num-40 { font-size: 40px } .num-48 { font-size: 48px } .num-56 { font-size: 56px } .num-64 { font-size: 64px } .num-84 { font-size: 84px }
 button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation;
@@ -564,14 +567,14 @@ a.cta { display: inline-flex; align-items: center; justify-content: center; text
    edge - the same border-left: 6px solid var(--border-gold) treatment
    .rsheet-face already uses for "this block is quoted, not authored here".
    Tips are sentences (CLAUDE.md's "if a player reads it as a sentence... it
-   is BODY"), so each line is li.body - at 18px, not .body's default 20px,
-   matching .body.secondary's size on the same SCALE the type-scale test
-   already allows. */
+   is BODY"), so each line is li.body at .body's own 20px. It used to carry a
+   font-size: 18px override "matching .body.secondary" - which is exactly the
+   shrink iron rule 3b forbids (18px is .secondary, chrome, not prose), and
+   the M5 final review called it. Say less or page it, never shrink it. */
 .notes { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px;
   background: var(--card); border: 1px solid var(--border); border-left: 6px solid var(--border-gold); border-radius: 6px; }
 .notes-head { display: flex; align-items: center; gap: 10px; }
 .notes ul, .notes-group ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
-.notes li.body, .notes-group li.body { font-size: 18px; }
 .notes-foot { display: flex; gap: 10px; flex-wrap: wrap; }
 /* .chip is a <button> everywhere else; the Source link (panel and sheet
    alike) is a real <a> (a new tab, not an app act) wearing the same class.

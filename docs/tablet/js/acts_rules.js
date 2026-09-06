@@ -20,6 +20,10 @@
 // for.
 export function handle(game, ui, act, arg) {
   if (act === "open_rules") {
+    // An empty arg names no section and no term: decline (false - this
+    // handler owns the act, it just has nothing to open) rather than seat a
+    // sheet whose header reads "§" and whose every block is missing.
+    if (!arg) return false;
     ui.sheet = arg.startsWith("term:")
       ? { kind: "rules", term: arg.slice("term:".length) }
       : { kind: "rules", section: arg };

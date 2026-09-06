@@ -39,3 +39,40 @@ def test_build_writes_json_and_is_a_noop_when_present(tmp_path):
 def test_missing_corpus_is_a_friendly_exit(tmp_path):
     r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_rules_text.py"), "--corpus", str(tmp_path), "--out", str(tmp_path / "x.json")], capture_output=True, text=True)
     assert r.returncode != 0 and "Traceback" not in r.stderr and "research/rules" in (r.stderr + r.stdout)
+
+
+def test_pin_skips_comment_lines_and_refuses_a_placeholder_digest(tmp_path, monkeypatch):
+    """M5 final review, two bugs in one three-line function.
+
+    (1) `_pin()` split every line containing "=", and rules.SOURCE.txt's own
+    header comments say "`page=` is where a human fetches it" and "Fill
+    `url=` only with a verified direct link" - so the comment prose became
+    pin keys. Comments are skipped first now.
+
+    (2) The file ships `sha256=<fill from shasum ...>` until a real PDF is
+    pinned, and that placeholder went straight into rules_text.json's
+    `source.pin`. A client reading it cannot tell a placeholder from a
+    digest, so a non-64-hex value is emitted as "" instead - the same
+    "placeholder rules data must not ship" rule CLAUDE.md's iron rule 4
+    states for copy."""
+    src = tmp_path / "rules.SOURCE.txt"
+    src.write_text(
+        "# Fill `url=` only with a verified direct link; `page=` is for humans.\n"
+        "\n"
+        "page=https://example.invalid/rules\n"
+        "sha256=<fill from `shasum -a 256` of the local PDF>\n"
+        "url=\n")
+    monkeypatch.setattr(brt, "SOURCE", str(src))
+
+    pin = brt._pin()
+
+    assert set(pin) == {"page", "sha256", "url"}, pin
+    assert brt._pinned_sha(pin) == ""
+
+    real = "a" * 64
+    src.write_text("# a comment with url= in it\npage=p\nsha256=%s\n" % real)
+    assert brt._pinned_sha(brt._pin()) == real
+
+    out = tmp_path / "rules_text.json"
+    brt.build(FIX, str(out), corpus_name="rules_fixture.md")
+    assert json.loads(out.read_text())["source"]["pin"] == real

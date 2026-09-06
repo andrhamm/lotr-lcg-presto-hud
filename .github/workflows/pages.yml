@@ -68,8 +68,14 @@ jobs:
         # above, is the critical artifact). On failure no icons.json is
         # written and every icon_slot() falls back to its placeholder glyph
         # until the next successful build.
+        #
+        # --svg-out is passed EXPLICITLY: the flag defaults off, because
+        # docs/data/ is also what the device deploy copies wholesale
+        # (`mpremote cp -r docs/data/ :/data/`) and ~2.0 MB of tablet-only
+        # vector art has no reader on the Presto. Only this Pages build,
+        # which serves the tablet client, asks for it.
         continue-on-error: true
-        run: python3 tools/build_icons.py
+        run: python3 tools/build_icons.py --svg-out docs/data/icons/svg
       - name: Build rules text
         # docs/data/rules_text.json: Rules Reference excerpts keyed by
         # section id and glossary term, for the tablet client's rules
@@ -81,8 +87,9 @@ jobs:
         # so most runs take this branch and do nothing. When a url= is
         # filled in: fetch the pinned PDF, verify it against the pinned
         # sha256, parse it to markdown with liteparse (needs Node - not
-        # otherwise used by this workflow, hence actions/setup-node below),
-        # then run the two build steps a local rebuild would run.
+        # otherwise used by this workflow, hence the actions/setup-node step
+        # at the top of this job), then run the two build steps a local
+        # rebuild would run.
         continue-on-error: true
         run: |
           url=$(grep '^url=' tools/data/rules.SOURCE.txt | cut -d= -f2-)

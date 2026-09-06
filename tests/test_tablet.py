@@ -3380,6 +3380,29 @@ console.log(JSON.stringify({
     assert js["noOfficialBody"], "no fabricated rules text may render when ui.rules is null: %r" % js["html"]
 
 
+def test_open_rules_with_an_empty_arg_opens_nothing():
+    """M5 final review, minor: every open_rules chip today passes a real
+    section id or a "term:" arg, but the handler seated a sheet from
+    whatever it got - an empty arg produced `{kind:"rules", section:""}`, a
+    modal headed "§" with no official text, no summary and no Related chips.
+    Declining is `false`, not `null`: this handler owns the act, it just has
+    nothing to open, and dispatch() (actions.js) treats null as "keep
+    looking" - which would end at its own `return false` anyway, but says
+    the wrong thing."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView(); const ui = newUi();
+const empty = perform(g, ui, "open_rules", "");
+const afterEmpty = ui.sheet;
+const real = perform(g, ui, "open_rules", "6.2");
+console.log(JSON.stringify({ empty, afterEmpty, real, sheet: ui.sheet }));
+""")
+    assert js["empty"] is False and js["afterEmpty"] is None
+    assert js["real"] is True and js["sheet"] == {"kind": "rules", "section": "6.2"}
+
+
 def test_elim_sheet_rules_chip_opens_glossary_then_returns_to_elim():
     """The elimination sheet's own "Rules · Player Elimination ›" chip opens
     the Rules modal on the glossary term, REPLACING the elim sheet - fine,
@@ -3713,6 +3736,30 @@ console.log(JSON.stringify({ withArt: pick("%s"), noPrefix: pick(null) }));
     assert '<figure class="card-frame"><img' not in js["noPrefix"]
     assert '<figure class="card-frame"><figcaption' in js["noPrefix"]
     assert "Old Forest Road · threat 1 · 3 quest points" in js["noPrefix"]
+
+
+def test_the_image_prefetch_fires_on_begin_setup_not_on_the_pick():
+    """The spec's prefetch is "Begin setup prefetches". It used to fire from
+    pick_scenario, which was correct when picking a scenario STARTED the
+    game - milestone 6's Task 2 split that act in two, so picking now only
+    opens the Scenario overview, a screen a player may well back out of to
+    read another quest. Left there it spent the bandwidth on every scenario
+    browsed rather than the one committed to (M5 final review).
+
+    app.js is the one tablet module that is not a pure string builder (it
+    touches navigator, db and the DOM), so node() cannot drive it - this
+    reads the source and checks every prefetchCardImages() CALL sits inside
+    the begin_setup branch, between it and the act that follows."""
+    src = open(os.path.join(ROOT, "docs", "tablet", "js", "app.js"), encoding="utf-8").read()
+    begin = src.index('if (act === "begin_setup") {')
+    after = src.index('if (act === "copy_log")', begin)
+    pick = src.index('if (act === "pick_scenario") {')
+    calls = [m.start() for m in re.finditer(r"(?<!function )prefetchCardImages\(", src)]
+    assert calls, "no prefetchCardImages() call site left in app.js"
+    for at in calls:
+        assert begin < at < after, (
+            "prefetchCardImages() at offset %d is outside the begin_setup branch "
+            "(begin_setup at %d, pick_scenario at %d)" % (at, begin, pick))
 
 
 def test_card_image_urls_cover_the_scenario_and_every_set_it_gathers():

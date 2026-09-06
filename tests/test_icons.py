@@ -263,6 +263,47 @@ def test_svg_out_mirrors_encounter_set_collision_winner(tmp_path):
     assert (svg_out / "clash.svg").read_bytes() == HALF
 
 
+def test_a_plain_run_writes_no_svgs(tmp_path, monkeypatch):
+    """--svg-out defaults OFF (M5 final review). The export is ~2.0 MB of
+    tablet-only art, and the device deploy is
+    `mpremote cp -r docs/data/ :/data/` - a whole-directory copy - so a
+    default-on export silently pushed 2 MB onto the Presto's flash that
+    nothing on the device reads. Run through main() so the CLI default
+    itself is exercised, and chdir first so a relative docs/data/icons/svg
+    would land inside tmp_path where this can see it."""
+    assets = tmp_path / "assets"
+    (assets / "encounter sets").mkdir(parents=True)
+    (assets / "expansion symbols").mkdir(parents=True)
+    (assets / "encounter sets" / "passage_through_mirkwood.svg").write_bytes(SQUARE)
+    out = tmp_path / "icons.json"
+
+    monkeypatch.chdir(tmp_path)
+    rc = build_icons.main(["--assets", str(assets), "--out", str(out)])
+
+    assert rc == 0
+    assert out.exists()
+    assert not (tmp_path / "docs").exists()
+
+
+def test_svg_out_flag_writes_the_export_the_pages_workflow_asks_for(tmp_path, monkeypatch):
+    """The other half of the default-off ruling: the flag the Pages workflow
+    passes (`--svg-out docs/data/icons/svg`, DEFAULT_SVG_OUT) must still
+    produce the SVGs the tablet client hotlinks. Exercised through main()
+    with that exact relative path, chdir'd into tmp_path."""
+    assets = tmp_path / "assets"
+    (assets / "encounter sets").mkdir(parents=True)
+    (assets / "expansion symbols").mkdir(parents=True)
+    (assets / "encounter sets" / "passage_through_mirkwood.svg").write_bytes(SQUARE)
+    out = tmp_path / "icons.json"
+
+    monkeypatch.chdir(tmp_path)
+    rc = build_icons.main(["--assets", str(assets), "--out", str(out),
+                           "--svg-out", build_icons.DEFAULT_SVG_OUT])
+
+    assert rc == 0
+    assert (tmp_path / build_icons.DEFAULT_SVG_OUT / "passage-through-mirkwood.svg").exists()
+
+
 def test_svg_out_flag_empty_disables_export(tmp_path, monkeypatch):
     assets = tmp_path / "assets"
     (assets / "encounter sets").mkdir(parents=True)
@@ -270,10 +311,6 @@ def test_svg_out_flag_empty_disables_export(tmp_path, monkeypatch):
     (assets / "encounter sets" / "passage_through_mirkwood.svg").write_bytes(SQUARE)
     out = tmp_path / "icons.json"
 
-    # Run through main() so the CLI flag itself is exercised, not just the
-    # underlying function default; chdir so DEFAULT_SVG_OUT (a relative
-    # docs/data/icons/svg path) can't land outside this tmp_path if the
-    # empty-string override were ever ignored.
     monkeypatch.chdir(tmp_path)
     rc = build_icons.main(["--assets", str(assets), "--out", str(out), "--svg-out", ""])
 

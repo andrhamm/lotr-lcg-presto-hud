@@ -84,9 +84,32 @@ def parse(md):
     flush()
     return {"sections": sections, "glossary": glossary, "faq": []}
 
+# A real sha256 digest, as `shasum -a 256` prints it. tools/data/
+# rules.SOURCE.txt ships with sha256=<fill from ...> until someone pins an
+# actual PDF, and that placeholder must never reach the artifact as if it
+# were a pin - a client reading source.pin has no way to tell the two apart.
+HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+
 def _pin():
+    """Parse tools/data/rules.SOURCE.txt's key=value lines.
+
+    Comment lines are skipped BEFORE the split: that file's own prose
+    mentions `page=` and `url=` inside "#" comments, and a naive
+    `if "=" in l` read them as pin keys (M5 final review).
+    """
     if not os.path.exists(SOURCE): return {}
-    return dict(l.strip().split("=", 1) for l in open(SOURCE) if "=" in l)
+    pin = {}
+    for line in open(SOURCE):
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line: continue
+        k, v = line.split("=", 1)
+        pin[k.strip()] = v.strip()
+    return pin
+
+def _pinned_sha(pin):
+    """The pinned PDF digest, or "" when nothing real is pinned yet."""
+    sha = pin.get("sha256", "")
+    return sha if HEX64_RE.match(sha) else ""
 
 def build(corpus_dir, out_path=DEFAULT_OUT, corpus_name=DEFAULT_NAME):
     path = os.path.join(corpus_dir, corpus_name)
@@ -97,7 +120,8 @@ def build(corpus_dir, out_path=DEFAULT_OUT, corpus_name=DEFAULT_NAME):
     pin = _pin()
     generated = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     doc.update({"generated": generated, "book": "Rules Reference",
-                "source": {"sha256": hashlib.sha256(md.encode("utf-8")).hexdigest(), "page": pin.get("page", ""), "pin": pin.get("sha256", "")}})
+                "source": {"sha256": hashlib.sha256(md.encode("utf-8")).hexdigest(),
+                           "page": pin.get("page", ""), "pin": _pinned_sha(pin)}})
     # ids that alias one record must serialise once each - JSON has no shared refs, so emit per id.
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:

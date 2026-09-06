@@ -21,11 +21,15 @@ Pages workflow marks that build step continue-on-error since icons are
 optional (card data is the critical artifact - see CLAUDE.md's Card data
 section).
 
-The same pass over the source (tarball or --assets dir) also writes every
-SVG to --svg-out (default docs/data/icons/svg/<slug>.svg, same
-gitignored/regenerated posture, same collision rule as icons.json) for
-consumers that want the vector art directly instead of the rasterized
-mask; --svg-out "" disables the export. Each exported SVG is recoloured
+The same pass over the source (tarball or --assets dir) can also write every
+SVG to --svg-out/<slug>.svg (same gitignored/regenerated posture, same
+collision rule as icons.json) for consumers that want the vector art
+directly instead of the rasterized mask. It is OFF by default: the export is
+~2.0 MB of tablet-only art, and docs/data/ is what the device deploy copies
+wholesale (`mpremote cp -r docs/data/ :/data/`), so a default-on export
+would push it all onto the Presto's flash for nothing. The Pages workflow
+asks for it explicitly (`--svg-out docs/data/icons/svg`, DEFAULT_SVG_OUT
+below); a plain run writes no SVGs. Each exported SVG is recoloured
 (see _recolor_svg) from the pack's fill="currentColor" - meant for an
 inline SVG that inherits the surrounding page's text color, which an <img>
 cannot do - to the palette gold both twins use for set icons, otherwise
@@ -54,6 +58,8 @@ except ImportError:  # pragma: no cover - exercised only where Pillow is absent
     Image = None
 
 DEFAULT_OUT = os.path.join("docs", "data", "icons.json")
+# Where the Pages workflow asks for the SVG export - NOT the CLI default,
+# which is off (see main()'s --svg-out and the module docstring).
 DEFAULT_SVG_OUT = os.path.join("docs", "data", "icons", "svg")
 SIZE = 24
 
@@ -381,11 +387,13 @@ def main(argv=None):
                           "the pinned upstream tarball (tools/data/icons.SOURCE.txt)")
     ap.add_argument("--refresh", action="store_true", help="re-pin to upstream HEAD sha")
     ap.add_argument("--out", default=DEFAULT_OUT)
-    ap.add_argument("--svg-out", default=DEFAULT_SVG_OUT,
-                     help="directory to also write each source SVG verbatim as "
+    ap.add_argument("--svg-out", default="",
+                     help="directory to ALSO write each source SVG verbatim as "
                           "<slug>.svg, same run and same collision rule as "
-                          "icons.json (encounter sets win); pass an empty string "
-                          "to disable the export entirely")
+                          "icons.json (encounter sets win). Off by default - "
+                          "the export is ~2.0 MB of tablet-only art and the "
+                          "device deploy copies docs/data/ wholesale. The Pages "
+                          "workflow passes %s explicitly." % DEFAULT_SVG_OUT)
     args = ap.parse_args(argv)
 
     if args.refresh:
