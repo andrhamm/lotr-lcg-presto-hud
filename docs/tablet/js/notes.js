@@ -7,14 +7,13 @@
 // whatever these return, and tests/test_tablet.py can drive both under
 // node with a fixture, no build required.
 //
-// db.bundle(slug).tips is the WHOLE tips.json map, not a per-scenario slice
-// (docs/js/db.js ~255: "tips: await this.tips()", and tips() loads the
-// entire file) - shaped {generated, source, scenarios: {"<slug>": {
-// attribution:{name,url}, general:[...], stages:{"1":[...], "2":[...]}}}}.
-// So this indexes tips.scenarios[scenarioSlug] itself; a scenario tips.json
-// has never heard of (build_tips.py only distilled 122 of ~350) is just an
-// absent key, not an error - both functions below degrade to "nothing to
-// show" for that case (R9: "a scenario absent from tips renders no panel").
+// docs/js/quest_catalog.js's loadTips() (line ~437) returns data.scenarios,
+// which is the flat map: {"<slug>": { attribution:{name,url}, general:[...],
+// stages:{"1":[...], "2":[...]} }}. So this indexes tips[scenarioSlug]
+// directly; a scenario tips.json has never heard of (build_tips.py only
+// distilled 122 of ~350) is just an absent key, not an error - both functions
+// below degrade to "nothing to show" for that case (R9: "a scenario absent
+// from tips renders no panel").
 import { fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 
@@ -30,7 +29,7 @@ const PANEL_MAX = 3;
 // distillation is empty at both) renders no panel at all - never an empty
 // shell with a header and no lines.
 export function notesFor(tips, scenarioSlug, stage_n) {
-  const rec = tips?.scenarios?.[scenarioSlug];
+  const rec = tips?.[scenarioSlug];
   if (!rec) return null;
   const stageItems = rec.stages?.[String(stage_n)];
   if (stageItems && stageItems.length) {
@@ -54,7 +53,7 @@ export function notesFor(tips, scenarioSlug, stage_n) {
 // each group repeats its own Source link anyway (R9), since the sheet's
 // groups are read independently as the player scrolls.
 export function allNotes(tips, scenarioSlug) {
-  const rec = tips?.scenarios?.[scenarioSlug];
+  const rec = tips?.[scenarioSlug];
   if (!rec) return [];
   const groups = [];
   if (rec.general?.length) {

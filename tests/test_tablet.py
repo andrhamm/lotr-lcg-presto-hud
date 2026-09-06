@@ -2719,11 +2719,17 @@ console.log(JSON.stringify({
 # (build_tips.py's distillation) - a placeholder attribution URL, never a
 # real one, per CLAUDE.md's data policy on verbatim vs. derived content:
 # this is a fixture for a test, not something that ships.
-_NOTES_FIXTURE = """{ scenarios: { "passage-through-mirkwood": {
+_NOTES_FIXTURE = """{ "passage-through-mirkwood": {
   attribution: { name: "Vision of the Palantir", url: "https://example.invalid/votp" },
   general: ["g1", "g2", "g3", "g4"],
   stages: { "2": ["s2a"] },
-} } }"""
+} }"""
+
+_NOTES_FIXTURE_EMPTY_URL = """{ "the-withered-heath": {
+  attribution: { name: "quests/the-withered-heath.md", url: "" },
+  general: ["tip1", "tip2"],
+  stages: {},
+} }"""
 
 
 def test_notes_panel_shows_general_tips_and_the_source_link_at_stage_one():
@@ -2842,3 +2848,31 @@ console.log(JSON.stringify({
 """ % _NOTES_FIXTURE)
     assert not js["hasNotes"], "a scenario slug absent from tips must render no panel at all"
     assert not js["bareHasNotes"], "a bare game with no scenario must render no panel at all"
+
+
+def test_notes_panel_renders_source_as_plain_label_when_url_is_empty():
+    """When attribution.url is empty (tips from quests/*.md callouts),
+    render the source name as a plain <span class="label">, not as an <a>
+    anchor. The name is still present."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { renderPane } from "./pane.js";
+import { newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25);
+const ui = newUi();
+ui.scenarioSlug = "the-withered-heath";
+ui.tips = %s;
+const html = renderPane(g, ui);
+console.log(JSON.stringify({
+  html,
+  hasNotes: html.includes('class="notes"'),
+  hasTip: html.includes(">tip1<"),
+  hasName: html.includes("quests/the-withered-heath.md"),
+  hasAnchor: html.includes('<a class="chip chip-tan"'),
+}));
+""" % _NOTES_FIXTURE_EMPTY_URL)
+    assert js["hasNotes"], js["html"]
+    assert js["hasTip"], js["html"]
+    assert js["hasName"], "the source name must still be present"
+    assert not js["hasAnchor"], "empty URL must render as plain label, not anchor"

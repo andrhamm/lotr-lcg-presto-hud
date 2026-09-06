@@ -16,10 +16,13 @@ function renderGroup(g) {
   const items = g.items.map(t => h`<li class="body">${t}</li>`).join("");
   const name = g.source?.name ?? "";
   const url = g.source?.url ?? "";
+  const sourceLink = url
+    ? h`<a class="chip chip-tan" href="${url}" target="_blank" rel="noopener">${CHROME.source} · ${name} ›</a>`
+    : h`<span class="label">${CHROME.source} · ${name}</span>`;
   return h`<div class="notes-group">
 <div class="label">${g.scope}</div>
 <ul>${raw(items)}</ul>
-<a class="chip chip-tan" href="${url}" target="_blank" rel="noopener">${CHROME.source} · ${name} ›</a>
+${raw(sourceLink)}
 </div>`;
 }
 

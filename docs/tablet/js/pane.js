@@ -165,7 +165,9 @@ function renderNotesPanel(notes) {
   const items = notes.items.map(t => h`<li class="body">${t}</li>`).join("");
   const name = notes.source?.name ?? "";
   const url = notes.source?.url ?? "";
-  const sourceLink = h`<a class="chip chip-tan" href="${url}" target="_blank" rel="noopener">${CHROME.source} · ${name} ›</a>`;
+  const sourceLink = url
+    ? h`<a class="chip chip-tan" href="${url}" target="_blank" rel="noopener">${CHROME.source} · ${name} ›</a>`
+    : h`<span class="label">${CHROME.source} · ${name}</span>`;
   const more = chip({ act: "open_notes", label: h`${CHROME.moreNotes} ›` });
   return h`<aside class="notes"><div class="notes-head">${raw(icon("PIPE", 22, WILLPOWER_GOLD))}<span class="label">${CHROME.notes} · ${notes.scope}</span></div><ul>${raw(items)}</ul><div class="notes-foot">${raw(sourceLink)}${raw(more)}</div></aside>`;
 }
