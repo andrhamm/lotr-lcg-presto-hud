@@ -1146,6 +1146,69 @@ console.log(JSON.stringify({
     assert js["sheetKind"] == "quest"
 
 
+def test_side_quest_picker_pagination_pages_forward_back_and_clamps():
+    """Fix round 1, review finding 1: no test drove sqpick_page before this
+    one. Nine entries in a single sphere is one more than PER_PAGE (8), so
+    picking that sphere must show a pager and split the rows across two
+    pages - real content assertions (the 9th entry's name is absent on page
+    1 and present on page 2, and vice versa), not just a page-number check,
+    since a stale render could show the wrong rows under a "correct" number.
+    Also exercises sqpick_page's own clamp at both ends (acts_sqpick.js:
+    Math.max(0, Math.min(pages - 1, sheet.page + arg)), which returns false
+    - no change - once the requested step would go past either edge."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+const ui = newUi();
+ui.sideQuests = Array.from({ length: 9 }, (_, i) => (
+  { id: "q" + (i + 1), name: "Quest " + (i + 1), points: i + 1, sphere: "Neutral" }));
+ui.sheet = { kind: "sqpick", sphere: null, selected: null, page: 0 };
+perform(g, ui, "sqpick_sphere", "Neutral");
+const page1Html = layout(g, ui);
+const initialPage = ui.sheet.page;
+const forward = perform(g, ui, "sqpick_page", "1");
+const page2Html = layout(g, ui);
+const pageAfterForward = ui.sheet.page;
+const forwardClamped = perform(g, ui, "sqpick_page", "1");
+const pageAfterForwardClamp = ui.sheet.page;
+const back = perform(g, ui, "sqpick_page", "-1");
+const page1AgainHtml = layout(g, ui);
+const backClamped = perform(g, ui, "sqpick_page", "-1");
+const pageAfterBackClamp = ui.sheet.page;
+console.log(JSON.stringify({
+  initialPage,
+  page1HasFirst: page1Html.includes("Quest 1"),
+  page1HasNinth: page1Html.includes("Quest 9"),
+  page1Label: page1Html.includes('<span class="body secondary">1/2</span>'),
+  forward, pageAfterForward,
+  page2HasFirst: page2Html.includes("Quest 1"),
+  page2HasNinth: page2Html.includes("Quest 9"),
+  page2Label: page2Html.includes('<span class="body secondary">2/2</span>'),
+  forwardClamped, pageAfterForwardClamp,
+  back,
+  page1AgainHasFirst: page1AgainHtml.includes("Quest 1"),
+  page1AgainHasNinth: page1AgainHtml.includes("Quest 9"),
+  backClamped, pageAfterBackClamp,
+}));
+""")
+    assert js["initialPage"] == 0, "sqpick_sphere resets to page 0"
+    assert js["page1HasFirst"] and not js["page1HasNinth"], "page 1 must hold the first 8 rows only"
+    assert js["page1Label"], "the page readout must read 1/2 on page 1"
+    assert js["forward"], "sqpick_page must report a change when it actually moves"
+    assert js["pageAfterForward"] == 1
+    assert js["page2HasNinth"] and not js["page2HasFirst"], "page 2 must hold the 9th row, not the first"
+    assert js["page2Label"], "the page readout must read 2/2 on page 2"
+    assert not js["forwardClamped"], "paging forward past the last page must be a no-op"
+    assert js["pageAfterForwardClamp"] == 1, "a clamped page tap must not move the page"
+    assert js["back"], "sqpick_page must report a change when it moves back"
+    assert js["page1AgainHasFirst"] and not js["page1AgainHasNinth"], "paging back must restore page 1's rows"
+    assert not js["backClamped"], "paging back past the first page must be a no-op"
+    assert js["pageAfterBackClamp"] == 0, "a clamped page tap must not move the page"
+
+
 # Task 7's fixture, shaped like the real catalog and like the twin's own
 # (tests/test_resolution_modal.py's STAGES, which drives ResolutionModal
 # through this same walk): stage 1 is one card worth 2 quest points, stage 2

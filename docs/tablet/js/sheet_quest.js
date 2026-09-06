@@ -172,13 +172,10 @@ export function renderQuestSheet(game, ui) {
   const sqSection = sqs.length
     ? h`<div class="label qsheet-section">${CHROME.sideQuestsHeader}</div>${raw(sqs.map((s, i) => renderSideQuestGroup(s, i)).join(""))}`
     : "";
-  // "+ Add location" opens the location picker (Task 5, landed - see
-  // sheet_locpick.js/acts_locpick.js). "+ Side quest" is Task 6's own chip:
-  // ui.sheet's "sqpick" kind has no entry in sheets.js's RENDERERS yet, so
-  // tapping it shows nothing until that lands (renderSheet's documented
-  // fallback for a kind it does not recognise), and open_sqpick dispatches
-  // nowhere yet either - same as open_quest sat inert in rail.js until this
-  // sheet landed.
+  // "+ Add location" opens the location picker (Task 5 - see
+  // sheet_locpick.js/acts_locpick.js). "+ Side quest" opens the side-quest
+  // picker (Task 6 - sheets.js's RENDERERS has a "sqpick" entry, and app.js's
+  // own "open_sqpick" case seats ui.sheet after loading ui.sideQuests).
   const addRow = h`<div class="qsheet-add">
 ${raw(chip({ act: "open_locpick", label: CHROME.addLocation, tone: "tan" }))}
 ${raw(chip({ act: "open_sqpick", label: CHROME.sideQuest, tone: "tan" }))}

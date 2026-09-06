@@ -11,16 +11,13 @@
 // 1) - one of the per-area handlers dispatch() tries in order, `handle`
 // returns null for any act it does not own.
 import { CHROME } from "./copy.js";
+import { PER_PAGE } from "./sheet_sqpick.js";
 
 // Imported, not a second hardcoded literal - sheet_sqpick.js's own grouping
 // keys off the same CHROME string when it builds each row's data-arg, so if
 // the two ever drifted, sqpick_sphere's pre-select below would silently stop
 // matching the "No sphere" bucket's rows.
 const NO_SPHERE = CHROME.sqpickNoSphere;
-// Kept in lockstep with sheet_sqpick.js's own PER_PAGE only because both
-// need the same page count - sheet_sqpick.js paginates the rows, this file
-// only needs to clamp sqpick_page's arg to the same range.
-const PER_PAGE = 8;
 
 function sphereOf(e) { return e.sphere || NO_SPHERE; }
 function inSphere(entries, sphere) { return entries.filter(e => sphereOf(e) === sphere); }
@@ -38,7 +35,10 @@ function rowCount(ui) {
 
 export function handle(game, ui, act, arg) {
   if (act === "sqpick_sphere") {
-    if (ui.sheet?.kind !== "sqpick") return false;
+    // Only valid on the sphere-list step - same shape as sqpick_row/
+    // sqpick_back's own step guards below, rather than just checking the
+    // sheet is a "sqpick" (review finding 6).
+    if (ui.sheet?.kind !== "sqpick" || ui.sheet.sphere !== null) return false;
     // Pre-select the sphere's first quest - SideQuestPickModal's own
     // onButton "sphere" case does the same (docs/js/screens.js), so a
     // sphere holding exactly one quest can go straight to Add.

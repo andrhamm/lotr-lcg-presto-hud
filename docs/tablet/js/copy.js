@@ -104,7 +104,9 @@ export const CHROME = {
   sqpickPickSphere: "Pick a sphere - or enter manually.",
   sqpickPickOne: "%s - pick one, then Add.",
   sqpickBack: "‹ Spheres",
-  sqpickManual: "Manual entry",
+  // "Manual entry" itself is manualEntry (locpick's own key, above) - the
+  // two pickers share the one label rather than carrying a duplicate string
+  // (review finding 4).
   sqpickAdd: "Add",
   sqpickNoSphere: "No sphere",
   sqpickOneQuest: "1 quest",

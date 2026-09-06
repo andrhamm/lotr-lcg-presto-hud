@@ -23,9 +23,10 @@ const NO_SPHERE = CHROME.sqpickNoSphere;
 // same way.
 const SPHERE_ORDER = ["Leadership", "Lore", "Spirit", "Tactics", "Neutral"];
 // Rows per page - this sheet scrolls (unlike the twin's fixed canvas), so
-// this is a "page it" call (CLAUDE.md rule 3b), not a viewport limit; keep
-// in lockstep with acts_sqpick.js's own PER_PAGE, which clamps sqpick_page.
-const PER_PAGE = 8;
+// this is a "page it" call (CLAUDE.md rule 3b), not a viewport limit.
+// Exported so acts_sqpick.js's sqpick_page can clamp to the same page count
+// instead of carrying a second copy of this number (review finding 2).
+export const PER_PAGE = 8;
 
 function sphereOf(e) { return e.sphere || NO_SPHERE; }
 
@@ -67,6 +68,11 @@ function sphereRow([sphere, count]) {
 // .locpick-row's own selected state uses.
 function questRow(e, selected) {
   const pts = fmt(CHROME.sqpickPts, e.points ?? 0);
+  // No current data path fills `e.text` - docs/js/quest_catalog.js's
+  // sideQuests() emits only {id, name, points, sphere, pack} (verified
+  // 2026-09-05), so this branch is dead until a follow-up extends
+  // sideQuests()/side_quests() in both twins to carry the card's printed
+  // text. Kept rather than removed so that follow-up is a data change only.
   const text = e.text ? h`<span class="body secondary">${e.text}</span>` : "";
   return h`<button type="button" class="${cx("sqpick-row", selected && "is-selected")}" data-act="sqpick_row" data-arg="${e.id}">
 <div class="sqpick-row-head"><span class="body">${e.name ?? ""}</span><span class="body secondary">${pts}</span></div>
@@ -121,7 +127,7 @@ ${raw(pager(page, pages))}`;
   }
   // "Manual entry" is always offered, catalog or not - the twin's own
   // footer button never depends on this.entries.length either.
-  ctas.push(chip({ act: "sqpick_manual", label: CHROME.sqpickManual, tone: "tan" }));
+  ctas.push(chip({ act: "sqpick_manual", label: CHROME.manualEntry, tone: "tan" }));
   ctas.push(cta({ act: "sqpick_cancel", label: CHROME.cancel, tone: "plain", grow: false }));
   return h`<h1 class="display">${CHROME.sqpickTitle}</h1>
 ${raw(body)}
