@@ -470,6 +470,11 @@ console.log(JSON.stringify({
 
 
 def test_resolution_pane_offers_the_allocator_then_the_window():
+    """Also the allocator minus stepper's own regression (review finding 7):
+    allocStep interpolated "&minus;" through h``, which escapes the "&" a
+    second time into literal "&amp;minus;" text on screen instead of the
+    glyph. resolve seeds the whole budget onto the quest row via autoSplit,
+    so its minus button is live (used > 0) in `before`."""
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { renderPane } from "./pane.js";
@@ -484,9 +489,14 @@ dispatch(g, ui, "apply_alloc", "");
 const after = renderPane(g, ui);
 console.log(JSON.stringify({ allocator: before.includes('data-act="apply_alloc"'),
   placed: after.includes('data-act="advance"') && !after.includes('data-act="apply_alloc"'),
-  progress: g.quest.progress }));
+  progress: g.quest.progress,
+  noEscapedMinus: before.includes("&amp;minus;"),
+  minusGlyph: before.includes("−"),
+}));
 """)
     assert js["allocator"] and js["placed"] and js["progress"] == 7
+    assert not js["noEscapedMinus"], "the minus stepper must never render as literal &amp;minus; text"
+    assert js["minusGlyph"], "the minus stepper renders the U+2212 character"
 
 
 def test_resolution_pane_reports_how_much_threat_rose_on_a_fail():
@@ -1217,13 +1227,19 @@ console.log(JSON.stringify({
 # catalog (23 of 39 branch stages; Escape from Khazad-dum's stage 2 is
 # "Search for an Exit" three times over), and it is why resolve_step.js's
 # branchName reads the back face.
+#
+# Old One Lair carries questPointsKind: "na" - a condition stage, one of the
+# 32 (of 116) branch alternatives in the catalog that print no quest points
+# at all (review finding 1) - so the walk below doubles as the regression:
+# it must never render "0 quest points" for this row, only for A Way Up's
+# real printed 4.
 _RESOLVE_STAGES = """
 const STAGES = [
   { stage: 1, cards: [{ questPoints: 2, faces: [
       { side: "A", name: "Flies and Spiders", text: "Setup: search the encounter deck." },
       { side: "B", name: "Flies and Spiders", text: null }] }] },
   { stage: 2, branch: "choice", cards: [
-      { questPoints: 0, faces: [
+      { questPoints: 0, questPointsKind: "na", faces: [
           { side: "A", name: "Search for an Exit", text: null },
           { side: "B", name: "Old One Lair", text: "This stage cannot be defeated until X." }] },
       { questPoints: 4, faces: [
@@ -1286,6 +1302,7 @@ console.log(JSON.stringify({
   branchFrontName: branchHtml.includes("Search for an Exit"),
   branchText: branchHtml.includes("Progress cannot be placed here."),
   branchPoints: branchHtml.includes("4 quest points"),
+  branchNoZeroPoints: branchHtml.includes("0 quest points"),
   branchTaps: (branchHtml.match(/data-act="res_branch"/g) || []).length,
   noRandomize: !branchHtml.includes('data-act="res_random"'),
   advanceKind: advanceStep.kind, advanceIdx: advanceStep.card_idx,
@@ -1311,6 +1328,7 @@ console.log(JSON.stringify({
     assert js["branchBackNames"], "fork rows are named off the BACK face"
     assert not js["branchFrontName"], "the shared front name would make both rows read alike"
     assert js["branchText"] and js["branchPoints"]
+    assert not js["branchNoZeroPoints"], "Old One Lair prints no points (questPointsKind: \"na\") - never a 0 it didn't print"
     assert js["branchTaps"] == 2 and js["noRandomize"]
     assert js["advanceKind"] == "advance" and js["advanceIdx"] == 1
     assert js["advanceUnderfilled"] is False
@@ -1440,6 +1458,142 @@ console.log(JSON.stringify({
     assert js["warning"], "an advance below the target has to say so"
     assert js["advanced"] == {"stage_idx": 1, "card_idx": 1, "side": "A",
                               "forcedFlag": False, "branchPick": None}
+
+
+def test_resolution_sheet_branch_row_shows_the_cards_own_x_text_instead_of_a_number():
+    """Review finding 1's other half: The Woodland Realm's stage 3 "To the
+    Elvenking's Halls" is the one branch alternative in the whole catalog
+    whose quest points are a coded X (questPointsKind: "x") rather than a
+    number or a printed "-" - so stagePointsShape (xshape.js) must route it
+    to the card's own questPointsX.text instead of a number, and it must
+    never fall back to "0 quest points" the way a bare
+    `card.questPoints ?? 0` used to. Progress is set straight on
+    g.quest.progress (like the forced-advance test above) rather than
+    walked through resolve/apply_alloc - only the derived branch step and
+    its render matter here."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { deriveResolveStep } from "./resolve_step.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const XTEXT = "X is equal to the threat level of the player with the highest threat level.";
+const STAGES = [
+  { stage: 1, cards: [{ questPoints: 1, faces: [
+      { side: "A", name: "On the Trail", text: "Setup: shuffle the encounter deck." },
+      { side: "B", name: "On the Trail", text: null }] }] },
+  { stage: 2, branch: "random", cards: [
+      { questPoints: 15, faces: [
+          { side: "A", name: "On the Trail", text: null },
+          { side: "B", name: "The Forest of Great Fear", text: "When Revealed: search the encounter deck." }] },
+      { questPoints: 0, questPointsKind: "x", questPointsX: { target: "highest_threat", text: XTEXT }, faces: [
+          { side: "A", name: "On the Trail", text: null },
+          { side: "B", name: "To the Elvenking's Halls", text: "This stage cannot be defeated until X." }] }] },
+];
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, STAGES);
+g.view = "quest_setup";
+const ui = newUi();
+perform(g, ui, "flip_to_b", "");
+g.quest.progress = g.quest.points;                // clear stage 1 without the full alloc walk
+ui.sheet = { kind: "resolve", forced: false, branchPick: null, skippedSide: [] };
+const step = deriveResolveStep(g, ui);
+const html = layout(g, ui);
+console.log(JSON.stringify({
+  kind: step.kind,
+  xText: html.includes(XTEXT),
+  ownCardText: html.includes("This stage cannot be defeated until X."),
+  numberPoints: html.includes("15 quest points"),
+  noZeroPoints: html.includes("0 quest points"),
+}));
+""")
+    assert js["kind"] == "branch"
+    assert js["xText"], "the X alternative shows the card's own questPointsX.text, not a number"
+    assert js["ownCardText"], "the card's own back-face text still prints too, same as any other row"
+    assert js["numberPoints"], "the numeric sibling still renders its real points"
+    assert not js["noZeroPoints"]
+
+
+def test_resolution_sheet_flip_cta_omits_the_qp_suffix_for_a_condition_or_x_stage():
+    """Review finding 3: the reveal step's "Flip to Side B -> N qp" CTA read
+    card.questPoints unconditionally, so a condition stage (questPointsKind
+    "na") or an X stage (questPointsKind "x") got the same "-> 0 qp" a real
+    numeric stage gets. Gated on the same shape predicate as the branch rows
+    (xshape.js's stagePointsShape) - the twin's own _drawReveal still prints
+    "0 qp" here; a follow-up card fixes it there."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+function reveal(card) {
+  const g = new GameState(1, 25);
+  g.preloadScenario({ slug: "x", name: "X" }, [{ stage: 1, cards: [card] }]);
+  g.view = "quest_setup";
+  const ui = newUi();
+  ui.sheet = { kind: "resolve", forced: false, branchPick: null, skippedSide: [] };
+  return layout(g, ui);
+}
+const condHtml = reveal({ questPoints: 0, questPointsKind: "na", faces: [
+  { side: "A", name: "Cond Stage", text: "Setup: shuffle the encounter deck." },
+  { side: "B", name: "Cond Stage", text: "Advances when the last enemy is defeated." }] });
+const xHtml = reveal({ questPoints: 0, questPointsKind: "x",
+  questPointsX: { target: "highest_threat", text: "X is equal to the threat level of the player with the highest threat level." },
+  faces: [
+    { side: "A", name: "X Stage", text: null },
+    { side: "B", name: "X Stage", text: "This stage cannot be defeated until X." }] });
+const numHtml = reveal({ questPoints: 3, faces: [
+  { side: "A", name: "Num Stage", text: "Setup: shuffle the encounter deck." },
+  { side: "B", name: "Num Stage", text: null }] });
+console.log(JSON.stringify({
+  condFlip: condHtml.includes(">Flip to Side B<"),
+  condNoQp: !condHtml.includes("qp"),
+  xFlip: xHtml.includes(">Flip to Side B → X<"),
+  xNoZero: !xHtml.includes("0 qp"),
+  numFlip: numHtml.includes(">Flip to Side B → 3 qp<"),
+}));
+""")
+    assert js["condFlip"], "no printed target - no arrow, no qp suffix at all"
+    assert js["condNoQp"]
+    assert js["xFlip"], "an X stage's flip CTA names the shape, not a number"
+    assert js["xNoZero"]
+    assert js["numFlip"], "a real numeric stage keeps its own qp suffix"
+
+
+def test_resolution_sheet_reveal_prints_one_line_for_a_card_blank_on_both_faces():
+    """Review finding 2: a stage card that prints no text on EITHER face used
+    to draw two "No card text" blocks, one per caption - reading as "this
+    stage has nothing to do" twice over. The twin's own _drawReveal folds
+    this into QUEST_SETUP.none (viewcopy.js) instead, said once. Checked by
+    counting .rsheet-face blocks rather than the sentence itself, since the
+    background quest_setup pane (pane.js's renderQuestSetup) also has its
+    OWN "has no Setup instructions" line for this same blank card
+    ("Stage 1A", stage+side) - a different string from the sheet's own
+    ("Stage 1", stage only), but both contain that phrase."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, [{ stage: 1, cards: [{ questPoints: 2, faces: [
+  { side: "A", name: "Blank Stage", text: null },
+  { side: "B", name: "Blank Stage", text: null }] }] }]);
+g.view = "quest_setup";
+const ui = newUi();
+ui.sheet = { kind: "resolve", forced: false, branchPick: null, skippedSide: [] };
+const html = layout(g, ui);
+console.log(JSON.stringify({
+  rsheetFaceBlocks: (html.match(/class="rsheet-face"/g) || []).length,
+  sheetLine: html.includes("Stage 1 has no Setup instructions."),
+  noCardTextLiteral: html.includes("No card text"),
+  sideCaptionsAbsent: !html.includes(">Side A<") && !html.includes(">Side B<"),
+}));
+""")
+    assert js["rsheetFaceBlocks"] == 1, "one block for the combined message, not one per blank face"
+    assert js["sheetLine"]
+    assert not js["noCardTextLiteral"]
+    assert js["sideCaptionsAbsent"], "the both-blank case is not per-face, so it drops the Side A/B captions too"
 
 
 def test_sailing_sheet_wheels_found_shifts_heading_and_cancel_leaves_it_unchanged():

@@ -57,3 +57,20 @@ export function xShape(loc) {
   if ((x.mul ?? 1) === 1 && !x.add) return "bare";
   return "count";
 }
+
+// A stage card's own printed-points predicate, for the resolution sheet
+// (sheet_resolve.js/resolve_step.js) - mirrors flipToB's own three-way read
+// of questPointsKind/questPointsX verbatim (docs/js/gamestate.js
+// ~1303-1313), so a branch row or a flip CTA never draws a number the card
+// does not carry (review finding 1: 33 of 116 branch alternatives in the
+// catalog have falsy questPoints - 32 print no target at all, one prints a
+// coded X - and "0 quest points" is a lie for either).
+//   "number" a real printed target - draw it
+//   "x"      the card's own text carries the formula (questPointsX.text)
+//   "none"   no target exists - draw nothing
+export function stagePointsShape(card) {
+  if (card?.questPointsX) return "x";
+  const kind = card?.questPointsKind;
+  if (kind === "na" || (!card?.questPoints && kind)) return "none";
+  return "number";
+}

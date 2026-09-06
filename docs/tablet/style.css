@@ -313,7 +313,11 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
   background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
   border-radius: 6px; }
 .rsheet-row-head { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; }
-.rsheet-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
+/* No .is-selected rule: the branch step only exists while nothing is picked
+   yet (review finding 4), so a row here is never the selected one. The
+   Randomize chip's wrapper is .rsheet-*, not .qsheet-add - same flex-wrap
+   values, moved into this file's own namespace (review finding 5). */
+.rsheet-dice { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* The sailing test sheet (Task 8): SailingModal's own wheel-count stepper
    (docs/js/screens.js) centred between a -/+ pair, with a LABEL/BODY pair

@@ -14,10 +14,12 @@
 // affordance into the card modal - this sheet scrolls, so every face prints
 // in full), and paginate. What it does keep is the twin's order of
 // precedence and its wording, log lines included.
-import { h, raw, cx } from "./dom.js";
+import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
 import { deriveResolveStep, backOf, branchName } from "./resolve_step.js";
+import { stagePointsShape } from "./xshape.js";
+import { NO_CARD_TEXT, QUEST_SETUP } from "../../js/viewcopy.js";
 
 // %s/%d template fill, in order - same helper as pane.js's local fmt().
 const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); };
@@ -27,21 +29,40 @@ const fmt = (t, ...a) => { let i = 0; return t.replace(/%[sd]/g, () => a[i++]); 
 // rule 3b: ALL-CAPS chrome names the slot, the rules text is prose).
 function faceBlock(caption, face) {
   return h`<div class="rsheet-face"><div class="label">${caption}</div>
-<p class="body">${face.text || CHROME.noCardText}</p></div>`;
+<p class="body">${face.text || NO_CARD_TEXT}</p></div>`;
+}
+
+// The flip CTA's label - gated on the SAME shape predicate the branch rows
+// use (xshape.js's stagePointsShape, review finding 3): a stage that prints
+// no number, or prints X, is not owed a "-> 0 qp"/"-> N qp" the card never
+// printed. Ruling: the twin's _drawReveal still prints "0 qp" here; a
+// follow-up card fixes it there, this one fixes it on the tablet now.
+function flipLabel(st) {
+  if (st.next_shape === "x") return CHROME.resolveFlipX;
+  if (st.next_shape === "none") return CHROME.resolveFlipBare;
+  return fmt(CHROME.resolveFlip, st.next_points);
 }
 
 // Both faces, because the back is where a stage's rules often live - 75 of
 // 514 stage cards print their When Revealed there and nothing on the front.
 // A card with only ONE face gets one block: claiming a Side B the catalog
 // does not have would be inventing a side of the card (see backOf).
+//
+// A card blank on BOTH faces is not two blank lines - one under "Side A"
+// and one under "Side B" reads like the stage has nothing to do twice over.
+// The twin's own _drawReveal folds this into QUEST_SETUP.none (viewcopy.js)
+// instead - "Stage %s has no Setup instructions." - said once (review
+// finding 2).
 function renderReveal(st) {
-  const blocks = faceBlock(CHROME.sideA, st.face_a ?? {})
-    + (st.face_b ? faceBlock(CHROME.sideB, st.face_b) : "");
+  const bothBlank = st.face_b && !st.face_a?.text && !st.face_b?.text;
+  const blocks = bothBlank
+    ? h`<div class="rsheet-face"><p class="body">${QUEST_SETUP.none.replace("%s", String(st.stage_n))}</p></div>`
+    : faceBlock(CHROME.sideA, st.face_a ?? {}) + (st.face_b ? faceBlock(CHROME.sideB, st.face_b) : "");
   const name = st.face_a?.name || st.face_b?.name || "";
   return h`<div class="label">${fmt(CHROME.resolveRevealed, st.stage_n)}</div>
 <h1 class="display">${name}</h1>
 <div class="rsheet-faces">${raw(blocks)}</div>
-<div class="cta-row">${raw(cta({ act: "res_flip", label: h`${fmt(CHROME.resolveFlip, st.next_points)}` }))}</div>`;
+<div class="cta-row">${raw(cta({ act: "res_flip", label: h`${flipLabel(st)}` }))}</div>`;
 }
 
 function renderLocation(st) {
@@ -58,28 +79,49 @@ ${raw(excessLine)}
 <div class="cta-row">${raw(cta({ act: "res_location", label: CHROME.resolveContinue }))}</div>`;
 }
 
+// A branch alternative's own points span - "number" draws it, "x" shows the
+// card's own formula sentence instead of a number, "none" draws nothing
+// (review finding 1: 33 of 116 alternatives in the catalog have falsy
+// questPoints - 32 print no target at all, one prints a coded X - and
+// neither is a 0 the card printed).
+function branchPointsLine(card) {
+  const shape = stagePointsShape(card);
+  if (shape === "number") return h`<span class="body secondary">${fmt(CHROME.branchPoints, card.questPoints)}</span>`;
+  if (shape === "x") return h`<span class="body secondary">${card.questPointsX?.text ?? ""}</span>`;
+  return "";
+}
+
 // One fork alternative: the path's own name and quest points, over the
 // card's own printed text. The name comes off the BACK face (branchName -
 // the front is the same generic stage title on 23 of the 39 branch stages),
 // and the text is the card's own words rather than a paraphrase of them
 // (CLAUDE.md rule 4) - all 116 alternative cards in the catalog print some.
 // Same two-line pickable-row shape .sqpick-row uses for a side quest.
-function branchRow(card, i, picked) {
+//
+// No "is-selected" state: this step only exists while branchPick is null
+// (deriveResolveStep's questStep falls through to "advance" the moment a
+// pick is made), so a row here is never the picked one - removed dead code
+// that could not fire (review finding 4).
+function branchRow(card, i) {
   const text = backOf(card)?.text;
   const line = text ? h`<span class="body secondary">${text}</span>` : "";
-  return h`<button type="button" class="${cx("rsheet-row", picked && "is-selected")}" data-act="res_branch" data-arg="${i}">
+  const pts = branchPointsLine(card);
+  return h`<button type="button" class="rsheet-row" data-act="res_branch" data-arg="${i}">
 <span class="rsheet-row-head"><span class="body">${branchName(card)}</span>
-<span class="body secondary">${fmt(CHROME.branchPoints, card.questPoints ?? 0)}</span></span>
+${raw(pts)}</span>
 ${raw(line)}</button>`;
 }
 
-function renderBranch(st, sheet) {
-  const rows = st.cards.map((c, i) => branchRow(c, i, (sheet.branchPick ?? null) === i)).join("");
+function renderBranch(st) {
+  const rows = st.cards.map((c, i) => branchRow(c, i)).join("");
   // ALL CAPS both ways: this slot names how the choice gets made and is read
   // as chrome under the title, not as a sentence (the twin's own comment).
   const mode = st.mode === "random" ? CHROME.randomPath : CHROME.firstPlayerChooses;
+  // .rsheet-dice, not .qsheet-add (review finding 5) - this file is
+  // .rsheet-* throughout; the quest sheet's namespace just happened to have
+  // the right flex-wrap values, so the rule moved rather than being copied.
   const dice = st.mode === "random"
-    ? h`<div class="qsheet-add">${raw(chip({ act: "res_random", label: CHROME.randomize, tone: "tan" }))}</div>`
+    ? h`<div class="rsheet-dice">${raw(chip({ act: "res_random", label: CHROME.randomize, tone: "tan" }))}</div>`
     : "";
   return h`<h1 class="display">${CHROME.choosePath}</h1>
 <div class="label">${mode}</div>
@@ -127,7 +169,7 @@ export function renderResolveSheet(game, ui) {
   if (st === null) return renderDone();
   if (st.kind === "reveal") return renderReveal(st);
   if (st.kind === "location") return renderLocation(st);
-  if (st.kind === "branch") return renderBranch(st, ui.sheet ?? {});
+  if (st.kind === "branch") return renderBranch(st);
   if (st.kind === "advance") return renderAdvance(st);
   if (st.kind === "victory") return renderVictory(st);
   return renderSideQuest(st);

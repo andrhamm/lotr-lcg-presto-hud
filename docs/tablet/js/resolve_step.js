@@ -13,6 +13,7 @@
 // then side quests.
 import { CHROME } from "./copy.js";
 import { faceOf, frontFace } from "./cards.js";
+import { stagePointsShape } from "./xshape.js";
 
 // The twin's backFace() (docs/js/ui.js) returns {} for a single-face card;
 // cards.js's faceOf(card, "B") deliberately falls back to faces[0] instead,
@@ -47,7 +48,7 @@ function questStep(game, sheet) {
     // comment, from the 2026-07-30 playtest of The Oath).
     return { kind: "reveal", stage_n: g.quest.stage_n,
              face_a: frontFace(card), face_b: backOf(card),
-             next_points: card.questPoints };
+             next_points: card.questPoints, next_shape: stagePointsShape(card) };
   }
   const nxtIdx = g.stage_idx + 1;
   if (nxtIdx >= g.stages.length) {

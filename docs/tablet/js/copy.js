@@ -127,11 +127,18 @@ export const CHROME = {
   resolveRevealed: "Stage %s revealed",
   sideA: "Side A",
   sideB: "Side B",
-  // A face the catalog has, that prints no game text of its own. Said per
-  // face, under that face's own caption, so a blank front never reads as
-  // "this stage has nothing to do" when the back is where its rules live.
-  noCardText: "No card text",
+  // A blank-face fallback used to live here as "No card text" - deleted in
+  // favor of NO_CARD_TEXT (docs/js/viewcopy.js), the twin's own string for
+  // the identical case (review finding 2). Both faces blank at once is a
+  // different case entirely - see QUEST_SETUP.none, also from viewcopy.js.
   resolveFlip: "Flip to Side B → %s qp",
+  // The flip CTA's other two shapes (review finding 3, xshape.js's
+  // stagePointsShape): a card that prints X or prints nothing at all is not
+  // owed a "-> 0 qp" the card never printed. The X case says nothing new -
+  // the card's own formula sentence is already on screen in the Side B
+  // block above - so the button just names the shape.
+  resolveFlipX: "Flip to Side B → X",
+  resolveFlipBare: "Flip to Side B",
   locationExplored: "Location Explored",
   progressOf: "%s/%s progress",
   resolveExcess: "%s excess → quest card",

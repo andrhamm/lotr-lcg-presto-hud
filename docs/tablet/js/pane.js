@@ -81,7 +81,12 @@ function allocStep(glyph, act, arg, live) {
 // room check (a row's own cap can still swallow a live-looking tap, same as
 // the twin - see docs/js/screen_play.js's "used > 0" / "used < budget").
 function allocRow(label, was, add, pts, arg, used, budget) {
-  const minus = allocStep("&minus;", "alloc-", arg, used > 0);
+  // U+2212, not the "&minus;" entity - allocStep interpolates glyph through
+  // h`` , which escapes the "&" a second time into literal "&amp;minus;"
+  // text on screen (review finding 7). primitives.js/pane.js's other
+  // steppers write "&minus;" straight into template text instead of through
+  // an interpolation, which is why they are fine as-is.
+  const minus = allocStep("−", "alloc-", arg, used > 0);
   const plus = allocStep("+", "alloc+", arg, used < budget);
   return h`<div class="alloc-row">
 <span class="body alloc-label">${label}</span>

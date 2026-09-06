@@ -42,8 +42,11 @@ export function handle(game, ui, act, arg) {
   }
   if (act === "res_branch") {
     if (st?.kind !== "branch") return false;
-    const i = Number(arg);
-    if (!(i >= 0 && i < st.cards.length)) return false;
+    // Number("") is 0, which an unguarded `i >= 0` bounds check happily
+    // accepts - an empty data-arg would silently pick path 0. parseInt("")
+    // is NaN, and Number.isInteger(NaN) is false, so this refuses instead.
+    const i = Number.parseInt(arg, 10);
+    if (!Number.isInteger(i) || i < 0 || i >= st.cards.length) return false;
     ui.sheet.branchPick = i;
     return true;
   }
