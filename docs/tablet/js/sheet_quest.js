@@ -180,6 +180,15 @@ export function renderQuestSheet(game, ui) {
 ${raw(chip({ act: "open_locpick", label: CHROME.addLocation, tone: "tan" }))}
 ${raw(chip({ act: "open_sqpick", label: CHROME.sideQuest, tone: "tan" }))}
 </div>`;
+  // "Advance anyway" (review finding C1) - the quest row's own way into the
+  // guided resolution flow before progress reaches the target, mirroring
+  // QuestConfigModal's "force_adv" button (docs/js/screens.js ~2244-2249):
+  // gated the same way it is there, on a stage tree existing at all. A
+  // custom/manual game (no stages) has no guided flow for this to open, so
+  // it keeps editing progress by hand instead.
+  const forceCta = game.stages.length
+    ? cta({ act: "quest_force", label: CHROME.questForceAdvance, tone: "plain", grow: false })
+    : "";
   return h`<h1 class="display">${CHROME.quest}</h1>
 <div class="qsheet-list">
 ${raw(renderQuestGroup(game))}
@@ -187,5 +196,5 @@ ${raw(locSection)}
 ${raw(sqSection)}
 </div>
 ${raw(addRow)}
-<div class="cta-row">${raw(cta({ act: "quest_done", label: CHROME.done }))}</div>`;
+<div class="cta-row">${raw(cta({ act: "quest_done", label: CHROME.done }))}${raw(forceCta)}</div>`;
 }

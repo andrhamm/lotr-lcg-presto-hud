@@ -1816,3 +1816,186 @@ def test_chip_labels_are_composed_with_h():
         "label built from a plain template literal, bypassing h`` escaping "
         "before raw() unwraps it:\n" + "\n".join(violations)
     )
+
+
+# ---------------------------------------------------------------------------
+# Final fix wave (milestone 3 review): C1, I2, I3, I4, M5, M8, M9, Rule 3b.
+# ---------------------------------------------------------------------------
+
+
+def test_quest_sheet_force_advance_button_renders_only_with_a_stage_tree():
+    """C1: "Advance anyway" (acts_quest.js's quest_force) is only offered
+    when the game has a stage tree at all - QuestConfigModal's own force_adv
+    button is gated the same way (docs/js/screens.js ~2244-2249): a
+    custom/manual game has no guided resolution flow for it to open."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+
+const bare = new GameState(1, 25); bare.advanceView();
+const bareUi = newUi();
+perform(bare, bareUi, "open_quest", "");
+const bareHtml = layout(bare, bareUi);
+
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, [{ stage: 1, cards: [{ questPoints: 3, faces: [
+  { side: "A", name: "X", text: null }, { side: "B", name: "X", text: null }] }] }]);
+g.view = "quest_setup";
+const ui = newUi();
+perform(g, ui, "open_quest", "");
+const html = layout(g, ui);
+console.log(JSON.stringify({
+  bareHasButton: bareHtml.includes('data-act="quest_force"'),
+  hasButton: html.includes('data-act="quest_force"'),
+  label: html.includes("Advance anyway"),
+}));
+""")
+    assert not js["bareHasButton"], "a custom/manual game has no guided resolution flow to force-open"
+    assert js["hasButton"] and js["label"]
+
+
+def test_quest_sheet_force_advance_walks_a_condition_stage_then_recovers_after_a_dismiss():
+    """C1, both halves of the finding. (a) A condition-mode stage (points 0,
+    so quest_done's ordinary needsResolution() check never fires on its own)
+    still needs a way into the guided flow - quest_force sets the SAME
+    pending_resolution = "forced" flag QuestConfigModal's force_adv sets, and
+    resolve_step.js's `sheet.forced` is what lets the quest step fire despite
+    the target never being reached. (b) Recovery: dismissing the resulting
+    resolve sheet with sheet_close (side A, quest.points back at 0 after the
+    advance) must not strand the player - reopening the quest sheet and
+    forcing again has to walk the SAME interrupted-reveal-first precedence
+    resolve_step.js documents, not skip straight to a stale "advance"."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, afterTap, newUi } from "./actions.js";
+import { deriveResolveStep } from "./resolve_step.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const STAGES = [
+  { stage: 1, cards: [{ questPoints: 0, questPointsKind: "na", faces: [
+      { side: "A", name: "The Bell Tolls", text: "Setup: shuffle the encounter deck." },
+      { side: "B", name: "The Bell Tolls", text: "This stage advances when the bell is struck three times." }] }] },
+  { stage: 2, cards: [{ questPoints: 3, faces: [
+      { side: "A", name: "The Answer", text: "When Revealed: add 1 enemy to staging." },
+      { side: "B", name: "The Answer", text: null }] }] },
+];
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, STAGES);
+g.view = "quest_setup";
+const ui = newUi();
+
+perform(g, ui, "flip_to_b", "");                    // 1A -> 1B: condition mode, 0 points
+const mode = g.quest.mode;
+perform(g, ui, "open_quest", "");
+const forced = perform(g, ui, "quest_force", "");
+afterTap(g, ui);
+const opened = { ...ui.sheet };
+const advanceStep = deriveResolveStep(g, ui);
+perform(g, ui, "res_advance", "");
+const advanced = { stage_idx: g.stage_idx, side: g.quest.side, points: g.quest.points };
+
+// (b) recovery: dismiss via the scrim rather than a resolve-sheet CTA, at
+// the freshly-advanced side A / 0 points, then force again.
+perform(g, ui, "sheet_close", "");
+const afterDismiss = { sheet: ui.sheet, pending: g.pending_resolution };
+perform(g, ui, "open_quest", "");
+perform(g, ui, "quest_force", "");
+afterTap(g, ui);
+const reopened = { ...ui.sheet };
+const revealStep = deriveResolveStep(g, ui);
+perform(g, ui, "res_flip", "");
+const flippedSide = g.quest.side;
+
+console.log(JSON.stringify({
+  mode, forced, opened, advanceKind: advanceStep.kind, advanceUnderfilled: advanceStep.underfilled,
+  advanced, afterDismiss, reopened, revealKind: revealStep.kind, flippedSide,
+}));
+""")
+    assert js["mode"] == "condition"
+    assert js["forced"] is True
+    assert js["opened"] == {"kind": "resolve", "forced": True, "branchPick": None, "skippedSide": []}
+    assert js["advanceKind"] == "advance"
+    assert js["advanceUnderfilled"] is False, "a condition stage prints no target, so it is never \"underfilled\""
+    assert js["advanced"] == {"stage_idx": 1, "side": "A", "points": 0}
+    assert js["afterDismiss"] == {"sheet": None, "pending": False}
+    assert js["reopened"] == {"kind": "resolve", "forced": True, "branchPick": None, "skippedSide": []}
+    assert js["revealKind"] == "reveal", "an interrupted flip (side A) takes precedence over the forced flag"
+    assert js["flippedSide"] == "B"
+
+
+def test_resolve_step_reports_all_resolved_instead_of_crashing_on_empty_stages():
+    """I2: a resume whose bundle failed to (re)hydrate leaves game.stages
+    == [] - fromDict()'s own default, since toDict() deliberately never
+    saves `stages` (docs/js/gamestate.js). deriveResolveStep used to index
+    g.stages[g.stage_idx] unconditionally the moment a quest already at its
+    points (or a forced advance) reached questStep(), crashing layout() on
+    every render. It must instead report nothing left to resolve. node()'s
+    own non-zero-exit check is what proves this no longer throws."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { newUi } from "./actions.js";
+import { deriveResolveStep } from "./resolve_step.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+g.stages = [];                              // simulate a resume with no (re)hydrated stage tree
+g.quest.points = 2; g.quest.progress = 2;   // already "at its points"
+const ui = newUi();
+ui.sheet = { kind: "resolve", forced: false, branchPick: null, skippedSide: [] };
+const atPoints = deriveResolveStep(g, ui);
+const atPointsHtml = layout(g, ui);
+
+g.quest.points = 0; g.quest.progress = 0;   // not at its points, but forced
+ui.sheet = { kind: "resolve", forced: true, branchPick: null, skippedSide: [] };
+const forced = deriveResolveStep(g, ui);
+const forcedHtml = layout(g, ui);
+
+console.log(JSON.stringify({
+  atPoints, atPointsAllResolved: atPointsHtml.includes("All resolved"),
+  forced, forcedAllResolved: forcedHtml.includes("All resolved"),
+}));
+""")
+    assert js["atPoints"] is None
+    assert js["atPointsAllResolved"]
+    assert js["forced"] is None
+    assert js["forcedAllResolved"]
+
+
+def test_quest_sheet_scrim_close_flags_resolution_same_as_done():
+    """I3: acts_sheets.js's sheet_close used to just clear ui.sheet for
+    every sheet kind, including the quest sheet - so a location edited up to
+    its own quest points and dismissed via the scrim (rather than the
+    sheet's own Done) never ran needsResolution() at all. Factored into
+    closeQuestSheet() (acts_quest.js), now shared by quest_done and this
+    scrim path - and it must NOT fire early, before the location is actually
+    at its points, or for a scrim close on some other sheet kind."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25); g.advanceView();
+g.active_locations.push({ points: 3, progress: 1, name: "Sarn Ford", threat: 2 });
+const ui = newUi();
+
+perform(g, ui, "open_staging", "");
+perform(g, ui, "sheet_close", "");
+const otherKind = { pending: g.pending_resolution, closed: ui.sheet === null };
+
+perform(g, ui, "open_quest", "");
+perform(g, ui, "sheet_close", "");
+const early = { pending: g.pending_resolution, closed: ui.sheet === null };
+
+perform(g, ui, "open_quest", "");
+perform(g, ui, "lP+", "0"); perform(g, ui, "lP+", "0");
+const progress = g.active_locations[0].progress;
+perform(g, ui, "sheet_close", "");
+console.log(JSON.stringify({
+  otherKind, early, progress, closed: ui.sheet === null, pending: g.pending_resolution,
+}));
+""")
+    assert js["otherKind"] == {"pending": False, "closed": True}, "a scrim close on a non-quest sheet must not run this check"
+    assert js["early"] == {"pending": False, "closed": True}, "not at its points yet: no false-positive resolution"
+    assert js["progress"] == 3
+    assert js["closed"]
+    assert js["pending"] == "auto"

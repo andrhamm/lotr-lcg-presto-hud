@@ -19,13 +19,50 @@ function clampAdj(cur, delta, cap = null) {
   return Math.max(0, Math.min(hi, cur + delta));
 }
 
+// Shared tail for "leaving the quest sheet" - used by both quest_done (the
+// sheet's own Done button) and acts_sheets.js's sheet_close when the sheet
+// it is dismissing is this one (review finding I3) - one function, so the
+// two paths can never drift.
+//
+// needsResolution() alone, unconditionally - NOT QuestingProgressModal's own
+// "close" case (docs/js/screens.js ~1463-1475), which runs it only when
+// `g.stages.length`, and falls back to a quest-only check otherwise. That
+// branch exists there because the twin's own lP+/lP- (onButton's "lP-"/"lP+"
+// case, ~1398) auto-explores a done location IMMEDIATELY when there is no
+// stage tree, so by close time a custom game never has location overflow
+// left to defer. This client's lP+/lP- (above) never does that - every
+// game, catalog or custom, defers ALL overflow (location, quest, side quest)
+// to this close-time check - so needsResolution() itself, which never reads
+// `stages`, is already the right - and already crash-safe - test for both.
+// The actual empty-`stages` crash this milestone's review flagged (I2) was
+// resolve_step.js indexing into the stage tree once resolution opens, fixed
+// there; nothing here needs a stages.length branch to avoid it.
+export function closeQuestSheet(game) {
+  if (game.needsResolution()) game.pending_resolution = "auto";
+}
+
 export function handle(game, ui, act, arg) {
   if (act === "quest_done") {
     ui.sheet = null;
     // Left for Task 7's own sheet to consume - it opens on this flag exactly
     // the way the elimination sheet opens on pending_elim (afterTap, in
     // actions.js).
-    if (game.needsResolution()) game.pending_resolution = "auto";
+    closeQuestSheet(game);
+    return true;
+  }
+  if (act === "quest_force") {
+    // The quest row's own "Advance anyway" (QuestConfigModal's "force_adv",
+    // docs/js/screens.js ~2244-2249, ~2290): only offered when the game has
+    // a stage tree at all - a custom game already has its own "Advance stage"
+    // button for the no-stages case, and has no guided resolution flow to
+    // open here. Sets the SAME flag the twin's force_adv sets
+    // (pending_resolution = "forced"); afterTap (actions.js) opens the
+    // resolution sheet on it exactly like the ordinary "auto" case, and
+    // resolve_step.js's `sheet.forced` is what lets the quest step fire even
+    // though progress has not reached the target.
+    if (!game.stages.length) return false;
+    ui.sheet = null;
+    game.pending_resolution = "forced";
     return true;
   }
   if (act === "qP-" || act === "qP+") {

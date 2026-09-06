@@ -65,6 +65,9 @@ export const CHROME = {
   replace: "Replace",
   remove: "Remove",
   addLocation: "+ Add location",
+  // The quest row's own forced advance (review finding C1) - verbatim
+  // QuestConfigModal's "force_adv" button label (docs/js/screens.js).
+  questForceAdvance: "Advance anyway",
   // Verbatim QuestingProgressModal's own fallback (docs/js/screens.js) for a
   // condition stage with no card-supplied advance sentence.
   questConditionFallback: "This stage advances on a condition, not on progress.",

@@ -89,6 +89,15 @@ export function deriveResolveStep(game, ui) {
     }
   }
   if ((g.quest.points > 0 && g.quest.progress >= g.quest.points) || sheet.forced) {
+    // Review finding I2: a resume whose bundle failed to load leaves
+    // `stages` empty, and questStep() indexes g.stages[g.stage_idx] with no
+    // guard of its own - forced (the quest row's own Advance) or a quest
+    // already at its points would otherwise crash layout() on every render.
+    // The twin's own force_adv button is only ever offered when
+    // game.stages.length is truthy (QuestConfigModal, docs/js/screens.js),
+    // so this state cannot arise there - refusing the step (-> "All
+    // resolved") is this side's own guard for a case the twin never reaches.
+    if (!g.stages.length) return null;
     return questStep(g, sheet);
   }
   // Skipped side quests are held by IDENTITY, not index - "Leave as-is" must
