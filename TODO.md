@@ -63,6 +63,18 @@ across columns, and surface blockers here.
 - [ ] One elimination prompt per eliminated player, not just the last
   - notes: `adjustAllThreat` / `applyRefresh` (both twins) set `pending_elim` to the LAST player crossing the level in one tap; when two cross together the first gets no avert prompt. Pre-existing in the Presto twin; on the tablet the un-prompted player has no route back until the M4 rewind lands. Fix: a queue (or a list) of pending eliminations, drained one prompt at a time - both twins, parity test.
 
+- [ ] Verify the rulebook page link the tablet's Rules modal offers
+  - notes: `docs/tablet/js/copy.js` `rulesPageUrl` (and `page=` in `tools/data/rules.SOURCE.txt`) point at FFG's product page; nothing verifies it resolves and it is the only thing the modal offers when `rules_text.json` is absent. Open it on the iPad during the soak; pin the direct PDF `url=` if FFG exposes one.
+
+- [ ] Service worker: sweep superseded caches on activate
+  - notes: `docs/tablet/sw.js` names `lotr-tablet-shell-v1` / `lotr-tablet-images-v1` and never deletes older names; harmless with one version, a leak the first time either bumps to -v2. Add the sweep (and a test in `tests/test_tablet_sw.py`) before the first version bump.
+
+- [ ] Rules text: "Spheres of Influence" picks up a diagram caption as See-also terms
+  - notes: `tools/build_rules_text.py`'s See-also continuation reads the sphere-icon legend that liteparse renders as prose right after the entry's See-also line (corpus artifact). Cosmetic (three spurious `see_also` entries, `text` clean). Stop continuation at a line without a comma, or special-case the entry.
+
+- [ ] Catalog loader reads the scenario's own set file twice per bundle
+  - notes: `includedSets` lists the own set, so `loadGatheredPacks`/`_load_gathered_packs` re-read `scenarios/<own>.json` after `loadScenario` already has it (`docs/js/quest_catalog.js`, `quest_catalog.py`). Pre-existing; one extra read per game start. Pass the already-loaded record in.
+
 ## In Progress
 * Notes for in progress overhaul of location/quest "progress":
 	* [these four are UNADDRESSED — the plan below shipped first. They are
