@@ -1146,6 +1146,239 @@ console.log(JSON.stringify({
     assert js["sheetKind"] == "quest"
 
 
+# Task 7's fixture, shaped like the real catalog and like the twin's own
+# (tests/test_resolution_modal.py's STAGES, which drives ResolutionModal
+# through this same walk): stage 1 is one card worth 2 quest points, stage 2
+# is a two-card fork. The fork's alternatives deliberately SHARE a front-face
+# name and differ only on their backs - that is the majority case in the
+# catalog (23 of 39 branch stages; Escape from Khazad-dum's stage 2 is
+# "Search for an Exit" three times over), and it is why resolve_step.js's
+# branchName reads the back face.
+_RESOLVE_STAGES = """
+const STAGES = [
+  { stage: 1, cards: [{ questPoints: 2, faces: [
+      { side: "A", name: "Flies and Spiders", text: "Setup: search the encounter deck." },
+      { side: "B", name: "Flies and Spiders", text: null }] }] },
+  { stage: 2, branch: "choice", cards: [
+      { questPoints: 0, faces: [
+          { side: "A", name: "Search for an Exit", text: null },
+          { side: "B", name: "Old One Lair", text: "This stage cannot be defeated until X." }] },
+      { questPoints: 4, faces: [
+          { side: "A", name: "Search for an Exit", text: "When Revealed: add 1 enemy to staging." },
+          { side: "B", name: "A Way Up", text: "Progress cannot be placed here." }] }] },
+];
+"""
+
+
+def test_resolution_sheet_walks_branch_advance_reveal_flip_to_all_resolved():
+    """Task-7 brief step 1. The whole guided flow in one tap sequence, the
+    twin's own (test_resolution_modal.py's
+    test_branch_pick_then_advance_then_reveal_then_flip, plus the auto-open
+    main.js does off pending_resolution): filling stage 1B's 2 quest points
+    sets game.pending_resolution, afterTap() seats the sheet the way app.js
+    does after every perform(), and deriveResolveStep() - the one function
+    both the renderer and the acts read - walks branch -> advance -> reveal
+    -> null. The reveal step must print BOTH faces (75 of 514 stage cards
+    print their rules only on the back), and the branch rows must be told
+    apart by their BACK names, since both alternatives here print the same
+    front name."""
+    js = node(_RESOLVE_STAGES + """
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, afterTap, newUi } from "./actions.js";
+import { deriveResolveStep } from "./resolve_step.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, STAGES);
+g.view = "quest_setup";
+const ui = newUi();
+perform(g, ui, "flip_to_b", "");                  // 1A -> 1B, 2 quest points
+g.setWillpower(4); g.setStaging(0);
+perform(g, ui, "resolve", "");
+perform(g, ui, "apply_alloc", "");                // 2 of 4 progress lands, stage cleared
+const pending = g.pending_resolution;
+afterTap(g, ui);
+const opened = ui.sheet && { ...ui.sheet };
+const cleared = g.pending_resolution;
+
+const branchStep = deriveResolveStep(g, ui);
+const branchHtml = layout(g, ui);
+perform(g, ui, "res_branch", "1");                // take the second path
+const advanceStep = deriveResolveStep(g, ui);
+const advanceHtml = layout(g, ui);
+perform(g, ui, "res_advance", "");
+const advanced = { stage_idx: g.stage_idx, card_idx: g.card_idx, side: g.quest.side,
+                   branchPick: ui.sheet.branchPick, kind: deriveResolveStep(g, ui).kind };
+const revealHtml = layout(g, ui);
+perform(g, ui, "res_flip", "");
+const flipped = { side: g.quest.side, points: g.quest.points, step: deriveResolveStep(g, ui) };
+const doneHtml = layout(g, ui);
+perform(g, ui, "res_close", "");
+console.log(JSON.stringify({
+  pending, opened, cleared,
+  branchKind: branchStep.kind, branchMode: branchStep.mode,
+  branchSheet: branchHtml.includes('class="sheet sheet-resolve"'),
+  branchTitle: branchHtml.includes("Choose a path") && branchHtml.includes("First player chooses"),
+  branchBackNames: branchHtml.includes("Old One Lair") && branchHtml.includes("A Way Up"),
+  branchFrontName: branchHtml.includes("Search for an Exit"),
+  branchText: branchHtml.includes("Progress cannot be placed here."),
+  branchPoints: branchHtml.includes("4 quest points"),
+  branchTaps: (branchHtml.match(/data-act="res_branch"/g) || []).length,
+  noRandomize: !branchHtml.includes('data-act="res_random"'),
+  advanceKind: advanceStep.kind, advanceIdx: advanceStep.card_idx,
+  advanceUnderfilled: advanceStep.underfilled,
+  advanceCta: advanceHtml.includes('data-act="res_advance"') && advanceHtml.includes("Reveal Stage 2"),
+  noWarning: !advanceHtml.includes("Progress hasn't reached target"),
+  advanced,
+  revealTitle: revealHtml.includes("Stage 2 revealed"),
+  revealFaceA: revealHtml.includes("When Revealed: add 1 enemy to staging."),
+  revealFaceB: revealHtml.includes("Progress cannot be placed here."),
+  revealCaptions: revealHtml.includes("Side A") && revealHtml.includes("Side B"),
+  revealCta: revealHtml.includes('data-act="res_flip"') && revealHtml.includes("4 qp"),
+  flipped,
+  doneTitle: doneHtml.includes("All resolved") && doneHtml.includes('data-act="res_close"'),
+  closed: ui.sheet,
+}));
+""")
+    assert js["pending"] == "auto"
+    assert js["opened"] == {"kind": "resolve", "forced": False, "branchPick": None, "skippedSide": []}
+    assert js["cleared"] is False, "afterTap must consume pending_resolution, like main.js's router"
+    assert js["branchKind"] == "branch" and js["branchMode"] == "choice"
+    assert js["branchSheet"] and js["branchTitle"]
+    assert js["branchBackNames"], "fork rows are named off the BACK face"
+    assert not js["branchFrontName"], "the shared front name would make both rows read alike"
+    assert js["branchText"] and js["branchPoints"]
+    assert js["branchTaps"] == 2 and js["noRandomize"]
+    assert js["advanceKind"] == "advance" and js["advanceIdx"] == 1
+    assert js["advanceUnderfilled"] is False
+    assert js["advanceCta"] and js["noWarning"]
+    assert js["advanced"] == {"stage_idx": 1, "card_idx": 1, "side": "A",
+                              "branchPick": None, "kind": "reveal"}
+    assert js["revealTitle"] and js["revealCaptions"]
+    assert js["revealFaceA"] and js["revealFaceB"], "both faces print - the back is where 75 stage cards keep their rules"
+    assert js["revealCta"]
+    assert js["flipped"] == {"side": "B", "points": 4, "step": None}
+    assert js["doneTitle"]
+    assert js["closed"] is None
+
+
+def test_resolution_sheet_final_stage_offers_victory_and_not_yet():
+    """Task-7 brief step 1, second walk. With no next stage, _questStep's
+    victory branch is the step: it carries the final stage's BACK face, whose
+    text is often the restriction that decides whether the game is actually
+    won ("cannot be defeated while X is in play"). "Not yet" must CLOSE and
+    log rather than re-derive - the step recomputes to the same victory while
+    progress >= points, so leaving the sheet open made the tap read as a
+    no-op (the twin's own continue_without_victory comment, from the
+    2026-07-30 playtest). Victory is the only setGameOver in the sheet."""
+    js = node("""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, afterTap, newUi } from "./actions.js";
+import { deriveResolveStep } from "./resolve_step.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, [{ stage: 1, cards: [{ questPoints: 2, faces: [
+  { side: "A", name: "The Last Stage", text: "Setup: shuffle the encounter deck." },
+  { side: "B", name: "The Last Stage", text: "This stage cannot be defeated while X is in play." }] }] }]);
+g.view = "quest_setup";
+const ui = newUi();
+perform(g, ui, "flip_to_b", "");
+g.setWillpower(4); g.setStaging(0);
+perform(g, ui, "resolve", "");
+perform(g, ui, "apply_alloc", "");
+afterTap(g, ui);
+const step = deriveResolveStep(g, ui);
+const html = layout(g, ui);
+perform(g, ui, "res_not_yet", "");
+const declined = { sheet: ui.sheet, over: g.game_over, log: g.log.at(-1).text };
+ui.sheet = { kind: "resolve", forced: false, branchPick: null, skippedSide: [] };
+perform(g, ui, "res_victory", "");
+console.log(JSON.stringify({
+  kind: step.kind, cleared: step.cleared,
+  title: html.includes("That was the final stage!") && html.includes("Quest 1B cleared"),
+  restriction: html.includes("This stage cannot be defeated while X is in play."),
+  ctas: html.includes('data-act="res_victory"') && html.includes('data-act="res_not_yet"'),
+  declined,
+  result: g.game_over?.result, sheet: ui.sheet,
+  overLog: g.log.at(-1).text,
+}));
+""")
+    assert js["kind"] == "victory" and js["cleared"] == "1B"
+    assert js["title"] and js["ctas"]
+    assert js["restriction"], "the final stage's back face is the reason \"Not yet\" exists"
+    assert js["declined"]["sheet"] is None, "\"Not yet\" closes; re-deriving would put the same screen back"
+    assert js["declined"]["over"] is None
+    assert js["declined"]["log"] == "Victory declined - the stage is not defeated yet"
+    assert js["result"] == "victory"
+    assert js["sheet"] is None
+    assert js["overLog"] == "GAME OVER - Victory! The final quest stage is complete"
+
+
+def test_resolution_sheet_side_quests_then_a_forced_underfilled_advance():
+    """The two branches the walk above cannot reach. (1) Side quests resolve
+    one at a time, and "Leave as-is" holds the skipped one by IDENTITY - the
+    twin's _skippedSideQuests - so completing a LATER one, which splices the
+    list, does not un-skip it or re-offer it under its new index. The
+    completion line is the twin's own, verbatim. (2) `forced` is the entry
+    the quest row's Advance uses (pending_resolution = "forced"): it reaches
+    the quest step with progress BELOW the target, which is exactly when the
+    advance step has to say so, and res_advance spends the flag (and the
+    branch pick) rather than carrying either into the next stage."""
+    js = node(_RESOLVE_STAGES + """
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { deriveResolveStep } from "./resolve_step.js";
+import { layout } from "./layout.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(1, 25);
+g.preloadScenario({ slug: "x", name: "X" }, STAGES);
+g.view = "quest_setup";
+const ui = newUi();
+perform(g, ui, "flip_to_b", "");
+g.quest.progress = 1;                                   // 1 of 2: NOT at its points
+g.side_quests.push({ points: 1, progress: 2, name: "Gather Information" });
+g.side_quests.push({ points: 2, progress: 2, name: "Prepare for Battle" });
+ui.sheet = { kind: "resolve", forced: false, branchPick: null, skippedSide: [] };
+
+const first = deriveResolveStep(g, ui);
+const sqHtml = layout(g, ui);
+perform(g, ui, "res_side_skip", "");
+const skipped = deriveResolveStep(g, ui);
+perform(g, ui, "res_side_done", "");
+const doneLog = g.log.at(-1).text;
+const remaining = g.side_quests.map(s => s.name);
+const settled = deriveResolveStep(g, ui);
+
+// The quest row's own "Advance": resolve the stage even though 1 < 2.
+ui.sheet = { kind: "resolve", forced: true, branchPick: 1, skippedSide: [] };
+const forced = deriveResolveStep(g, ui);
+const forcedHtml = layout(g, ui);
+perform(g, ui, "res_advance", "");
+console.log(JSON.stringify({
+  first: { kind: first.kind, idx: first.idx, name: first.name },
+  sqCtas: sqHtml.includes('data-act="res_side_done"') && sqHtml.includes('data-act="res_side_skip"'),
+  sqProgress: sqHtml.includes("2/1 progress"),
+  skipped: { kind: skipped.kind, idx: skipped.idx, name: skipped.name },
+  doneLog, remaining, settled,
+  forced: { kind: forced.kind, idx: forced.card_idx, underfilled: forced.underfilled },
+  warning: forcedHtml.includes("Progress hasn&#39;t reached target - confirm"),
+  advanced: { stage_idx: g.stage_idx, card_idx: g.card_idx, side: g.quest.side,
+              forcedFlag: ui.sheet.forced, branchPick: ui.sheet.branchPick },
+}));
+""")
+    assert js["first"] == {"kind": "side_quest", "idx": 0, "name": "Gather Information"}
+    assert js["sqCtas"] and js["sqProgress"]
+    assert js["skipped"] == {"kind": "side_quest", "idx": 1, "name": "Prepare for Battle"}
+    assert js["doneLog"] == "Side quest 2 completed (resolution)"
+    assert js["remaining"] == ["Gather Information"]
+    assert js["settled"] is None, "a skipped side quest must stay skipped after a later one splices the list"
+    assert js["forced"] == {"kind": "advance", "idx": 1, "underfilled": True}
+    assert js["warning"], "an advance below the target has to say so"
+    assert js["advanced"] == {"stage_idx": 1, "card_idx": 1, "side": "A",
+                              "forcedFlag": False, "branchPick": None}
+
+
 def test_chip_labels_are_composed_with_h():
     """chip()/cta() in primitives.js insert `label` via raw() (see
     test_h_escapes_interpolations_but_not_raw above), so a label built from

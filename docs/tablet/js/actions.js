@@ -15,8 +15,10 @@ import { handle as questActs } from "./acts_quest.js";
 import { handle as playerActs } from "./acts_players.js";
 import { handle as elimActs } from "./acts_elim.js";
 import { handle as sqpickActs } from "./acts_sqpick.js";
+import { handle as resolveActs } from "./acts_resolve.js";
 
-const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs, sqpickActs];
+const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs,
+                  sqpickActs, resolveActs];
 
 export const newUi = () => ({
   screen: "play", alloc: null, placed: false, picker: null,
@@ -53,11 +55,28 @@ export function dispatch(game, ui, act, arg) {
 // themselves rather than being tapped open - after ANY tap changes the game,
 // app.js calls this so the right one appears without every act above having
 // to know about it. `!ui.sheet` means an already-open sheet (e.g. the
-// players sheet mid-edit) is never yanked away by an elimination that
-// happens to land in the same tap.
+// players sheet mid-edit) is never yanked away by an elimination - or a
+// resolution - that happens to land in the same tap.
+//
+// Elimination is checked FIRST, the way main.js's router orders the same
+// two (its pending_elim block sits above its pending_resolution one) - a
+// player leaving the game changes what the resolution flow is even about.
+// An unconsumed resolution flag is left standing rather than dropped: the
+// next tap that closes the sheet in the way (elim_confirm, say) runs this
+// again and opens it then, exactly like the twin's router picking the flag
+// up on a later tick.
 export function afterTap(game, ui) {
   if (game.pending_elim !== null && !ui.sheet) {
     ui.sheet = { kind: "elim", i: game.pending_elim, level: game.players[game.pending_elim].elimination };
+  }
+  if (game.pending_resolution && !ui.sheet) {
+    // "forced" is the quest row's own Advance entry (the twin's
+    // pending_resolution = "forced"): resolve the quest step even when
+    // progress has not reached the target. "auto" - placeProgress, or the
+    // quest sheet's Done - is the ordinary at-its-points case.
+    ui.sheet = { kind: "resolve", forced: game.pending_resolution === "forced",
+                 branchPick: null, skippedSide: [] };
+    game.pending_resolution = false;
   }
 }
 

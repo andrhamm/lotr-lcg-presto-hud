@@ -113,4 +113,37 @@ export const CHROME = {
   sqpickPrev: "‹ Prev",
   sqpickNext: "Next ›",
   sqpickPage: "%d/%d",
+  // The resolution sheet (Task 7) - ResolutionModal's own six steps
+  // (docs/js/screens.js), one string per thing it says. The rules claims
+  // here are the twin's, verbatim where a player could act on them:
+  // "Progress hasn't reached target - confirm" (its _drawAdvance warning)
+  // and "%s excess → quest card" (_drawLocation), which is the rulebook's
+  // p.15 rule that a location's excess progress flows on to the quest card -
+  // already in CLAUDE.md's verified-mechanics list. Nothing new is asserted.
+  allResolved: "All resolved",
+  resolveContinue: "Continue",
+  resolveRevealed: "Stage %s revealed",
+  sideA: "Side A",
+  sideB: "Side B",
+  // A face the catalog has, that prints no game text of its own. Said per
+  // face, under that face's own caption, so a blank front never reads as
+  // "this stage has nothing to do" when the back is where its rules live.
+  noCardText: "No card text",
+  resolveFlip: "Flip to Side B → %s qp",
+  locationExplored: "Location Explored",
+  progressOf: "%s/%s progress",
+  resolveExcess: "%s excess → quest card",
+  choosePath: "Choose a path",
+  firstPlayerChooses: "First player chooses",
+  randomPath: "Random",
+  randomize: "Randomize for me",
+  branchPoints: "%s quest points",
+  questCleared: "Quest %s cleared",
+  underfilled: "Progress hasn't reached target - confirm",
+  revealStage: "Reveal Stage %s",
+  finalStage: "That was the final stage!",
+  declareVictory: "Declare Victory",
+  notYet: "Not yet - keep playing",
+  markComplete: "Mark Complete",
+  leaveAsIs: "Leave as-is",
 };
