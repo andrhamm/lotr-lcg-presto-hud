@@ -3,6 +3,7 @@ test_twin_parity.py drives the model. Render functions return strings and
 never touch `document`, which is what makes this possible."""
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -54,6 +55,36 @@ console.log(JSON.stringify({
     assert js["esc"] == "<b>&lt;i&gt;&amp;</b>"
     assert js["raw"] == "<b><i>x</i></b>"
     assert js["list"] == "<ul>a<li>b</li></ul>"
+
+
+# A nested h`` call interpolated into an outer h`` template returns an
+# already-escaped plain string - dom.js's one() only trusts a Raw instance
+# (raw()'s wrapper), so the outer template escapes that string a second time
+# and the fragment renders as literal markup text instead of markup. This
+# regex is a conservative static scan for the shape, not a parser: it flags
+# any `${...h`` interpolation that doesn't also contain `raw(` before the
+# nested call. It caught sheet_locpick.js's set-group header
+# (39f0cb2, `${set ? h\`<div class="label">${set}</div>\` : ""}`) - see
+# test_location_picker_travel_then_manual_entry_appends_a_second_seat's own
+# regression assertion on the rendered HTML for the runtime side of the fix.
+NESTED_H_WITHOUT_RAW_RE = re.compile(r"\$\{([^}]*?)h`")
+
+
+def test_no_nested_h_without_raw():
+    tablet_js_dir = os.path.join(ROOT, "docs", "tablet", "js")
+    violations = []
+    for name in sorted(os.listdir(tablet_js_dir)):
+        if not name.endswith(".js"):
+            continue
+        with open(os.path.join(tablet_js_dir, name)) as f:
+            for lineno, line in enumerate(f, 1):
+                for m in NESTED_H_WITHOUT_RAW_RE.finditer(line):
+                    if "raw(" not in m.group(1):
+                        violations.append("%s:%d: %s" % (name, lineno, line.strip()))
+    assert not violations, (
+        "nested h`` inside an interpolation must be wrapped in raw(...), "
+        "or the outer template double-escapes it:\n" + "\n".join(violations)
+    )
 
 
 def test_primitives_are_buttons_with_actions():
@@ -963,6 +994,12 @@ perform(g, ui, "locpick_save", "");
 console.log(JSON.stringify({
   travelChip: beforeHtml.includes('data-act="open_locpick"') && beforeHtml.includes('data-arg="new::play"'),
   rowRendered: listHtml.includes("Old Forest Road") && listHtml.includes('data-act="locpick_row"'),
+  // Regression: the set-group header is a nested h`` fragment interpolated
+  // into the outer h`` template (sheet_locpick.js's groupBySet loop) - it
+  // must be wrapped in raw(...) there, or the outer template escapes the
+  // inner one's own escaping and the header renders as literal markup text
+  // instead of a heading (dom.js's one() only trusts a Raw instance).
+  setHeaderHtml: listHtml,
   ...afterTravel,
   manualPts,
   seats: g.active_locations.length,
@@ -973,6 +1010,10 @@ console.log(JSON.stringify({
 """)
     assert js["travelChip"], "the Travel pane must offer its own CTA when no location is active"
     assert js["rowRendered"]
+    assert '<div class="label">Passage Through Mirkwood</div>' in js["setHeaderHtml"], \
+        "the set header must render as markup, not escaped text"
+    assert "&lt;div" not in js["setHeaderHtml"], \
+        "a nested h`` fragment interpolated without raw(...) double-escapes into literal text"
     assert js["name"] == "Old Forest Road" and js["points"] == 3 and js["threat"] == 1
     assert js["staging"] == 3            # setStaging(4), then -1 (travelTo's own contribution)
     assert js["logged"]
