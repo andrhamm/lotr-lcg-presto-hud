@@ -16,10 +16,11 @@ import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, setBoardTracking } fro
 import { DataClient } from "../../js/db.js";
 import { CATALOG_UNAVAILABLE } from "../../js/viewcopy.js";
 import { layout } from "./layout.js";
-import { perform, newUi, afterTap } from "./actions.js";
+import { perform, dispatch, newUi, afterTap } from "./actions.js";
 import { logText } from "./logfilter.js";
-import { imagePrefix } from "../../js/quest_catalog.js";
+import { imagePrefix, cyclesFor } from "../../js/quest_catalog.js";
 import { imageUrls } from "./cardimage.js";
+import { overviewFor } from "./newgame.js";
 
 // A finished game is appended to history once. Reset wherever `game` is
 // rebound (new game / a fresh scenario pick) - mirrors main.js's own
@@ -67,7 +68,12 @@ async function buildPicker() {
   // The card-art prefix rides along with the index the picker already had to
   // read - see seatImagePrefix() for the resume path, which has no picker.
   ui.imagePrefix = imagePrefix(index);
-  return { index, players: 2, threats: [25, 25],
+  // Milestone 6 (Task 2): the tablet-density picker starts on the Official
+  // source, its first cycle selected - cyclesFor() degrades to [] for a
+  // null/empty index, same as every other catalog-optional read here.
+  const source = "official";
+  const cycle = index ? (cyclesFor(index, source)[0]?.cycle ?? null) : null;
+  return { index, players: 2, threats: [25, 25], source, cycle,
            error: index ? null : CATALOG_UNAVAILABLE };
 }
 
@@ -161,36 +167,47 @@ async function handleAct(act, arg) {
     render();
     return;
   }
-  if (act === "ng_players") {
-    const n = Number(arg);
-    const threats = ui.picker.threats;
-    ui.picker.players = n;
-    ui.picker.threats = Array.from({ length: n }, (_, i) => threats[i] ?? 25);
-    render();
-    return;
-  }
-  if (act === "ng_threat-" || act === "ng_threat+") {
-    const i = Number(arg);
-    const d = act === "ng_threat-" ? -1 : 1;
-    ui.picker.threats[i] = Math.max(0, (ui.picker.threats[i] ?? 25) + d);
-    render();
-    return;
-  }
   if (act === "pick_scenario") {
+    // Milestone 6 (Task 2): picking a scenario no longer starts the game -
+    // it opens the Scenario overview (Task 3 renders it; layout.js carries
+    // a placeholder until then) so the player sees the difficulty ladder,
+    // stages and cards before committing. ng_players/ng_threat± moved out
+    // to acts_newgame.js (ui-only, ui.picker edits) - this stays here
+    // because it awaits db.bundle().
     const slug = arg;
     const b = await db.bundle(slug);
-    const entry = ui.picker.index?.scenarios?.find(s => s.slug === slug);
-    if (!b || !entry) {
+    const overview = overviewFor(ui.picker.index, slug, b);
+    if (!b || !overview.entry) {
       // The catalog changed under us mid-pick (or the bundle fetch failed) -
       // surface it rather than leaving the tap looking like it did nothing.
       ui.picker.error = CATALOG_UNAVAILABLE;
       render();
       return;
     }
+    ui.locations = b.locations ?? [];
+    // Same two fields as the resume path above (Task 4) - seated here too
+    // since a fresh pick never goes through boot()'s branch at all.
+    ui.tips = b.tips ?? null;
+    ui.scenarioSlug = overview.entry.slug;
+    prefetchCardImages(b);
+    ui.overview = overview;
+    ui.sheet = null;
+    ui.screen = "overview";
+    render();
+    return;
+  }
+  if (act === "begin_setup") {
+    // The other half of what pick_scenario used to do in one step (Task 2):
+    // this is where the game object itself is actually created, so this is
+    // where the queue gets cleared/tagged - see CLAUDE.md's "queue is tagged
+    // with its game object" rule. ui.overview.difficulty is the Scenario
+    // overview's own ladder pick (Task 3; "Standard" until then, seated by
+    // overviewFor()).
+    const { entry, bundle, difficulty } = ui.overview;
     const scenarioMeta = {
       slug: entry.slug, name: entry.name, pack: entry.pack, cycle: entry.cycle,
       source: entry.source, kind: entry.kind,
-      nightmare: false, mode: "Standard",
+      nightmare: difficulty === "Nightmare", mode: difficulty,
       maxCardThreat: entry.maxCardThreat, hasXThreat: entry.hasXThreat,
     };
     const players = ui.picker.players;
@@ -204,14 +221,8 @@ async function handleAct(act, arg) {
       game.players[i].starting_threat = t;
     });
     game.logEvent(`New game: ${players} players, threat ${threats.join("/")}, first P1`);
-    game.preloadScenario(scenarioMeta, b.stages);
+    game.preloadScenario(scenarioMeta, bundle.stages);
     game.view = "quest_setup";
-    ui.locations = b.locations ?? [];
-    // Same two fields as the resume path above (Task 4) - seated here too
-    // since a fresh pick never goes through boot()'s branch at all.
-    ui.tips = b.tips ?? null;
-    ui.scenarioSlug = scenarioMeta.slug;
-    prefetchCardImages(b);
     ui.sheet = null;
     ui.screen = "play";
     db.session.saveState(game);
@@ -238,6 +249,20 @@ async function handleAct(act, arg) {
     ui.sideQuests = await db.sideQuests();
     ui.sheet = { kind: "sqpick", sphere: null, selected: null, page: 0 };
     render();
+    return;
+  }
+  if (ui.screen === "newgame" || ui.screen === "overview") {
+    // The picker's own edits (ng_source/ng_cycle/ng_players/ng_threat±) and
+    // the overview placeholder's ov_back are ui-only (acts_newgame.js) -
+    // never touch `game` at all. They must NOT go through perform()/
+    // db.session.record(): `game` here can still be the PREVIOUS,
+    // already-finished GameState ("new_game" clears the session but does
+    // not rebind `game` - only begin_setup does), and a queued write tagged
+    // to it would resurrect a save the player just asked to leave behind
+    // (CLAUDE.md's "the queue is tagged with its game object" hazard - a
+    // rebind is what is supposed to drop it, and none has happened yet).
+    const changed = dispatch(game, ui, act, arg);
+    if (changed) render();
     return;
   }
   const changed = perform(game, ui, act, arg);

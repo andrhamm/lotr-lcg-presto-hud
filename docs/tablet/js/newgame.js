@@ -1,78 +1,69 @@
-// The new-game / picker screen (Task 6): pick a player count, a starting
-// threat per player, and a scenario from the official quest catalog. Pure
-// string builder like every other tablet render function - no
-// document/window, so tests/test_tablet.py can drive it under node. app.js
-// owns every catalog fetch and the async new_game/ng_players/ng_threat/
-// pick_scenario acts; this module only reads what it is handed via
-// `ui.picker = { index, players, threats, error }` and never touches
-// storage or the network itself. (There is no resume path here yet - a
-// resumed save skips this screen entirely, straight to "play"; review
-// finding M11 deleted a resume chip that a save flag never actually set.)
-import { h, raw } from "./dom.js";
+// The new-game / picker screen at tablet density (Task 2, milestone 6):
+// three columns - Players, Cycles, Scenarios - instead of the phone-era
+// flat list. app.js owns every catalog fetch and the async new_game/
+// pick_scenario/begin_setup acts; acts_newgame.js owns the ui-only edits
+// (ng_source/ng_cycle/ng_players/ng_threat±); this module only reads what
+// it is handed via `ui.picker = { index, players, threats, source, cycle,
+// error }` and never touches storage or the network itself. Cycle/scenario
+// grouping is quest_catalog.js's own groupByCycle/cyclesFor - the exact
+// logic the twin's picker screens use, not a second copy of it - so the
+// nightmare/zero-stage exclusions live in one place. (There is no resume
+// path here yet - a resumed save skips this screen entirely, straight to
+// "play"; review finding M11 deleted a resume chip that a save flag never
+// actually set.)
+import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, counter } from "./primitives.js";
-import { CYCLE_ORDER } from "../../js/quest_catalog.js";
+import { cyclesFor, groupByCycle } from "../../js/quest_catalog.js";
 import { icon } from "../../js/icons_svg.js";
+import { setIcon } from "./seticon.js";
 import { THREAT_RED, THREAT_SHADOW } from "./palette.js";
 
-// Mirrors quest_catalog.js's own (unexported) cycleRank: a cycle absent from
-// CYCLE_ORDER sorts just before "Other" rather than falling off the end.
-function cycleRank(cycle) {
-  const i = CYCLE_ORDER.indexOf(cycle);
-  return i === -1 ? CYCLE_ORDER.indexOf("Other") - 0.5 : i;
+// Picking a scenario used to start the game outright; now it opens the
+// Scenario overview (Task 3 renders it for real) so the player sees the
+// difficulty ladder, stages and cards before committing. Pure - app.js's
+// `pick_scenario` calls this once the bundle has loaded, and
+// tests/test_tablet.py drives it directly since pick_scenario itself can't
+// be driven under node (it awaits db.bundle()).
+export function overviewFor(index, slug, bundle) {
+  const entry = (index?.scenarios ?? []).find(s => s.slug === slug) ?? null;
+  return { slug, entry, bundle, difficulty: "Standard", readonly: false };
 }
 
-// Plain ordinal compare, not localeCompare - same reasoning as
-// quest_catalog.js's byName (twin-stable sort).
-function byOrderThenName(a, b) {
-  if ((a.order == null) !== (b.order == null)) return a.order == null ? 1 : -1;
-  if ((a.order ?? 0) !== (b.order ?? 0)) return (a.order ?? 0) - (b.order ?? 0);
-  const an = a.name ?? "", bn = b.name ?? "";
-  return an < bn ? -1 : an > bn ? 1 : 0;
+function sourceToggle(source) {
+  const chips = [
+    { key: "official", label: CHROME.official },
+    { key: "alep", label: CHROME.community },
+  ].map(s => chip({ act: "ng_source", arg: s.key, label: s.label, tone: s.key === source ? "gold" : "tan" })).join("");
+  return h`<div class="source-toggle">${raw(chips)}</div>`;
 }
 
-// Quest-kind, official-source rows grouped by cycle (CYCLE_ORDER order) and
-// sorted by play order then name within each group - the shape
-// quest_catalog.js's groupByCycle produces for the twin's picker screens,
-// but filtered on `kind` directly rather than `stageCount`: a "quest" row in
-// the real catalog always carries at least one stage (build_card_data.py
-// only stamps kind "quest" when a Quest card is present, and a scenario with
-// one has a non-empty stages list), and filtering this way also reads
-// correctly against a minimal/synthetic index that never set stageCount at
-// all - groupByCycle's own `stageCount > 0` gate would silently drop such
-// rows instead.
-function scenarioGroups(index) {
-  const scenarios = (index?.scenarios ?? [])
-    .filter(s => s.kind === "quest" && (s.source ?? "official") === "official"
-      && !(s.name ?? "").endsWith(" - Nightmare"));
-  const groups = new Map();
-  for (const scn of scenarios) {
-    const cycle = scn.cycle ?? "Other";
-    if (!groups.has(cycle)) groups.set(cycle, []);
-    groups.get(cycle).push(scn);
-  }
-  return [...groups.keys()]
-    .sort((a, b) => cycleRank(a) - cycleRank(b))
-    .map(cycle => ({ cycle, scenarios: [...groups.get(cycle)].sort(byOrderThenName) }));
-}
-
-// One row: a button that starts the game (data-act="pick_scenario", arg the
-// slug app.js hands to db.bundle()). A scenario name is a name a player
-// reads - BODY (scale 2), sentence case as printed, never the chip's
-// ALL-CAPS LABEL treatment - with the pack line under it at the body
-// secondary tier. Scenario names and pack names are catalog text, not
-// ours - h`` escapes both (names can carry an apostrophe, e.g. "The
-// Steward's Fear").
-function scenarioRow(scn) {
-  return h`<button type="button" class="scenario-row" data-act="pick_scenario" data-arg="${scn.slug}">
-<span class="body">${scn.name ?? ""}</span>
-<span class="body secondary">${scn.pack ?? ""}</span>
+// One cycle: BODY name (a name a player reads) plus its LABEL metadata -
+// scenario count and the group's earliest release year, when known
+// (cyclesFor's `date` is a "YYYY-MM" string or null - a synthetic/minimal
+// index that never set releaseDate at all, same degrade as everywhere else
+// that field is read).
+function cycleRow(g, selectedCycle) {
+  const year = g.date ? g.date.slice(0, 4) : "";
+  const meta = year ? `${g.count} · ${year}` : String(g.count);
+  return h`<button type="button" class="${cx("cycle-row", g.cycle === selectedCycle && "is-selected")}" data-act="ng_cycle" data-arg="${g.cycle}">
+<span class="body">${g.cycle}</span>
+<span class="label">${meta}</span>
 </button>`;
 }
 
-function scenarioGroup(g) {
-  const rows = g.scenarios.map(scenarioRow).join("");
-  return h`<div class="scenario-group"><div class="label">${g.cycle}</div><div class="scenario-list">${raw(rows)}</div></div>`;
+// One scenario: its set icon + name (BODY, sentence case as printed - never
+// the chip's ALL-CAPS LABEL treatment), the pack line under it at the body
+// secondary tier, and the stage count as LABEL (dense tabular metadata, not
+// a sentence a player reads). Scenario names and pack names are catalog
+// text, not ours - h`` escapes both (names can carry an apostrophe, e.g.
+// "The Steward's Fear").
+function scenarioRow(scn) {
+  return h`<button type="button" class="scenario-row" data-act="pick_scenario" data-arg="${scn.slug}">
+<div class="scenario-head">${raw(setIcon(scn.name ?? "", 28))}<span class="body">${scn.name ?? ""}</span></div>
+<span class="body secondary">${scn.pack ?? ""}</span>
+<span class="label">${raw(fmt(CHROME.stagesCount, scn.stageCount ?? 0))}</span>
+</button>`;
 }
 
 function playerChips(count) {
@@ -96,16 +87,41 @@ function threatCounters(threats) {
   return h`<div class="threat-row">${raw(cells)}</div>`;
 }
 
+function playersColumn(players, threats) {
+  return h`<div class="newgame-col newgame-players">
+<div class="label">${CHROME.players}</div>
+${raw(playerChips(players))}
+${raw(threatCounters(threats))}
+</div>`;
+}
+
 export function renderNewGame(ui) {
   const p = ui.picker ?? {};
   const players = p.players ?? 2;
   const threats = p.threats ?? Array(players).fill(25);
-  const catalog = p.error
-    ? h`<div class="well"><p class="body">${p.error}</p></div>`
-    : scenarioGroups(p.index).map(scenarioGroup).join("");
-  return h`<main class="pane newgame">
-<div class="newgame-head"><h1 class="display">${CHROME.newGame}</h1></div>
-<div class="newgame-section"><div class="label">${CHROME.players}</div>${raw(playerChips(players))}${raw(threatCounters(threats))}</div>
-<div class="newgame-section"><div class="label">${CHROME.scenario}</div>${raw(catalog)}</div>
-</main>`;
+  const playersCol = playersColumn(players, threats);
+
+  if (p.error) {
+    const cyclesCol = h`<div class="newgame-col newgame-cycles"><div class="label">${CHROME.cycles}</div></div>`;
+    const scenariosCol = h`<div class="newgame-col newgame-scenarios"><div class="label">${CHROME.scenarios}</div><div class="well"><p class="body">${p.error}</p></div></div>`;
+    return h`<main class="pane newgame"><div class="newgame-grid">${raw(playersCol)}${raw(cyclesCol)}${raw(scenariosCol)}</div></main>`;
+  }
+
+  const source = p.source ?? "official";
+  const cycles = cyclesFor(p.index ?? {}, source);
+  const cycle = p.cycle ?? cycles[0]?.cycle ?? null;
+  const cyclesCol = h`<div class="newgame-col newgame-cycles">
+<div class="label">${CHROME.cycles}</div>
+${raw(sourceToggle(source))}
+<div class="cycle-list">${raw(cycles.map(g => cycleRow(g, cycle)).join(""))}</div>
+</div>`;
+
+  const group = groupByCycle(p.index?.scenarios ?? [], source).find(g => g.cycle === cycle);
+  const scenarios = group?.scenarios ?? [];
+  const scenariosCol = h`<div class="newgame-col newgame-scenarios">
+<div class="label">${CHROME.scenarios}</div>
+<div class="scenario-list">${raw(scenarios.map(scenarioRow).join(""))}</div>
+</div>`;
+
+  return h`<main class="pane newgame"><div class="newgame-grid">${raw(playersCol)}${raw(cyclesCol)}${raw(scenariosCol)}</div></main>`;
 }

@@ -574,33 +574,187 @@ console.log(JSON.stringify({ a: /data-act="skip"[^>]*/.exec(a)?.[0] ?? "", b: /c
     assert js["aTone"] == "skip" and js["b"] == "plain" and js["counts"]
 
 
-def test_new_game_screen_lists_scenarios_and_players():
-    """renderNewGame(ui) is a pure string builder (Task 6): player-count
-    chips, a starting-threat counter per player, and the official quest
-    catalog (kind=="quest" only - "n" here is kind "nightmare" and must not
-    surface, and a "quest"-kind row named "<Scenario> - Nightmare" - a
-    Nightmare deck's replacement quest card - must not surface either).
-    No resume chip: review finding M11 deleted it (no handler ever answered
-    its tap, and app.js never actually set the hasSave flag it read)."""
-    js = node("""
+# The tablet-density picker fixture (Task 2, milestone 6): two sources
+# (official/alep) x two cycles each x two scenarios each, plus one
+# "- Nightmare"-named row and one zero-stage row planted in the official
+# C1 cycle - groupByCycle/cyclesFor (quest_catalog.js) must drop both from
+# every rendered group, the same filtering the twin's own picker screens
+# already rely on (kind=="nightmare", stageCount<=0, the name suffix, and
+# source itself). Cycle names are not in CYCLE_ORDER, so they sort by
+# first-seen order in the array - C1/A1 come first in each source.
+NG_FIXTURE = """
+const index = { scenarios: [
+  { slug: "o1a", name: "Official 1A", pack: "P", cycle: "C1", kind: "quest", source: "official", order: 1, stageCount: 2, releaseDate: "2011-01" },
+  { slug: "o1b", name: "Official 1B", pack: "P", cycle: "C1", kind: "quest", source: "official", order: 2, stageCount: 3, releaseDate: "2011-02" },
+  { slug: "o1nm", name: "Official 1A - Nightmare", pack: "P", cycle: "C1", kind: "quest", source: "official", order: 3, stageCount: 3, releaseDate: "2011-03" },
+  { slug: "o1z", name: "Official 1 Zero", pack: "P", cycle: "C1", kind: "quest", source: "official", order: 4, stageCount: 0, releaseDate: "2011-04" },
+  { slug: "o2a", name: "Official 2A", pack: "P", cycle: "C2", kind: "quest", source: "official", order: 1, stageCount: 2, releaseDate: "2013-01" },
+  { slug: "o2b", name: "Official 2B", pack: "P", cycle: "C2", kind: "quest", source: "official", order: 2, stageCount: 3, releaseDate: "2013-02" },
+  { slug: "a1a", name: "Community 1A", pack: "Q", cycle: "A1", kind: "quest", source: "alep", order: 1, stageCount: 2, releaseDate: "2021-01" },
+  { slug: "a1b", name: "Community 1B", pack: "Q", cycle: "A1", kind: "quest", source: "alep", order: 2, stageCount: 3, releaseDate: "2021-02" },
+  { slug: "a2a", name: "Community 2A", pack: "Q", cycle: "A2", kind: "quest", source: "alep", order: 1, stageCount: 2, releaseDate: "2022-01" },
+  { slug: "a2b", name: "Community 2B", pack: "Q", cycle: "A2", kind: "quest", source: "alep", order: 2, stageCount: 3, releaseDate: "2022-02" },
+] };
+"""
+
+
+def test_new_game_picker_default_lists_officials_first_cycle_and_its_two_scenarios():
+    """renderNewGame(ui) at tablet density (Task 2) is three columns -
+    Players (unchanged), Cycles and Scenarios - built from quest_catalog.js's
+    own groupByCycle/cyclesFor rather than a second copy of that filtering.
+    With no source/cycle seated yet the renderer defaults to Official and
+    that source's first cycle, and only THAT cycle's two scenarios show -
+    not the sibling cycle's, not the other source's, and never the
+    "- Nightmare" row or the zero-stage row planted alongside them."""
+    js = node(NG_FIXTURE + """
 import { renderNewGame } from "./newgame.js";
-const html = renderNewGame({ picker: { index: { scenarios: [
-  { slug: "a", name: "A", pack: "P", cycle: "C", kind: "quest", order: 1, source: "official" },
-  { slug: "n", name: "N", pack: "P", cycle: "C", kind: "nightmare", order: 2, source: "official" },
-  { slug: "a-nm", name: "A - Nightmare", pack: "P", cycle: "C", kind: "quest", order: 3, source: "official" },
-] }, players: 3, threats: [25, 25, 30] } });
+const html = renderNewGame({ picker: { index, players: 2, threats: [25, 25] } });
+const officialChip = /<button[^>]*data-act="ng_source" data-arg="official"[^>]*>/.exec(html)[0];
+const communityChip = /<button[^>]*data-act="ng_source" data-arg="alep"[^>]*>/.exec(html)[0];
+const c1Row = /<button[^>]*data-act="ng_cycle" data-arg="C1"[^>]*>/.exec(html)[0];
+const c2Row = /<button[^>]*data-act="ng_cycle" data-arg="C2"[^>]*>/.exec(html)[0];
 console.log(JSON.stringify({
-  counters: (html.match(/class="counter"/g) || []).length,
-  hasA: html.includes(">A<"),
-  hasN: html.includes(">N<"),
-  hasANightmare: html.includes('data-arg="a-nm"'),
-  noResume: !html.includes('data-act="resume"'),
+  officialGold: officialChip.includes("chip-gold"),
+  communityTan: communityChip.includes("chip-tan"),
+  c1Selected: c1Row.includes("is-selected"),
+  c2Selected: c2Row.includes("is-selected"),
+  hasA1: html.includes('data-arg="A1"'), hasC2: html.includes('data-arg="C2"'),
+  hasO1a: html.includes('data-arg="o1a"'), hasO1b: html.includes('data-arg="o1b"'),
+  hasO1nm: html.includes('data-arg="o1nm"'), hasO1z: html.includes('data-arg="o1z"'),
+  hasO2a: html.includes('data-arg="o2a"'), hasA1a: html.includes('data-arg="a1a"'),
 }));
 """)
-    assert js["counters"] == 3
-    assert js["hasA"] and not js["hasN"]
-    assert not js["hasANightmare"]
-    assert js["noResume"]
+    assert js["officialGold"] and js["communityTan"]
+    assert js["c1Selected"] and not js["c2Selected"]
+    assert js["hasC2"]              # the sibling cycle is still LISTED...
+    assert not js["hasA1"]           # ...but never a community cycle
+    assert js["hasO1a"] and js["hasO1b"]
+    assert not js["hasO1nm"] and not js["hasO1z"]
+    assert not js["hasO2a"]          # C2's own scenarios aren't shown either
+    assert not js["hasA1a"]
+
+
+def test_new_game_picker_ng_source_switches_and_preselects_first_cycle():
+    """ng_source (acts_newgame.js) is ui-only and dispatch()-routed (Task 2):
+    switching source resets ui.picker.cycle to THAT source's own first
+    cycle, since the two catalogs never share a cycle name."""
+    js = node(NG_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+import { renderNewGame } from "./newgame.js";
+const g = new GameState();
+const ui = { picker: { index, players: 2, threats: [25, 25], source: "official", cycle: "C1" } };
+const changed = dispatch(g, ui, "ng_source", "alep");
+const html = renderNewGame(ui);
+console.log(JSON.stringify({
+  changed, source: ui.picker.source, cycle: ui.picker.cycle,
+  hasA1a: html.includes('data-arg="a1a"'), hasA1b: html.includes('data-arg="a1b"'),
+  hasO1a: html.includes('data-arg="o1a"'),
+}));
+""")
+    assert js["changed"] is True
+    assert js["source"] == "alep" and js["cycle"] == "A1"
+    assert js["hasA1a"] and js["hasA1b"]
+    assert not js["hasO1a"]
+
+
+def test_new_game_picker_ng_cycle_switches_the_scenario_column():
+    js = node(NG_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+import { renderNewGame } from "./newgame.js";
+const g = new GameState();
+const ui = { picker: { index, players: 2, threats: [25, 25], source: "official", cycle: "C1" } };
+const changed = dispatch(g, ui, "ng_cycle", "C2");
+const noop = dispatch(g, ui, "ng_cycle", "C2");   // reselecting is a no-op
+const html = renderNewGame(ui);
+console.log(JSON.stringify({
+  changed, noop, cycle: ui.picker.cycle,
+  hasO2a: html.includes('data-arg="o2a"'), hasO2b: html.includes('data-arg="o2b"'),
+  hasO1a: html.includes('data-arg="o1a"'),
+}));
+""")
+    assert js["changed"] is True and js["noop"] is False
+    assert js["cycle"] == "C2"
+    assert js["hasO2a"] and js["hasO2b"]
+    assert not js["hasO1a"]
+
+
+def test_new_game_picker_players_and_threat_acts_still_work_through_dispatch():
+    """ng_players/ng_threat± moved verbatim out of app.js's own hand-rolled
+    `if` chain into acts_newgame.js (Task 2) - same behaviour, now reached
+    through the shared dispatch() table instead of a bespoke check."""
+    js = node("""
+import { GameState } from "../../js/gamestate.js";
+import { dispatch } from "./actions.js";
+const g = new GameState();
+const ui = { picker: { index: { scenarios: [] }, players: 2, threats: [25, 25], source: "official", cycle: null } };
+const playersChanged = dispatch(g, ui, "ng_players", "3");
+const threatChanged = dispatch(g, ui, "ng_threat+", "0");
+console.log(JSON.stringify({
+  playersChanged, threatChanged,
+  players: ui.picker.players, threats: ui.picker.threats,
+}));
+""")
+    assert js["playersChanged"] is True and js["threatChanged"] is True
+    assert js["players"] == 3
+    assert js["threats"] == [26, 25, 25]
+
+
+def test_new_game_picker_cycle_and_scenario_rows_are_real_buttons():
+    js = node(NG_FIXTURE + """
+import { renderNewGame } from "./newgame.js";
+const html = renderNewGame({ picker: { index, players: 2, threats: [25, 25] } });
+const tags = [...html.matchAll(/<(\\w+)[^>]*class="[^"]*(?:cycle-row|scenario-row)(?![\\w-])[^"]*"/g)].map(m => m[1]);
+console.log(JSON.stringify({ n: tags.length, allButtons: tags.every(t => t === "button") }));
+""")
+    assert js["n"] >= 4      # 2 cycle rows + 2 scenario rows, at least
+    assert js["allButtons"]
+
+
+def test_overview_for_builds_the_seat_pick_scenario_hands_to_ui_overview():
+    """pick_scenario itself can't be driven under node (it awaits
+    db.bundle()) - overviewFor(index, slug, bundle) is the pure helper it
+    calls once the bundle has loaded, exported from newgame.js so this task's
+    tests can cover the shape without a live DataClient."""
+    js = node(NG_FIXTURE + """
+import { overviewFor } from "./newgame.js";
+const bundle = { stages: [{ id: 1 }], locations: [], tips: null };
+const found = overviewFor(index, "o1a", bundle);
+const missing = overviewFor(index, "no-such-slug", bundle);
+console.log(JSON.stringify({
+  slug: found.slug, name: found.entry?.name, difficulty: found.difficulty,
+  readonly: found.readonly, hasBundle: found.bundle === bundle,
+  missingEntry: missing.entry,
+}));
+""")
+    assert js["slug"] == "o1a" and js["name"] == "Official 1A"
+    assert js["difficulty"] == "Standard" and js["readonly"] is False
+    assert js["hasBundle"]
+    assert js["missingEntry"] is None
+
+
+def test_overview_placeholder_screen_renders_title_and_begin_setup():
+    """Task 3 renders the Scenario overview for real; until then layout.js
+    carries a placeholder (task-2 brief) so the picker -> overview ->
+    begin_setup flow is usable end-to-end and this task's own tests can
+    assert the screen transition landed."""
+    js = node(NG_FIXTURE + """
+import { GameState } from "../../js/gamestate.js";
+import { overviewFor } from "./newgame.js";
+import { layout } from "./layout.js";
+const bundle = { stages: [{ id: 1 }], locations: [], tips: null };
+const overview = overviewFor(index, "o1a", bundle);
+const ui = { screen: "overview", overview };
+const html = layout(new GameState(), ui);
+console.log(JSON.stringify({
+  hasTitle: html.includes(">Official 1A<"),
+  hasBeginSetup: html.includes('data-act="begin_setup"'),
+  hasBack: html.includes('data-act="ov_back"'),
+}));
+""")
+    assert js["hasTitle"]
+    assert js["hasBeginSetup"] and js["hasBack"]
 
 
 def test_catalog_paths_resolve_beside_the_module_not_the_page():

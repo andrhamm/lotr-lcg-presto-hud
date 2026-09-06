@@ -359,28 +359,46 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .eng-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .eng-value { display: flex; align-items: center; gap: 8px; }
 
-/* The new-game / picker screen (Task 6): player count, a starting-threat
-   counter per player, and the official quest catalog grouped by cycle - or
-   a resume chip up top when a save exists (docs/tablet/js/newgame.js). */
+/* The new-game / picker screen at tablet density (Task 2, milestone 6):
+   three independently-scrolling columns - Players, Cycles, Scenarios -
+   instead of the phone-era stacked sections (docs/tablet/js/newgame.js). */
 .newgame { gap: 20px; }
-.newgame-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.newgame-section { display: flex; flex-direction: column; gap: 10px; }
+.newgame-grid { display: grid; grid-template-columns: 300px 320px 1fr; gap: 18px; height: 100%; }
+/* min-height: 0 is load-bearing on a grid/flex item that must itself scroll -
+   without it the column refuses to shrink below its content's natural
+   height and the grid just grows past the pane instead of clipping each
+   column to its own scrollbar. */
+.newgame-col { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; }
 .player-chips { display: flex; gap: 10px; }
 /* Player-count chips are single digits in an otherwise ALL-CAPS chip row -
    without a floor they pinch down to the glyph's own width and read as a
    different, smaller control than every other chip on the screen. */
 .chip-square { min-width: 56px; }
 .threat-row { display: flex; gap: 12px; flex-wrap: wrap; }
-.scenario-group { display: flex; flex-direction: column; gap: 8px; }
+/* The Official/Community toggle heading the Cycles column. */
+.source-toggle { display: flex; gap: 10px; }
+.cycle-list { display: flex; flex-direction: column; gap: 8px; }
+/* A cycle name is BODY (a name a player reads), its scenario count/year is
+   LABEL (dense tabular metadata) - same distinction .scenario-row draws
+   below. Bevelled and full-width like every other tappable row on this
+   screen; .is-selected swaps the bevel for the card_hi/gold treatment
+   .locpick-row's own selected state uses. */
+.cycle-row { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; width: 100%; min-height: 56px; padding: 8px 16px; text-align: left;
+  background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
+  border-radius: 6px; }
+.cycle-row.is-selected { background: var(--card-hi); border-color: var(--gold); }
 .scenario-list { display: flex; flex-direction: column; gap: 8px; }
 /* A scenario name is BODY (a name a player reads), not a chip's ALL-CAPS
    LABEL - so the row is its own beveled, full-width button (same raised
-   look as .chip, just left-aligned and roomy enough for a two-line name +
-   pack) rather than a chip glued to a separate label span. */
+   look as .chip, just left-aligned and roomy enough for its set icon, a
+   two-line name + pack, and its stage count) rather than a chip glued to a
+   separate label span. */
 .scenario-row { display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
   gap: 2px; width: 100%; min-height: 56px; padding: 8px 16px; text-align: left;
   background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
   border-radius: 6px; }
+.scenario-head { display: flex; align-items: center; gap: 8px; }
 
 /* The sheet framework (milestone 3, Task 2): a modal overlay - .scrim covers
    the app, .sheet is the panel itself. Every sheet's own content (title,

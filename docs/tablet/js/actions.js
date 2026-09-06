@@ -21,10 +21,11 @@ import { handle as transportActs } from "./acts_transport.js";
 import { handle as logActs } from "./acts_log.js";
 import { handle as rulesActs } from "./acts_rules.js";
 import { handle as notesActs } from "./acts_notes.js";
+import { handle as newgameActs } from "./acts_newgame.js";
 
 const HANDLERS = [playActs, sheetActs, locpickActs, questActs, playerActs, elimActs,
                   sqpickActs, resolveActs, sailingActs, transportActs, logActs, rulesActs,
-                  notesActs];
+                  notesActs, newgameActs];
 
 export const newUi = () => ({
   screen: "play", alloc: null, placed: false, picker: null,
@@ -57,6 +58,10 @@ export const newUi = () => ({
   // here rather than only by open_log so every renderer can read it without
   // a guard, and re-seated by open_log so a fresh visit starts clean.
   log: { filter: "all", sel: null },
+  // Milestone 6 (Task 2): the Scenario overview's own seat - null until
+  // pick_scenario builds one (newgame.js's overviewFor()). Task 3 renders it
+  // for real; this task's layout.js placeholder just needs `entry.name`.
+  overview: null,
 });
 
 // Lazily seat ui.alloc the first time an alloc act runs against a resolved

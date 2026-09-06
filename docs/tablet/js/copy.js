@@ -10,6 +10,19 @@ export const CHROME = {
   round: "Round",
   newGame: "New game",
   scenario: "Scenario",
+  // The tablet-density picker's three columns (Task 2, milestone 6) - a
+  // source toggle, the cycle list, the scenario list. "scenario" above is
+  // still the singular used elsewhere (e.g. resume state); this is the
+  // column header naming the whole list.
+  official: "Official",
+  community: "Community",
+  cycles: "Cycles",
+  scenarios: "Scenarios",
+  stagesCount: "%s stages",
+  // The Scenario overview (Task 2 placeholder; Task 3 builds the real
+  // screen) - its two footer CTAs.
+  beginSetup: "Begin setup",
+  backToScenarios: "‹ Scenarios",
   begin: "Begin",
   eliminated: "Eliminated",
   noLocation: "no active location",
