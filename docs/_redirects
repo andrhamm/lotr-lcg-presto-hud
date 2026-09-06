@@ -1,1 +1,6 @@
-/tablet/* /:splat 301
+# Cloudflare Pages redirects. Only the OLD ENTRY PAGE moves: the tablet's
+# assets still live under /tablet/ (the root index loads tablet/js/app.js and
+# tablet/style.css), so a /tablet/* wildcard would redirect the site's own
+# scripts away from themselves. Exact matches only.
+/tablet/ / 301
+/tablet/index.html / 301

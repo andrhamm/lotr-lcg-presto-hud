@@ -42,9 +42,15 @@ def test_the_service_worker_moved_to_the_root():
 
 
 def test_redirects_send_old_tablet_links_to_the_new_root():
+    """Only the old ENTRY page redirects. The tablet's own assets still live
+    under /tablet/ (the root index loads tablet/js/app.js and tablet/style.css),
+    so a /tablet/* wildcard would send the site's scripts away from themselves
+    on Cloudflare Pages, where _redirects wins over static files."""
     redirects = _read("_redirects")
-    assert re.search(r"^/tablet/\*\s+/:splat\s+301\s*$", redirects, re.MULTILINE), \
-        "docs/_redirects must 301 the old /tablet/* paths to the new root"
+    assert re.search(r"^/tablet/\s+/\s+301\s*$", redirects, re.MULTILINE)
+    assert re.search(r"^/tablet/index\.html\s+/\s+301\s*$", redirects, re.MULTILINE)
+    assert not re.search(r"^/tablet/\*", redirects, re.MULTILINE), \
+        "a /tablet/* wildcard would redirect tablet/js/app.js and tablet/style.css"
 
 
 def test_headers_set_cache_control_for_the_worker_and_data():
