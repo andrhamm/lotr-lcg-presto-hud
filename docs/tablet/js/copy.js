@@ -51,14 +51,35 @@ export const CHROME = {
   noPoints: "—",
   questPointsShort: "%s QP",
   stageShort: "Stage %s",
+  stageSubject: "Stage %s · %s",
+  stageSubjectBranch: "Stage %s · %s alternatives",
   stageAlternatives: "%s alternatives",
   // The tip SLOTS. Fixed set, fixed order, drawn whether or not the scenario
   // has anything for them, because the whole point is that a player learns
   // where to look once. `notes` is where an unclassified tip lands - every
   // tip in tips.json is one today; the classification pass fills the rest.
+  //
+  // The set is READ OFF THE SOURCE, not invented. Every category below is one
+  // the Vision of the Palantir spotlights actually write per stage, checked
+  // against the Journey Down the Anduin post:
+  //   pacing   "your main priority at this point is to set up a boardstate as
+  //            quickly as possible while keeping a low threat" (stage 1),
+  //            "the priority should really be willpower" (2), "switch back to
+  //            a combat mindset" (3) - the build-vs-push axis.
+  //   advance  "clear the board of as many other enemies as possible" before
+  //            engaging the Troll; "enter this stage with as few encounter
+  //            cards already in play as possible" - what to have done first.
+  //   watch    the named cards that punish you here: Hill Troll, Goblin
+  //            Sniper, Marsh Adder, Wargs, Evil Storm.
+  //   avoid    "players no longer play Dunedain Hunter, Wait no Longer, or
+  //            Guarded (X) cards" - anti-synergy, not deckbuilding.
+  //   players  "In 4 player games this won't be a major issue ... and
+  //            especially true solo" - recurs on nearly every stage.
+  // An earlier draft had Threat/Combat/Deckbuilding, which were guesses about
+  // what the advice would be shaped like rather than what it is.
   tipSlots: {
-    pacing: "Pacing", threat: "Threat", combat: "Combat",
-    watch: "Watch for", deck: "Deckbuilding", notes: "Notes",
+    pacing: "Pacing", advance: "Before you advance", watch: "Watch for",
+    avoid: "Avoid", players: "Player count", notes: "Notes",
   },
   tipSlotEmpty: "Nothing recorded yet.",
   stageSideA: "Side A", stageSideB: "Side B",

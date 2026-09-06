@@ -1228,7 +1228,8 @@ console.log(JSON.stringify({
 }));
 """)
     # Same slots, same order, on both scopes.
-    assert js["ovLabels"] == ["Pacing", "Threat", "Combat", "Watch for", "Deckbuilding", "Notes"]
+    assert js["ovLabels"] == ["Pacing", "Before you advance", "Watch for",
+                              "Avoid", "Player count", "Notes"]
     assert js["stLabels"] == js["ovLabels"]
     # ...and the scopes really are different content.
     assert js["ovHasGeneral"] and not js["stHasGeneral"]

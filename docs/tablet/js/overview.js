@@ -62,18 +62,25 @@ export function scenarioMetaFor(entry, difficulty) {
 
 // -- sections ---------------------------------------------------------
 
-function header(name, entry, stageCount) {
-  // pack · cycle · n stages: dense tabular metadata under the name, so
-  // LABEL. Each piece is dropped when the catalog has nothing for it (a
-  // minimal/synthetic index, or no entry at all) rather than leaving a
-  // stranded separator.
+// The heading names WHAT YOU ARE LOOKING AT, which is not always the
+// scenario: on a stage it is that stage. There used to be two DISPLAY
+// headings on a stage view - the scenario's and the stage card's - so the
+// biggest text on screen never changed as you navigated, and the thing you
+// had actually selected was the smaller of the two.
+//
+// The scenario is a breadcrumb above it, at LABEL, together with the dense
+// metadata that was already there: it is still worth naming (the in-game
+// reference has no list to read it off) but it is context, not the subject.
+// Each piece is dropped when the catalog has nothing for it rather than
+// leaving a stranded separator.
+function header(name, entry, stageCount, subject) {
   const stagesLabel = stageCount
     ? (stageCount === 1 ? CHROME.stagesCountOne : fmt(CHROME.stagesCount, stageCount))
     : "";
-  const meta = [entry.pack, entry.cycle, stagesLabel]
+  const crumb = [name, entry.pack, entry.cycle, stagesLabel]
     .filter(Boolean).join(" · ");
   return h`<header class="ov-head">${raw(setIcon(name, 44))}
-<div class="ov-head-text"><h1 class="display">${name}</h1><p class="label">${meta}</p></div>
+<div class="ov-head-text"><p class="label">${crumb}</p><h1 class="display">${subject}</h1></div>
 </header>`;
 }
 
@@ -273,19 +280,24 @@ function stageFace(face) {
   return h`<div class="stage-face">${label ? raw(h`<div class="label">${label}</div>`) : ""}${raw(text)}</div>`;
 }
 
-function stageCardBlock(card) {
+// A single-card stage does NOT repeat its name here: the heading above says
+// "Stage 1 · Flies and Spiders" already, and printing it again immediately
+// underneath is the same redundancy the three repeated STAGE blocks were.
+// A branch stage does name each block, because there the name identifies
+// WHICH of the alternatives you are reading - the heading can only say how
+// many there are.
+function stageCardBlock(card, named) {
   const faces = (card.faces ?? []).map(stageFace).join("");
-  return h`<article class="stage-card">
-<header class="stage-card-head"><h2 class="display">${branchName(card)}</h2>${raw(stagePoints(card))}</header>
-${raw(faces)}
-</article>`;
+  const head = named
+    ? h`<header class="stage-card-head"><p class="body strong">${branchName(card)}</p>${raw(stagePoints(card))}</header>`
+    : (stagePoints(card) ? h`<header class="stage-card-head">${raw(stagePoints(card))}</header>` : "");
+  return h`<article class="stage-card">${raw(head)}${raw(faces)}</article>`;
 }
 
-function stageDetail(stage, n) {
+function stageDetail(stage) {
   const cards = stage.cards ?? [];
-  const blocks = cards.map(stageCardBlock).join("");
-  return h`<section class="ov-section"><div class="label">${fmt(CHROME.stageShort, n)}</div>
-${raw(blocks)}</section>`;
+  const named = cards.length > 1;
+  return h`<section class="ov-section">${raw(cards.map(c => stageCardBlock(c, named)).join(""))}</section>`;
 }
 
 function footer() {
@@ -315,7 +327,6 @@ export function renderScenarioDetail(game, ui) {
   const name = entry.name ?? data.name ?? game?.scenario?.name ?? "";
   const difficulty = ov.difficulty ?? "Standard";
   const sets = gatherSets(data, name);
-  const head = header(name, entry, entry.stageCount ?? stages.length);
 
   // Which of the two views this is. The selection lives on the chooser's own
   // picker seat; the in-game reference has no list to select from, so it is
@@ -329,12 +340,12 @@ export function renderScenarioDetail(game, ui) {
     // to pull off the shelf, what its cards look like, and the tips that are
     // not about any single stage. NO stage list - that is the left column's
     // job now, and three repeated blocks of it here is what this replaced.
-    const left = h`<div class="ov-main">${raw(head)}
+    return h`<div class="ov-grid">
+${raw(header(name, entry, entry.stageCount ?? stages.length, CHROME.overview))}
 ${raw(difficultySection(ov, entry, data, difficulty))}
 ${raw(setsSection(sets))}
+${raw(tipsSection(ui, ov.slug, null))}
 ${raw(cardsSection(cardGroups(data, name), ui.imagePrefix))}</div>`;
-    const right = h`<div class="ov-side">${raw(tipsSection(ui, ov.slug, null))}</div>`;
-    return h`<div class="ov-grid">${raw(left)}${raw(right)}</div>`;
   }
 
   // A STAGE. Its own printed text is the authority on what it does, so that
@@ -349,10 +360,18 @@ ${raw(cardsSection(cardGroups(data, name), ui.imagePrefix))}</div>`;
   // label that claims more than the data says. Deck-wide counts belong to the
   // overview.
   const n = stage.stage ?? sel;
-  const left = h`<div class="ov-main">${raw(head)}
-${raw(stageDetail(stage, n))}</div>`;
-  const right = h`<div class="ov-side">${raw(tipsSection(ui, ov.slug, n))}</div>`;
-  return h`<div class="ov-grid">${raw(left)}${raw(right)}</div>`;
+  const cards = stage.cards ?? [];
+  // The subject line names the stage AND what it is called, so the heading is
+  // the answer to "what am I looking at" on its own. A branch stage names its
+  // count instead: which alternative the quest deck turns up is not knowable
+  // here, and picking one would be a claim.
+  const subject = cards.length === 1
+    ? fmt(CHROME.stageSubject, n, branchName(cards[0]))
+    : fmt(CHROME.stageSubjectBranch, n, cards.length);
+  return h`<div class="ov-grid">
+${raw(header(name, entry, entry.stageCount ?? stages.length, subject))}
+${raw(stageDetail(stage))}
+${raw(tipsSection(ui, ov.slug, n))}</div>`;
 }
 
 // The whole-screen host: the read-only reference opened mid-game. The

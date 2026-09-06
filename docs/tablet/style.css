@@ -58,7 +58,7 @@ html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: n
    list from travelling on to whatever is behind it (the sheet scrim, the
    document). */
 .pane, .sheet, .log-rows, .log-side, .newgame-col, .drill-list, .detail-scroll,
-.ov-main, .ov-side, .export-text {
+.ov-grid, .export-text {
   touch-action: pan-y; overscroll-behavior: contain;
 }
 /* Nothing here is prose to be selected, and a long-press that starts a
@@ -817,11 +817,26 @@ a.chip { text-decoration: none; min-height: 44px; }
    pane. .pane already scrolls (overflow-y: auto), so this screen inherits it
    rather than opening a second scrolling region. */
 .overview { gap: 16px; }
-.ov-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  gap: 24px; align-items: start; }
-.ov-main, .ov-side { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+/* ONE column, not two. The detail used to split 3fr/2fr - on a 1366 screen
+   that is 553px of stage text beside 369px of tips, both narrower than they
+   want to be, in a column half of whose height was empty. The split was not
+   buying anything: nothing here needs to be read side by side.
+   Content decides its own width instead. Prose is capped at a readable
+   measure (below), and the things that genuinely want room - the card grid -
+   get the whole column. */
+.ov-grid { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+/* Prose does not want 950px of line. The cap is on the READING blocks only,
+   so the card grid and the stat rows still use the full width. */
+.ov-grid > .ov-section > .tipslots,
+.ov-grid > .ov-section > .stage-card { max-width: 78ch; }
 .ov-head { display: flex; align-items: center; gap: 14px; }
-.ov-head-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* Breadcrumb over subject: the LABEL line names the scenario, the DISPLAY
+   below it names what you are actually looking at. */
+.ov-head-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ov-head-text .display { margin: 0; }
+/* A card's own name inside a stage block - BODY, but it is a name, so it
+   takes the gold the headings use rather than reading as more prose. */
+.body.strong { color: var(--gold); font-weight: 600; }
 .ov-section { display: flex; flex-direction: column; gap: 10px; }
 .ov-ladder { display: flex; gap: 10px; flex-wrap: wrap; }
 /* The read-only variant's difficulty: what the players already committed to,

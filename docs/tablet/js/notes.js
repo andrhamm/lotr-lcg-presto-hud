@@ -48,7 +48,7 @@ export function notesFor(tips, scenarioSlug, stage_n) {
 // always look there, which only works if the set and the order never change -
 // so this is a fixed list, and an empty slot is DRAWN as empty rather than
 // dropped. `notes` is last because it is the catch-all.
-export const TIP_SLOTS = ["pacing", "threat", "combat", "watch", "deck", "notes"];
+export const TIP_SLOTS = ["pacing", "advance", "watch", "avoid", "players", "notes"];
 
 // One tip is either a plain string (every tip in tips.json today) or
 // {kind, text} once the classification pass has been over it. Both shapes are
