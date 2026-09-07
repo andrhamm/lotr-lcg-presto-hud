@@ -102,6 +102,41 @@ def test_header_chip_rows_clear_the_44px_floor(selector):
     assert px is not None and px >= 44, ".%s has no min-height >= 44px" % selector
 
 
+def _z_index_of(css, selector):
+    css = _strip_comments(css)
+    m = re.search(r"\." + re.escape(selector) + r"(?![\w-])[^{]*\{([^}]*)\}", css)
+    assert m, "no rule found for .%s" % selector
+    zm = re.search(r"z-index\s*:\s*(\d+)", m.group(1))
+    return int(zm.group(1)) if zm else None
+
+
+def test_the_modal_scrim_covers_everything_the_app_draws():
+    """A modal that things show through is not a modal. The rail's pinned rows
+    are what did it: `position: sticky` with a z-index makes each one its own
+    stacking context, so a scrim with no z-index at all painted UNDER the
+    chosen cycle, the chosen scenario and their headers.
+
+    So the scrim has to outrank every z-index the app assigns - the pins and
+    the corner reload. The ?debug=1 readout is the one deliberate exception:
+    it is a measuring instrument, and it has to be able to report on a modal
+    too."""
+    css = _css()
+    scrim = _z_index_of(css, "scrim")
+    assert scrim is not None, "the scrim needs an explicit z-index"
+    for selector in ("setup-list > .label", "app-reload"):
+        # (the first is matched by its own leading class below)
+        pass
+    ranked = {}
+    for m in re.finditer(r"([^{}]*)\{([^}]*z-index\s*:\s*(\d+)[^}]*)\}", _strip_comments(css)):
+        sel, z = m.group(1).strip(), int(m.group(3))
+        ranked[sel] = z
+    below = {s: z for s, z in ranked.items()
+             if z >= scrim and "scrim" not in s and "debug-overlay" not in s}
+    assert not below, "these paint at or above the modal scrim: %s" % below
+    # And it really is above the two that mattered.
+    assert scrim > _z_index_of(css, "app-reload")
+
+
 def test_font_regex_does_not_cross_braces():
     assert _font_sizes_of(".a { font-size: 13px } .b { width: 7px }") == [13.0]
 

@@ -743,7 +743,15 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    rows, footer) stacks with the flex column below; sheets.js's data-stop
    marks the .sheet element so a tap on its body never bubbles to the
    scrim's data-act="sheet_close" (see app.js's click delegation). */
-.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.66); display: flex; align-items: center; justify-content: center; }
+/* ABOVE EVERYTHING THE APP DRAWS. A modal that things show through is not a
+   modal, and the rail's pinned rows are the ones that did it: `position:
+   sticky` with a z-index makes each one its own stacking context, so they
+   painted over a scrim that had no z-index at all.
+   50 clears the pins (3-4) and the corner reload (30) with room in between;
+   the ?debug=1 readout stays above at 999, since it is a measuring
+   instrument and has to be able to report on a modal too. */
+.scrim { position: absolute; inset: 0; z-index: 50; background: rgba(0,0,0,.66);
+  display: flex; align-items: center; justify-content: center; }
 .sheet { width: 1160px; max-height: 920px; overflow: auto; padding: 20px 24px 22px; background: var(--bg); border: 1px solid var(--border-gold); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.6);
   display: flex; flex-direction: column; gap: 16px; }
 
