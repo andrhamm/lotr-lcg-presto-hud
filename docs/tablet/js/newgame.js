@@ -76,14 +76,14 @@ ${raw(cycleIcon(g.cycle, 30))}
 // inside it IS a button - nesting them is invalid markup that iOS resolves
 // however it likes. app.js delegates on the closest [data-act], so the icon
 // takes its own taps and the rest of the row still selects.
-function scenarioRow(scn, selected, locked) {
+function scenarioRow(scn, selected, locked, pinTop) {
   const isSel = scn.slug === selected;
-  const mark = !isSel ? "" : chip({
-    act: locked ? "ng_unlock" : "ng_lock", arg: scn.slug,
-    label: h`${locked ? CHROME.markUnlock : CHROME.markLock}`,
-    tone: "gold", extraClass: "row-mark",
-  });
-  return h`<div class="${cx("drill-row", "drill-scenario", isSel && "is-selected", isSel && locked && "is-locked")}" data-act="pick_scenario" data-arg="${scn.slug}" role="button">
+  // The SAME glyph treatment the chosen cycle's ✕ already uses (.drill-x) -
+  // it was a chip before, which is a different shape, a different ground and
+  // ALL-CAPS letterforms for what is the same kind of control in the same
+  // column. One vocabulary: a square gold-edged glyph at the row's right.
+  const mark = !isSel ? "" : h`<button type="button" class="drill-x" data-act="${locked ? "ng_unlock" : "ng_lock"}" data-arg="${scn.slug}">${locked ? CHROME.markUnlock : CHROME.markLock}</button>`;
+  return h`<div class="${cx("drill-row", "drill-scenario", isSel && "is-selected", isSel && locked && "is-locked")}" data-act="pick_scenario" data-arg="${scn.slug}" role="button"${isSel ? raw(pin(pinTop)) : ""}>
 ${raw(setIcon(scn.name ?? "", 36))}
 <span class="body">${scn.name ?? ""}</span>
 ${raw(mark)}
@@ -105,10 +105,28 @@ ${raw(mark)}
 // catalog the cycle list comes from, and once a cycle is chosen that question
 // is already answered - leaving the toggle up offers a control that would
 // silently throw away the selection under it.
+// The rail pins in a STACK: the CYCLE header, then the chosen cycle, then the
+// SCENARIOS header, then the chosen scenario - each parking under the one
+// above it rather than all of them fighting for `top: 0`. So both choices and
+// both their headers stay on screen however far you scroll into a long list,
+// and STAGES arrives underneath them instead of shoving them off.
+//
+// The offsets are computed here rather than written into the stylesheet
+// because they depend on WHICH pins exist: with no scenario chosen there is
+// no third pin, and a hard-coded top would leave a gap where it would have
+// been. HEAD_H/ROW_H are style.css's own (.setup-list > .label height, and
+// .drill-row's min-height plus the list's row gap).
+const HEAD_H = 28;
+// The ROW's own height, with no spacing added: the next pin has to sit flush
+// against the bottom of the one above it. Counting the gap as well left an
+// 8px slot between them where the scrolling list showed through.
+const ROW_H = 60;
+const pin = top => ` style="top:${top}px"`;
+
 function drillList(p, cycles, scenarios) {
   if (p.drill !== "scenarios") {
     return h`${raw(sourceToggle(p.source ?? "official"))}
-<div class="label">${CHROME.cycles}</div>
+<div class="label"${raw(pin(0))}>${CHROME.cycles}</div>
 <div class="drill-list">${raw(cycles.map(cycleRow).join(""))}</div>`;
   }
   // While locking, the rows are still drawn - with the class that animates
@@ -118,14 +136,24 @@ function drillList(p, cycles, scenarios) {
   const rows = (p.locked && !p.locking)
     ? scenarios.filter(s => s.slug === p.slug)
     : scenarios;
-  const list = rows.map(s => scenarioRow(s, p.slug, p.locked)).join("");
-  return h`<div class="label">${CHROME.cycleOne}</div>
-<div class="drill-row drill-current" data-act="ng_cycles" role="button">
+  // Collapsing bottom-up: the last row goes first and the fold travels
+  // upward, so the chosen row is left standing rather than being the only
+  // thing that survives a simultaneous disappearance. Delay is capped so a
+  // long cycle (the LotR Saga's 18) does not take a second to settle.
+  const last = rows.length - 1;
+  const list = rows.map((s, i) => {
+    const row = scenarioRow(s, p.slug, p.locked, HEAD_H * 2 + ROW_H);
+    if (!p.locking || s.slug === p.slug) return row;
+    const delay = Math.min((last - i) * 16, 160);
+    return h`<div class="rail-fold" style="animation-delay:${delay}ms">${raw(row)}</div>`;
+  }).join("");
+  return h`<div class="label"${raw(pin(0))}>${CHROME.cycleOne}</div>
+<div class="drill-row drill-current" data-act="ng_cycles" role="button"${raw(pin(HEAD_H))}>
 ${raw(cycleIcon(p.cycle ?? "", 30))}
 <span class="body">${p.cycle ?? ""}</span>
 <span class="drill-x" aria-hidden="true">✕</span>
 </div>
-<div class="label">${CHROME.scenarios}</div>
+<div class="label"${raw(pin(HEAD_H + ROW_H))}>${CHROME.scenarios}</div>
 <div class="${cx("drill-list", p.locking && "is-locking")}">${raw(list)}</div>`;
 }
 
@@ -141,7 +169,8 @@ ${raw(cycleIcon(p.cycle ?? "", 30))}
 // kind). `stages` here is the bundle's, so this list is exactly what the
 // detail can draw.
 function stageRow(label, name, meta, arg, selected) {
-  return h`<button type="button" class="${cx("drill-row", "stage-row", selected && "is-selected")}" data-act="ng_stage" data-arg="${arg}">
+  const top = HEAD_H * 3 + ROW_H * 2;
+  return h`<button type="button" class="${cx("drill-row", "stage-row", selected && "is-selected")}" data-act="ng_stage" data-arg="${arg}"${selected ? raw(pin(top)) : ""}>
 ${label ? raw(h`<span class="label stage-n">${label}</span>`) : ""}
 <span class="body">${name}</span>
 ${meta ? raw(h`<span class="label">${meta}</span>`) : ""}
@@ -163,7 +192,7 @@ function stagesSection(stages, selected) {
       : (card ? branchName(card) : "");
     rows.push(stageRow(fmt(CHROME.stageShort, n), name, meta, String(n), selected === String(n)));
   });
-  return h`<div class="label">${CHROME.stagesHeader}</div>
+  return h`<div class="label"${raw(pin(HEAD_H * 2 + ROW_H * 2))}>${CHROME.stagesHeader}</div>
 <div class="drill-list stage-list">${raw(rows.join(""))}</div>`;
 }
 

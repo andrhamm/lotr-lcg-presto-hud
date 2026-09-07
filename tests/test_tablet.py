@@ -906,14 +906,17 @@ console.log(JSON.stringify({
     .map(m => m[1]),
   currentIsDiv: /<div[^>]*class="[^"]*drill-current/.test(scenarios),
   scenarioIsDiv: /<div[^>]*class="[^"]*drill-scenario/.test(scenarios),
-  markIsButton: /<button[^>]*class="[^"]*row-mark[^"]*"[^>]*data-act="ng_lock"/.test(scenarios),
+  // The lock mark wears the SAME glyph treatment as the chosen cycle's ✕
+  // (.drill-x) - one vocabulary for one kind of control in one column.
+  markIsButton: /<button[^>]*class="drill-x"[^>]*data-act="ng_lock"/.test(scenarios),
+  markSharesCycleGlyph: (scenarios.match(/class="drill-x"/g) || []).length >= 2,
   rowsStillAct: (scenarios.match(/data-act="pick_scenario"/g) || []).length,
 }));
 """)
     assert js["nested"] is False
     assert js["cycleRowsAreButtons"] and set(js["cycleRowsAreButtons"]) == {"button"}
     assert js["currentIsDiv"] and js["scenarioIsDiv"]
-    assert js["markIsButton"]
+    assert js["markIsButton"] and js["markSharesCycleGlyph"]
     assert js["rowsStillAct"] >= 2
 
 

@@ -542,12 +542,15 @@ async function handleAct(act, arg) {
     // and own no elements to listen on; the duration is style.css's own.
     if (changed && act === "ng_lock") {
       render();
+      // style.css's own fold duration (240ms) plus newgame.js's biggest
+      // stagger (160ms, capped): settling sooner would cut the fold off
+      // mid-collapse on the rows nearest the top, which are the last to go.
       setTimeout(() => {
         if (!ui.picker?.locking) return;
         ui.picker.locking = false;
         ui.picker.locked = true;
         render();
-      }, 240);
+      }, 420);
       return;
     }
     // Entering a cycle auto-picks its first quest, so the detail side is

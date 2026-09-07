@@ -587,8 +587,14 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 /* The drill-in list: cycles, or one cycle's quests. One scrolling region
    holding both states, so entering a cycle does not move the scrollbar to a
    different element. */
-.drill-list { display: flex; flex-direction: column; gap: 8px;
-  min-height: 0; overflow-y: auto; padding-right: 4px; }
+/* gap: 0 with the spacing as a margin, so a collapsing row can take its own
+   spacing with it - a flex `gap` survives its item and leaves an 8px ghost
+   behind every folded row.
+   No padding-right: the scroller is .setup-list now, and that inset was what
+   made the chosen-cycle row (which is not inside this list) render wider than
+   every row that is. */
+.drill-list { display: flex; flex-direction: column; gap: 0; min-height: 0; }
+.drill-list > * + * { margin-top: 8px; }
 .drill-row { display: flex; align-items: center; gap: 12px; width: 100%;
   min-height: 60px; padding: 8px 16px; text-align: left; background: var(--btn);
   border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d);
@@ -603,7 +609,11 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    active" treatment .is-selected uses - because it is a live selection, not a
    heading. The X is the affordance; the whole row is the target. */
 .drill-current { background: var(--card-hi); border-color: var(--gold); }
-.drill-x { flex: 0 0 auto; width: 32px; height: 32px; display: flex;
+/* Shared by the chosen cycle's ✕ and a selected scenario's lock mark - one
+   vocabulary for one kind of control. It renders as a <span> in the first and
+   a <button> in the second, so the ground is set explicitly: a bare <button>
+   inherits the platform's own ButtonFace, which is white. */
+.drill-x { background: transparent; padding: 0; flex: 0 0 auto; width: 32px; height: 32px; display: flex;
   align-items: center; justify-content: center; color: var(--gold);
   font-size: 18px; line-height: 1; border: 1px solid var(--border-gold);
   border-radius: 6px; }
@@ -628,11 +638,17 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 /* The header's height and the pinned row's offset are ONE number: a header
    shorter than the offset leaves a slot between them where the scrolling list
    shows through, which reads as a rendering fault rather than as a pin. */
-.setup-list > .label { position: sticky; top: 0; z-index: 3; background: var(--bg);
+/* The pins STACK: each parks under the one above it rather than all of them
+   fighting for top: 0, so the cycle and the scenario and both their headers
+   stay on screen however far you scroll. The `top` of each comes from
+   newgame.js as an inline style, because which pins exist depends on state -
+   a hard-coded offset would leave a gap where a missing pin would have been.
+   Headers sit above rows in z so a row scrolls UNDER its own header. */
+.setup-list > .label { position: sticky; z-index: 4; background: var(--bg);
   display: flex; align-items: center; height: 28px; padding: 0 4px; }
 .setup-list .drill-current,
 .setup-list .drill-scenario.is-selected,
-.setup-list .stage-row.is-selected { position: sticky; top: 28px; z-index: 2; }
+.setup-list .stage-row.is-selected { position: sticky; z-index: 3; }
 
 /* THE ROW'S STATE ICON (the checkmark that locks a choice in, the ✕ that lets
    it go). Square, at the row's right edge, and its own tap target - the row
@@ -642,16 +658,21 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    and fade as the chosen one rises to meet the header. It is a real animation
    rather than a disappearance because the eye needs something to follow from
    "a list" to "one choice". app.js settles the state when it has run. */
-.drill-list.is-locking > .drill-scenario:not(.is-selected) {
+/* LOCKING IN. Every row but the chosen one folds shut, bottom-up (newgame.js
+   staggers the delay by distance from the foot), and the chosen row rises
+   into the gap they leave - it is not animated itself, it simply ends up
+   where the collapse puts it, which is the organic part.
+   The fold is a grid 1fr -> 0fr rather than a max-height guess: the row keeps
+   its real height on the way down instead of snapping from an arbitrary
+   number, and nothing has to know how tall a wrapped scenario name is. */
+.rail-fold { display: grid; grid-template-rows: 1fr;
   animation: rail-fold 240ms ease-in forwards; pointer-events: none; }
+.rail-fold > * { min-height: 0; overflow: hidden; }
 @keyframes rail-fold {
-  from { opacity: 1; max-height: 76px; transform: none; }
-  to { opacity: 0; max-height: 0; margin: 0; padding-top: 0; padding-bottom: 0;
-       border-width: 0; transform: scale(.94); }
+  from { grid-template-rows: 1fr; opacity: 1; margin-top: 8px; }
+  to { grid-template-rows: 0fr; opacity: 0; margin-top: 0; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .drill-list.is-locking > .drill-scenario:not(.is-selected) { animation-duration: 1ms; }
-}
+@media (prefers-reduced-motion: reduce) { .rail-fold { animation-duration: 1ms; } }
 /* A stage row: its number as LABEL chrome at a fixed width so the names line
    up, the name taking the slack, its points hard right. Overview is the same
    row with none of that - one row shape, not two. */
