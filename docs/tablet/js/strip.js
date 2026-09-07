@@ -168,7 +168,7 @@ export function renderStrip(game, ui) {
 </div>`;
 
   return h`<header class="strip">
-<div class="round"><div class="round-n"><span class="label">${CHROME.round}</span><span class="num num-40">${game.round}</span></div>${raw(legend)}</div>
+<div class="round"><div class="round-n"><span class="label">${CHROME.round}</span><div class="round-stamp"><span class="num num-40">${game.round}</span><span class="label round-step">${game.step}</span></div></div>${raw(legend)}</div>
 <div class="strip-flow">${raw(body)}</div>
 <div class="strip-tools">${raw(menuChip)}</div>
 </header>`;

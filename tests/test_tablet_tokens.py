@@ -147,6 +147,30 @@ def test_the_busiest_phase_segment_fits_all_of_its_ticks():
     assert "overflow: hidden" not in row
 
 
+def test_the_primary_action_cannot_be_scrolled_off_the_screen():
+    """.pane scrolls, and .cta-row is a direct child of it - so before this,
+    any view whose content ran taller than the pane pushed the primary action
+    below the fold. Questing: Staging overflowed by 2px at 1366x1024, and by
+    more on a device once the safe-area inset shortens the pane, which is how
+    it ended up half off-screen there.
+
+    margin-top: auto puts it at the bottom when the content is SHORT. Sticky
+    is what keeps it there when the content is LONG, and the ground is what
+    stops the content showing through it on the way past. All three are
+    required; this asserts all three rather than trusting that the next person
+    to touch this rule knows why they are there."""
+    css = _strip_comments(_css())
+    m = re.search(r"\.pane\s*>\s*\.cta-row(?![\w-])[^{]*\{([^}]*)\}", css)
+    assert m, ".pane > .cta-row has no rule pinning it"
+    rule = m.group(1)
+    assert "position: sticky" in rule, "the CTA row must be sticky, or it scrolls away"
+    assert re.search(r"bottom:\s*0", rule), "sticky with no bottom offset does nothing"
+    assert "background:" in rule, "content would show through it as it scrolls past"
+    base = re.search(r"^\.cta-row(?![\w-])[^{]*\{([^}]*)\}", css, re.M)
+    assert base and "margin-top: auto" in base.group(1), (
+        "it still has to sit at the bottom when the content is short")
+
+
 def test_the_modal_scrim_covers_everything_the_app_draws():
     """A modal that things show through is not a modal. The rail's pinned rows
     are what did it: `position: sticky` with a z-index makes each one its own

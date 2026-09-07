@@ -3650,11 +3650,12 @@ const unesc = s => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">")
 // chip-less band (a loop's closing note) can never be handed the next
 // band's chip.
 function chipBands(html) {
-  return html.split('<div class="band ').slice(1).map(f => {
-    // An action-window band leads with a heading naming itself ("Action
-    // window"), so the band's own sentence is the first .body paragraph
-    // AFTER any such heading - not necessarily .band-text's first child.
-    const text = /<div class="band-text">(?:<div class="label band-kind">[^<]*<\\/div>)?<p class="body">([\\s\\S]*?)<\\/p>/.exec(f);
+  return html.split('class="band ').slice(1).map(f => {
+    // A band that cites a rules section IS the control now (the citation is
+    // a corner label, not a chip), and both the kind heading and the citation
+    // live in a .band-head row - so the band's own sentence is the first
+    // .body paragraph after that row, not .band-text's first child.
+    const text = /<div class="band-text"><div class="band-head">[\\s\\S]*?<\\/div><p class="body">([\\s\\S]*?)<\\/p>/.exec(f);
     const chip = /data-act="open_rules" data-arg="([^"]*)"/.exec(f);
     return text && chip ? [chip[1], unesc(text[1])] : null;
   }).filter(Boolean);

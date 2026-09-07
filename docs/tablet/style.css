@@ -185,7 +185,19 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
    no background, dim glyph - and it is a <span>, never a <button>, so it is
    not a tap target at all. */
 .step-off { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; color: var(--dim); }
-.band { display: flex; gap: 16px; align-items: center; padding: 10px 12px 10px 18px; background: var(--card); border: 1px solid var(--border); border-left: 6px solid; border-radius: 6px; }
+.band { display: flex; gap: 16px; align-items: center; width: 100%; text-align: left;
+  padding: 10px 12px 10px 18px; background: var(--card); border: 1px solid var(--border);
+  border-left: 6px solid; border-radius: 6px; }
+/* A band that cites a rules section is itself the way into it - so it takes
+   the press feedback every other control has, without the bevel (it is a
+   block of reading, not a button-shaped thing). */
+button.band { cursor: pointer; }
+button.band:active { transform: translateY(1px); background: var(--card-hi); }
+/* Heading row: what this band IS on the left, what it cites on the right.
+   The citation is metadata about the block, which is where LABEL belongs. */
+.band-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.band-head:empty { display: none; }
+.band-cite { margin-left: auto; color: var(--dim); font-variant-numeric: tabular-nums; }
 /* PURPLE IS THE ACTION WINDOW, and only the action window. It used to be
    green, which this palette also spends on PROGRESS (the quest ring, the
    progress numerals) - so the one colour a player most needs to read
@@ -237,6 +249,12 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
    72px content box and clipped the ROUND label off the top. */
 .round { display: flex; align-items: center; gap: 14px; flex: 0 0 auto; padding-right: 16px; }
 .round-n { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+/* The round number with the step beside it - "2  2.P" - the way the Presto's
+   own header stamps them. It used to be spelled out in a line under the phase
+   heading in the pane ("Round 2 · Step 2.P · First player P2"), which
+   repeated what the strip and the rail were both already showing. */
+.round-stamp { display: flex; align-items: baseline; gap: 8px; }
+.round-step { color: var(--muted); font-variant-numeric: tabular-nums; }
 /* The legend names the two marks. There is room for it - the strip is 96px
    and the round number was using a third of it - and without it the timeline
    is shapes you are expected to already understand. */
@@ -252,7 +270,11 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
   background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
   border-radius: 6px; font-size: 20px; color: var(--tan); }
 .tbtn.is-off { background: transparent; border-color: transparent; box-shadow: none; color: var(--dim); opacity: .4; }
-.seg { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 8px; flex: 1 1 0; min-width: 0; padding: 8px 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+/* justify-content: FLEX-START, not center: segments hold between one and six
+   ticks, so centring put every phase name at a different height - Resource
+   and Planning rode up against the top edge while Quest sat low. The name is
+   a row of headings across the strip and has to read as one. */
+.seg { position: relative; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; flex: 1 1 0; min-width: 0; padding: 8px 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .seg.is-skippable { background: var(--card-hi); border-color: var(--amber); }
 /* The name is the segment's whole point, so it never yields: flex: 0 0 auto,
    and the tick row is what clips instead. The Quest phase has four flow views
@@ -437,6 +459,17 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    title row, and a bottom-pinned cta-row shared by every view. */
 .pane { flex: 1 1 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 18px 16px; min-width: 0; overflow-y: auto; }
 .cta-row { display: flex; gap: 12px; margin-top: auto; }
+/* THE PANE'S OWN CTA ROW IS PINNED. It is a direct child of a scrolling box,
+   so before this any view whose content ran taller than the pane pushed the
+   primary action below the fold - Questing: Staging overflowed by 2px at
+   1366x1024 and by more on a device once the safe-area inset shortens the
+   pane, which is exactly how it ended up half off-screen there.
+   margin-top: auto still puts it at the bottom when the content is short;
+   sticky is what keeps it there when the content is long. The --bg ground
+   and the padding are what stop the content showing through it as it passes
+   underneath. */
+.pane > .cta-row { position: sticky; bottom: 0; z-index: 1;
+  padding-top: 10px; background: var(--bg); }
 .pane.gameover { align-items: center; justify-content: center; text-align: center; gap: 16px; }
 /* .cta-row's margin-top: auto pins it to the pane's bottom edge, which
    overrides .pane.gameover's own justify-content: center above it - zero it

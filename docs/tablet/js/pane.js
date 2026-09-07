@@ -425,7 +425,11 @@ export function renderPane(game, ui) {
   const notes = notesFor(ui.tips, ui.scenarioSlug, game.quest?.stage_n);
   const notesHtml = notes ? renderNotesPanel(notes) : "";
 
-  const titleLine = h`${CHROME.round} ${game.round} · ${CHROME.step} ${game.step} · ${CHROME.firstPlayer} P${game.first_player + 1}`;
+  // No "Round 1 · Step 1.R · First player P1" line here any more. Every part
+  // of it is already on screen and closer to where it belongs: the round and
+  // the step are stamped on the strip's round indicator (strip.js, the way
+  // the Presto's header stamps them), and the first player is flagged on that
+  // player's own card in the rail.
 
   const ctaButtons = [];
   // quest_setup's Back leaves the game (there is nothing behind it), so
@@ -450,7 +454,6 @@ export function renderPane(game, ui) {
 
   return h`<main class="pane">
 <h1 class="display">${title}</h1>
-<p class="label">${raw(titleLine)}</p>
 ${raw(parts)}
 ${raw(notesHtml)}
 <div class="cta-row">${raw(ctaButtons.join(""))}</div>

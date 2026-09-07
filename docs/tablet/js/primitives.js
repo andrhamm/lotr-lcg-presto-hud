@@ -19,12 +19,22 @@ export function chip({ act, arg = "", label, tone = "gold", height = 44, extraCl
 // A framework band needs no heading: it is what happens anyway, and every
 // other band on the screen is one.
 export function band({ kind, text, sub = null, section = null }) {
-  const rulesChip = section
-    ? raw(chip({ act: "open_rules", arg: section, label: h`${CHROME.rules} §${section} ›`, tone: "tan" }))
-    : "";
+  // The rules reference is a CORNER LABEL, not a button. It was a full chip
+  // sitting under the text - a 44px bevelled control, the same weight as the
+  // things a player actually taps to change the game, for what is a citation.
+  // The whole band is the tap target instead, so the reference names itself
+  // where a citation belongs (top right, on the heading's own line) and the
+  // thing you reach for is the section you are reading.
+  const cite = section
+    ? raw(h`<span class="label band-cite">§${section}</span>`) : "";
   const head = kind === "window"
     ? raw(h`<div class="label band-kind">${CHROME.actionWindow}</div>`) : "";
-  return h`<div class="${cx("band", "band-" + kind)}"><div class="band-text">${head}<p class="body">${text}</p>${sub ? raw(h`<p class="body secondary">${sub}</p>`) : ""}${rulesChip}</div></div>`;
+  const body = h`<div class="band-head">${head}${cite}</div><p class="body">${text}</p>${sub ? raw(h`<p class="body secondary">${sub}</p>`) : ""}`;
+  const cls = cx("band", "band-" + kind, section && "band-cited");
+  // No section, no citation, nothing to open - it stays an inert block rather
+  // than a control that does nothing.
+  if (!section) return h`<div class="${cls}"><div class="band-text">${raw(body)}</div></div>`;
+  return h`<button type="button" class="${cls}" data-act="open_rules" data-arg="${section}"><div class="band-text">${raw(body)}</div></button>`;
 }
 
 export function counter({ label, icon, value, act, arg = "" }) {
