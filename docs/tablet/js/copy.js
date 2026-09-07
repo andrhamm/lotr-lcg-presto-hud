@@ -165,6 +165,15 @@ export const CHROME = {
   step: "step",
   firstPlayer: "first player",
   withoutActions: "Without actions",
+  // THE core concept this tracker exists to teach. Rules Reference: "An
+  // action ability may only be triggered during an action window", and
+  // "when an action window opens, the first player has the first opportunity
+  // to initiate an action, or pass". Everything else in a round happens
+  // whether the players act or not.
+  actionWindow: "Action window",
+  actionWindowNext: "Then an action window.",
+  actionWindowPrev: "After an action window.",
+  legendFramework: "Framework",
   checksMade: "Checks made",
   checksSummary: "%d in staging, %d engaged",
   reset: "Reset",

@@ -251,13 +251,25 @@ const html = renderStrip(g, newUi());
 console.log(JSON.stringify({ segs: (html.match(/class="seg/g) || []).length,
   current: (html.match(/is-current/g) || []).length,
   currentView: /data-view="quest_staging"[^>]*is-current|is-current[^>]*data-view="quest_staging"/.test(html),
-  windows: (html.match(/tick-window/g) || []).length, aw: html.includes("aw_"),
+  // Scoped to the flow, not the whole strip: the legend's swatches reuse the
+  // tick classes on purpose (a key has to be drawn in the same ink as the
+  // thing it names), so counting them as ticks would be counting the key.
+  windows: ((html.split('class="strip-flow"').pop()).match(/tick-window/g) || []).length,
+  legend: [...html.matchAll(/class="legend-item"><i class="tick tick-(\\w+)[^>]*><\\/i>([^<]+)</g)]
+    .map(m => [m[1], m[2]]),
+  aw: html.includes("aw_"),
   planningWindow: /data-view="planning"[^>]*tick-window|tick-window[^>]*data-view="planning"/.test(html),
   round: html.includes(">1<") }));
 """)
     assert js["segs"] == 8
     assert js["current"] == 1 and js["currentView"]
     assert js["windows"] == 11         # 8 aw_ windows + planning + the two combat windows
+    # The legend NAMES the two marks. Without it the timeline is shapes a
+    # player is expected to already understand, and the distinction it
+    # encodes - what happens anyway, versus when you are allowed to act - is
+    # the one this tracker exists to teach ("An action ability may only be
+    # triggered during an action window", Rules Reference).
+    assert js["legend"] == [["framework", "Framework"], ["window", "Action window"]]
     assert js["aw"] is False           # window views are ticks, never named
     assert js["planningWindow"]        # Planning's own tick IS the round's window tick
     assert js["round"]
@@ -3639,7 +3651,10 @@ const unesc = s => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">")
 // band's chip.
 function chipBands(html) {
   return html.split('<div class="band ').slice(1).map(f => {
-    const text = /^[^>]*><div class="band-text"><p class="body">([\\s\\S]*?)<\\/p>/.exec(f);
+    // An action-window band leads with a heading naming itself ("Action
+    // window"), so the band's own sentence is the first .body paragraph
+    // AFTER any such heading - not necessarily .band-text's first child.
+    const text = /<div class="band-text">(?:<div class="label band-kind">[^<]*<\\/div>)?<p class="body">([\\s\\S]*?)<\\/p>/.exec(f);
     const chip = /data-act="open_rules" data-arg="([^"]*)"/.exec(f);
     return text && chip ? [chip[1], unesc(text[1])] : null;
   }).filter(Boolean);

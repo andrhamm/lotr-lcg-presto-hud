@@ -186,7 +186,20 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
    not a tap target at all. */
 .step-off { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; color: var(--dim); }
 .band { display: flex; gap: 16px; align-items: center; padding: 10px 12px 10px 18px; background: var(--card); border: 1px solid var(--border); border-left: 6px solid; border-radius: 6px; }
-.band-framework { border-left-color: var(--red) } .band-window { border-left-color: var(--green) } .band-tip { border-left-color: var(--gold) }
+/* PURPLE IS THE ACTION WINDOW, and only the action window. It used to be
+   green, which this palette also spends on PROGRESS (the quest ring, the
+   progress numerals) - so the one colour a player most needs to read
+   unambiguously was the one doing two jobs.
+   Red stays framework. Worth knowing: FFG's own timing chart in the Rules
+   Reference draws action windows in RED boxes and framework steps in brown,
+   so red-for-framework was already at odds with the source; purple is not
+   competing with anything in either vocabulary. */
+.band-framework { border-left-color: var(--red) }
+.band-window { border-left-color: var(--purple) }
+.band-tip { border-left-color: var(--gold) }
+/* The window band names itself: it is the only band on the screen describing
+   something the players may CHOOSE to do. */
+.band-kind { color: var(--purple); letter-spacing: .1em; }
 .band-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 0 }
 /* The band's own "Rules §n ›" chip (Task 3, milestone 5) is the last child
    of .band-text's column - without this it inherits that column's default
@@ -219,8 +232,19 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
    `.round` was a 2x2 grid holding the round number, a Menu chip, a four
    button replay transport AND its step readout - all crammed into the corner
    the eye reads first, for a job the timeline itself already does. */
-.round { display: flex; flex-direction: column; justify-content: center; gap: 2px;
-  flex: 0 0 auto; padding-right: 16px; }
+/* Round number and legend side by side, not stacked: stacked, the three of
+   them (13px label + 40px numeral + two legend rows) overflowed the strip's
+   72px content box and clipped the ROUND label off the top. */
+.round { display: flex; align-items: center; gap: 14px; flex: 0 0 auto; padding-right: 16px; }
+.round-n { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+/* The legend names the two marks. There is room for it - the strip is 96px
+   and the round number was using a third of it - and without it the timeline
+   is shapes you are expected to already understand. */
+.legend { display: flex; flex-direction: column; gap: 5px; }
+.legend-item { display: flex; align-items: center; gap: 6px;
+  font: 700 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--dim); white-space: nowrap; }
+.legend .tick { position: static; }
 .strip-flow { display: flex; align-items: stretch; gap: 8px; flex: 1 1 auto; min-width: 0; }
 .strip-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
   min-height: 44px; padding-left: 12px; }
@@ -270,8 +294,8 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
   background: transparent; border: 2px solid var(--red); }
 .tick-framework.is-done, .tick-framework.is-current { background: var(--red); }
 .tick-window { width: 11px; height: 11px; border-radius: 50%; align-self: center;
-  background: transparent; border: 2px solid var(--green); }
-.tick-window.is-done, .tick-window.is-current { background: var(--green); }
+  background: transparent; border: 2px solid var(--purple); }
+.tick-window.is-done, .tick-window.is-current { background: var(--purple); }
 .playhead { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--gold); }
 /* A tick a real delta entered this round (strip.js's renderTick, via
    game.deltaIndexForView) is a rewind target - wrapped in this transparent,

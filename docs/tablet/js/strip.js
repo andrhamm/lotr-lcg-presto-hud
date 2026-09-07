@@ -156,8 +156,19 @@ export function renderStrip(game, ui) {
   // a rewind target (renderTick's rw_tick), so a separate four-button
   // transport beside the round number was a second control for a job the
   // timeline already does - and it was the first thing the eye met.
+  // A LEGEND, because a shape nobody can name is decoration. The strip's two
+  // marks encode the single most important distinction in a round - what
+  // happens anyway, and when you are allowed to act - and until now the only
+  // way to learn which was which was to watch the playhead move.
+  // "An action ability may only be triggered during an action window" (Rules
+  // Reference), which is exactly the thing a tracker exists to teach.
+  const legend = h`<div class="legend">
+<span class="legend-item"><i class="tick tick-framework is-done"></i>${CHROME.legendFramework}</span>
+<span class="legend-item"><i class="tick tick-window is-done"></i>${CHROME.actionWindow}</span>
+</div>`;
+
   return h`<header class="strip">
-<div class="round"><span class="label">${CHROME.round}</span><span class="num num-40">${game.round}</span></div>
+<div class="round"><div class="round-n"><span class="label">${CHROME.round}</span><span class="num num-40">${game.round}</span></div>${raw(legend)}</div>
 <div class="strip-flow">${raw(body)}</div>
 <div class="strip-tools">${raw(menuChip)}</div>
 </header>`;

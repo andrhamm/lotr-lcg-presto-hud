@@ -12,11 +12,19 @@ export function chip({ act, arg = "", label, tone = "gold", height = 44, extraCl
 // "Rules §n ›" row that opens the Rules sheet (sheet_rules.js) on that
 // section. quest_setup/quest_sailing's bands never pass one (rules_map.js's
 // own comment on why), so they stay chip-less exactly as before.
+// An action-window band SAYS SO. It is the one thing in the round a player
+// may choose to do - "An action ability may only be triggered during an action
+// window" (Rules Reference, Action Windows) - so it gets a heading naming
+// itself rather than being a differently-coloured paragraph among paragraphs.
+// A framework band needs no heading: it is what happens anyway, and every
+// other band on the screen is one.
 export function band({ kind, text, sub = null, section = null }) {
   const rulesChip = section
     ? raw(chip({ act: "open_rules", arg: section, label: h`${CHROME.rules} §${section} ›`, tone: "tan" }))
     : "";
-  return h`<div class="${cx("band", "band-" + kind)}"><div class="band-text"><p class="body">${text}</p>${sub ? raw(h`<p class="body secondary">${sub}</p>`) : ""}${rulesChip}</div></div>`;
+  const head = kind === "window"
+    ? raw(h`<div class="label band-kind">${CHROME.actionWindow}</div>`) : "";
+  return h`<div class="${cx("band", "band-" + kind)}"><div class="band-text">${head}<p class="body">${text}</p>${sub ? raw(h`<p class="body secondary">${sub}</p>`) : ""}${rulesChip}</div></div>`;
 }
 
 export function counter({ label, icon, value, act, arg = "" }) {
