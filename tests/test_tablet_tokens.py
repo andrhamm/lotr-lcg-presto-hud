@@ -147,6 +147,33 @@ def test_the_busiest_phase_segment_fits_all_of_its_ticks():
     assert "overflow: hidden" not in row
 
 
+def test_the_phase_timeline_sits_on_one_line_whatever_the_round_has_reached():
+    """A tick the round has REACHED is a rewind target, so it is wrapped in a
+    button carrying this client's 44px tap floor; one it has not reached is a
+    bare span the size of the mark. If the row only takes the height of what
+    is in it, those are two different heights - and with align-items: center
+    the marks land on two different centrelines, so the timeline's shapes
+    drift up and down the strip as play advances past each phase. Measured
+    before the fix: 44px rows against 18px rows, marks 13px apart.
+
+    So the row carries the floor itself, unconditionally."""
+    css = _strip_comments(_css())
+    row = re.search(r"\.tick-row(?![\w-])[^{]*\{([^}]*)\}", css)
+    assert row, "no .tick-row rule"
+    m = re.search(r"min-height:\s*(\d+)px", row.group(1))
+    assert m, ".tick-row needs a min-height, or its height follows its contents"
+    floor = int(m.group(1))
+    btn = re.search(r"\.tick-btn(?![\w-])[^{]*\{([^}]*)\}", css)
+    want = 44
+    if btn:
+        b = re.search(r"(?:min-)?height:\s*(\d+)px", btn.group(1))
+        if b:
+            want = int(b.group(1))
+    assert floor >= want, (
+        "the row (%spx) is shorter than the tap target it can contain (%spx), "
+        "so reached and unreached phases sit at different heights" % (floor, want))
+
+
 def test_the_primary_action_cannot_be_scrolled_off_the_screen():
     """.pane scrolls, and .cta-row is a direct child of it - so before this,
     any view whose content ran taller than the pane pushed the primary action

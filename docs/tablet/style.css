@@ -292,8 +292,15 @@ button.band:active { transform: translateY(1px); background: var(--card-hi); }
    gap that comes to 115px inside a 112px segment, so the last action window
    was quietly cut in half. The sizes below are chosen against that worst
    case (3*18 + 3*11 + 5*4 = 107) rather than against a comfortable one. */
+/* EVERY tick row is the same height, whether or not it contains a tap target.
+   A tick the round has reached is a rewind target, so it is wrapped in a
+   button carrying this client's 44px floor; a tick it has not reached is a
+   bare 18px span. With align-items: center that put the marks on two
+   different centrelines - 13px apart - so the timeline's shapes drifted up
+   and down the strip as the round advanced past each phase. The row keeps the
+   button's height at all times and the marks centre in it identically. */
 .tick-row { display: flex; align-items: center; flex-wrap: nowrap; gap: 4px;
-  min-width: 0; }
+  min-width: 0; min-height: 44px; }
 .skip-note { position: absolute; top: 4px; right: 8px; font: 700 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--amber); }
 .log-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--btn); color: var(--tan); font: 700 13px/1 var(--sans); font-variant-numeric: tabular-nums; }
 .tick { position: relative; display: inline-block; flex: 0 0 auto; }
