@@ -228,7 +228,7 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
   background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
   border-radius: 6px; font-size: 20px; color: var(--tan); }
 .tbtn.is-off { background: transparent; border-color: transparent; box-shadow: none; color: var(--dim); opacity: .4; }
-.seg { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 8px; flex: 1 1 0; min-width: 0; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+.seg { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 8px; flex: 1 1 0; min-width: 0; padding: 8px 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .seg.is-skippable { background: var(--card-hi); border-color: var(--amber); }
 /* The name is the segment's whole point, so it never yields: flex: 0 0 auto,
    and the tick row is what clips instead. The Quest phase has four flow views
@@ -241,8 +241,13 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 .seg:has(.tick.is-done) .phase-name { color: var(--tan); }
 .seg:has(.tick.is-current) .phase-name { color: var(--gold); }
 .seg.is-skippable .phase-name { color: var(--amber); }
-.tick-row { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px;
-  min-width: 0; overflow: hidden; }
+/* The row must FIT, not clip. Quest is the widest phase - three framework
+   steps and three windows - and at an 18px square, a 12px circle and a 5px
+   gap that comes to 115px inside a 112px segment, so the last action window
+   was quietly cut in half. The sizes below are chosen against that worst
+   case (3*18 + 3*11 + 5*4 = 107) rather than against a comfortable one. */
+.tick-row { display: flex; align-items: center; flex-wrap: nowrap; gap: 4px;
+  min-width: 0; }
 .skip-note { position: absolute; top: 4px; right: 8px; font: 700 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--amber); }
 .log-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--btn); color: var(--tan); font: 700 13px/1 var(--sans); font-variant-numeric: tabular-nums; }
 .tick { position: relative; display: inline-block; flex: 0 0 auto; }
@@ -252,16 +257,20 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
    Help teaches the pairing.
    Every tick wore it only AFTER the round reached it - a future one was
    neutral grey - so most of the strip was undifferentiated shapes at the
-   moment a player is looking ahead to decide what to do. A future tick keeps
-   its own colour, just unlit: same hue, low alpha, so the whole round reads
-   as "red things happen to me, green things are mine" at a glance.
+   moment a player is looking ahead to decide what to do.
+   OUTLINED = ahead, SOLID = reached. Not "dimmer": a first attempt drew
+   future ticks in their own hue at 26-30% alpha, which measures 1.5-1.7
+   against the card ground where the grey it replaced measured 5.3 - the
+   action windows in particular all but disappeared. An outline keeps the
+   hue at full strength on the EDGE (5.3 / 6.0) while still reading as
+   unfinished, and it says "not yet" rather than "less important".
    Square vs circle carries the same distinction redundantly, for anyone who
    does not separate those two hues. */
 .tick-framework { width: 18px; height: 18px; border-radius: 2px;
-  background: rgba(247,101,62,.26); }
+  background: transparent; border: 2px solid var(--red); }
 .tick-framework.is-done, .tick-framework.is-current { background: var(--red); }
 .tick-window { width: 11px; height: 11px; border-radius: 50%; align-self: center;
-  background: rgba(136,168,92,.30); }
+  background: transparent; border: 2px solid var(--green); }
 .tick-window.is-done, .tick-window.is-current { background: var(--green); }
 .playhead { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--gold); }
 /* A tick a real delta entered this round (strip.js's renderTick, via

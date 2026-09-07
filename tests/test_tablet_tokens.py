@@ -111,6 +111,42 @@ def _z_index_of(css, selector):
     return int(zm.group(1)) if zm else None
 
 
+def test_the_busiest_phase_segment_fits_all_of_its_ticks():
+    """The Quest phase has three framework steps and three action windows -
+    six ticks in one segment, the most any phase carries. They have to FIT.
+
+    A `flex-wrap: wrap` let the row spill onto a second line, which overflowed
+    the strip's content box and clipped the phase NAME off the busiest
+    segment; switching to nowrap moved the loss to the other end and cut the
+    last action window in half instead. So the sizes are chosen against that
+    worst case rather than against a comfortable one, and this asserts the
+    arithmetic rather than trusting it.
+
+    Segment width at 1366: (1366 - the rail and the strip's own padding) split
+    eight ways, ~116px of content."""
+    css = _css()
+
+    def px(selector, prop):
+        m = re.search(r"\." + re.escape(selector) + r"(?![\w-])[^{]*\{([^}]*)\}",
+                      _strip_comments(css))
+        assert m, "no rule for .%s" % selector
+        v = re.search(prop + r"\s*:\s*(\d+)px", m.group(1))
+        return int(v.group(1)) if v else None
+
+    square = px("tick-framework", "width")
+    circle = px("tick-window", "width")
+    gap = px("tick-row", "gap")
+    assert square and circle and gap is not None
+    # Three squares, three circles, five gaps between them.
+    needed = 3 * square + 3 * circle + 5 * gap
+    assert needed <= 116, (
+        "Quest's six ticks need %spx and the segment gives ~116" % needed)
+    # And the row must not silently hide the overflow if that ever stops
+    # being true - a clipped tick is an action window the player cannot see.
+    row = re.search(r"\.tick-row(?![\w-])[^{]*\{([^}]*)\}", _strip_comments(css)).group(1)
+    assert "overflow: hidden" not in row
+
+
 def test_the_modal_scrim_covers_everything_the_app_draws():
     """A modal that things show through is not a modal. The rail's pinned rows
     are what did it: `position: sticky` with a z-index makes each one its own
