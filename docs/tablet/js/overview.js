@@ -74,7 +74,7 @@ export function scenarioMetaFor(entry, difficulty) {
 // reference has no list to read it off) but it is context, not the subject.
 // Each piece is dropped when the catalog has nothing for it rather than
 // leaving a stranded separator.
-function header(name, entry, stageCount) {
+function header(name, entry, stageCount, have) {
   const stagesLabel = stageCount
     ? (stageCount === 1 ? CHROME.stagesCountOne : fmt(CHROME.stagesCount, stageCount))
     : "";
@@ -84,7 +84,7 @@ function header(name, entry, stageCount) {
   const cycle = entry.cycle ?? "";
   const pack = entry.pack && !cycle.includes(entry.pack) ? entry.pack : "";
   const meta = [pack, cycle, stagesLabel].filter(Boolean).join(" · ");
-  return h`<header class="ov-head">${raw(setIcon(name, 44))}
+  return h`<header class="ov-head">${raw(setIcon(name, 44, have))}
 <div class="ov-head-text"><h1 class="display">${name}</h1><p class="label">${meta}</p></div>
 </header>`;
 }
@@ -119,9 +119,9 @@ function gatherSets(data, name) {
   return (data.includedSets ?? [name]).filter(Boolean);
 }
 
-function setsSection(sets) {
+function setsSection(sets, have) {
   const rows = sets.map(s =>
-    h`<li class="ov-set">${raw(setIcon(s, 28))}<span class="body">${s}</span></li>`).join("");
+    h`<li class="ov-set">${raw(setIcon(s, 28, have))}<span class="body">${s}</span></li>`).join("");
   return h`<section class="ov-section"><div class="label">${CHROME.setsToGather}</div>
 <ul class="ov-sets">${raw(rows)}</ul></section>`;
 }
@@ -351,7 +351,7 @@ export function renderScenarioDetail(game, ui) {
     // in-game reference brings its own - renderOverview below.)
     return h`<div class="ov-grid">
 ${raw(difficultySection(ov, entry, data, difficulty))}
-${raw(setsSection(sets))}
+${raw(setsSection(sets, ui.iconSlugs ?? null))}
 ${raw(tipsSection(ui, ov.slug, null))}
 ${raw(cardsSection(cardGroups(data, name), ui.imagePrefix, ui.packDates ?? {}))}</div>`;
   }
@@ -384,6 +384,6 @@ export function renderOverview(game, ui) {
   // This host has no app bar - it is a reference screen opened over the game,
   // not a step in a flow - so the heading lives here rather than in a band.
   // It is the ONE title on this screen, same rule as the chooser's.
-  const head = header(name, entry, entry.stageCount ?? stages.length);
+  const head = header(name, entry, entry.stageCount ?? stages.length, ui.iconSlugs ?? null);
   return h`<main class="pane overview">${raw(head)}${raw(renderScenarioDetail(game, ui))}${raw(footer())}</main>`;
 }

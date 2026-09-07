@@ -515,6 +515,30 @@ export async function loadTips() {
 // rules_text.json wasn't generated this build, a corrupt file, ...) returns
 // null so callers treat rules lookup as unavailable rather than erroring
 // (same "optional at runtime" contract as loadTips()).
+// WHICH SET/CYCLE ICONS ACTUALLY EXIST - the manifest build_icons.py writes
+// beside its SVG export (docs/data/icons/svg/index.json), as a Set of slugs.
+//
+// The tablet derives an icon slug from a printed NAME, and plenty of names
+// have no symbol in the pack: 8 of the catalog's 17 cycles are groupings this
+// project invented rather than printed cycles, and a long tail of encounter
+// sets is simply not covered. Without this the only way to find out is to
+// request the file and watch it 404, which paints the browser's own
+// broken-image glyph for a frame before any handler can replace it.
+//
+// null on any failure - a build that never ran --svg-out (the device deploy
+// does not, and has no use for SVGs), an older site, a cold offline reload.
+// The caller treats null as "unknown" and falls back to asking, which is
+// exactly the behaviour this replaces, so a missing manifest costs the flash
+// back and nothing else.
+export async function loadIconSlugs() {
+  try {
+    const list = await (await fetch(dataUrl("icons/svg/index.json"))).json();
+    return Array.isArray(list) ? new Set(list) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function loadRulesText() {
   try {
     return await (await fetch(dataUrl("rules_text.json"))).json();

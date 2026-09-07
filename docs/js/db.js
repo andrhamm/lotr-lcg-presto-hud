@@ -8,7 +8,7 @@
 // frames length-prefixed binary records into files, this keeps one array per
 // key, and both feed the identical foldLog/foldReplay.
 import { foldLog, foldReplay } from "./gamestate.js";
-import { loadIndex, loadScenario, loadIcons, loadTips, loadRulesText, loadLocations,
+import { loadIndex, loadScenario, loadIcons, loadTips, loadRulesText, loadIconSlugs, loadLocations,
          loadScenarioMedia, loadPlayerSideQuests } from "./quest_catalog.js";
 
 // Two clients share this origin (docs/ and docs/tablet/), so every key is
@@ -321,6 +321,13 @@ export class DataClient {
   async rulesText() {
     if (this._rulesText === undefined) this._rulesText = await loadRulesText();
     return this._rulesText;
+  }
+
+  // Which set/cycle icons the build actually exported. Immutable catalog data
+  // like the rules text, so it is read once and pinned for the session.
+  async iconSlugs() {
+    if (this._iconSlugs === undefined) this._iconSlugs = await loadIconSlugs();
+    return this._iconSlugs;
   }
 
   releaseGame() { this._bundles = {}; }

@@ -41,11 +41,11 @@ function sourceToggle(source) {
 // index that never set releaseDate at all, same degrade as everywhere else
 // that field is read). The trailing chevron says the row goes somewhere,
 // which on a drill-in list is the whole contract of the row.
-function cycleRow(g) {
+function cycleRow(g, have) {
   const year = g.date ? g.date.slice(0, 4) : "";
   const meta = year ? `${g.count} · ${year}` : String(g.count);
   return h`<button type="button" class="drill-row" data-act="ng_cycle" data-arg="${g.cycle}">
-${raw(cycleIcon(g.cycle, 30))}
+${raw(cycleIcon(g.cycle, 30, have))}
 <span class="body">${g.cycle}</span>
 <span class="label">${meta}</span>
 <span class="drill-chev" aria-hidden="true">›</span>
@@ -76,7 +76,7 @@ ${raw(cycleIcon(g.cycle, 30))}
 // inside it IS a button - nesting them is invalid markup that iOS resolves
 // however it likes. app.js delegates on the closest [data-act], so the icon
 // takes its own taps and the rest of the row still selects.
-function scenarioRow(scn, selected, locked, pinTop) {
+function scenarioRow(scn, selected, locked, pinTop, have) {
   const isSel = scn.slug === selected;
   // The SAME glyph treatment the chosen cycle's ✕ already uses (.drill-x) -
   // it was a chip before, which is a different shape, a different ground and
@@ -84,7 +84,7 @@ function scenarioRow(scn, selected, locked, pinTop) {
   // column. One vocabulary: a square gold-edged glyph at the row's right.
   const mark = !isSel ? "" : h`<button type="button" class="drill-x" data-act="${locked ? "ng_unlock" : "ng_lock"}" data-arg="${scn.slug}">${locked ? CHROME.markUnlock : CHROME.markLock}</button>`;
   return h`<div class="${cx("drill-row", "drill-scenario", isSel && "is-selected", isSel && locked && "is-locked")}" data-act="pick_scenario" data-arg="${scn.slug}" role="button"${isSel ? raw(pin(pinTop)) : ""}>
-${raw(setIcon(scn.name ?? "", 36))}
+${raw(setIcon(scn.name ?? "", 36, have))}
 <span class="body">${scn.name ?? ""}</span>
 ${raw(mark)}
 </div>`;
@@ -123,11 +123,11 @@ const HEAD_H = 28;
 const ROW_H = 60;
 const pin = top => ` style="top:${top}px"`;
 
-function drillList(p, cycles, scenarios) {
+function drillList(p, cycles, scenarios, have) {
   if (p.drill !== "scenarios") {
     return h`${raw(sourceToggle(p.source ?? "official"))}
 <div class="label"${raw(pin(0))}>${CHROME.cycles}</div>
-<div class="drill-list">${raw(cycles.map(cycleRow).join(""))}</div>`;
+<div class="drill-list">${raw(cycles.map(g => cycleRow(g, have)).join(""))}</div>`;
   }
   // While locking, the rows are still drawn - with the class that animates
   // them away - so there is something to animate. app.js flips to the locked
@@ -142,14 +142,14 @@ function drillList(p, cycles, scenarios) {
   // long cycle (the LotR Saga's 18) does not take a second to settle.
   const last = rows.length - 1;
   const list = rows.map((s, i) => {
-    const row = scenarioRow(s, p.slug, p.locked, HEAD_H * 2 + ROW_H);
+    const row = scenarioRow(s, p.slug, p.locked, HEAD_H * 2 + ROW_H, have);
     if (!p.locking || s.slug === p.slug) return row;
     const delay = Math.min((last - i) * 16, 160);
     return h`<div class="rail-fold" style="animation-delay:${delay}ms">${raw(row)}</div>`;
   }).join("");
   return h`<div class="label"${raw(pin(0))}>${CHROME.cycleOne}</div>
 <div class="drill-row drill-current" data-act="ng_cycles" role="button"${raw(pin(HEAD_H))}>
-${raw(cycleIcon(p.cycle ?? "", 30))}
+${raw(cycleIcon(p.cycle ?? "", 30, have))}
 <span class="body">${p.cycle ?? ""}</span>
 <span class="drill-x" aria-hidden="true">✕</span>
 </div>
@@ -177,7 +177,7 @@ ${meta ? raw(h`<span class="label">${meta}</span>`) : ""}
 </button>`;
 }
 
-function stagesSection(stages, selected) {
+function stagesSection(stages, selected, have) {
   const rows = [stageRow(null, CHROME.overview, null, "overview", selected === "overview")];
   stages.forEach((st, i) => {
     const n = st.stage ?? i + 1;
@@ -210,11 +210,11 @@ function emptyDetail() {
 // The metadata line drops the pack when the cycle already contains it ("Core
 // Set" inside "Core Set (Mirkwood Paths)"): the breadcrumb printed both, which
 // is how it came to be four items long and two of them the same words.
-function barFor(ui, picked, openCycle) {
+function barFor(ui, picked, openCycle, have) {
   // Before a scenario is picked the band still has something true to show: the
   // cycle you are inside.
   if (!picked) return { title: CHROME.chooseScenarioTitle,
-                        mark: openCycle ? cycleIcon(openCycle, 56) : null };
+                        mark: openCycle ? cycleIcon(openCycle, 56, have) : null };
   const ov = ui.overview ?? {};
   const entry = ov.entry ?? {};
   const name = entry.name ?? ov.bundle?.scenario?.name ?? "";
@@ -224,13 +224,15 @@ function barFor(ui, picked, openCycle) {
   const cycle = entry.cycle ?? "";
   const pack = entry.pack && !cycle.includes(entry.pack) ? entry.pack : "";
   return {
-    title: name, icon: name,
+    title: name, icon: name, iconHave: have,
     meta: [pack, cycle, stagesLabel].filter(Boolean).join(" · "),
   };
 }
 
 export function renderNewGame(game, ui) {
   const p = ui.picker ?? {};
+  // Which icons the build actually exported (app.js seats it at boot).
+  const have = ui.iconSlugs ?? null;
 
   // A catalog that never loaded costs the player the rows, not the screen:
   // the error goes where the quests would have been, and the detail side
@@ -259,7 +261,7 @@ export function renderNewGame(game, ui) {
   const detail = picked ? renderScenarioDetail(game, ui) : emptyDetail();
 
   const stages = picked ? (ui.overview?.bundle?.stages ?? []) : [];
-  const stageList = picked ? stagesSection(stages, p.stage ?? "overview") : "";
+  const stageList = picked ? stagesSection(stages, p.stage ?? "overview", have) : "";
   // Continue lives in the band, not at the foot of the pane. It is the step's
   // forward action, so it belongs with the step's other navigation - and a
   // full-width green bar across the bottom of a reference screen shouted
@@ -271,7 +273,7 @@ export function renderNewGame(game, ui) {
   // nothing for the delegation to catch - which is this client's existing
   // convention for an off control (primitives.js's transportButton).
   const head = setupHead({
-    back: "go_home", backLabel: CHROME.backToHome, ...barFor(ui, picked, p.drill === "scenarios" ? cycle : null),
+    back: "go_home", backLabel: CHROME.backToHome, ...barFor(ui, picked, p.drill === "scenarios" ? cycle : null, have),
     // The aside is the step's forward action and NOTHING else. A stage chip
     // lived here briefly and was wrong twice over: the rail's STAGES list
     // already shows which stage is selected, and putting it beside Continue
@@ -284,7 +286,7 @@ export function renderNewGame(game, ui) {
   });
 
   return h`<main class="pane setup">${raw(head)}<div class="setup-grid">
-<div class="setup-list">${raw(drillList({ ...p, source, cycle }, cycles, scenarios))}${raw(stageList)}</div>
+<div class="setup-list">${raw(drillList({ ...p, source, cycle }, cycles, scenarios, have))}${raw(stageList)}</div>
 <div class="setup-detail">${raw(detail)}</div>
 </div></main>`;
 }

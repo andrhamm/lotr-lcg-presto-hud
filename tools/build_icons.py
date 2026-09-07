@@ -280,6 +280,25 @@ def _assemble(svg_sources, size, svg_out=None):
                     f.write(_recolor_svg(svg_bytes))
             except OSError as e:
                 raise SystemExit("Failed to write SVG %r to %r: %s" % (slug, svg_out, e))
+    # A MANIFEST of what was actually exported, beside the exports.
+    #
+    # The tablet builds an <img> per set/cycle icon from a slug it derives
+    # from the printed NAME, and 8 of the catalog's 17 cycles (plus a long
+    # tail of encounter sets) simply have no symbol in the pack. Without this
+    # the client can only find that out by requesting the file and watching it
+    # 404 - which paints the browser's broken-image glyph for a frame before
+    # the error handler can swap in the placeholder. It already knows; it just
+    # had no way to say so.
+    #
+    # Written here rather than derived from icons.json's keys because THIS is
+    # the list of files that exist on disk: same set today (251 of each), but
+    # the manifest cannot drift from the export it is written beside.
+    if svg_out:
+        try:
+            with open(os.path.join(svg_out, "index.json"), "w", encoding="utf-8") as f:
+                json.dump(sorted(icons), f, separators=(",", ":"))
+        except OSError as e:
+            raise SystemExit("Failed to write the SVG manifest to %r: %s" % (svg_out, e))
     return icons, counts
 
 

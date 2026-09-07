@@ -44,11 +44,11 @@ import { setIcon } from "./seticon.js";
 // the Back chip's own label now says outright ("Main Menu" / "Scenario"), and
 // two pieces of chrome describing the same thing is what made this corner
 // noisy in the first place.
-export function setupHead({ title, meta = null, icon = null, mark = null, aside = "", back, backLabel }) {
+export function setupHead({ title, meta = null, icon = null, iconHave = null, mark = null, aside = "", back, backLabel }) {
   // The mark is large on purpose: it is the one piece of the band that is not
   // text, and at 34px it read as a bullet beside the title rather than as the
   // scenario's own symbol.
-  const glyph = mark ?? (icon ? setIcon(icon, 56) : "");
+  const glyph = mark ?? (icon ? setIcon(icon, 56, iconHave) : "");
   return h`<header class="appbar">
 <div class="appbar-nav">${raw(chip({ act: back, label: h`${backLabel}`, tone: "tan" }))}</div>
 <div class="appbar-subject">${raw(glyph)}

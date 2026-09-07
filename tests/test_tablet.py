@@ -905,6 +905,48 @@ console.log(JSON.stringify({
     assert not js["afterContinueArmed"] and js["afterContinueShown"]
 
 
+def test_an_icon_the_build_never_exported_is_never_requested():
+    """The client derives an icon slug from a printed NAME, and plenty of
+    names have no symbol in the pack - 8 of the catalog's 17 cycles are
+    groupings this project invented rather than printed cycles, plus a long
+    tail of encounter sets. It used to find that out by asking for the file
+    and watching it 404, which paints the browser's own broken-image glyph for
+    a frame before any handler can replace it.
+
+    build_icons.py writes a manifest beside its SVG export, so the answer is
+    known before the request: a slug that is not in it renders the placeholder
+    directly and asks the network for nothing.
+
+    Without the manifest (a build that never ran --svg-out - the device deploy
+    does not, and has no use for SVGs) the behaviour is exactly what it was,
+    so a missing manifest costs the flash back and nothing else."""
+    js = node("""
+import { setIcon, cycleIcon, iconSlugs } from "./seticon.js";
+const have = new Set(["passage-through-mirkwood", "dwarrowdelf-cycle"]);
+console.log(JSON.stringify({
+  // Present: a real <img>, and no placeholder-only wrapper.
+  present: setIcon("Passage Through Mirkwood", 36, have),
+  // Absent: no <img> at all, so nothing 404s.
+  absent: setIcon("Core Set (Mirkwood Paths)", 36, have),
+  // A cycle resolves through its own "-cycle" chain against the same set.
+  cyclePresent: cycleIcon("The Dwarrowdelf", 30, have),
+  cycleAbsent: cycleIcon("Hobbit Saga", 30, have),
+  // No manifest: ask, exactly as before.
+  unknown: setIcon("Core Set (Mirkwood Paths)", 36, null),
+  chain: iconSlugs("Crossings of Poros"),
+}));
+""")
+    assert "<img" in js["present"] and "passage-through-mirkwood.svg" in js["present"]
+    assert "<img" not in js["absent"] and "is-missing" in js["absent"]
+    assert "<img" in js["cyclePresent"] and "dwarrowdelf-cycle.svg" in js["cyclePresent"]
+    assert "<img" not in js["cycleAbsent"] and "is-missing" in js["cycleAbsent"]
+    # No manifest -> the previous optimistic behaviour, unchanged.
+    assert "<img" in js["unknown"]
+    # ...and the fallback chain itself is untouched by any of this.
+    assert js["chain"][0] == "crossings-of-poros"
+    assert "the-crossings-of-poros" in js["chain"]
+
+
 def test_the_rail_never_nests_a_button_inside_a_button():
     """A <button> inside a <button> is invalid markup and iOS resolves it
     however it likes, so any row that carries its OWN control is a div with

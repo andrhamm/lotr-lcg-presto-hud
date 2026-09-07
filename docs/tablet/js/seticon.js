@@ -94,28 +94,42 @@ export function iconSlugs(name) {
 // this project invented rather than printed cycles (Core Set (Mirkwood Paths),
 // the two Sagas, Standalone/PoD and the four ALeP groups), which have no cycle
 // symbol to find - they fall back to the placeholder glyph, correctly.
-export function cycleIcon(name, px) {
+export function cycleIcon(name, px, have = null) {
   const base = slugify(name);
   const bare = base.startsWith("the-") ? base.slice(4) : base;
   const chain = [];
   for (const b of [base, bare]) {
     for (const s of [b + "-cycle", b]) if (s && !chain.includes(s)) chain.push(s);
   }
-  return iconImg(chain, px);
+  return iconImg(chain, px, have);
 }
 
-// One <img> carrying a chain of candidates. data-alt is the rest of it,
-// comma-separated; app.js's error listener shifts one off and retries before
-// giving up on the placeholder glyph.
-function iconImg(chain, px) {
-  const [primary, ...rest] = chain;
+// One <img> for the first candidate that EXISTS, or no <img> at all.
+//
+// `have` is the manifest build_icons.py writes beside its SVG export - the
+// set of slugs actually on disk - seated once on `ui` at boot. With it, a
+// name the pack has no symbol for renders the placeholder directly and asks
+// the network for nothing: no 404, and no frame of the browser's own
+// broken-image glyph before the error handler can swap it out. That flash was
+// the whole cost of guessing, and the build already knew the answer.
+//
+// Without it (`have` null - a build that never ran --svg-out, an older site,
+// a cold offline reload) this falls back to the previous behaviour: ask for
+// the first candidate and let app.js's error listener walk the rest. So a
+// missing manifest costs the flash back and nothing else.
+function iconImg(chain, px, have) {
+  const usable = have ? chain.filter(s => have.has(s)) : chain;
+  if (!usable.length) {
+    return h`<span class="seticon is-missing" style="width:${px}px;height:${px}px"><i class="seticon-fallback">◆</i></span>`;
+  }
+  const [primary, ...rest] = usable;
   const src = dataUrl("icons/svg/" + primary + ".svg");
   const alt = rest.map(s => dataUrl("icons/svg/" + s + ".svg")).join(",");
   return h`<span class="seticon" style="width:${px}px;height:${px}px"><img src="${src}" alt="" loading="lazy"${alt ? raw(h` data-alt="${alt}"`) : ""}><i class="seticon-fallback">◆</i></span>`;
 }
 
-export function setIcon(name, px) {
-  return iconImg(iconSlugs(name), px);
+export function setIcon(name, px, have = null) {
+  return iconImg(iconSlugs(name), px, have);
 }
 
 // The scenario's own set icon, keyed by `game.scenario?.name` (the one name
@@ -125,7 +139,7 @@ export function setIcon(name, px) {
 // unconditionally instead of repeating the `setName ? setIcon(...) : ""`
 // guard - rail.js's stage pill and sheet_quest.js's quest-group header both
 // used to carry that exact two-line duplicate.
-export function scenarioIcon(game, px) {
+export function scenarioIcon(game, px, have = null) {
   const setName = game.scenario?.name;
-  return setName ? setIcon(setName, px) : "";
+  return setName ? setIcon(setName, px, have) : "";
 }

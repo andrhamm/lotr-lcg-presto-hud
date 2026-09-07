@@ -276,6 +276,11 @@ async function boot() {
   // below runs, the same way db.bundle()'s pieces are seated per-game.
   // Degrades to null on any catalog failure (db.rulesText()'s contract).
   ui.rules = await db.rulesText();
+  // Which set/cycle icons the build exported. Static catalog data like the
+  // rules text, so it is seated once here regardless of which branch below
+  // runs - and it is what lets seticon.js skip asking for a symbol the pack
+  // does not have, instead of learning that from a 404.
+  ui.iconSlugs = await db.iconSlugs();
   const saved = db.session.loadState();
   if (saved) {
     game = GameState.fromDict(saved.state);

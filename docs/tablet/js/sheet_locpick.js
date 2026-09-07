@@ -84,7 +84,7 @@ function renderList(game, ui) {
     ? h`<p class="body secondary">${fmt(CHROME.locpickReplacing, loc.progress, loc.points)}</p>`
     : h`<p class="body secondary">${CHROME.locpickPrompt}</p>`;
   const groups = groupBySet(entries).map(({ set, rows }) => h`<div class="locpick-group">
-${set ? raw(h`<div class="locpick-group-head">${raw(setIcon(set, 20))}<span class="label">${set}</span></div>`) : ""}
+${set ? raw(h`<div class="locpick-group-head">${raw(setIcon(set, 20, ui.iconSlugs ?? null))}<span class="label">${set}</span></div>`) : ""}
 ${raw(rows.map(e => locRow(e, e.id === sheet.selected, ui.imagePrefix)).join(""))}
 </div>`).join("");
   return h`${raw(sub)}<div class="locpick-list">${raw(groups)}</div>`;
