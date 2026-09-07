@@ -13,7 +13,7 @@ import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
 import { setIcon } from "./seticon.js";
-import { cardImage } from "./cardimage.js";
+import { cardImage, cardFacts } from "./cardimage.js";
 
 function step(act, arg, label) {
   return h`<button type="button" class="step step-sm" data-act="${act}" data-arg="${arg}">${label}</button>`;
@@ -58,7 +58,13 @@ function groupBySet(entries) {
 function locRow(e, selected, prefix) {
   const eThreat = e.threatKind === "x" ? "X" : (e.threat ?? 0);
   const ePoints = e.pointsKind === "x" ? "X" : (e.points ?? 0);
+  // The picker's entries are quest_catalog's flattened rows, not full card
+  // records, so they can only state what they carry - which is the set and
+  // the printed numbers the row already shows. Absent fields are absent from
+  // the table rather than guessed at.
   const frame = cardImage({ prefix, id: e.id, image: e.image, name: e.name ?? "",
+                            facts: cardFacts({ card: { encounterSet: e.set, type: "Location",
+                                                       faces: [{ threat: e.threat, questPoints: e.points }] } }),
                             caption: fmt(CHROME.locpickStats, eThreat, ePoints) });
   // The row is a DIV, not a button, because the card inside it is one: every
   // card on screen opens the quick view, and a <button> inside a <button> is

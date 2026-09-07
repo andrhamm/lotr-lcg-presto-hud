@@ -28,3 +28,32 @@ export function faceOf(card, side) {
 export function frontFace(card) {
   return faceOf(card, "A");
 }
+
+
+// Pack -> release date ("YYYY-MM"), derived from the index's own scenario
+// entries. The index's `packs` list carries a name, a slug and a card count
+// but no date; the scenarios carry `pack` and `releaseDate`, so the map falls
+// out of them. 88 of the catalog's 105 packs are covered - the rest ship no
+// pickable scenario (player-card packs, the errata pack), so nothing the card
+// quick view can open belongs to one.
+//
+// Pure, so app.js can seat it once beside ui.imagePrefix rather than every
+// render rebuilding it.
+export function packDates(index) {
+  const out = {};
+  for (const s of index?.scenarios ?? []) {
+    if (s.pack && s.releaseDate && !out[s.pack]) out[s.pack] = s.releaseDate;
+  }
+  return out;
+}
+
+// "2011-09" -> "September 2011". The catalog stores a month, never a day, so
+// this never invents one.
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July",
+                "August", "September", "October", "November", "December"];
+export function releaseLabel(ym) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(ym ?? ""));
+  if (!m) return null;
+  const name = MONTHS[Number(m[2]) - 1];
+  return name ? `${name} ${m[1]}` : m[1];
+}

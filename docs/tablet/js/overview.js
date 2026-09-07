@@ -22,7 +22,8 @@ import { h, raw, fmt, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
 import { setIcon } from "./seticon.js";
-import { cardImage } from "./cardimage.js";
+import { cardImage, cardFacts } from "./cardimage.js";
+import { releaseLabel } from "./cards.js";
 import { stagePointsShape } from "./xshape.js";
 import { branchName } from "./resolve_step.js";
 import { frontFace } from "./cards.js";
@@ -211,10 +212,11 @@ function cardCaption(key, card) {
   return bits.join(" · ");
 }
 
-function cardsSection(groups, prefix) {
+function cardsSection(groups, prefix, packDates) {
   const blocks = groups.map(g => {
     const figures = g.cards.map(c => cardImage({
       prefix, id: c.id, image: c.image, name: c.name, faces: c.faces,
+      facts: cardFacts({ card: c, packDate: releaseLabel(packDates[c.pack]) }),
       caption: cardCaption(g.key, c),
     })).join("");
     return h`<div class="ov-type"><div class="label">${CHROME.cardTypes[g.key]}</div>
@@ -351,7 +353,7 @@ export function renderScenarioDetail(game, ui) {
 ${raw(difficultySection(ov, entry, data, difficulty))}
 ${raw(setsSection(sets))}
 ${raw(tipsSection(ui, ov.slug, null))}
-${raw(cardsSection(cardGroups(data, name), ui.imagePrefix))}</div>`;
+${raw(cardsSection(cardGroups(data, name), ui.imagePrefix, ui.packDates ?? {}))}</div>`;
   }
 
   // A STAGE. Its own printed text is the authority on what it does, so that

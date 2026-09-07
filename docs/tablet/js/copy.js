@@ -91,6 +91,17 @@ export const CHROME = {
   // folds the rest of the list away, an ✕ brings it back.
   markLock: "✓", markUnlock: "✕",
   cardArtMissing: "No picture for this card in this build.",
+  // The quick view's table. Row order is cardimage.js's cardFacts(); these
+  // are just the labels. The stat names are the game's own, as FFG prints
+  // them ("defense" in US spelling, "hit points" per Learn to Play p.20) -
+  // the same words the card captions already use.
+  cardFacts: {
+    quantity: "Copies", set: "Encounter set", pack: "Pack", released: "Released",
+    type: "Type", traits: "Traits", keywords: "Keywords",
+    engagement: "Engagement", threat: "Threat", willpower: "Willpower",
+    attack: "Attack", defense: "Defense", hitPoints: "Hit points",
+    questPoints: "Quest points", victory: "Victory",
+  },
   // 75 stage cards in the catalog have no A-side text at all (their B side
   // carries the rules). Saying so is better than an empty panel that reads
   // like a loading failure.

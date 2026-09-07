@@ -19,6 +19,7 @@ import { layout } from "./layout.js";
 import { perform, dispatch, newUi, afterTap } from "./actions.js";
 import { logText } from "./logfilter.js";
 import { imagePrefix, cyclesFor, groupByCycle } from "../../js/quest_catalog.js";
+import { packDates } from "./cards.js";
 import { imageUrls } from "./cardimage.js";
 import { overviewFor, scenarioMetaFor } from "./overview.js";
 
@@ -160,6 +161,9 @@ async function buildPicker() {
   // The card-art prefix rides along with the index the picker already had to
   // read - the resume path (boot()) reads the same one for itself.
   ui.imagePrefix = imagePrefix(index);
+  // Pack -> release date, for the card quick view's table. Seated once here
+  // beside the prefix rather than rebuilt on every render.
+  ui.packDates = packDates(index);
   // Milestone 6 (Task 2): the tablet-density picker starts on the Official
   // source, its first cycle selected - cyclesFor() degrades to [] for a
   // null/empty index, same as every other catalog-optional read here.
@@ -300,6 +304,7 @@ async function boot() {
     // location picker mid-round, and that is where the card art shows.
     const index = await catalogIndex();
     ui.imagePrefix = imagePrefix(index);
+    ui.packDates = packDates(index);
     // The read-only Scenario overview (M6, Task 3) the QUEST zone's stage
     // pill opens mid-game. Seated HERE, at boot, for the same reason the
     // bundle's other pieces are: opening a reference screen must not cost a
@@ -602,8 +607,9 @@ root.addEventListener("click", ev => {
   if (btn.dataset.act === "open_card") {
     const files = (btn.dataset.files ?? "").split(",").filter(Boolean);
     if (!files.length) return;
-    ui.sheet = { kind: "card", name: btn.dataset.arg ?? "",
-                 caption: btn.dataset.caption ?? "", files, face: 0 };
+    let facts = [];
+    try { facts = JSON.parse(btn.dataset.facts ?? "[]"); } catch { facts = []; }
+    ui.sheet = { kind: "card", name: btn.dataset.arg ?? "", files, face: 0, facts };
     render();
     return;
   }

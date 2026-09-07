@@ -69,7 +69,39 @@ export function faceFiles(card) {
 // enlarge, and a control that opens an empty modal is worse than no control.
 // The caption is what the player reads in that case (see the module header),
 // which is exactly why it is never optional.
-export function cardImage({ prefix, id, image, name, caption, faces = null }) {
+// What the quick view's table says about a card. Everything here is READ OFF
+// THE RECORD - the printed values, the printed traits, the printed keywords,
+// how many copies the set contains - and anything the card does not print is
+// simply absent rather than shown as a zero, which would be a claim the card
+// does not make.
+//
+// The card's own picture is not repeated in words: its text, its art and its
+// stat column are all legible at this size, so the table carries what the
+// PICTURE cannot say - which set it belongs to, when that came out, and how
+// many copies of it are in the deck.
+export function cardFacts({ card, packDate }) {
+  const f = (card?.faces ?? [])[0] ?? {};
+  const rows = [];
+  const put = (k, v) => { if (v !== null && v !== undefined && v !== "") rows.push([k, String(v)]); };
+  put("quantity", card?.quantity);
+  put("set", card?.encounterSet);
+  put("pack", card?.pack);
+  put("released", packDate);
+  put("type", card?.type);
+  put("traits", (card?.traits ?? "").replace(/\.$/, "").replace(/\.\s*/g, " · "));
+  put("keywords", (card?.keywords ?? "").replace(/\.$/, "").replace(/\.\s*/g, " · "));
+  put("engagement", f.engagementCost);
+  put("threat", f.threat);
+  put("willpower", f.willpower);
+  put("attack", f.attack);
+  put("defense", f.defense);
+  put("hitPoints", f.hitPoints);
+  put("questPoints", f.questPoints);
+  put("victory", f.victoryPoints);
+  return rows;
+}
+
+export function cardImage({ prefix, id, image, name, caption, faces = null, facts = null }) {
   const files = faceFiles({ id, image, faces });
   const src = cardUrl(prefix, { id, image });
   const img = src ? h`<img src="${src}" alt="" loading="lazy">` : "";
@@ -77,7 +109,11 @@ export function cardImage({ prefix, id, image, name, caption, faces = null }) {
   if (!files.length || !prefix) {
     return h`<figure class="card-frame">${raw(img)}<figcaption class="body">${raw(label)}</figcaption></figure>`;
   }
-  return h`<button type="button" class="card-frame" data-act="open_card" data-arg="${name ?? ""}" data-files="${files.join(",")}" data-caption="${caption ?? ""}">${raw(img)}<span class="body card-cap">${raw(label)}</span></button>`;
+  // The facts ride as JSON in the dataset alongside the files, for the same
+  // reason: the modal needs no lookup table and every renderer stays pure.
+  const factAttr = facts && facts.length
+    ? raw(h` data-facts="${JSON.stringify(facts)}"`) : "";
+  return h`<button type="button" class="card-frame" data-act="open_card" data-arg="${name ?? ""}" data-files="${files.join(",")}" data-caption="${caption ?? ""}"${factAttr}>${raw(img)}<span class="body card-cap">${raw(label)}</span></button>`;
 }
 
 // Every card picture the scenario `bundle` can put on screen, each URL once,

@@ -727,14 +727,31 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    The art is sized off the viewport height rather than given a fixed width,
    so the whole card is visible without scrolling on any screen this runs on -
    a card you have to scroll is not a quick view. */
-.sheet-card { width: auto; max-width: 92vw; align-items: center; }
-.cardview-head { display: flex; align-items: flex-start; justify-content: space-between;
+.sheet-card { width: auto; max-width: 92vw; }
+/* The modal's own top bar: subject left, the way out right - the same shape
+   the screens use, and for the same reason. A Close at the foot of a tall
+   card is a scroll away from the thing you just opened. */
+.cardview-bar { display: flex; align-items: center; justify-content: space-between;
   gap: 24px; width: 100%; }
-.cardview-head .display { margin: 0; }
-.cardview-tools { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
-.cardview-art { height: min(68vh, 720px); width: auto; aspect-ratio: 5/7;
-  object-fit: contain; border-radius: 10px; background: var(--well);
-  border: 1px solid var(--border-gold); display: block; }
+.cardview-bar .display { margin: 0; }
+.cardview-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+/* Card left, facts right. The picture is sized off the viewport height so the
+   whole card is visible without scrolling - a card you have to scroll is not
+   a quick view. */
+.cardview-body { display: flex; align-items: flex-start; gap: 28px; }
+/* NO border and no plate. The printed card already has an edge - a frame
+   around it competes with the card's own artwork for the same job. */
+.cardview-art { height: min(66vh, 700px); width: auto; aspect-ratio: 5/7;
+  object-fit: contain; border-radius: 6px; display: block; flex: 0 0 auto; }
+/* The facts, as a real definition list: label column fixed so the values line
+   up into a column you can read down, which is the whole point of a table
+   rather than a run-on caption. */
+.cardview-facts { margin: 0; min-width: 300px; display: flex; flex-direction: column; }
+.cardview-row { display: grid; grid-template-columns: 132px minmax(0, 1fr);
+  gap: 14px; align-items: baseline; padding: 9px 0;
+  border-top: 1px solid var(--border); }
+.cardview-row:first-child { border-top: 0; }
+.cardview-row dd { margin: 0; }
 .cardview-art.is-missing { display: flex; align-items: center; justify-content: center;
   padding: 24px; text-align: center; }
 
