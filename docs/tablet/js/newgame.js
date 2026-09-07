@@ -229,22 +229,6 @@ function barFor(ui, picked, openCycle) {
   };
 }
 
-// The selected stage, as the band's right-hand chip. It is a chip and not part
-// of the title because it is a SELECTION - the same thing the left rail is
-// showing - and because a title that grows a clause per selection is how the
-// old heading ended up saying the scenario twice.
-function stageChip(ui, stages) {
-  const sel = ui.picker?.stage ?? "overview";
-  if (sel === "overview") return "";
-  const st = stages.find((s, i) => String(s.stage ?? i + 1) === String(sel));
-  if (!st) return "";
-  const cards = st.cards ?? [];
-  const label = cards.length === 1
-    ? fmt(CHROME.stageSubject, sel, branchName(cards[0]))
-    : fmt(CHROME.stageSubjectBranch, sel, cards.length);
-  return chip({ act: "ng_stage", arg: "overview", label: h`${label} ✕`, tone: "gold", height: 40 });
-}
-
 export function renderNewGame(game, ui) {
   const p = ui.picker ?? {};
 
@@ -288,10 +272,15 @@ export function renderNewGame(game, ui) {
   // convention for an off control (primitives.js's transportButton).
   const head = setupHead({
     back: "go_home", backLabel: CHROME.backToHome, ...barFor(ui, picked, p.drill === "scenarios" ? cycle : null),
-    aside: (picked ? stageChip(ui, stages) : "")
-      + (picked
-        ? cta({ act: "go_players", label: h`${CHROME.continueToPlayers}`, tone: "ok", grow: false })
-        : h`<span class="cta cta-ok is-off">${CHROME.continueToPlayers}</span>`),
+    // The aside is the step's forward action and NOTHING else. A stage chip
+    // lived here briefly and was wrong twice over: the rail's STAGES list
+    // already shows which stage is selected, and putting it beside Continue
+    // implied the choice was part of what Continue starts - which it never
+    // is. A game always begins at stage 1; the stage selection is a reading
+    // position in the detail pane, not a setup decision.
+    aside: picked
+      ? cta({ act: "go_players", label: h`${CHROME.continueToPlayers}`, tone: "ok", grow: false })
+      : h`<span class="cta cta-ok is-off">${CHROME.continueToPlayers}</span>`,
   });
 
   return h`<main class="pane setup">${raw(head)}<div class="setup-grid">
