@@ -883,16 +883,38 @@ console.log(JSON.stringify({
     assert not js["afterContinueArmed"] and js["afterContinueShown"]
 
 
-def test_new_game_chooser_drill_rows_are_real_buttons():
-    js = node(NG_FIXTURE + """
+def test_the_rail_never_nests_a_button_inside_a_button():
+    """A <button> inside a <button> is invalid markup and iOS resolves it
+    however it likes, so any row that carries its OWN control is a div with
+    the act on it instead. app.js delegates on the closest [data-act], so the
+    inner control takes its own taps and the rest of the row still selects.
+
+    That is: cycle rows in the top-level list are plain buttons (nothing
+    inside them to tap), while the chosen-cycle row and the scenario rows are
+    divs - the first because of its ✕, the second because of the checkmark
+    that locks the choice in."""
+    js = node(NG_FIXTURE + r"""
 import { renderNewGame } from "./newgame.js";
 const cycles = renderNewGame(null, { picker: { index, drill: "cycles" } });
-const scenarios = renderNewGame(null, { picker: { index, cycle: "C1", drill: "scenarios" } });
-const tags = [...(cycles + scenarios).matchAll(/<(\\w+)[^>]*class="[^"]*drill-row(?![\\w-])[^"]*"/g)].map(m => m[1]);
-console.log(JSON.stringify({ n: tags.length, allButtons: tags.every(t => t === "button") }));
+const scenarios = renderNewGame(null, { picker: { index, cycle: "C1", drill: "scenarios", slug: "o1a" } });
+const all = cycles + scenarios;
+// A button whose markup contains another <button> before its own close tag.
+const nested = /<button\b[^>]*>(?:(?!<\/button>)[\s\S])*<button\b/.test(all);
+console.log(JSON.stringify({
+  nested,
+  cycleRowsAreButtons: [...cycles.matchAll(/<(\w+)[^>]*class="[^"]*drill-row[^"]*"/g)]
+    .map(m => m[1]),
+  currentIsDiv: /<div[^>]*class="[^"]*drill-current/.test(scenarios),
+  scenarioIsDiv: /<div[^>]*class="[^"]*drill-scenario/.test(scenarios),
+  markIsButton: /<button[^>]*class="[^"]*row-mark[^"]*"[^>]*data-act="ng_lock"/.test(scenarios),
+  rowsStillAct: (scenarios.match(/data-act="pick_scenario"/g) || []).length,
+}));
 """)
-    assert js["n"] >= 5      # 2 cycle rows + a back row + 2 scenario rows
-    assert js["allButtons"]
+    assert js["nested"] is False
+    assert js["cycleRowsAreButtons"] and set(js["cycleRowsAreButtons"]) == {"button"}
+    assert js["currentIsDiv"] and js["scenarioIsDiv"]
+    assert js["markIsButton"]
+    assert js["rowsStillAct"] >= 2
 
 
 def test_stage_count_is_singular_for_one_stage_and_only_the_detail_prints_it():
@@ -921,7 +943,7 @@ const ovHtml = renderOverview(new GameState(),
 // LABEL. Matching the word "stage" instead would hit the set icon's own
 // src ("one-stage-quest.svg"), which is how this assertion first passed
 // while proving nothing.
-const row = /<button[^>]*data-act="pick_scenario"[\s\S]*?<\/button>/.exec(pickerHtml)?.[0] ?? "";
+const row = /<div[^>]*data-act="pick_scenario"[\s\S]*?<\/div>/.exec(pickerHtml)?.[0] ?? "";
 console.log(JSON.stringify({
   pickerHasRow: row.includes('data-arg="one-stage"'),
   pickerAnyCount: /class="label"/.test(row),

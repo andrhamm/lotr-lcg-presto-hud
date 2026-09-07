@@ -45,6 +45,8 @@ export function handle(game, ui, act, arg) {
   if (act === "ng_cycles") {
     if (ui.picker.drill !== "scenarios") return false;
     ui.picker.drill = "cycles";
+    ui.picker.locked = false;
+    ui.picker.locking = false;
     // Everything downstream of the cycle goes with it. Leaving the slug behind
     // left the previous scenario loaded under a list that no longer contained
     // it: its stages still in the rail, its detail still in the pane, its name
@@ -57,6 +59,20 @@ export function handle(game, ui, act, arg) {
   // The left column's third list: which stage the detail pane is drawing, or
   // "overview" for the whole quest. ui-only, and cheap - the bundle is
   // already pinned, so switching stages reads nothing.
+  // Locking is two steps so it can be animated: ng_lock only raises
+  // `locking`, app.js renders that (the rows are still there, wearing the
+  // class that folds them away), and settles to `locked` when it has run.
+  if (act === "ng_lock") {
+    if (!ui.picker.slug || ui.picker.locked) return false;
+    ui.picker.locking = true;
+    return true;
+  }
+  if (act === "ng_unlock") {
+    if (!ui.picker.locked) return false;
+    ui.picker.locked = false;
+    ui.picker.locking = false;
+    return true;
+  }
   if (act === "ng_stage") {
     if (ui.picker.stage === arg) return false;
     ui.picker.stage = arg;

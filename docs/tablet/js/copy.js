@@ -87,6 +87,9 @@ export const CHROME = {
   tipSlotEmpty: "Nothing recorded yet.",
   stageSideA: "Side A", stageSideB: "Side B",
   flipCard: "Flip ›",
+  // The scenario row's own state icon: a checkmark locks the choice in and
+  // folds the rest of the list away, an ✕ brings it back.
+  markLock: "✓", markUnlock: "✕",
   cardArtMissing: "No picture for this card in this build.",
   // 75 stage cards in the catalog have no A-side text at all (their B side
   // carries the rules). Saying so is better than an empty panel that reads

@@ -610,17 +610,48 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 /* The list's own labels sit in the column, not inside the scrolling lists, so
    CYCLE, SCENARIOS and STAGES stay put while their rows scroll under them. */
 .setup-list > .label { padding: 2px 4px 0; flex: 0 0 auto; }
-/* THREE sections in one column (M7): the cycle, its scenarios, and - once a
-   scenario is picked - its stages. Both lists scroll independently, and both
-   are flex: 1 1 auto so a 9-scenario cycle and a 5-stage quest share the
-   column instead of one pushing the other off the bottom. The scenario list
-   yields first (a lower basis): the stage list is the one you are actively
-   working when a scenario is open. */
-/* Both lists are CONTENT-sized (flex: 0 1 auto), never growing to fill: a
-   growing scenario list pushes STAGES to the foot of the column with a hole
-   above it. They shrink and scroll only when the two together outrun the
-   column, which is the case worth spending the scrollbar on. */
-.setup-list > .drill-list, .setup-list > .stage-list { flex: 0 1 auto; }
+/* ONE SCROLLER, WITH THE ACTIVE CHOICE PINNED.
+   The three sections - the cycle, its scenarios, its stages - used to be
+   separate scrolling boxes, which meant STAGES sat in a fixed slot whether or
+   not anything was above it. They are one flow now: STAGES simply follows the
+   scenarios the way SCENARIOS follows the cycle, and the column scrolls as a
+   whole.
+   What makes that navigable on a long cycle (the LotR Saga runs to 18) is
+   stickiness. Each section's header sticks to the top of the scroller, and
+   the ACTIVE ROW of that section sticks just under its own header - so
+   scrolling down from a scenario picked near the top of the list, that
+   scenario stops at the SCENARIOS header and stays in view until the STAGES
+   header arrives and takes the top for itself. You never lose sight of what
+   you chose while looking at what it contains. */
+.setup-list { overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
+.setup-list > .drill-list, .setup-list > .stage-list { flex: 0 0 auto; overflow: visible; }
+/* The header's height and the pinned row's offset are ONE number: a header
+   shorter than the offset leaves a slot between them where the scrolling list
+   shows through, which reads as a rendering fault rather than as a pin. */
+.setup-list > .label { position: sticky; top: 0; z-index: 3; background: var(--bg);
+  display: flex; align-items: center; height: 28px; padding: 0 4px; }
+.setup-list .drill-current,
+.setup-list .drill-scenario.is-selected,
+.setup-list .stage-row.is-selected { position: sticky; top: 28px; z-index: 2; }
+
+/* THE ROW'S STATE ICON (the checkmark that locks a choice in, the ✕ that lets
+   it go). Square, at the row's right edge, and its own tap target - the row
+   around it is a div precisely so this can be a button. */
+.row-mark { min-width: 44px; justify-content: center; font-size: 18px; }
+/* Locking folds the rest of the list away: the rows collapse their own height
+   and fade as the chosen one rises to meet the header. It is a real animation
+   rather than a disappearance because the eye needs something to follow from
+   "a list" to "one choice". app.js settles the state when it has run. */
+.drill-list.is-locking > .drill-scenario:not(.is-selected) {
+  animation: rail-fold 240ms ease-in forwards; pointer-events: none; }
+@keyframes rail-fold {
+  from { opacity: 1; max-height: 76px; transform: none; }
+  to { opacity: 0; max-height: 0; margin: 0; padding-top: 0; padding-bottom: 0;
+       border-width: 0; transform: scale(.94); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drill-list.is-locking > .drill-scenario:not(.is-selected) { animation-duration: 1ms; }
+}
 /* A stage row: its number as LABEL chrome at a fixed width so the names line
    up, the name taking the slack, its points hard right. Overview is the same
    row with none of that - one row shape, not two. */

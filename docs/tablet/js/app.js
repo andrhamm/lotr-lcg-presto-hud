@@ -69,8 +69,67 @@ let game = new GameState();
 game.clock = clock;
 const ui = newUi();
 
+// Update the live DOM to match `next` IN PLACE, reusing every node that has
+// not changed.
+//
+// render() used to be `root.innerHTML = layout(...)`, which throws the entire
+// document away and builds a new one on every tap. That is why selecting a
+// stage made the whole screen flash and every icon and card picture reload:
+// the <img> elements were not re-fetched (they are cached) but they WERE new
+// elements, so each one decoded and painted again from scratch.
+//
+// `isEqualNode` is the whole trick - it is a deep structural comparison, so an
+// untouched subtree is recognised in one call and skipped entirely, images and
+// all. Only the nodes that actually differ are touched, and an element that
+// survives keeps its identity: its scroll position, and the decoded picture
+// inside it.
+//
+// Nothing here is a framework. It reconciles by POSITION, which is right for
+// this client because every list it draws is rendered in a stable order from
+// the same source - and a mis-pairing would cost a repaint, never correctness,
+// since the attributes and text are overwritten from `next` either way.
+function morph(dst, src) {
+  if (dst.isEqualNode(src)) return;
+  if (dst.nodeType !== src.nodeType || dst.nodeName !== src.nodeName) {
+    dst.replaceWith(src.cloneNode(true));
+    return;
+  }
+  if (dst.nodeType === Node.TEXT_NODE || dst.nodeType === Node.COMMENT_NODE) {
+    dst.data = src.data;
+    return;
+  }
+  for (const a of [...dst.attributes]) {
+    if (!src.hasAttribute(a.name)) dst.removeAttribute(a.name);
+  }
+  for (const a of src.attributes) {
+    if (dst.getAttribute(a.name) !== a.value) dst.setAttribute(a.name, a.value);
+  }
+  const dn = [...dst.childNodes];
+  const sn = [...src.childNodes];
+  for (let i = 0; i < Math.max(dn.length, sn.length); i++) {
+    if (!sn[i]) { dn[i].remove(); continue; }
+    if (!dn[i]) { dst.appendChild(sn[i].cloneNode(true)); continue; }
+    morph(dn[i], sn[i]);
+  }
+}
+
+// The host element's OWN attributes are the page's, not the render's (#app
+// carries the id index.html ships and every fixed-position rule keys off it),
+// so only its children are reconciled.
+function morphChildren(dst, src) {
+  const dn = [...dst.childNodes];
+  const sn = [...src.childNodes];
+  for (let i = 0; i < Math.max(dn.length, sn.length); i++) {
+    if (!sn[i]) { dn[i].remove(); continue; }
+    if (!dn[i]) { dst.appendChild(sn[i].cloneNode(true)); continue; }
+    morph(dn[i], sn[i]);
+  }
+}
+
 function render() {
-  root.innerHTML = layout(game, ui);
+  const next = document.createElement("div");
+  next.innerHTML = layout(game, ui);
+  morphChildren(root, next);
   markRoute();
   // The Game Log's row list is the one scrolling region whose position is not
   // implied by the markup, and innerHTML rebuilds it from scratch on every
@@ -111,7 +170,7 @@ async function buildPicker() {
   // the right belongs to. A fresh picker starts at the top of the drill-in
   // with nothing selected, so the detail side shows its instruction.
   return { index, players: 2, threats: [25, 25], source, cycle,
-           drill: "cycles", slug: null, stage: "overview",
+           drill: "cycles", slug: null, stage: "overview", locked: false,
            error: index ? null : CATALOG_UNAVAILABLE };
 }
 
@@ -322,6 +381,10 @@ async function seatScenario(slug) {
   // newgame.js will not draw a detail whose slug the picker is not
   // actually pointing at.
   ui.picker.slug = overview.entry.slug;
+  // Picking a DIFFERENT scenario drops the lock: the lock says "this is the
+  // one", and it cannot go on saying that about a quest you just moved off.
+  ui.picker.locked = false;
+  ui.picker.locking = false;
   // A freshly picked scenario always opens on its overview: it is the first
   // row of the stage list and the whole-quest view, and carrying the previous
   // scenario's stage number across would land on a stage this quest may not
@@ -472,6 +535,21 @@ async function handleAct(act, arg) {
     // (CLAUDE.md's "the queue is tagged with its game object" hazard - a
     // rebind is what is supposed to drop it, and none has happened yet).
     const changed = dispatch(game, ui, act, arg);
+    // ng_lock only raised `locking`, so the rows are still on screen wearing
+    // the class that folds them away. Let that run, then settle to the locked
+    // state - which is what actually removes them. Timed here rather than on
+    // an animationend listener because the renderers are pure string builders
+    // and own no elements to listen on; the duration is style.css's own.
+    if (changed && act === "ng_lock") {
+      render();
+      setTimeout(() => {
+        if (!ui.picker?.locking) return;
+        ui.picker.locking = false;
+        ui.picker.locked = true;
+        render();
+      }, 240);
+      return;
+    }
     // Entering a cycle auto-picks its first quest, so the detail side is
     // never blank once you are inside one: the list and the detail always
     // describe the same thing. It is a second act on one tap rather than a

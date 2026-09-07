@@ -61,11 +61,33 @@ ${raw(cycleIcon(g.cycle, 30))}
 // belongs to - without it the two halves of the screen read as unrelated.
 // Scenario names are catalog text, not ours - h`` escapes them (names carry
 // apostrophes, e.g. "The Steward's Fear").
-function scenarioRow(scn, selected) {
-  return h`<button type="button" class="${cx("drill-row", "drill-scenario", scn.slug === selected && "is-selected")}" data-act="pick_scenario" data-arg="${scn.slug}">
+// The row carries its own state icon on the right, the way the chosen cycle
+// carries its ✕:
+//
+//   selected, not locked   a CHECKMARK - "this is the one" - which locks the
+//                          choice and folds the rest of the list away.
+//   locked                 an ✕, which unlocks and brings the list back.
+//
+// Locking is worth having because the list is long (the LotR Saga cycle runs
+// to 18) and once you have chosen, every other row is just something in the
+// way of the stages below.
+//
+// The row is a DIV with the act on it, not a <button>, because the icon
+// inside it IS a button - nesting them is invalid markup that iOS resolves
+// however it likes. app.js delegates on the closest [data-act], so the icon
+// takes its own taps and the rest of the row still selects.
+function scenarioRow(scn, selected, locked) {
+  const isSel = scn.slug === selected;
+  const mark = !isSel ? "" : chip({
+    act: locked ? "ng_unlock" : "ng_lock", arg: scn.slug,
+    label: h`${locked ? CHROME.markUnlock : CHROME.markLock}`,
+    tone: "gold", extraClass: "row-mark",
+  });
+  return h`<div class="${cx("drill-row", "drill-scenario", isSel && "is-selected", isSel && locked && "is-locked")}" data-act="pick_scenario" data-arg="${scn.slug}" role="button">
 ${raw(setIcon(scn.name ?? "", 36))}
 <span class="body">${scn.name ?? ""}</span>
-</button>`;
+${raw(mark)}
+</div>`;
 }
 
 // The list half. Two states, never both.
@@ -89,14 +111,22 @@ function drillList(p, cycles, scenarios) {
 <div class="label">${CHROME.cycles}</div>
 <div class="drill-list">${raw(cycles.map(cycleRow).join(""))}</div>`;
   }
+  // While locking, the rows are still drawn - with the class that animates
+  // them away - so there is something to animate. app.js flips to the locked
+  // state when the animation has run; a list that simply vanished would give
+  // the eye nothing to follow from the list to the choice.
+  const rows = (p.locked && !p.locking)
+    ? scenarios.filter(s => s.slug === p.slug)
+    : scenarios;
+  const list = rows.map(s => scenarioRow(s, p.slug, p.locked)).join("");
   return h`<div class="label">${CHROME.cycleOne}</div>
-<button type="button" class="drill-row drill-current" data-act="ng_cycles">
+<div class="drill-row drill-current" data-act="ng_cycles" role="button">
 ${raw(cycleIcon(p.cycle ?? "", 30))}
 <span class="body">${p.cycle ?? ""}</span>
 <span class="drill-x" aria-hidden="true">✕</span>
-</button>
+</div>
 <div class="label">${CHROME.scenarios}</div>
-<div class="drill-list">${raw(scenarios.map(s => scenarioRow(s, p.slug)).join(""))}</div>`;
+<div class="${cx("drill-list", p.locking && "is-locking")}">${raw(list)}</div>`;
 }
 
 // The chosen scenario's stages, under the scenario list. Overview is the
