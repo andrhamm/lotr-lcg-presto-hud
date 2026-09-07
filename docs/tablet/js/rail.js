@@ -7,6 +7,7 @@
 // with the log screen in milestone 4.
 import { h, raw, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
+import { glyph } from "./glyphs.js";
 import { chip, zone } from "./primitives.js";
 import { isUndone } from "./logfilter.js";
 import { faceOf } from "./cards.js";
@@ -29,7 +30,11 @@ function renderPlayerCell(game, p, i) {
   // string, not a Raw), so every one of them needs raw() at the point it is
   // re-interpolated into the outer template - otherwise the outer h``
   // re-escapes the already-escaped markup.
-  const label = isFirst ? h`${raw('<span class="flag">&#9873;</span>')}P${i + 1}` : h`P${i + 1}`;
+  // The first-player marker. It was a literal U+2691 and the log prompt below
+  // a U+25B6 - both of which iOS is free to render from its colour emoji face
+  // rather than from the UI type. Drawn, like the rest of this client's
+  // chrome (glyphs.js).
+  const label = isFirst ? h`${raw(h`<span class="flag">${raw(glyph("flag", 16))}</span>`)}P${i + 1}` : h`P${i + 1}`;
   const elim = p.eliminated ? h`<div class="player-elim">${CHROME.eliminated}</div>` : "";
   return h`<div class="${cx("player-cell", p.eliminated && "is-eliminated")}">
 <div class="${cx("player-label", isFirst && "is-first")}">${raw(label)}</div>
@@ -181,7 +186,7 @@ function renderLogBlock(game) {
   return h`<div class="log-block">
 <div class="log-head-row"><span class="label">${CHROME.log}</span>${raw(openChip)}</div>
 <div class="log-rows-clip">${raw(rows)}</div>
-<div class="log-prompt">&#9654; ${prompt}</div>
+<div class="log-prompt">${raw(glyph("next", 14))} ${prompt}</div>
 </div>`;
 }
 

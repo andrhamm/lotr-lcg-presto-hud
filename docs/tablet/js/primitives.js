@@ -49,6 +49,9 @@ export function cta({ act, arg = "", label, tone = "ok", grow = true }) {
 // screen and dropped in the milestone-4 fix wave: it is a second way to say
 // the same thing, and the bevel is the client's one signal for "tappable".
 export function transportButton({ act, glyph, on, title }) {
-  if (on) return h`<button type="button" class="tbtn" data-act="${act}" title="${title}">${glyph}</button>`;
-  return h`<span class="tbtn is-off" title="${title}">${glyph}</span>`;
+  // `glyph` is markup now (glyphs.js's inline SVG), not a character, so it is
+  // interpolated raw. It used to be a literal "\u23EE"/"\u25C0" and friends,
+  // which iOS renders as full-colour emoji.
+  if (on) return h`<button type="button" class="tbtn" data-act="${act}" title="${title}">${raw(glyph)}</button>`;
+  return h`<span class="tbtn is-off" title="${title}">${raw(glyph)}</span>`;
 }

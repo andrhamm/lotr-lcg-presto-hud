@@ -19,6 +19,7 @@
 // db.bundle()); acts_newgame.js owns the ui-only edits.
 import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
+import { glyph } from "./glyphs.js";
 import { chip, cta } from "./primitives.js";
 import { setupHead } from "./setup_head.js";
 import { renderScenarioDetail } from "./overview.js";
@@ -48,7 +49,7 @@ function cycleRow(g, have) {
 ${raw(cycleIcon(g.cycle, 30, have))}
 <span class="body">${g.cycle}</span>
 <span class="label">${meta}</span>
-<span class="drill-chev" aria-hidden="true">›</span>
+<span class="drill-chev" aria-hidden="true">${raw(glyph("chevronRight", 20))}</span>
 </button>`;
 }
 
@@ -82,7 +83,7 @@ function scenarioRow(scn, selected, locked, pinTop, have) {
   // it was a chip before, which is a different shape, a different ground and
   // ALL-CAPS letterforms for what is the same kind of control in the same
   // column. One vocabulary: a square gold-edged glyph at the row's right.
-  const mark = !isSel ? "" : h`<button type="button" class="drill-x" data-act="${locked ? "ng_unlock" : "ng_lock"}" data-arg="${scn.slug}">${locked ? CHROME.markUnlock : CHROME.markLock}</button>`;
+  const mark = !isSel ? "" : h`<button type="button" class="drill-x" data-act="${locked ? "ng_unlock" : "ng_lock"}" data-arg="${scn.slug}">${raw(glyph(locked ? "close" : "check", 18))}</button>`;
   return h`<div class="${cx("drill-row", "drill-scenario", isSel && "is-selected", isSel && locked && "is-locked")}" data-act="pick_scenario" data-arg="${scn.slug}" role="button"${isSel ? raw(pin(pinTop)) : ""}>
 ${raw(setIcon(scn.name ?? "", 36, have))}
 <span class="body">${scn.name ?? ""}</span>
@@ -151,7 +152,7 @@ function drillList(p, cycles, scenarios, have) {
 <div class="drill-row drill-current" data-act="ng_cycles" role="button"${raw(pin(HEAD_H))}>
 ${raw(cycleIcon(p.cycle ?? "", 30, have))}
 <span class="body">${p.cycle ?? ""}</span>
-<span class="drill-x" aria-hidden="true">✕</span>
+<span class="drill-x" aria-hidden="true">${raw(glyph("close", 18))}</span>
 </div>
 <div class="label"${raw(pin(HEAD_H + ROW_H))}>${CHROME.scenarios}</div>
 <div class="${cx("drill-list", p.locking && "is-locking")}">${raw(list)}</div>`;

@@ -8,6 +8,7 @@
 // and a modal would cover the very rows it is explaining.
 import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
+import { glyph } from "./glyphs.js";
 import { chip, cta, transportButton } from "./primitives.js";
 // isUndone/isRewindable live in logfilter.js with the filters - the rail and
 // acts_log.js ask the same two questions, and one answer means the button
@@ -39,18 +40,20 @@ function renderFilters(log) {
 }
 
 // Six controls, where the strip carries four: the log screen is where a
-// player goes to move by ROUND, so ◀◀ / ▶▶ are here and nowhere else. An
+// player goes to move by ROUND, so the doubled prev/next pair is here and
+// nowhere else. An
 // unavailable one drops to the same inert, unbevelled span the strip uses -
 // one off state for the whole client (see primitives.js's transportButton).
 function renderTransport(game) {
   const back = game.canUndo(), fwd = game.canRedo();
-  const b = (act, glyph, on, title) => transportButton({ act, glyph, on, title });
-  const controls = b("rw_first", "⏮", back, CHROME.rwFirst)
-    + b("rw_round_back", "◀◀", back, CHROME.rwRoundBack)
-    + b("rw_undo", "◀", back, CHROME.rwUndo)
-    + b("rw_redo", "▶", fwd, CHROME.rwRedo)
-    + b("rw_round_fwd", "▶▶", fwd, CHROME.rwRoundFwd)
-    + b("rw_last", "⏭", fwd, CHROME.rwLast);
+  // `mark`, not `glyph`: the imported glyph() is what builds these.
+  const b = (act, mark, on, title) => transportButton({ act, glyph: mark, on, title });
+  const controls = b("rw_first", glyph("first"), back, CHROME.rwFirst)
+    + b("rw_round_back", glyph("prev") + glyph("prev"), back, CHROME.rwRoundBack)
+    + b("rw_undo", glyph("prev"), back, CHROME.rwUndo)
+    + b("rw_redo", glyph("next"), fwd, CHROME.rwRedo)
+    + b("rw_round_fwd", glyph("next") + glyph("next"), fwd, CHROME.rwRoundFwd)
+    + b("rw_last", glyph("last"), fwd, CHROME.rwLast);
   return h`<div class="transport">${raw(controls)}</div>`;
 }
 

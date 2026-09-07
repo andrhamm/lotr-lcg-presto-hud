@@ -113,6 +113,15 @@ html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: n
    is-danger treatments already use for "this goes badly". */
 .body.no { color: var(--no-fg); }
 .label { font: 700 13px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--dim); }
+/* THE CLIENT'S OWN CHROME GLYPHS (glyphs.js): transport, chevrons, marks.
+   currentColor throughout, so each one takes the ink of whatever it sits in -
+   a tan chip, a gold pinned row, a dimmed transport button - and needs no
+   per-use colour. They replaced literal characters ("\23EE", "\25C0", ...)
+   which iOS renders from its colour emoji face rather than from the UI type.
+   vertical-align on the baseline so an inline one sits with its text rather
+   than riding above it. */
+.glyph { display: inline-block; vertical-align: -0.15em; flex: none; }
+
 /* A set/expansion icon (Task 5, seticon.js): sized inline by the caller's
    style="width/height" (18-22px everywhere it appears), img filling that box
    until it 404s - app.js's one delegated `error` listener adds is-missing,

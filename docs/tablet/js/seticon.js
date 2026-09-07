@@ -46,6 +46,7 @@
 // adds `is-missing` to the wrapper (style.css's `.seticon.is-missing img` /
 // `.seticon:not(.is-missing) .seticon-fallback` pair swap the glyph in).
 import { h, raw } from "./dom.js";
+import { glyph } from "./glyphs.js";
 import { dataUrl, slugify } from "../../js/quest_catalog.js";
 
 // Names the community icon pack files under a different title than the one
@@ -120,12 +121,12 @@ export function cycleIcon(name, px, have = null) {
 function iconImg(chain, px, have) {
   const usable = have ? chain.filter(s => have.has(s)) : chain;
   if (!usable.length) {
-    return h`<span class="seticon is-missing" style="width:${px}px;height:${px}px"><i class="seticon-fallback">◆</i></span>`;
+    return h`<span class="seticon is-missing" style="width:${px}px;height:${px}px"><i class="seticon-fallback">${raw(glyph("diamond", Math.round(px * 0.7)))}</i></span>`;
   }
   const [primary, ...rest] = usable;
   const src = dataUrl("icons/svg/" + primary + ".svg");
   const alt = rest.map(s => dataUrl("icons/svg/" + s + ".svg")).join(",");
-  return h`<span class="seticon" style="width:${px}px;height:${px}px"><img src="${src}" alt="" loading="lazy"${alt ? raw(h` data-alt="${alt}"`) : ""}><i class="seticon-fallback">◆</i></span>`;
+  return h`<span class="seticon" style="width:${px}px;height:${px}px"><img src="${src}" alt="" loading="lazy"${alt ? raw(h` data-alt="${alt}"`) : ""}><i class="seticon-fallback">${raw(glyph("diamond", Math.round(px * 0.7)))}</i></span>`;
 }
 
 export function setIcon(name, px, have = null) {

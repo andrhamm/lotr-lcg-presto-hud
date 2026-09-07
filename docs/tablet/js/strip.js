@@ -4,6 +4,7 @@
 // tests/test_tablet.py can drive it under node the way it drives the model.
 import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
+import { glyph } from "./glyphs.js";
 import { chip, transportButton } from "./primitives.js";
 import {
   flowViews, VIEW_STEP, windowAfter, isActionWindow, lastWindowBefore,
@@ -144,14 +145,15 @@ export function renderStrip(game, ui) {
   // sits beside the round number instead of stacking past the strip's 96px.
   const menuChip = chip({ act: "open_menu", label: h`${CHROME.menu} ›`, tone: "tan", height: 30 });
 
-  // The transport (Task 2, milestone 4): ⏮ ◀ ▶ ⏭ move the replay cursor by
+  // The transport (Task 2, milestone 4): first/prev/next/last move the
+  // replay cursor by
   // index/single-step/round - canUndo()/canRedo() alone decide whether each
   // end is live, exactly like Back/Redo everywhere else in this client.
   // Placed as a second pair of rows in `.round` (style.css turns the block
   // into a 2x2 grid so the four 44px buttons sit beside the round number
   // instead of stacking past the strip's 96px - see the CSS comment there).
   const canB = game.canUndo(), canF = game.canRedo();
-  const transport = h`<div class="transport">${raw(transportButton({ act: "rw_first", glyph: "⏮", on: canB, title: CHROME.rwFirst }))}${raw(transportButton({ act: "rw_undo", glyph: "◀", on: canB, title: CHROME.rwUndo }))}${raw(transportButton({ act: "rw_redo", glyph: "▶", on: canF, title: CHROME.rwRedo }))}${raw(transportButton({ act: "rw_last", glyph: "⏭", on: canF, title: CHROME.rwLast }))}</div>
+  const transport = h`<div class="transport">${raw(transportButton({ act: "rw_first", glyph: glyph("first"), on: canB, title: CHROME.rwFirst }))}${raw(transportButton({ act: "rw_undo", glyph: glyph("prev"), on: canB, title: CHROME.rwUndo }))}${raw(transportButton({ act: "rw_redo", glyph: glyph("next"), on: canF, title: CHROME.rwRedo }))}${raw(transportButton({ act: "rw_last", glyph: glyph("last"), on: canF, title: CHROME.rwLast }))}</div>
 <div class="label transport-readout">${fmt(CHROME.stepOf, game.replay_step + 1, game.deltas.length)}</div>`;
 
   return h`<header class="strip"><div class="round"><span class="label">${CHROME.round}</span><div class="round-row"><span class="num num-40">${game.round}</span>${raw(menuChip)}</div>${raw(transport)}</div>${raw(body)}</header>`;

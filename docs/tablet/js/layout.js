@@ -3,6 +3,7 @@
 // builder like every other tablet render function - no document/window.
 import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
+import { glyph } from "./glyphs.js";
 import { cta } from "./primitives.js";
 import { renderStrip } from "./strip.js";
 import { renderRail } from "./rail.js";
@@ -25,7 +26,7 @@ import { renderLogScreen } from "./screen_log.js";
 // Deliberately quiet: it sits at 40% opacity until touched, so it reads as
 // part of the frame rather than as a control anyone needs.
 function reloadButton() {
-  return h`<button type="button" class="app-reload" data-act="reload_app" title="${CHROME.refresh}" aria-label="${CHROME.refresh}">&#8635;</button>`;
+  return h`<button type="button" class="app-reload" data-act="reload_app" title="${CHROME.refresh}" aria-label="${CHROME.refresh}">${raw(glyph("reload", 26))}</button>`;
 }
 
 function renderGameOver(game) {
