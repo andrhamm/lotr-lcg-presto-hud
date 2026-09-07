@@ -3151,7 +3151,13 @@ console.log(JSON.stringify({ moved, inert, step: g.replay_step, staging: g.stagi
 """)
     assert js["moved"] is True and js["inert"] is False
     assert js == {**js, "step": 0, "staging": 0, "view": "planning"}
-    assert js["planningIsButton"] and js["futureIsNotButton"] and js["transport"] and js["readout"]
+    assert js["planningIsButton"] and js["futureIsNotButton"]
+    # The strip carries NO separate transport any more: every tick a delta
+    # reached this round is itself the rewind target, so four buttons beside
+    # the round number were a second control for a job the timeline already
+    # does - and they sat where the eye lands first. The Game Log screen keeps
+    # its own six-control transport, where moving by ROUND is the point.
+    assert not js["transport"] and not js["readout"]
 
 
 def test_round_granularity_transport_crosses_a_round_boundary():

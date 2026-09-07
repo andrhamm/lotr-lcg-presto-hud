@@ -1,11 +1,14 @@
-// The transport strip: one segment per phase, one tick per flow view, the
-// round's action-window ticks, and the current playhead. Pure string
+// The round's timeline: one segment per phase, one tick per flow view, the
+// round's action-window ticks, and the current playhead. It is also the
+// client's replay NAVIGATION - every tick a delta actually reached this round
+// is a rewind target - which is why there is no separate transport up here
+// any more. The Game Log screen keeps its own six-control one, where moving
+// by round is the point. Pure string
 // builder like every other tablet render function - no document/window, so
 // tests/test_tablet.py can drive it under node the way it drives the model.
-import { h, raw, cx, fmt } from "./dom.js";
+import { h, raw, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { glyph } from "./glyphs.js";
-import { chip, transportButton } from "./primitives.js";
+import { chip } from "./primitives.js";
 import {
   flowViews, VIEW_STEP, windowAfter, isActionWindow, lastWindowBefore,
   phaseViewOf,
@@ -140,21 +143,22 @@ export function renderStrip(game, ui) {
     .map(seg => renderSeg(game, views, seg, curIdx, skipRange, offPhase))
     .join("");
 
-  // The Menu sheet's one entry point (milestone 3): new game mid-play. Same
-  // header-nav chip shape as the rail's "Edit ›" (rail.js), height:30 so it
-  // sits beside the round number instead of stacking past the strip's 96px.
-  const menuChip = chip({ act: "open_menu", label: h`${CHROME.menu} ›`, tone: "tan", height: 30 });
+  // The Menu sheet's one entry point (milestone 3): new game mid-play. It
+  // sits at the RIGHT end of the strip now, with the reload - app-level
+  // chrome, in the corner every other screen keeps app-level chrome in. It
+  // was crammed against the round number, sharing a 2x2 grid with a replay
+  // transport, in the spot the eye reads first.
+  const menuChip = chip({ act: "open_menu", label: h`${CHROME.menu}`, tone: "tan", height: 36 });
 
-  // The transport (Task 2, milestone 4): first/prev/next/last move the
-  // replay cursor by
-  // index/single-step/round - canUndo()/canRedo() alone decide whether each
-  // end is live, exactly like Back/Redo everywhere else in this client.
-  // Placed as a second pair of rows in `.round` (style.css turns the block
-  // into a 2x2 grid so the four 44px buttons sit beside the round number
-  // instead of stacking past the strip's 96px - see the CSS comment there).
-  const canB = game.canUndo(), canF = game.canRedo();
-  const transport = h`<div class="transport">${raw(transportButton({ act: "rw_first", glyph: glyph("first"), on: canB, title: CHROME.rwFirst }))}${raw(transportButton({ act: "rw_undo", glyph: glyph("prev"), on: canB, title: CHROME.rwUndo }))}${raw(transportButton({ act: "rw_redo", glyph: glyph("next"), on: canF, title: CHROME.rwRedo }))}${raw(transportButton({ act: "rw_last", glyph: glyph("last"), on: canF, title: CHROME.rwLast }))}</div>
-<div class="label transport-readout">${fmt(CHROME.stepOf, game.replay_step + 1, game.deltas.length)}</div>`;
 
-  return h`<header class="strip"><div class="round"><span class="label">${CHROME.round}</span><div class="round-row"><span class="num num-40">${game.round}</span>${raw(menuChip)}</div>${raw(transport)}</div>${raw(body)}</header>`;
+  // Round on the left, the round's own timeline across the middle, app chrome
+  // on the right. The strip IS the navigation: every tick a delta reached is
+  // a rewind target (renderTick's rw_tick), so a separate four-button
+  // transport beside the round number was a second control for a job the
+  // timeline already does - and it was the first thing the eye met.
+  return h`<header class="strip">
+<div class="round"><span class="label">${CHROME.round}</span><span class="num num-40">${game.round}</span></div>
+<div class="strip-flow">${raw(body)}</div>
+<div class="strip-tools">${raw(menuChip)}</div>
+</header>`;
 }

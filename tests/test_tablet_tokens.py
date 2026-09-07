@@ -92,12 +92,13 @@ def _min_height_of(css, selector):
     return int(hm.group(1)) if hm else None
 
 
-@pytest.mark.parametrize("selector", ["zone-head", "round-row"])
+@pytest.mark.parametrize("selector", ["zone-head", "strip-tools"])
 def test_header_chip_rows_clear_the_44px_floor(selector):
-    # rail.js's "Edit ->" chip and strip.js's "Menu ->" chip are 30px header
-    # nav chips, not a sheet's own 44px tap target - the spec allows that
-    # ONLY inside a row that is itself >= 44px tall (review finding I4), so
-    # the row - .zone-head / .round-row - is what has to carry the floor.
+    # rail.js's "Edit ->" chip is a 30px header nav chip, not a sheet's own
+    # 44px tap target - the spec allows that ONLY inside a row that is itself
+    # >= 44px tall (review finding I4), so the ROW is what carries the floor.
+    # The strip's Menu chip moved out of .round-row (which is gone with the
+    # transport) into .strip-tools at the strip's right end.
     px = _min_height_of(_css(), selector)
     assert px is not None and px >= 44, ".%s has no min-height >= 44px" % selector
 

@@ -215,60 +215,53 @@ button:active { border-top-color: var(--bevel-d); border-left-color: var(--bevel
 
 /* Transport strip (Task 3): one segment per phase, one tick per flow view. */
 .strip { height: 96px; display: flex; align-items: stretch; gap: 8px; padding: 12px 62px 12px 18px; background: var(--well); border-bottom: 1px solid var(--border); overflow: hidden; }
-/* `.round` was a single flex column (ROUND label, then the round-row). The
-   replay transport (Task 2, milestone 4) adds two more children - the
-   button row and its "Step n/N" readout - and there is no headroom to just
-   stack them underneath: `.strip`'s content box is 96 - 2*12(padding) =
-   72px tall, and a naive four-row stack (13 + 44 + 44 + 13, plus three 4px
-   gaps) comes to 126px. So this is a 2x2 grid instead of a column: column 1
-   keeps the existing ROUND label over the round-row, column 2 puts the new
-   readout over the transport row - two 13px LABEL rows side by side on top,
-   two 44px rows (round-row's own min-height, .tbtn's own height) side by
-   side underneath. That is 13 + 4(row-gap) + 44 = 61px, inside the 72px
-   budget with room to spare - `align-content: center` centers the block in
-   the leftover 11px, same job `justify-content: center` did on the old flex
-   column. Nothing about the strip's own 96px/12px padding changes; the fit
-   is entirely this rule's doing, at the cost of `.round` growing wider
-   (flex: 0 0 auto already lets the segs give up the width). */
-.round { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto;
-  align-items: center; align-content: center; column-gap: 16px; row-gap: 4px;
-  flex: 0 0 auto; padding: 0 14px 0 0; }
-/* The ROUND label is column 1/row 1; :first-child picks it out from
-   .transport-readout, the grid's OTHER .label (column 2/row 1) - that one
-   places itself, below. */
-.round > .label:first-child { grid-column: 1; grid-row: 1; }
-/* The round number and the "Menu ›" chip (milestone 3) share one row rather
-   than stacking a third line under ROUND/num - the strip is only 96px tall.
-   min-height: same reasoning as .zone-head above (review finding I4) - the
-   "Menu ›" chip is 30px, so the row it sits in is the thing that has to
-   clear the 44px tap-target floor. Column 1/row 2 in `.round`'s grid. */
-.round-row { display: flex; align-items: center; gap: 8px; min-height: 44px; grid-column: 1; grid-row: 2; }
-/* The transport (Task 2): ⏮ ◀ ▶ ⏭ (primitives.js's transportButton()) -
-   bevelled like .chip when canUndo()/canRedo() says the direction is live,
-   unbevelled and dimmed (`.is-off`, a <span>, not a <button> - nothing for
-   app.js's data-act delegation to catch) when it is not. Glyph-only, so
-   min-width rather than width - a floor, not a fixed box. Column 2/row 2,
-   beside round-row. */
-.transport { display: flex; align-items: center; gap: 6px; grid-column: 2; grid-row: 2; }
+/* Round on the left, the timeline across the middle, app chrome on the right.
+   `.round` was a 2x2 grid holding the round number, a Menu chip, a four
+   button replay transport AND its step readout - all crammed into the corner
+   the eye reads first, for a job the timeline itself already does. */
+.round { display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  flex: 0 0 auto; padding-right: 16px; }
+.strip-flow { display: flex; align-items: stretch; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.strip-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+  min-height: 44px; padding-left: 12px; }
 .tbtn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 44px;
   background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
   border-radius: 6px; font-size: 20px; color: var(--tan); }
 .tbtn.is-off { background: transparent; border-color: transparent; box-shadow: none; color: var(--dim); opacity: .4; }
-/* "Step n/N" - column 2/row 1, above .transport. */
-.transport-readout { white-space: nowrap; grid-column: 2; grid-row: 1; }
 .seg { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 8px; flex: 1 1 0; min-width: 0; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .seg.is-skippable { background: var(--card-hi); border-color: var(--amber); }
-.phase-name { font: 600 18px/1 var(--serif); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The name is the segment's whole point, so it never yields: flex: 0 0 auto,
+   and the tick row is what clips instead. The Quest phase has four flow views
+   plus their windows, which wrapped the row onto a second line, overflowed
+   the strip's 72px content box and clipped the NAME right off the segment -
+   the phase with the most going on was the one that stopped saying its own
+   name. */
+.phase-name { flex: 0 0 auto; font: 600 18px/1 var(--serif); color: var(--dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg:has(.tick.is-done) .phase-name { color: var(--tan); }
 .seg:has(.tick.is-current) .phase-name { color: var(--gold); }
 .seg.is-skippable .phase-name { color: var(--amber); }
-.tick-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.tick-row { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px;
+  min-width: 0; overflow: hidden; }
 .skip-note { position: absolute; top: 4px; right: 8px; font: 700 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--amber); }
 .log-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--btn); color: var(--tan); font: 700 13px/1 var(--sans); font-variant-numeric: tabular-nums; }
 .tick { position: relative; display: inline-block; flex: 0 0 auto; }
-.tick-framework { width: 22px; height: 22px; border-radius: 2px; background: var(--dim); }
+/* THE TICKS CARRY THE COLOUR VOCABULARY THE APP ALREADY TEACHES: red is
+   framework (it happens whether you act or not), green is your window. The
+   guidance bands in the pane below are the same two colours, and Settings ->
+   Help teaches the pairing.
+   Every tick wore it only AFTER the round reached it - a future one was
+   neutral grey - so most of the strip was undifferentiated shapes at the
+   moment a player is looking ahead to decide what to do. A future tick keeps
+   its own colour, just unlit: same hue, low alpha, so the whole round reads
+   as "red things happen to me, green things are mine" at a glance.
+   Square vs circle carries the same distinction redundantly, for anyone who
+   does not separate those two hues. */
+.tick-framework { width: 18px; height: 18px; border-radius: 2px;
+  background: rgba(247,101,62,.26); }
 .tick-framework.is-done, .tick-framework.is-current { background: var(--red); }
-.tick-window { width: 12px; height: 12px; border-radius: 50%; align-self: center; background: var(--dim); }
+.tick-window { width: 11px; height: 11px; border-radius: 50%; align-self: center;
+  background: rgba(136,168,92,.30); }
 .tick-window.is-done, .tick-window.is-current { background: var(--green); }
 .playhead { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--gold); }
 /* A tick a real delta entered this round (strip.js's renderTick, via
