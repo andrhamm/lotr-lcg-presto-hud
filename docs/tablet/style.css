@@ -735,6 +735,11 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
   gap: 24px; width: 100%; }
 .cardview-bar .display { margin: 0; }
 .cardview-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+/* The pager sits with the other tools, and its position stamp is fixed-width
+   so stepping from "9 / 22" to "10 / 22" does not shove the buttons sideways. */
+.cardview-pager { display: flex; align-items: center; gap: 8px; }
+.cardview-pager .label { min-width: 62px; text-align: center; font-variant-numeric: tabular-nums; }
+.cardview-pager .chip { min-width: 48px; justify-content: center; font-size: 18px; }
 /* Card left, facts right. The picture is sized off the viewport height so the
    whole card is visible without scrolling - a card you have to scroll is not
    a quick view. */

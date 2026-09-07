@@ -11,12 +11,13 @@
 // copies of it are in the deck - so that is what the table leads with, and
 // the printed values follow as a reference rather than as a substitute.
 //
-// The seat is `ui.sheet = { kind: "card", name, files, face, facts }` -
-// `files` is the card's face image FILENAMES (cardimage.js's faceFiles),
-// front first, `face` is the index showing, and `facts` is cardFacts()'s
-// [label, value] rows. app.js reads all of it off the tapped element, so
-// there is no card index to keep in sync and the renderers stay pure.
-import { h, raw } from "./dom.js";
+// The seat is `ui.sheet = { kind: "card", cards, at, face }` - `cards` is
+// every card on the screen behind it, in the order the screen shows them
+// (app.js reads that off the page in DOM order at open time, so the pager can
+// never disagree with the grid it came from), `at` is which one is showing
+// and `face` which of its sides. Each card carries its own face image
+// FILENAMES and its cardFacts() rows.
+import { h, raw, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip } from "./primitives.js";
 
@@ -29,7 +30,10 @@ function statTable(facts) {
 
 export function renderCardSheet(game, ui) {
   const s = ui.sheet ?? {};
-  const files = s.files ?? [];
+  const cards = s.cards ?? [];
+  const at = Math.min(s.at ?? 0, Math.max(cards.length - 1, 0));
+  const card = cards[at] ?? {};
+  const files = card.files ?? [];
   const face = Math.min(s.face ?? 0, Math.max(files.length - 1, 0));
   const src = ui.imagePrefix && files[face] ? ui.imagePrefix + files[face] : null;
   // 198 catalog encounter cards carry two different face images; the rest
@@ -44,9 +48,18 @@ export function renderCardSheet(game, ui) {
   // The modal carries its own top bar, the way the screens do: the subject on
   // the left, the way out on the right. A Close at the FOOT of a tall card is
   // a scroll away from the thing you just opened.
+  // The pager. It is drawn only when there is somewhere to page TO, and it
+  // says where you are - "3 / 22" - because leafing through an encounter set
+  // without a position is how you lose track of whether you have seen them
+  // all.
+  const pager = cards.length > 1
+    ? h`<div class="cardview-pager">${raw(chip({ act: "card_prev", label: h`${CHROME.prevCard}`, tone: "tan" }))}
+<span class="label">${fmt(CHROME.cardPosition, at + 1, cards.length)}</span>
+${raw(chip({ act: "card_next", label: h`${CHROME.nextCard}`, tone: "tan" }))}</div>`
+    : "";
   return h`<header class="cardview-bar">
-<h1 class="display">${s.name ?? ""}</h1>
-<div class="cardview-tools">${raw(flip)}${raw(chip({ act: "sheet_close", label: h`${CHROME.close}`, tone: "tan" }))}</div>
+<h1 class="display">${card.name ?? ""}</h1>
+<div class="cardview-tools">${raw(pager)}${raw(flip)}${raw(chip({ act: "sheet_close", label: h`${CHROME.close}`, tone: "tan" }))}</div>
 </header>
-<div class="cardview-body">${raw(art)}${raw(statTable(s.facts))}</div>`;
+<div class="cardview-body">${raw(art)}${raw(statTable(card.facts))}</div>`;
 }

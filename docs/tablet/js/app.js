@@ -605,11 +605,26 @@ root.addEventListener("click", ev => {
   // lookup table and every render function stays pure. Read off the element
   // that was tapped rather than threaded through a seat nothing else wants.
   if (btn.dataset.act === "open_card") {
-    const files = (btn.dataset.files ?? "").split(",").filter(Boolean);
-    if (!files.length) return;
-    let facts = [];
-    try { facts = JSON.parse(btn.dataset.facts ?? "[]"); } catch { facts = []; }
-    ui.sheet = { kind: "card", name: btn.dataset.arg ?? "", files, face: 0, facts };
+    // The quick view pages through every card on the screen, in the order the
+    // screen shows them - which is simply DOM ORDER, so it is read off the
+    // page rather than threaded through a seat. That keeps the ordering
+    // honest by construction: however the overview decides to group and sort
+    // its cards, the pager follows, because it is the same list.
+    //
+    // The payloads are parsed here and stored, not the elements: a render
+    // replaces or re-attributes nodes, and a pager holding stale elements
+    // would page to cards that are no longer on screen.
+    const read = el => ({
+      name: el.dataset.arg ?? "",
+      files: (el.dataset.files ?? "").split(",").filter(Boolean),
+      facts: (() => { try { return JSON.parse(el.dataset.facts ?? "[]"); } catch { return []; } })(),
+    });
+    const els = [...root.querySelectorAll('[data-act="open_card"]')];
+    const cards = els.map(read).filter(c => c.files.length);
+    const at = Math.max(els.filter(e => (e.dataset.files ?? "").split(",").filter(Boolean).length)
+      .indexOf(btn), 0);
+    if (!cards.length) return;
+    ui.sheet = { kind: "card", cards, at, face: 0 };
     render();
     return;
   }

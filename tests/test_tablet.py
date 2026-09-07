@@ -782,14 +782,18 @@ const twoSided = { id: "x", image: "x.jpg", name: "The Watcher",
 const oneSided = { id: "y", image: "y.jpg", name: "Forest Spider", faces: [{ image: "y.jpg" }] };
 const noArt = { name: "Hand-typed" };
 const g = new GameState();
-const ui = { imagePrefix: prefix,
-  sheet: { kind: "card", name: "The Watcher", caption: "×1", files: ["x.jpg", "x.B.jpg"], face: 0 } };
+// The seat holds every card on the screen behind it, in the order the screen
+// shows them, plus which one is open.
+const ui = { imagePrefix: prefix, sheet: { kind: "card", at: 0, face: 0, cards: [
+  { name: "The Watcher", files: ["x.jpg", "x.B.jpg"], facts: [["quantity", "1"]] },
+  { name: "Forest Spider", files: ["y.jpg"], facts: [] },
+] } };
 const front = renderCardSheet(g, ui);
 const flipped = dispatch(g, ui, "card_flip", "");
 const back = renderCardSheet(g, ui);
 const wrapped = dispatch(g, ui, "card_flip", "");   // wraps, never clamps
-const oneUi = { imagePrefix: prefix,
-  sheet: { kind: "card", name: "Forest Spider", files: ["y.jpg"], face: 0 } };
+const oneUi = { imagePrefix: prefix, sheet: { kind: "card", at: 0, face: 0,
+  cards: [{ name: "Forest Spider", files: ["y.jpg"], facts: [] }] } };
 console.log(JSON.stringify({
   twoFiles: faceFiles(twoSided), oneFile: faceFiles(oneSided), noFiles: faceFiles(noArt),
   twoMarkup: cardImage({ prefix, ...twoSided }),
@@ -799,6 +803,15 @@ console.log(JSON.stringify({
   flipped, wrapped, faceAfterWrap: ui.sheet.face,
   twoHasFlip: front.includes('data-act="card_flip"'),
   oneHasFlip: renderCardSheet(g, oneUi).includes('data-act="card_flip"'),
+  // The pager: only where there is somewhere to page to, and it wraps.
+  twoHasPager: front.includes('data-act="card_next"'),
+  onePagerless: !renderCardSheet(g, oneUi).includes('data-act="card_next"'),
+  position: /class="label">(\\d+ \\/ \\d+)</.exec(front)?.[1],
+  paged: dispatch(g, ui, "card_next", ""),
+  atAfterNext: ui.sheet.at,
+  nameAfterNext: /<h1 class="display">([^<]*)</.exec(renderCardSheet(g, ui))?.[1],
+  faceResetOnPage: ui.sheet.face,
+  wrappedRound: (() => { dispatch(g, ui, "card_next", ""); return ui.sheet.at; })(),
 }));
 """)
     assert js["twoFiles"] == ["x.jpg", "x.B.jpg"]
@@ -816,6 +829,15 @@ console.log(JSON.stringify({
     assert js["faceAfterWrap"] == 0
     # Offered only where there is a second side to see.
     assert js["twoHasFlip"] and not js["oneHasFlip"]
+    # The pager exists only with somewhere to go, says where you are, wraps,
+    # and resets the face - "which side am I on" belongs to the card you were
+    # looking at, not the next one.
+    assert js["twoHasPager"] and js["onePagerless"]
+    assert js["position"] == "1 / 2"
+    assert js["paged"] is True and js["atAfterNext"] == 1
+    assert js["nameAfterNext"] == "Forest Spider"
+    assert js["faceResetOnPage"] == 0
+    assert js["wrappedRound"] == 0
 
 
 def test_retapping_what_is_already_selected_changes_nothing():

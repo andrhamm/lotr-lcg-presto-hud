@@ -87,6 +87,8 @@ export const CHROME = {
   tipSlotEmpty: "Nothing recorded yet.",
   stageSideA: "Side A", stageSideB: "Side B",
   flipCard: "Flip ›",
+  prevCard: "‹", nextCard: "›",
+  cardPosition: "%s / %s",
   // The scenario row's own state icon: a checkmark locks the choice in and
   // folds the rest of the list away, an ✕ brings it back.
   markLock: "✓", markUnlock: "✕",

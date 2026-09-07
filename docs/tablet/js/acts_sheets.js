@@ -19,9 +19,23 @@ export function handle(game, ui, act, arg) {
   // card at the table.
   if (act === "card_flip") {
     if (ui.sheet?.kind !== "card") return false;
-    const n = (ui.sheet.files ?? []).length;
+    const n = (ui.sheet.cards?.[ui.sheet.at ?? 0]?.files ?? []).length;
     if (n < 2) return false;
     ui.sheet.face = ((ui.sheet.face ?? 0) + 1) % n;
+    return true;
+  }
+  // Paging through the screen's other cards, in the order the screen shows
+  // them. It WRAPS, like the flip does: at the end of an encounter set the
+  // next card is the first one, which is how you leaf through a stack. The
+  // face resets, because "which side am I on" belongs to the card you were
+  // looking at, not to the next one.
+  if (act === "card_prev" || act === "card_next") {
+    if (ui.sheet?.kind !== "card") return false;
+    const n = (ui.sheet.cards ?? []).length;
+    if (n < 2) return false;
+    const d = act === "card_next" ? 1 : -1;
+    ui.sheet.at = ((ui.sheet.at ?? 0) + d + n) % n;
+    ui.sheet.face = 0;
     return true;
   }
   if (act === "sheet_close") {
