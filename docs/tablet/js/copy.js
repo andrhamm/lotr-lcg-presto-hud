@@ -361,6 +361,9 @@ export const CHROME = {
   // cursor by index/single-step/round, mirrored by the Game Log's own
   // transport (Task 3, primitives.js's transportButton). Titles, not visible
   // labels - the glyph is the label; these are the button's `title=` only.
+  // The transport controls' own names, under the arrows (primitives.js's
+  // transportButton). Short because they sit under a 44px button.
+  tcapFirst: "First", tcapRound: "Round", tcapTap: "Tap", tcapLatest: "Latest",
   rwFirst: "First",
   rwUndo: "Back one tap",
   rwRedo: "Forward one tap",
@@ -386,9 +389,11 @@ export const CHROME = {
   copyLog: "Copy",
   rewinding: "Rewinding",
   rounds: "Rounds",
-  rewindExplain1: "Rewinding puts the tracker back to the moment after an earlier tap. Nothing is deleted yet.",
-  rewindExplain2: "Lines after that moment stay in the log, greyed, and Forward brings them back.",
-  rewindExplain3: "The next edit you make from a rewound position drops the greyed lines for good.",
+  // One paragraph, three facts - it was three paragraphs, and the first of
+  // them opened by restating the button underneath it ("Rewind to selected
+  // line"). What a player actually needs to know is that nothing is lost
+  // yet, how to get it back, and what does lose it.
+  rewindExplain: "Rewinding moves the tracker back to an earlier tap. The lines after it stay in the log, greyed, and Forward brings them back - but your next edit from there drops them for good.",
   roundLine: "Round %s · %s lines",
   roundLineOne: "Round %s · 1 line",
   logEmptyFilter: "No lines match this filter.",

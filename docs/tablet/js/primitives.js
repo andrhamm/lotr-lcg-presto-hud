@@ -88,10 +88,17 @@ export function cta({ act, arg = "", label, tone = "ok", grow = true }) {
 // is selected. A `disabled` <button> that kept its act was tried on the log
 // screen and dropped in the milestone-4 fix wave: it is a second way to say
 // the same thing, and the bevel is the client's one signal for "tappable".
-export function transportButton({ act, glyph, on, title }) {
+// `caption` is the button's NAME, under it, in LABEL. Six arrows in a row
+// where two of them move a whole round and two move a single tap is not
+// something a player can read off the shapes, and `title` is unreachable on a
+// tablet - there is no hover. So the transport says what each control does.
+export function transportButton({ act, glyph, on, title, caption = null }) {
   // `glyph` is markup now (glyphs.js's inline SVG), not a character, so it is
   // interpolated raw. It used to be a literal "\u23EE"/"\u25C0" and friends,
   // which iOS renders as full-colour emoji.
-  if (on) return h`<button type="button" class="tbtn" data-act="${act}" title="${title}">${raw(glyph)}</button>`;
-  return h`<span class="tbtn is-off" title="${title}">${raw(glyph)}</span>`;
+  const btn = on
+    ? h`<button type="button" class="tbtn" data-act="${act}" title="${title}" aria-label="${title}">${raw(glyph)}</button>`
+    : h`<span class="tbtn is-off" title="${title}" aria-label="${title}">${raw(glyph)}</span>`;
+  if (!caption) return btn;
+  return h`<span class="${cx("tctl", !on && "is-off")}">${raw(btn)}<span class="label tcap">${caption}</span></span>`;
 }

@@ -47,13 +47,16 @@ function renderFilters(log) {
 function renderTransport(game) {
   const back = game.canUndo(), fwd = game.canRedo();
   // `mark`, not `glyph`: the imported glyph() is what builds these.
-  const b = (act, mark, on, title) => transportButton({ act, glyph: mark, on, title });
-  const controls = b("rw_first", glyph("first"), back, CHROME.rwFirst)
-    + b("rw_round_back", glyph("prev") + glyph("prev"), back, CHROME.rwRoundBack)
-    + b("rw_undo", glyph("prev"), back, CHROME.rwUndo)
-    + b("rw_redo", glyph("next"), fwd, CHROME.rwRedo)
-    + b("rw_round_fwd", glyph("next") + glyph("next"), fwd, CHROME.rwRoundFwd)
-    + b("rw_last", glyph("last"), fwd, CHROME.rwLast);
+  const b = (act, mark, on, title, caption) =>
+    transportButton({ act, glyph: mark, on, title, caption });
+  // Each control names itself: which of these six moves a whole ROUND and
+  // which moves one tap is not readable off an arrowhead.
+  const controls = b("rw_first", glyph("first"), back, CHROME.rwFirst, CHROME.tcapFirst)
+    + b("rw_round_back", glyph("prev") + glyph("prev"), back, CHROME.rwRoundBack, CHROME.tcapRound)
+    + b("rw_undo", glyph("prev"), back, CHROME.rwUndo, CHROME.tcapTap)
+    + b("rw_redo", glyph("next"), fwd, CHROME.rwRedo, CHROME.tcapTap)
+    + b("rw_round_fwd", glyph("next") + glyph("next"), fwd, CHROME.rwRoundFwd, CHROME.tcapRound)
+    + b("rw_last", glyph("last"), fwd, CHROME.rwLast, CHROME.tcapLatest);
   return h`<div class="transport">${raw(controls)}</div>`;
 }
 
@@ -87,9 +90,7 @@ function renderRounds(game) {
 function renderSide(game) {
   return h`<aside class="log-side">
 <h2 class="label">${CHROME.rewinding}</h2>
-<p class="body">${CHROME.rewindExplain1}</p>
-<p class="body">${CHROME.rewindExplain2}</p>
-<p class="body">${CHROME.rewindExplain3}</p>
+<p class="body">${CHROME.rewindExplain}</p>
 <h2 class="label">${CHROME.rounds}</h2>
 <ol class="round-list">${raw(renderRounds(game))}</ol>
 </aside>`;
