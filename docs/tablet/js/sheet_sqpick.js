@@ -12,6 +12,7 @@
 import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { chip, cta } from "./primitives.js";
+import { glyph } from "./glyphs.js";
 
 const NO_SPHERE = CHROME.sqpickNoSphere;
 // The five printed spheres in their usual order, then any other catalog
@@ -61,9 +62,9 @@ function sphereRow([sphere, count]) {
 // One side-quest row: name + points on one line, the card's own printed text
 // (when the catalog has one) stacked underneath as a second BODY secondary
 // line - CLAUDE.md rule 4, "prefer the card's own printed text over a
-// paraphrase". `selected` swaps in the same card_hi/gold treatment
-// .locpick-row's own selected state uses.
-function questRow(e, selected) {
+// paraphrase". There is no selected state: tapping the row adds the quest
+// (see renderSqPickSheet), so nothing is ever merely chosen.
+function questRow(e) {
   const pts = fmt(CHROME.sqpickPts, e.points ?? 0);
   // No current data path fills `e.text` - docs/js/quest_catalog.js's
   // sideQuests() emits only {id, name, points, sphere, pack} (verified
@@ -71,9 +72,23 @@ function questRow(e, selected) {
   // sideQuests()/side_quests() in both twins to carry the card's printed
   // text. Kept rather than removed so that follow-up is a data change only.
   const text = e.text ? h`<span class="body secondary">${e.text}</span>` : "";
-  return h`<button type="button" class="${cx("sqpick-row", selected && "is-selected")}" data-act="sqpick_row" data-arg="${e.id}">
+  return h`<button type="button" class="sqpick-row" data-act="sqpick_row" data-arg="${e.id}">
 <div class="sqpick-row-head"><span class="body">${e.name ?? ""}</span><span class="body secondary">${pts}</span></div>
 ${raw(text)}</button>`;
+}
+
+// The chosen sphere: a FILTER you can see and clear, not a heading - the same
+// row the scenario chooser gives the chosen cycle (newgame.js: a LABEL, then
+// the choice on a gold-edged row carrying an X, the whole row being the
+// target). It replaces a "< Spheres" chip that sat in the footer among the
+// actions, which put "go back a step" in the row reserved for "leave" and
+// "commit".
+function sphereCrumb(sphere) {
+  return h`<div class="label">${CHROME.sqpickSphere}</div>
+<div class="drill-row drill-current" data-act="sqpick_back" role="button">
+<span class="body">${sphere}</span>
+<span class="drill-x" aria-hidden="true">${raw(glyph("close", 18))}</span>
+</div>`;
 }
 
 // Prev/Next steppers plus a "page/pages" readout - only drawn once there is
@@ -106,27 +121,28 @@ export function renderSqPickSheet(game, ui) {
 <p class="body secondary">${CHROME.sqpickEmptyHint}</p>`;
   } else if (sheet.sphere === null) {
     const { chunk, page, pages } = paged(spheres(entries), sheet.page);
-    body = h`<p class="body secondary">${CHROME.sqpickPickSphere}</p>
-<div class="sqpick-list">${raw(chunk.map(sphereRow).join(""))}</div>
+    body = h`<div class="sqpick-list">${raw(chunk.map(sphereRow).join(""))}</div>
 ${raw(pager(page, pages))}`;
   } else {
     const { chunk, page, pages } = paged(inSphere(entries, sheet.sphere), sheet.page);
-    body = h`<p class="body secondary">${fmt(CHROME.sqpickPickOne, sheet.sphere)}</p>
-<div class="sqpick-list">${raw(chunk.map(e => questRow(e, e.id === sheet.selected)).join(""))}</div>
+    // A ROW IS THE ADD. Picking a quest and then pressing Add is two taps for
+    // one decision, and it is what forced the sheet to explain itself in
+    // prose ("Lore - pick one, then Add."). The twin needs the confirm - its
+    // canvas modal has no way to scroll a list, so a row tap is also how it
+    // pages - and it is not reversible there either; here the quest sheet's
+    // own remove (sRemove) undoes a mis-tap in one.
+    body = h`${raw(sphereCrumb(sheet.sphere))}
+<div class="sqpick-list">${raw(chunk.map(questRow).join(""))}</div>
 ${raw(pager(page, pages))}`;
-    ctas.push(chip({ act: "sqpick_back", label: CHROME.sqpickBack, tone: "tan" }));
-    // Needs a selection - SideQuestPickModal only draws its Add button once
-    // this.selected is set; mirrored on the render side (dispatch's own
-    // sqpick_add case guards it again).
-    if (sheet.selected !== null) {
-      ctas.push(cta({ act: "sqpick_add", label: CHROME.sqpickAdd, grow: false }));
-    }
   }
-  // "Manual entry" is always offered, catalog or not - the twin's own
-  // footer button never depends on this.entries.length either.
-  ctas.push(chip({ act: "sqpick_manual", label: CHROME.manualEntry, tone: "tan" }));
+  // Two ways out, both the same shape - a CTA in the footer. "Manual entry"
+  // is always offered, catalog or not (the twin's own footer button never
+  // depends on this.entries.length either), and it used to be an ALL-CAPS
+  // chip beside a sentence-case CTA: two treatments for two things a player
+  // does with the same finality.
+  ctas.push(cta({ act: "sqpick_manual", label: CHROME.manualEntry, tone: "plain", grow: false }));
   ctas.push(cta({ act: "sqpick_cancel", label: CHROME.cancel, tone: "plain", grow: false }));
   return h`<h1 class="display">${CHROME.sqpickTitle}</h1>
 ${raw(body)}
-<div class="cta-row">${raw(ctas.join(""))}</div>`;
+<div class="cta-row cta-row-end">${raw(ctas.join(""))}</div>`;
 }

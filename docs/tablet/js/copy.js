@@ -262,7 +262,6 @@ export const CHROME = {
   // see sheet_locpick.js).
   locpickTitleNew: "Travel",
   locpickTitleChange: "Change Location",
-  locpickPrompt: "Pick the location - or enter it manually.",
   locpickReplacing: "Replaces the current location (%s/%s discarded).",
   manualEntry: "Manual entry",
   travelHere: "Travel",
@@ -285,13 +284,15 @@ export const CHROME = {
   sqpickTitle: "Add Side Quest",
   sqpickEmpty: "No side-quest catalog data available.",
   sqpickEmptyHint: "Use Manual entry below.",
-  sqpickPickSphere: "Pick a sphere - or enter manually.",
-  sqpickPickOne: "%s - pick one, then Add.",
-  sqpickBack: "‹ Spheres",
+  // The chosen sphere, shown the way the scenario chooser shows the chosen
+  // cycle: a LABEL naming the filter, then the filter itself on a row with an
+  // X that clears it. There is no instruction line any more - "Lore - pick
+  // one, then Add." was the UI narrating its own two-step to the player, and
+  // the two-step is gone: a row IS the add.
+  sqpickSphere: "Sphere",
   // "Manual entry" itself is manualEntry (locpick's own key, above) - the
   // two pickers share the one label rather than carrying a duplicate string
   // (review finding 4).
-  sqpickAdd: "Add",
   sqpickNoSphere: "No sphere",
   sqpickOneQuest: "1 quest",
   sqpickManyQuests: "%d quests",

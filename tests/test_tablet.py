@@ -2080,15 +2080,18 @@ console.log(JSON.stringify({
     assert js["manualClosed"]
 
 
-def test_side_quest_picker_pick_sphere_row_add_appends_and_reopens_quest():
-    """Task-6 brief step 1. SideQuestPickModal's own two-step flow (pick a
-    sphere, then a quest inside it) mirrored as a sheet - onButton "add"
-    (docs/js/screens.js) pushes {points, progress:0, name} and logs the
-    verbatim "Side quest added: ..." line, then _leave() reopens the
-    progress modal (here, ui.sheet {kind:"quest"}). Two entries in two
-    different spheres means picking "Neutral" only ever has one candidate
-    row - acts_sqpick.js's own sqpick_sphere pre-selects it, and the
-    explicit "row" tap below re-confirms the same id."""
+def test_side_quest_picker_row_tap_appends_and_reopens_the_quest_sheet():
+    """Task-6 brief step 1: pick a sphere, then a quest inside it. The row
+    tap IS the add - it pushes {points, progress:0, name} and logs the
+    verbatim "Side quest added: ..." line (SideQuestPickModal's own onButton
+    "add" branch, docs/js/screens.js), then reopens the quest sheet.
+
+    The twin's separate Add confirm is deliberately NOT mirrored. On its
+    canvas modal a row tap also has to do the paging, so the confirm is
+    load-bearing there; here it was a second tap for one decision, and it is
+    what made the sheet narrate its own flow in prose ("Lore - pick one,
+    then Add."). A mis-tap is undone in one by the quest sheet's own
+    remove."""
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { perform, newUi } from "./actions.js";
@@ -2102,7 +2105,6 @@ ui.sideQuests = [
 ui.sheet = { kind: "sqpick", sphere: null, selected: null, page: 0 };
 perform(g, ui, "sqpick_sphere", "Neutral");
 perform(g, ui, "sqpick_row", "a");
-perform(g, ui, "sqpick_add", "");
 console.log(JSON.stringify({
   count: g.side_quests.length,
   name: g.side_quests[0]?.name,
@@ -2130,7 +2132,14 @@ def test_side_quest_picker_manual_back_cancel_and_render_shape():
     with no printed sphere buckets under "No sphere" (SideQuestPickModal's
     own NO_SPHERE), a side quest's own printed text renders as a second BODY
     secondary line under its name/points row, and the pager is absent when
-    everything already fits on one page."""
+    everything already fits on one page.
+
+    The chosen sphere is a CRUMB, drawn the way the scenario chooser draws
+    the chosen cycle - a LABEL, then the choice on a gold-edged row with an X
+    that clears it (.drill-current, sqpick_back). It was a "< Spheres" chip
+    down in the footer, which put "go back a step" in the row reserved for
+    leaving and committing. And there is no instruction sentence: the step
+    is shown, not narrated."""
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { perform, newUi } from "./actions.js";
@@ -2146,18 +2155,18 @@ ui.sheet = { kind: "sqpick", sphere: null, selected: null, page: 0 };
 const sphereHtml = layout(g, ui);
 perform(g, ui, "sqpick_sphere", "Neutral");
 const questHtml = layout(g, ui);
-const autoSelected = ui.sheet.selected;
 perform(g, ui, "sqpick_back", "");
 const backSphere = ui.sheet.sphere;
 perform(g, ui, "sqpick_cancel", "");
 console.log(JSON.stringify({
   noSphereRow: sphereHtml.includes("No sphere") && sphereHtml.includes('data-act="sqpick_sphere"') && sphereHtml.includes('data-arg="No sphere"'),
   noPager: !sphereHtml.includes("sqpick-pager") && !sphereHtml.includes('data-act="sqpick_page"'),
-  autoSelected,
   name: questHtml.includes("Fortune or Fate"),
   pts: questHtml.includes("3 pts"),
   text: questHtml.includes("Draw the top card of the encounter deck."),
-  selectedClass: questHtml.includes("is-selected"),
+  crumb: /<div class="label">Sphere<\/div>\s*<div class="drill-row drill-current" data-act="sqpick_back"/.test(questHtml)
+    && questHtml.includes(">Neutral<"),
+  noProse: !questHtml.includes("pick one") && !sphereHtml.includes("Pick a sphere"),
   backSphere,
   cancelKind: ui.sheet?.kind,
   cancelCount: g.side_quests.length,
@@ -2165,10 +2174,10 @@ console.log(JSON.stringify({
 """)
     assert js["noSphereRow"], "an entry with no printed sphere must bucket under \"No sphere\""
     assert js["noPager"], "two rows on one page must not draw a pager"
-    assert js["autoSelected"] == "a", "a sphere with exactly one quest is pre-selected, ready for Add"
     assert js["name"] and js["pts"]
     assert js["text"], "the card's own printed text must render, not be dropped"
-    assert js["selectedClass"]
+    assert js["crumb"], "the chosen sphere is a clearable crumb, not a footer chip"
+    assert js["noProse"], "the sheet must not narrate its own flow in prose"
     assert js["backSphere"] is None, "Back returns to the sphere step"
     assert js["cancelKind"] == "quest"
     assert js["cancelCount"] == 0, "Cancel must not add anything"

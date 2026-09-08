@@ -111,6 +111,21 @@ def _z_index_of(css, selector):
     return int(zm.group(1)) if zm else None
 
 
+def test_a_sheets_actions_are_pinned_to_the_sheet():
+    """The sheet IS the scroll box (max-height 920), so a .cta-row that is
+    just its last child scrolls away with the list above it - the Travel
+    picker's Cancel and Travel sat below the fold of their own modal, which
+    is the same defect the pane's CTA row had, and the same fix. Sticky, with
+    a ground of its own so the rows do not show through it."""
+    css = _strip_comments(_css())
+    m = re.search(r"\.sheet\s*>\s*\.cta-row(?![\w-])[^{]*\{([^}]*)\}", css)
+    assert m, "no rule pinning a sheet's own cta-row"
+    rule = m.group(1)
+    assert "position: sticky" in rule, "a sheet's actions must not scroll away"
+    assert re.search(r"bottom:\s*0", rule), "sticky with no bottom offset does nothing"
+    assert "background:" in rule, "a pinned row needs a ground, or content shows through"
+
+
 def test_the_busiest_phase_segment_fits_all_of_its_ticks():
     """The Quest phase has three framework steps and three action windows -
     six ticks in one segment, the most any phase carries. They have to FIT.

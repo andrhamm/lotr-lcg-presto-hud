@@ -1,6 +1,9 @@
 // The side-quest picker's own acts (Task 6) - mirrors SideQuestPickModal's
-// onButton/_leave (docs/js/screens.js): pick a sphere, pick a catalog row
-// inside it (or skip straight to "Manual entry"), then Add. Entries come
+// onButton/_leave (docs/js/screens.js): pick a sphere, then pick a catalog
+// row inside it (or skip straight to "Manual entry"). The twin's separate
+// "add" confirm is NOT mirrored: on a canvas modal a row tap has to double as
+// paging, so the confirm is load-bearing there; here the row tap is the add,
+// and the quest sheet's own remove (sRemove) undoes a mis-tap in one. Entries come
 // from `ui.sideQuests`, loaded lazily the first time "open_sqpick" fires -
 // that needs `await db.sideQuests()`, so app.js handles it directly (the
 // same way it already handles "pick_scenario"/"new_game") rather than
@@ -39,12 +42,9 @@ export function handle(game, ui, act, arg) {
     // sqpick_back's own step guards below, rather than just checking the
     // sheet is a "sqpick" (review finding 6).
     if (ui.sheet?.kind !== "sqpick" || ui.sheet.sphere !== null) return false;
-    // Pre-select the sphere's first quest - SideQuestPickModal's own
-    // onButton "sphere" case does the same (docs/js/screens.js), so a
-    // sphere holding exactly one quest can go straight to Add.
-    const quests = inSphere(ui.sideQuests ?? [], arg);
+    // No pre-selection to make: there is no selected state on this step any
+    // more, because a row tap adds outright.
     ui.sheet.sphere = arg;
-    ui.sheet.selected = quests.length ? quests[0].id : null;
     ui.sheet.page = 0;
     return true;
   }
@@ -52,13 +52,20 @@ export function handle(game, ui, act, arg) {
     const sheet = ui.sheet;
     if (sheet?.kind !== "sqpick" || sheet.sphere === null) return false;
     sheet.sphere = null;
-    sheet.selected = null;
     sheet.page = 0;
     return true;
   }
+  // The row IS the add - SideQuestPickModal's own onButton "add" branch,
+  // verbatim log line, fired from the tap that chose the quest.
   if (act === "sqpick_row") {
-    if (ui.sheet?.kind !== "sqpick" || ui.sheet.sphere === null) return false;
-    ui.sheet.selected = arg;
+    const sheet = ui.sheet;
+    if (sheet?.kind !== "sqpick" || sheet.sphere === null) return false;
+    const e = (ui.sideQuests ?? []).find(x => x.id === arg);
+    if (!e) return false;
+    const pts = e.points ?? 0;
+    game.side_quests.push({ points: pts, progress: 0, name: e.name });
+    game.logEvent(`Side quest added: ${e.name} (${pts} pts, progress view)`);
+    ui.sheet = { kind: "quest" };
     return true;
   }
   if (act === "sqpick_page") {
@@ -68,18 +75,6 @@ export function handle(game, ui, act, arg) {
     const next = Math.max(0, Math.min(pages - 1, sheet.page + Number(arg)));
     if (next === sheet.page) return false;
     sheet.page = next;
-    return true;
-  }
-  if (act === "sqpick_add") {
-    const sheet = ui.sheet;
-    if (sheet?.kind !== "sqpick" || sheet.selected === null) return false;
-    const e = (ui.sideQuests ?? []).find(x => x.id === sheet.selected);
-    if (!e) return false;
-    // SideQuestPickModal's own onButton "add" branch, verbatim log line.
-    const pts = e.points ?? 0;
-    game.side_quests.push({ points: pts, progress: 0, name: e.name });
-    game.logEvent(`Side quest added: ${e.name} (${pts} pts, progress view)`);
-    ui.sheet = { kind: "quest" };
     return true;
   }
   if (act === "sqpick_manual") {

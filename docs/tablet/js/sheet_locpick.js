@@ -80,9 +80,15 @@ function renderList(game, ui) {
   const sheet = ui.sheet;
   const entries = ui.locations ?? [];
   const loc = replacing(game, sheet);
+  // Only the CONSEQUENCE gets a line. "Pick the location - or enter it
+  // manually." was the sheet narrating itself: a list of locations under a
+  // title that says Travel, with a Manual entry button in its own footer,
+  // needs no sentence telling the player to pick one. What replacing an
+  // active location costs is a different matter - that is a fact about the
+  // game, and it stays.
   const sub = loc
     ? h`<p class="body secondary">${fmt(CHROME.locpickReplacing, loc.progress, loc.points)}</p>`
-    : h`<p class="body secondary">${CHROME.locpickPrompt}</p>`;
+    : "";
   const groups = groupBySet(entries).map(({ set, rows }) => h`<div class="locpick-group">
 ${set ? raw(h`<div class="locpick-group-head">${raw(setIcon(set, 20, ui.iconSlugs ?? null))}<span class="label">${set}</span></div>`) : ""}
 ${raw(rows.map(e => locRow(e, e.id === sheet.selected, ui.imagePrefix)).join(""))}
@@ -129,18 +135,24 @@ export function renderLocPickSheet(game, ui) {
   // step, minus a way back: Cancel is the tablet's one way out of either,
   // see the module comment).
   if (!manual) {
-    ctas.push(chip({ act: "locpick_manual", label: CHROME.manualEntry, tone: "tan" }));
-    // Needs a selection - LocationPickModal only draws its Travel button
-    // once this.selected is set; this mirrors that gate on the render
-    // side (dispatch's own locpick_travel case guards it again).
-    if (sheet.selected !== null) {
-      ctas.push(cta({ act: "locpick_travel", label: confirmLabel, grow: false }));
-    }
+    ctas.push(cta({ act: "locpick_manual", label: CHROME.manualEntry, tone: "plain", grow: false }));
+    // Needs a selection, but it does not APPEAR with one. The button used to
+    // be absent until a row was picked, so the footer reflowed under the
+    // finger at the exact moment the player was reaching for it. Inert until
+    // then instead - an unbevelled span with no data-act, the same "not a tap
+    // target" shape the log screen's own Rewind CTA and the strip's transport
+    // use. dispatch's locpick_travel guards the act again either way.
+    ctas.push(sheet.selected !== null
+      ? cta({ act: "locpick_travel", label: confirmLabel, grow: false })
+      : h`<span class="cta cta-ok is-off">${confirmLabel}</span>`);
   } else {
     ctas.push(cta({ act: "locpick_save", label: confirmLabel, grow: false }));
   }
-  ctas.push(cta({ act: "locpick_cancel", label: CHROME.cancel, tone: "plain", grow: false }));
+  // Cancel sits before the confirm, so the trailing edge - where the thumb
+  // goes - is the commit, on both of this sheet's two states.
+  ctas.splice(ctas.length - 1, 0,
+    cta({ act: "locpick_cancel", label: CHROME.cancel, tone: "plain", grow: false }));
   return h`<h1 class="display">${title}</h1>
 ${raw(body)}
-<div class="cta-row">${raw(ctas.join(""))}</div>`;
+<div class="cta-row cta-row-end">${raw(ctas.join(""))}</div>`;
 }

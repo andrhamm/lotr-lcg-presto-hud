@@ -497,7 +497,7 @@ async function handleAct(act, arg) {
     // - only the picker's rows are empty and its Manual entry chip is the
     // one way forward (sheet_sqpick.js's own empty-catalog branch).
     ui.sideQuests = await db.sideQuests();
-    ui.sheet = { kind: "sqpick", sphere: null, selected: null, page: 0 };
+    ui.sheet = { kind: "sqpick", sphere: null, page: 0 };
     render();
     return;
   }

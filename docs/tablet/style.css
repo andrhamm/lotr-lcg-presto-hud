@@ -893,6 +893,21 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    a yes/no question. Declared after .sheet, which sets the default width at
    the same specificity and would otherwise win on source order. */
 .sheet-menu, .sheet-elim { width: min(620px, 92vw); }
+/* Sheets that are a LIST get a list's width. A picker holding two rows of a
+   name and a point value was drawn 1160px wide - the width a workspace of
+   steppers needs - so the rows ran the width of the screen with the value
+   marooned at the far end of each one. */
+.sheet-sqpick, .sheet-locpick { width: min(760px, 92vw); }
+/* A footer whose buttons are all exits: they belong at the trailing edge,
+   not stretched across it. */
+.cta-row-end { justify-content: flex-end; }
+/* A SHEET'S ACTIONS ARE PINNED TO THE SHEET. The sheet is the scroll box
+   (max-height 920), so a footer that is just the last child scrolls away with
+   the list above it - the Travel picker's Cancel and Travel sat below the
+   fold of its own modal, which is the same defect the pane's CTA row had and
+   the same fix. */
+.sheet > .cta-row { position: sticky; bottom: 0; z-index: 2; background: var(--bg);
+  padding-top: 12px; margin-top: 12px; box-shadow: 0 -12px 16px -12px rgba(0,0,0,.9); }
 
 /* The players sheet: the everyone-at-once chip row, then one row per player
    (id + distance to elimination, threat/willpower/engaged stepper blocks). */
@@ -978,7 +993,11 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    which still clears the 56px floor above. */
 .locpick-row .card-frame { width: auto; flex: 1 1 auto; flex-direction: row;
   align-items: center; gap: 16px; }
-.locpick-row .card-frame img { width: 96px; flex: none; }
+/* A THUMBNAIL, not a card. At 96px wide the art is ~134px tall, so one row
+   of a name and a stat line stood 157px high and four rows filled the modal -
+   a list you cannot scan. The quick view is one tap away on the art itself
+   for anyone who wants to read the card. */
+.locpick-row .card-frame img { width: 60px; flex: none; }
 .locpick-row .card-frame figcaption { flex: 1 1 auto; }
 .locpick-manual { display: flex; flex-direction: column; gap: 10px; }
 
