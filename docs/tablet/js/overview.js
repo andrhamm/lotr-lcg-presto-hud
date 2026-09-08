@@ -20,7 +20,7 @@
 // and the notes are tips.json's already-fact-checked distillation.
 import { h, raw, fmt, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { chip, cta } from "./primitives.js";
+import { chip, cta, reloadButton } from "./primitives.js";
 import { setIcon } from "./seticon.js";
 import { cardImage, cardFacts } from "./cardimage.js";
 import { releaseLabel } from "./cards.js";
@@ -86,6 +86,7 @@ function header(name, entry, stageCount, have) {
   const meta = [pack, cycle, stagesLabel].filter(Boolean).join(" · ");
   return h`<header class="ov-head">${raw(setIcon(name, 44, have))}
 <div class="ov-head-text"><h1 class="display">${name}</h1><p class="label">${meta}</p></div>
+${raw(reloadButton({ inline: true }))}
 </header>`;
 }
 
@@ -188,28 +189,21 @@ function cardGroups(data, name) {
     .map(k => ({ key: k, cards: buckets.get(k) }));
 }
 
-// The caption under one card: how many copies, then what it prints. The
-// words are the game's own - Learn to Play uses "engagement cost", "attack",
-// "defense" (US spelling, as FFG prints it) and "Hit Points and Damage"
-// (p.20) - and every value is the card's own, read off its printed front
-// face. A null field is simply absent from the caption: it means the card
-// prints nothing there, and inventing a 0 would be a claim about the card.
+// The caption under one card: HOW MANY COPIES, and nothing else.
+//
+// It used to spell out the printed stat line too - "First Enemy · x3 ·
+// engagement 25 · threat 2 · attack 2 · defense 1 · hit points 4" - which is
+// the card's own stat column transcribed into prose, under a picture of that
+// column, at a size where it is legible. Seven facts nobody reads, wrapping
+// to five lines under every card, so a row of four cards cost more vertical
+// space in captions than in art. The values are not lost: the quick view's
+// fact table (cardFacts) carries every one of them, in a table, which is
+// where dense tabular metadata belongs.
+//
+// The count stays because it is the one fact the picture CANNOT tell you:
+// how many copies of this card the encounter deck holds.
 function cardCaption(key, card) {
-  const face = frontFace(card) ?? {};
-  const bits = [];
-  if (card.quantity > 0) bits.push(fmt(CHROME.copies, card.quantity));
-  const put = (t, v) => { if (v !== null && v !== undefined) bits.push(fmt(t, v)); };
-  if (key === "enemy") {
-    put(CHROME.stats.engagement, face.engagementCost);
-    put(CHROME.stats.threat, face.threat);
-    put(CHROME.stats.attack, face.attack);
-    put(CHROME.stats.defense, face.defense);
-    put(CHROME.stats.hitPoints, face.hitPoints);
-  } else if (key === "location") {
-    put(CHROME.stats.threat, face.threat);
-    put(CHROME.branchPoints, face.questPoints);
-  }
-  return bits.join(" · ");
+  return card.quantity > 0 ? fmt(CHROME.copies, card.quantity) : "";
 }
 
 function cardsSection(groups, prefix, packDates) {
@@ -236,16 +230,27 @@ function cardsSection(groups, prefix, packDates) {
 // only works if an empty slot is drawn as empty rather than dropped. That is
 // the whole reason this is not just a list.
 //
-// Tips are strings in tips.json today and every one of them lands in `notes`;
-// notes.js's slotted() also accepts {kind, text}, so the classification pass
-// can land scenario by scenario without a flag day here.
+// But that frame only teaches anything once the slots hold something. Tips
+// are strings in tips.json today and every one of them lands in `notes`, so
+// drawing the full frame now puts FIVE identical "Nothing recorded yet."
+// rows on every scenario - half the notes panel saying nothing, on every
+// screen that shows notes. So the frame appears with the data: until a
+// scenario has a classified tip, only the filled slots are drawn. No flag
+// day - notes.js's slotted() already accepts {kind, text}, so a scenario
+// grows its frame the moment the classification pass reaches it.
 function slotRows(slots) {
-  return slots.map(s => {
+  const classified = slots.some(s => s.kind !== "notes" && s.items.length);
+  return slots.filter(s => classified || s.items.length).map(s => {
     const body = s.items.length
       ? s.items.map(t => h`<li class="body">${t}</li>`).join("")
       : h`<li class="body is-empty">${CHROME.tipSlotEmpty}</li>`;
-    return h`<div class="${cx("tipslot", !s.items.length && "is-empty")}">
-<span class="label">${CHROME.tipSlots[s.kind]}</span>
+    // Unclassified, the one row IS the section: the panel's own heading
+    // already says Notes, so labelling the row "Notes" as well printed the
+    // word twice, six pixels apart, for one list.
+    const name = classified
+      ? h`<span class="label">${CHROME.tipSlots[s.kind]}</span>` : "";
+    return h`<div class="${cx("tipslot", !classified && "is-bare", !s.items.length && "is-empty")}">
+${raw(name)}
 <ul>${raw(body)}</ul></div>`;
   }).join("");
 }

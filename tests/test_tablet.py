@@ -248,7 +248,7 @@ import { newUi } from "./actions.js";
 setWindowPolicy(WINDOW_POLICY_BANDS);
 const g = new GameState(2, 25); g.advanceView(); g.enterView("quest_staging");
 const html = renderStrip(g, newUi());
-console.log(JSON.stringify({ segs: (html.match(/class="seg/g) || []).length,
+console.log(JSON.stringify({ segs: (html.match(/class="seg[" ]/g) || []).length,
   current: (html.match(/is-current/g) || []).length,
   currentView: /data-view="quest_staging"[^>]*is-current|is-current[^>]*data-view="quest_staging"/.test(html),
   // Scoped to the flow, not the whole strip: the legend's swatches reuse the
@@ -276,7 +276,7 @@ console.log(JSON.stringify({ segs: (html.match(/class="seg/g) || []).length,
 
 
 def test_strip_marks_the_combat_segment_skippable_when_the_offer_is_promoted():
-    js = node("""
+    js = node(r"""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { renderStrip } from "./strip.js";
 import { newUi } from "./actions.js";
@@ -286,10 +286,16 @@ const a = renderStrip(g, newUi());
 g.setEngaged(0, 1);
 const b = renderStrip(g, newUi());
 console.log(JSON.stringify({ promoted: /data-phase="Combat"[^>]*is-skippable/.test(a),
-  demoted: /data-phase="Combat"[^>]*is-skippable/.test(b), landing: a.includes("6.P") }));
+  demoted: /data-phase="Combat"[^>]*is-skippable/.test(b),
+  tag: /data-phase="Combat"[\s\S]*?<span class="skip-note label">Skip</.test(a),
+  noStepId: !a.includes(">6.P<") }));
 """)
-    assert js["promoted"] and js["landing"]
+    assert js["promoted"] and js["tag"]
     assert js["demoted"] is False
+    # The tag says "Skip", not the landing's internal step id: "6.P" is not a
+    # thing a player has ever seen, and it used to sit on top of the phase
+    # name of the very segment it was labelling.
+    assert js["noStepId"]
 
 
 def test_strip_skip_landing_off_flow_still_finds_its_segment():
@@ -303,7 +309,7 @@ def test_strip_skip_landing_off_flow_still_finds_its_segment():
     indexOf'ing the raw aw_ id) is what lets that whole segment - not just
     the landing tick - light up is-skippable. Before the fix, indexOf(-1)
     on the un-mapped aw_ id sinks the range check and NOTHING lights up."""
-    js = node("""
+    js = node(r"""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS, SKIPS } from "../../js/gamestate.js";
 import { renderStrip } from "./strip.js";
 import { newUi } from "./actions.js";
@@ -314,11 +320,13 @@ const html = renderStrip(g, newUi());
 console.log(JSON.stringify({
   encounterSkippable: /data-phase="Encounter"[^>]*is-skippable/.test(html),
   combatSkippable: /data-phase="Combat"[^>]*is-skippable/.test(html),
-  landing53: html.includes(">5.3<"),
+  encounterTag: /data-phase="Encounter"[\s\S]*?<span class="skip-note label">Skip</.test(html),
 }));
 """)
+    # The whole segment lighting up IS the proof that the off-flow landing
+    # resolved: an unmapped aw_ id sinks the range check and nothing lights.
     assert js["encounterSkippable"]
-    assert js["landing53"]
+    assert js["encounterTag"]
     assert js["combatSkippable"] is False
 
 
@@ -1359,7 +1367,7 @@ console.log(JSON.stringify({ rows, overviewFirst: rows[0]?.[0] }));
 
 def test_overview_cards_are_the_scenarios_own_set_with_counts_and_printed_values():
     """R5: the scenario's own cards, grouped by type, each with how many
-    copies it ships and what it prints. A card from a set this quest merely
+    copies it ships. A card from a set this quest merely
     GATHERS lives in that set's own file, not in this grid - the shared-sets
     chips are what say it is coming. Every value is the card's own; a null
     field is absent, never a 0 the card does not print."""
@@ -1367,17 +1375,21 @@ def test_overview_cards_are_the_scenarios_own_set_with_counts_and_printed_values
 import { GameState } from "../../js/gamestate.js";
 import { renderOverview } from "./overview.js";
 const html = renderOverview(new GameState(), uiFor({}));
-const caps = [...html.matchAll(/<span class="body card-cap">([^<]*)<\/span>/g)].map(m => m[1]);
+const caps = [...html.matchAll(/<span class="body card-cap">([\s\S]*?)<\/span><\/button>/g)]
+  .map(m => m[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim());
 console.log(JSON.stringify({
   caps,
   headings: [...html.matchAll(/<div class="ov-type"><div class="label">([^<]+)</g)].map(m => m[1]),
   art: [...html.matchAll(/<img src="([^"]+)"/g)].map(m => m[1]).filter(u => u.includes("art.example")),
 }));
 """)
+    # The name and the copy count. The stat line is NOT transcribed under the
+    # picture of it - it is in the quick view's fact table, where a table of
+    # numbers belongs; see cardCaption's own note.
     assert js["caps"] == [
-        "First Enemy · ×3 · engagement 25 · threat 2 · attack 2 · defense 1 · hit points 4",
-        "Second Enemy · ×2 · engagement 30 · threat 3 · attack 3 · defense 2 · hit points 5",
-        "First Location · ×2 · threat 1 · 3 quest points",
+        "First Enemy · ×3",
+        "Second Enemy · ×2",
+        "First Location · ×2",
     ]
     assert js["headings"] == ["Enemies", "Locations"]
     assert js["art"] == ["https://art.example.invalid/e1.jpg",
@@ -1421,6 +1433,12 @@ def test_tips_render_as_fixed_slots_at_the_scope_being_shown():
     whole point - a player learns once where pacing advice lives and then
     always looks there, which a list that varies per scenario cannot offer.
 
+    The frame arrives WITH THE DATA. Every tip in tips.json is unclassified
+    today and lands in `notes`, so drawing all six slots for those scenarios
+    put five identical "Nothing recorded yet." rows on the screen - half the
+    panel saying nothing, on every scenario. Until a scenario has one
+    classified tip, only its filled slots are drawn; after, the full frame.
+
     Scope follows the left column's selection: the overview shows the
     scenario's general tips, a selected stage shows only that stage's. A
     stage's advice is only findable if it is not mixed in with every other
@@ -1438,11 +1456,20 @@ const stageUi = uiFor({});
 stageUi.picker = { stage: "1" };
 const st = renderOverview(new GameState(), stageUi);
 const none = renderOverview(new GameState(), uiFor({ slug: "no-tips-here" }));
+// The same scenario once ONE tip carries a kind: the whole frame appears.
+const classifiedUi = uiFor({});
+classifiedUi.tips = { ov1: { ...bundle.tips.ov1,
+  general: [{ kind: "pacing", text: "Build first, push at stage 2." }] } };
+const cls = renderOverview(new GameState(), classifiedUi);
 const labels = h => [...h.matchAll(/<div class="tipslot[^"]*">\s*<span class="label">([^<]+)</g)].map(m => m[1]);
 console.log(JSON.stringify({
   slots: TIP_SLOTS,
   ovLabels: labels(ov),
   stLabels: labels(st),
+  clsLabels: labels(cls),
+  clsEmpty: (cls.match(/tipslot [^"]*is-empty/g) || []).length,
+  ovBare: (ov.match(/tipslot is-bare/g) || []).length,
+  clsBare: (cls.match(/tipslot[^"]*is-bare/g) || []).length,
   ovHasGeneral: ov.includes("Keep a location in play for the extra progress."),
   stHasGeneral: st.includes("Keep a location in play for the extra progress."),
   emptySlots: (ov.match(/tipslot is-empty/g) || []).length,
@@ -1451,14 +1478,20 @@ console.log(JSON.stringify({
     .filter(s => s.items.length).map(s => [s.kind, s.items]),
 }));
 """)
-    # Same slots, same order, on both scopes.
-    assert js["ovLabels"] == ["Pacing", "Before you advance", "Watch for",
-                              "Avoid", "Player count", "Notes"]
+    # Unclassified today: only the slot that holds something is drawn, on
+    # both scopes - no wall of "Nothing recorded yet." - and it carries no
+    # row label either, because the panel's own heading already says Notes.
+    assert js["ovLabels"] == []
     assert js["stLabels"] == js["ovLabels"]
+    assert js["ovBare"] == 1 and js["clsBare"] == 0
+    assert js["emptySlots"] == 0
     # ...and the scopes really are different content.
     assert js["ovHasGeneral"] and not js["stHasGeneral"]
-    # Every slot but the catch-all is empty today, and says so.
-    assert js["emptySlots"] == 5
+    # One classified tip brings the whole frame, in its fixed order, with the
+    # empty slots drawn as empty - which is what the frame is for.
+    assert js["clsLabels"] == ["Pacing", "Before you advance", "Watch for",
+                               "Avoid", "Player count", "Notes"]
+    assert js["clsEmpty"] == 5
     # A scenario with no tips at all draws no panel, not an empty shell.
     assert not js["noneHasSlots"]
     # Both tip shapes, routed.
@@ -3045,14 +3078,49 @@ console.log(JSON.stringify({ noop, real, threats: g.players.map(p => p.threat) }
     assert js["threats"] == [1, 1]
 
 
+def test_the_threat_helm_is_drawn_only_where_the_number_is_threat():
+    """The staging rail and the staging sheet count three different things -
+    threat, enemies, locations - and all three used to be drawn beside the
+    black threat helm, because the icon set has no enemy or location mask.
+    That put the threat mark next to a count of locations, which reads as
+    "threat 3" about a number that is not threat. The honest answer to a
+    missing mask is no mark; the caption above each number names it."""
+    js = node(r"""
+import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
+import { perform, newUi } from "./actions.js";
+import { layout } from "./layout.js";
+import { renderStagingSheet } from "./sheet_staging.js";
+setWindowPolicy(WINDOW_POLICY_BANDS);
+const g = new GameState(2, 25); g.advanceView();
+const ui = newUi();
+const rail = layout(g, ui);
+perform(g, ui, "open_staging", "");
+const sheet = renderStagingSheet(g, ui);
+// One pill/row per counted thing; count how many carry an <svg> mark.
+// Scoped to the STAGING grid - the quest zone's own progress pills use the
+// trail mark, which is right there and not what this is about.
+const grid = /<div class="staging-grid">([\s\S]*?)<\/div><\/div>/.exec(rail)?.[1] ?? "";
+const rowsMarked = [...sheet.matchAll(/<span class="ssheet-val">(<svg)?/g)].filter(m => m[1]).length;
+console.log(JSON.stringify({
+  pills: (grid.match(/<div class="pill-stat">/g) || []).length,
+  pillsMarked: [...grid.matchAll(/<div class="pill-stat">(<svg)?/g)].filter(m => m[1]).length,
+  rows: (sheet.match(/<span class="ssheet-val">/g) || []).length,
+  rowsMarked,
+}));
+""")
+    assert js["pills"] == 3 and js["rows"] == 3
+    assert js["pillsMarked"] == 1, "only THREAT wears the helm in the rail"
+    assert js["rowsMarked"] == 1, "only THREAT wears the helm in the sheet"
+
+
 def test_players_sheet_title_carries_no_stale_game_wide_elimination_figure():
     """M9: the title used to print game.elimination_threat - the GAME's
     default level - while elim_setlvl recalibrates a level PER PLAYER
     (p.elimination). Recalibrating one player's level away from the default
     left a header figure that named a level no row on screen still used;
-    each row already prints its own "N to M", so the title carries no
-    number of its own now."""
-    js = node("""
+    each row already prints its own distance and its own level, so the title
+    carries no number of its own now."""
+    js = node(r"""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { perform, afterTap, newUi } from "./actions.js";
 import { layout } from "./layout.js";
@@ -3062,11 +3130,14 @@ perform(g, ui, "thr", "0:5"); afterTap(g, ui);                       // P1: 45 -
 perform(g, ui, "elim_lvl", "10"); perform(g, ui, "elim_setlvl", ""); // P1's own level -> 60
 perform(g, ui, "open_players", "");
 const html = layout(g, ui);
+const title = /<h1 class="display">([^<]*)</.exec(html)?.[1] ?? "";
 console.log(JSON.stringify({
   title: html.includes('<h1 class="display">Players</h1>'),
-  noStaleFigure: !html.includes("elimination at"),
-  p1Row: html.includes("10 to 60"),
-  p2Row: html.includes("5 to 50"),
+  // Scoped to the TITLE's own text: each row names its own level, and that
+  // is the point - only a game-wide figure up here would be the stale one.
+  noStaleFigure: !/[0-9]/.test(title),
+  p1Row: html.includes("10 to elimination at 60"),
+  p2Row: html.includes("5 to elimination at 50"),
 }));
 """)
     assert js["title"]
@@ -4224,7 +4295,7 @@ console.log(JSON.stringify({ withArt: pick("%s"), noPrefix: pick(null) }));
     # empty modal is worse than no control.
     assert '<figure class="card-frame"><figcaption class="body">Hand-typed' in art
     # The caption is the name plus the numbers the row has always shown.
-    assert ">Old Forest Road · threat 1 · 3 quest points</span>" in art
+    assert ">Old Forest Road <span class=\"card-copies\">· threat 1 · 3 quest points</span>" in art
 
     # No pinned prefix (an index built before the pin, or a catalog that
     # would not load): not one card <img> anywhere, and the rows still read.
@@ -4233,7 +4304,8 @@ console.log(JSON.stringify({ withArt: pick("%s"), noPrefix: pick(null) }));
     # With no prefix there is no URL to enlarge, so no card is tappable.
     assert 'data-act="open_card"' not in js["noPrefix"]
     assert '<figure class="card-frame"><figcaption' in js["noPrefix"]
-    assert "Old Forest Road · threat 1 · 3 quest points" in js["noPrefix"]
+    assert ('Old Forest Road <span class="card-copies">· threat 1 · 3 quest points'
+            in js["noPrefix"])
 
 
 def test_the_image_prefetch_fires_on_begin_setup_not_on_the_pick():

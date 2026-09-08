@@ -118,12 +118,18 @@ def test_the_busiest_phase_segment_fits_all_of_its_ticks():
     A `flex-wrap: wrap` let the row spill onto a second line, which overflowed
     the strip's content box and clipped the phase NAME off the busiest
     segment; switching to nowrap moved the loss to the other end and cut the
-    last action window in half instead. So the sizes are chosen against that
-    worst case rather than against a comfortable one, and this asserts the
-    arithmetic rather than trusting it.
+    last action window in half instead.
 
-    Segment width at 1366: (1366 - the rail and the strip's own padding) split
-    eight ways, ~116px of content."""
+    This assertion USED TO LIE. It modelled six bare marks - 3*18 + 3*11 +
+    5*4 = 107px - and passed, while the rendered row measured 137px in a 91px
+    segment with two windows clipped off. Two things it never counted: a tick
+    the round has reached is wrapped in a .tick-btn (this client's 44px tap
+    floor, 28px wide), and the log badge sat in the same row. So it now
+    measures what is actually in the row, and the badge is no longer in it.
+
+    The segment no longer has a fixed width either (`.seg` is flex-basis auto
+    now, so a phase is as wide as its own round needs); this stays as the
+    guard on the arithmetic, against the width the old equal split gave."""
     css = _css()
 
     def px(selector, prop):
@@ -136,11 +142,16 @@ def test_the_busiest_phase_segment_fits_all_of_its_ticks():
     square = px("tick-framework", "width")
     circle = px("tick-window", "width")
     gap = px("tick-row", "gap")
+    btn = px("tick-btn", "min-width")
     assert square and circle and gap is not None
-    # Three squares, three circles, five gaps between them.
-    needed = 3 * square + 3 * circle + 5 * gap
-    assert needed <= 116, (
-        "Quest's six ticks need %spx and the segment gives ~116" % needed)
+    assert btn, ".tick-btn needs a min-width - it is what a reached tick wears"
+    # Worst case as it actually renders: three framework ticks, and the round
+    # has reached the first of them, so that one is a button.
+    needed = btn + 2 * square + 3 * circle + 5 * gap
+    assert needed <= 145, (
+        "Quest's six ticks need %spx of row" % needed)
+    # The badge belongs to the name's row now, not to the timeline's.
+    assert "log-badge" in css
     # And the row must not silently hide the overflow if that ever stops
     # being true - a clipped tick is an action window the player cannot see.
     row = re.search(r"\.tick-row(?![\w-])[^{]*\{([^}]*)\}", _strip_comments(css)).group(1)

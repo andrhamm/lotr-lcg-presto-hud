@@ -9,7 +9,7 @@
 import { h, raw, cx, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
 import { glyph } from "./glyphs.js";
-import { chip, cta, transportButton } from "./primitives.js";
+import { chip, cta, transportButton, reloadButton } from "./primitives.js";
 // isUndone/isRewindable live in logfilter.js with the filters - the rail and
 // acts_log.js ask the same two questions, and one answer means the button
 // this screen offers and the act that answers it can never disagree about
@@ -121,7 +121,7 @@ export function renderLogScreen(game, ui) {
 ${raw(rewind)}${raw(chip({ act: "export_log", label: CHROME.exportLog, tone: "tan" }))}</footer>`;
 
   return h`<section class="logscreen">
-<header class="log-head"><h1 class="display">${CHROME.log}</h1>${raw(chip({ act: "log_close", label: h`${CHROME.close} ›`, tone: "tan" }))}</header>
+<header class="log-head"><h1 class="display">${CHROME.log}</h1>${raw(reloadButton({ inline: true }))}${raw(chip({ act: "log_close", label: h`${CHROME.close} ›`, tone: "tan" }))}</header>
 <div class="log-main">${raw(renderFilters(log))}
 <ol class="log-rows">${raw(rows)}</ol>
 ${raw(foot)}</div>

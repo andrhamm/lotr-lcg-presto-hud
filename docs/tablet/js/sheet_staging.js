@@ -10,11 +10,14 @@ function step(act, arg, label) {
   return h`<button type="button" class="step step-sm" data-act="${act}" data-arg="${arg}">${label}</button>`;
 }
 
-function row(label, value, before, after) {
+// `mark` is the icon beside the number, and only THREAT has one: there is no
+// enemy or location mask in the icon set, and drawing the threat helm next to
+// a count of locations says "threat 3" about a number that is not threat.
+function row(label, value, before, after, mark = "") {
   return h`<div class="ssheet-row">
 <span class="body ssheet-label">${label}</span>
 <div class="ssheet-controls">${raw(before)}
-<span class="ssheet-val">${raw(icon("THREAT", 36, THREAT_BLACK, THREAT_BLACK_EDGE))}<span class="num num-36">${value}</span></span>
+<span class="ssheet-val">${raw(mark)}<span class="num num-36">${value}</span></span>
 ${raw(after)}</div>
 </div>`;
 }
@@ -22,7 +25,8 @@ ${raw(after)}</div>
 export function renderStagingSheet(game, ui) {
   const threatRow = row(CHROME.threat, game.staging,
     step("stg5", "-5", "−5") + step("stg-", "", "−1"),
-    step("stg+", "", "+1") + step("stg5", "5", "+5"));
+    step("stg+", "", "+1") + step("stg5", "5", "+5"),
+    icon("THREAT", 36, THREAT_BLACK, THREAT_BLACK_EDGE));
   const enemiesRow = row(CHROME.enemies, game.staging_enemies,
     step("stgen-", "", "−"), step("stgen+", "", "+"));
   const locationsRow = row(CHROME.locations, game.staging_locations,

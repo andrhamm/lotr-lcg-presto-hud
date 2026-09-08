@@ -26,6 +26,13 @@ export const CHROME = {
   // there is no way to reload at all. Title text, not a visible label - the
   // glyph is the control.
   refresh: "Reload the app",
+  reload: "Reload",
+  // The tag on a phase the offered skip passes over entirely.
+  skipTag: "Skip",
+  // The timeline's marks are rewind targets - a real change to the game -
+  // and nothing on screen said so. A control with a consequence has to
+  // announce itself.
+  tickHint: "Tap a mark to rewind",
   disclaimer: "An unofficial fan-made tracker. Not affiliated with, or endorsed by, Fantasy Flight Games or Middle-earth Enterprises.",
   // The setup flow's shared header (setup_head.js). One header on both
   // steps, so "no header, no instruction at all" is answered once rather
@@ -37,8 +44,7 @@ export const CHROME = {
   backToScenario: "‹ Scenario",
   chooseScenarioTitle: "Choose a scenario",
   choosePlayersTitle: "Set up the players",
-  choosePlayersHint: "How many are playing, and each player's starting threat.",
-  chooseScenarioEmpty: "Choose a scenario on the left to see its encounter sets, stages and cards.",
+  chooseScenarioEmpty: "Choose a scenario.",
   // The chosen cycle, shown as a filter you can clear rather than as a
   // heading. Singular, and its own key: `cycles` above heads the LIST.
   cycleOne: "Cycle",
@@ -160,6 +166,16 @@ export const CHROME = {
   noLocation: "no active location",
   sideQuest: "+ side quest",
   threat: "Threat",
+  // The players sheet's three stat columns. Two of them were an icon and
+  // nothing else - a gold sun and a black helm - and no player has any way
+  // to learn that the black helm counts ENGAGED ENEMIES. Written once, over
+  // the first row, so the columns are named without repeating the name on
+  // every row.
+  committed: "Committed",
+  engagedEnemies: "Engaged",
+  // How far this player is from elimination, and the level they are counting
+  // to. It read "25 to 50", which is a range, not a distance.
+  toElimination: "%s to elimination at %s",
   enemies: "Enemies",
   locations: "Locations",
   step: "step",
@@ -197,7 +213,12 @@ export const CHROME = {
   // with the sheet_players.js title fix, review finding M9 - each row
   // already prints its OWN distance to elimination, and a single game-wide
   // number was wrong the instant any one row's level was recalibrated.
-  playersSheetFooter: "Every change is logged as it happens. Done just closes the sheet.",
+  //
+  // playersSheetFooter went the same way, for a different reason: "Every
+  // change is logged as it happens. Done just closes the sheet." explained
+  // the APP to the player. Every screen in this client logs what it changes
+  // and every sheet's Done closes it; a sentence saying so on one of them is
+  // noise, and noise in the place a player looks for the game's own words.
   newGameWarning: "The current game is saved until you start a new one.",
   // The elimination sheet (Task 3). "%d" is the fmt() placeholder used the
   // same way OUTCOME's templates are (docs/js/viewcopy.js) - see

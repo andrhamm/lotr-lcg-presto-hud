@@ -8,7 +8,7 @@
 // tests/test_tablet.py can drive it under node the way it drives the model.
 import { h, raw, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { chip } from "./primitives.js";
+import { chip, reloadButton } from "./primitives.js";
 import {
   flowViews, VIEW_STEP, windowAfter, isActionWindow, lastWindowBefore,
   phaseViewOf,
@@ -86,11 +86,23 @@ function renderSeg(game, views, seg, curIdx, skipRange, offPhase) {
   const stepIds = new Set(seg.views.map(v => VIEW_STEP[v]));
   const count = game.log.filter(e => e.round === game.round && stepIds.has(e.step)).length;
   const badge = count > 0 ? h`<span class="log-badge">${count}</span>` : "";
-  const note = skippable
-    ? h`<div class="skip-note">${VIEW_STEP[skipRange.landing]}</div>`
-    : "";
+  // A skippable segment SAYS "SKIP", not "6.P".
+  //
+  // It used to print the landing view's raw step id, absolutely positioned
+  // over the segment's top-right corner - so the busiest thing it did was
+  // overlap the phase name, and what it overlapped it with was an internal
+  // id no player has ever seen. Where the skip lands is already said in
+  // words by the CTA that offers it ("No enemies. Skip combat."); what the
+  // strip has to add is WHICH PHASES GO, which is the amber run - and this
+  // tag names that run.
+  const note = skippable ? h`<span class="skip-note label">${CHROME.skipTag}</span>` : "";
 
-  return h`<div data-phase="${seg.phase}" class="${cx("seg", skippable && "is-skippable")}"><div class="phase-name">${phaseLabel(seg.phase)}</div><div class="tick-row">${raw(ticks)}${raw(badge)}</div>${raw(note)}</div>`;
+  // The badge rides on the NAME's row, not in the tick row. In the tick row
+  // it was one more 16px box competing with the marks for a fixed-width
+  // segment, and the Quest phase - six ticks, the busiest in the round - lost
+  // that competition: 137px of content in 91px of box, two action windows
+  // clipped clean off the timeline.
+  return h`<div data-phase="${seg.phase}" class="${cx("seg", skippable && "is-skippable")}"><div class="seg-head"><div class="phase-name">${phaseLabel(seg.phase)}</div>${raw(note)}${raw(badge)}</div><div class="tick-row">${raw(ticks)}</div></div>`;
 }
 
 // Group flowViews() by step(VIEW_STEP[v]).phase. The views arrive already in
@@ -165,11 +177,12 @@ export function renderStrip(game, ui) {
   const legend = h`<div class="legend">
 <span class="legend-item"><i class="tick tick-framework is-done"></i>${CHROME.legendFramework}</span>
 <span class="legend-item"><i class="tick tick-window is-done"></i>${CHROME.actionWindow}</span>
+<span class="legend-hint label">${CHROME.tickHint}</span>
 </div>`;
 
   return h`<header class="strip">
 <div class="round"><div class="round-n"><span class="label">${CHROME.round}</span><div class="round-stamp"><span class="num num-40">${game.round}</span><span class="label round-step">${game.step}</span></div></div>${raw(legend)}</div>
 <div class="strip-flow">${raw(body)}</div>
-<div class="strip-tools">${raw(menuChip)}</div>
+<div class="strip-tools">${raw(menuChip)}${raw(reloadButton({ inline: true }))}</div>
 </header>`;
 }

@@ -31,7 +31,7 @@
 // same place.
 import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { chip } from "./primitives.js";
+import { chip, reloadButton } from "./primitives.js";
 import { setIcon } from "./seticon.js";
 
 // `title` is what this screen is about right now. `meta` is the dense metadata
@@ -54,6 +54,6 @@ export function setupHead({ title, meta = null, icon = null, iconHave = null, ma
 <div class="appbar-subject">${raw(glyph)}
 <div class="appbar-text"><h1 class="display">${title}</h1>${meta ? raw(h`<p class="label">${meta}</p>`) : ""}</div>
 </div>
-<div class="appbar-aside">${raw(aside)}</div>
+<div class="appbar-aside">${raw(reloadButton({ inline: true }))}${raw(aside)}</div>
 </header>`;
 }

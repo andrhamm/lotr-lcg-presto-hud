@@ -1,5 +1,27 @@
 import { h, raw, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
+import { glyph } from "./glyphs.js";
+
+// The app's own reload.
+//
+// Not a debugging convenience: added to the Home Screen (the manifest's
+// display: standalone) or in Fullscreen, this app has no browser chrome at
+// all, so there is otherwise NO way to reload it - and a reload is the one
+// recovery a player has when a render goes wrong, since the game itself is
+// durable in storage and comes back exactly as it was.
+//
+// It says what it does. A bare circular-arrow glyph in the corner is
+// ambiguous with "undo" and with "restart the game", and a title attribute
+// does not help: there is no hover on a tablet. Quiet, not hidden - it reads
+// as part of the frame rather than as a control anyone needs.
+//
+// `inline` seats it in the strip's own tool cluster beside Menu instead of
+// floating over the corner. On the play screen the corner is already spoken
+// for, and two controls a few pixels apart, one of them floating, is not a
+// cluster - it is a collision.
+export function reloadButton({ inline = false } = {}) {
+  return h`<button type="button" class="${cx("app-reload", inline && "app-reload-inline")}" data-act="reload_app" aria-label="${CHROME.refresh}">${raw(glyph("reload", 20))}<span class="label">${CHROME.reload}</span></button>`;
+}
 
 // Bevelled = tappable: the HUD's one chrome rule, kept. Every button is a
 // real <button> with a data-act; app.js delegates on it.

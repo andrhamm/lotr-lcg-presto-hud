@@ -219,7 +219,16 @@ button.band:active { transform: translateY(1px); background: var(--card-hi); }
    like a second CTA instead of a chip. Same fix .esheet-choice > .cta
    already applies to a button inside a column flex for the same reason. */
 .band-text > .chip { align-self: flex-start; }
-.counter { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; flex: 1 1 0; min-width: 0 }
+/* A STEPPER IS THE SIZE OF ITS CONTENT, not the size of what is left over.
+   `flex: 1 1 0` made it grow into every spare pixel of the pane: on Questing:
+   Commit the willpower control came out 1006x400 - 42% of the screen - for a
+   label, a numeral and two buttons, with the minus and the plus a metre apart
+   because the row justified them to opposite ends of all that width.
+   flex: none takes its own height; the width cap keeps the two buttons within
+   a thumb's travel of the value they change. */
+.counter { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  flex: 0 0 auto; align-self: flex-start; width: min(100%, 380px); min-width: 0 }
 .counter-row { display: flex; align-items: center; justify-content: space-between; gap: 12px }
 .counter-value { display: flex; align-items: center; gap: 14px }
 /* gap/padding trimmed by 2px each when the log block's header row grew to
@@ -239,7 +248,7 @@ button.band:active { transform: translateY(1px); background: var(--card-hi); }
 .ground-card { background: var(--card) } .ground-well { background: var(--well) }
 
 /* Transport strip (Task 3): one segment per phase, one tick per flow view. */
-.strip { height: 96px; display: flex; align-items: stretch; gap: 8px; padding: 12px 62px 12px 18px; background: var(--well); border-bottom: 1px solid var(--border); overflow: hidden; }
+.strip { height: 96px; display: flex; align-items: stretch; gap: 8px; padding: 12px 18px; background: var(--well); border-bottom: 1px solid var(--border); overflow: hidden; }
 /* Round on the left, the timeline across the middle, app chrome on the right.
    `.round` was a 2x2 grid holding the round number, a Menu chip, a four
    button replay transport AND its step readout - all crammed into the corner
@@ -259,12 +268,14 @@ button.band:active { transform: translateY(1px); background: var(--card-hi); }
    and the round number was using a third of it - and without it the timeline
    is shapes you are expected to already understand. */
 .legend { display: flex; flex-direction: column; gap: 5px; }
+.legend-hint { color: var(--dim); opacity: .8; text-transform: none;
+  letter-spacing: .02em; white-space: nowrap; }
 .legend-item { display: flex; align-items: center; gap: 6px;
   font: 700 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase;
   color: var(--dim); white-space: nowrap; }
 .legend .tick { position: static; }
 .strip-flow { display: flex; align-items: stretch; gap: 8px; flex: 1 1 auto; min-width: 0; }
-.strip-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+.strip-tools { display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
   min-height: 44px; padding-left: 12px; }
 .tbtn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 44px;
   background: var(--btn); border: 1px solid var(--bevel-l); border-bottom-color: var(--bevel-d); border-right-color: var(--bevel-d);
@@ -274,7 +285,14 @@ button.band:active { transform: translateY(1px); background: var(--card-hi); }
    ticks, so centring put every phase name at a different height - Resource
    and Planning rode up against the top edge while Quest sat low. The name is
    a row of headings across the strip and has to read as one. */
-.seg { position: relative; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; flex: 1 1 0; min-width: 0; padding: 8px 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+/* A SEGMENT IS AS WIDE AS ITS ROUND NEEDS. `flex: 1 1 0` made all eight
+   equal, so every phase got 91px whether it carried one tick or six - and
+   Quest carries six, needing 137px. The two widest action windows were cut
+   off the end of the timeline: the strip claimed the round had fewer windows
+   than it has, which is the one thing this strip exists to say. Now the
+   basis is the content (flex-basis: auto, no shrink) and only the LEFTOVER
+   space is shared out equally. */
+.seg { position: relative; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; flex: 1 0 auto; padding: 8px 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .seg.is-skippable { background: var(--card-hi); border-color: var(--amber); }
 /* The name is the segment's whole point, so it never yields: flex: 0 0 auto,
    and the tick row is what clips instead. The Quest phase has four flow views
@@ -282,7 +300,8 @@ button.band:active { transform: translateY(1px); background: var(--card-hi); }
    the strip's 72px content box and clipped the NAME right off the segment -
    the phase with the most going on was the one that stopped saying its own
    name. */
-.phase-name { flex: 0 0 auto; font: 600 18px/1 var(--serif); color: var(--dim);
+.seg-head { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.phase-name { flex: 1 1 auto; font: 600 18px/1 var(--serif); color: var(--dim);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg:has(.tick.is-done) .phase-name { color: var(--tan); }
 .seg:has(.tick.is-current) .phase-name { color: var(--gold); }
@@ -300,8 +319,10 @@ button.band:active { transform: translateY(1px); background: var(--card-hi); }
    and down the strip as the round advanced past each phase. The row keeps the
    button's height at all times and the marks centre in it identically. */
 .tick-row { display: flex; align-items: center; flex-wrap: nowrap; gap: 4px;
-  min-width: 0; min-height: 44px; }
-.skip-note { position: absolute; top: 4px; right: 8px; font: 700 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--amber); }
+  min-width: max-content; min-height: 44px; }
+/* In the head row, not floating over it: absolutely positioned it landed on
+   top of the phase name of the very segment it was describing. */
+.skip-note { flex: 0 0 auto; color: var(--amber); }
 .log-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--btn); color: var(--tan); font: 700 13px/1 var(--sans); font-variant-numeric: tabular-nums; }
 .tick { position: relative; display: inline-block; flex: 0 0 auto; }
 /* THE TICKS CARRY THE COLOUR VOCABULARY THE APP ALREADY TEACHES: red is
@@ -549,10 +570,17 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    so the OS edges are already excluded here and adding --sa-top again would
    push it a second status bar down. */
 .app-reload { position: absolute; top: 8px; right: 10px; z-index: 30;
-  width: 44px; height: 44px; display: flex; align-items: center;
-  justify-content: center; font-size: 26px; line-height: 1; color: var(--dim);
-  background: transparent; border: 1px solid transparent; border-radius: 8px;
-  opacity: .4; }
+  min-height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 7px;
+  color: var(--dim); background: transparent; border: 1px solid transparent;
+  border-radius: 8px; opacity: .55; }
+.app-reload .label { color: inherit; }
+/* In the strip it is a member of the tool cluster, not a floater over it. */
+.app-reload-inline { position: static; min-height: 36px; padding: 0 10px;
+  flex: 0 0 auto; }
+/* The heads that carry it put it first in their right-hand cluster, so the
+   screen's own forward action stays the last thing in the corner. */
+.ov-head .app-reload-inline, .log-head .app-reload-inline { margin-left: auto; }
+.log-head .app-reload-inline + .chip { margin-left: 0; }
 .app-reload:active { opacity: 1; color: var(--gold); border-color: var(--border-gold);
   background: var(--btn); transform: none; }
 
@@ -763,6 +791,9 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .tipslot { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px;
   padding: 10px 0; border-top: 1px solid var(--border); align-items: start; }
 .tipslot:first-child { border-top: 0; }
+/* No label column when there is no label (see slotRows). */
+.tipslot.is-bare { grid-template-columns: minmax(0, 1fr); }
+.card-copies { white-space: nowrap; color: var(--muted); }
 .tipslot > .label { padding-top: 5px; }
 .tipslot ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 /* An empty slot is muted and italic: present, plainly nothing yet, and never
@@ -851,6 +882,13 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
   display: flex; align-items: center; justify-content: center; }
 .sheet { width: 1160px; max-height: 920px; overflow: auto; padding: 20px 24px 22px; background: var(--bg); border: 1px solid var(--border-gold); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.6);
   display: flex; flex-direction: column; gap: 16px; }
+/* Sheets that are PROMPTS get a prompt's width. 1160px is right for the
+   editors (the players sheet is a row per player, the quest sheet a column of
+   locations) and absurd for a confirm: the Menu came out 1160x247 for one
+   sentence and two buttons - a modal four fifths as wide as the screen asking
+   a yes/no question. Declared after .sheet, which sets the default width at
+   the same specificity and would otherwise win on source order. */
+.sheet-menu, .sheet-elim { width: min(620px, 92vw); }
 
 /* The players sheet: the everyone-at-once chip row, then one row per player
    (id + distance to elimination, threat/willpower/engaged stepper blocks). */
@@ -858,9 +896,15 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
 .psheet-list { display: flex; flex-direction: column; gap: 10px; }
 .psheet-row { display: flex; align-items: center; gap: 16px; padding: 10px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .psheet-row-elim { justify-content: space-between; }
-.psheet-id { display: flex; flex-direction: column; gap: 2px; width: 130px; flex: 0 0 auto; }
-.psheet-threat { display: flex; align-items: center; justify-content: center; gap: 8px; flex: 1 1 0; }
-.psheet-will, .psheet-eng { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.psheet-id { display: flex; flex-direction: column; gap: 2px; width: 168px; flex: 0 0 auto; }
+.psheet-block { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.psheet-controls { display: flex; align-items: center; gap: 8px; }
+/* Present on every row, inked on the first: the columns get named once and
+   the rows still line up to the pixel. */
+.psheet-cap { color: var(--muted); }
+.psheet-cap.is-ghost { visibility: hidden; }
+.psheet-threat { flex: 1 1 0; }
+.psheet-will, .psheet-eng { flex: 0 0 auto; }
 .psheet-val { display: flex; align-items: center; gap: 6px; min-width: 56px; justify-content: center; }
 /* Overrides .body.secondary's muted colour once a player is within 10 of
    elimination - same threshold the rail's .bar-danger already uses. */

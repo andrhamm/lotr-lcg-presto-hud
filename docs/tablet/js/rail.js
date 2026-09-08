@@ -137,15 +137,21 @@ function renderQuestZone(game) {
 // (caption on top, icon+number below) rather than one row, so the caption
 // never collides with the icon in the 324px column - see .pill-compact and
 // .staging-grid in style.css.
-function renderStagingPill(caption, value) {
+function renderStagingPill(caption, value, mark = "") {
   return h`<div class="pill pill-compact">
 <span class="label">${caption}</span>
-<div class="pill-stat">${raw(icon("THREAT", 20, THREAT_BLACK, THREAT_BLACK_EDGE))}<span class="num num-34">${value}</span></div>
+<div class="pill-stat">${raw(mark)}<span class="num num-34">${value}</span></div>
 </div>`;
 }
 
 function renderStagingZone(game) {
-  const body = renderStagingPill(CHROME.threat, game.staging)
+  // The helm is on THREAT only. All three pills used to wear it, so a "3"
+  // under LOCATIONS was drawn beside the threat mark - reading as "threat 3"
+  // for a number that counts locations. There is no enemy or location mask
+  // in the icon set, and the honest answer to that is no mark, not the wrong
+  // one; the caption above each number is what names it.
+  const body = renderStagingPill(CHROME.threat, game.staging,
+      icon("THREAT", 20, THREAT_BLACK, THREAT_BLACK_EDGE))
     + renderStagingPill(CHROME.enemies, game.staging_enemies)
     + renderStagingPill(CHROME.locations, game.staging_locations);
   return zone({

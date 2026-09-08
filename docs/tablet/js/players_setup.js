@@ -39,7 +39,7 @@ export function renderPlayersSetup(ui) {
   const players = p.players ?? 2;
   const threats = p.threats ?? Array(players).fill(25);
   const head = setupHead({
-    title: CHROME.choosePlayersTitle, meta: CHROME.choosePlayersHint,
+    title: CHROME.choosePlayersTitle,
     back: "go_scenario", backLabel: CHROME.backToScenario,
     aside: cta({ act: "begin_setup", label: CHROME.beginSetup, tone: "ok", grow: false }),
   });

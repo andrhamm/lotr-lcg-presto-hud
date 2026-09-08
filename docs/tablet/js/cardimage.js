@@ -105,7 +105,12 @@ export function cardImage({ prefix, id, image, name, caption, faces = null, fact
   const files = faceFiles({ id, image, faces });
   const src = cardUrl(prefix, { id, image });
   const img = src ? h`<img src="${src}" alt="" loading="lazy">` : "";
-  const label = h`${name ?? ""}${caption ? " · " + caption : ""}`;
+  // The caption rides in its own nowrap span: as a bare " · " + text it
+  // wrapped between the two, leaving a separator dangling at the start of
+  // the second line ("East Bight Patrol" / "· x1").
+  const label = caption
+    ? h`${name ?? ""}${raw(h` <span class="card-copies">· ${caption}</span>`)}`
+    : h`${name ?? ""}`;
   if (!files.length || !prefix) {
     return h`<figure class="card-frame">${raw(img)}<figcaption class="body">${raw(label)}</figcaption></figure>`;
   }
