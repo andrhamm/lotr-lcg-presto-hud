@@ -898,6 +898,10 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
    steppers needs - so the rows ran the width of the screen with the value
    marooned at the far end of each one. */
 .sheet-sqpick, .sheet-locpick { width: min(760px, 92vw); }
+/* Same rule for the rest: the width follows what the sheet holds. A prompt
+   with one button was being drawn as wide as the players editor. */
+.sheet-resolve { width: min(860px, 92vw); }
+.sheet-sailing { width: min(620px, 92vw); }
 /* A footer whose buttons are all exits: they belong at the trailing edge,
    not stretched across it. */
 .cta-row-end { justify-content: flex-end; }
@@ -1082,7 +1086,10 @@ a.cta { display: inline-flex; align-items: center; justify-content: center; text
   background: var(--card); border: 1px solid var(--border); border-left: 6px solid var(--border-gold); border-radius: 6px; }
 .notes-head { display: flex; align-items: center; gap: 10px; }
 .notes ul, .notes-group ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
-.notes-foot { display: flex; gap: 10px; flex-wrap: wrap; }
+/* align-items: center - the citation is a text link, and stretched to the
+   chip's height beside it its underline sat at the bottom of that box
+   instead of under its own words. */
+.notes-foot { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 /* .chip is a <button> everywhere else; the Source link (panel and sheet
    alike) is a real <a> (a new tab, not an app act) wearing the same class.
    .chip's own display:inline-flex/align-items:center already fit an anchor

@@ -72,8 +72,8 @@ ${raw(wheelStep("+", "sail_d", "1", v < 8))}
 <div class="label">${CHROME.result}</div>
 <p class="body">${headingLine(resultIdx)}</p>
 </div>
-<div class="cta-row">
-${raw(cta({ act: "sail_apply", label: CHROME.apply, grow: false }))}
+<div class="cta-row cta-row-end">
 ${raw(cta({ act: "sail_cancel", label: CHROME.cancel, tone: "plain", grow: false }))}
+${raw(cta({ act: "sail_apply", label: CHROME.apply, grow: false }))}
 </div>`;
 }

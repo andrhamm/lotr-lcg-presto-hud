@@ -9,11 +9,11 @@
 // refused.
 import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { chip, cta } from "./primitives.js";
+import { cta } from "./primitives.js";
 import { logText } from "./logfilter.js";
 
 export function renderExportSheet(game, ui) {
   return h`<h1 class="display">${CHROME.exportLog}</h1>
 <textarea class="export-text body" readonly rows="16">${logText(game)}</textarea>
-<div class="cta-row">${raw(chip({ act: "copy_log", label: CHROME.copyLog, tone: "tan" }))}${raw(cta({ act: "sheet_close", label: CHROME.done, tone: "plain" }))}</div>`;
+<div class="cta-row cta-row-end">${raw(cta({ act: "copy_log", label: CHROME.copyLog, tone: "plain", grow: false }))}${raw(cta({ act: "sheet_close", label: CHROME.done, grow: false }))}</div>`;
 }
