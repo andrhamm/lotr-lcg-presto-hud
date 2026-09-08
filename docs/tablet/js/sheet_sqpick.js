@@ -117,8 +117,7 @@ export function renderSqPickSheet(game, ui) {
     // No catalog data at all - same fallback the location picker shows
     // (LocationPickModal/loadPlayerSideQuests both degrade to [] on any
     // catalog failure), so Manual entry is the only way forward.
-    body = h`<p class="body secondary">${CHROME.sqpickEmpty}</p>
-<p class="body secondary">${CHROME.sqpickEmptyHint}</p>`;
+    body = h`<p class="body secondary">${CHROME.sqpickEmpty}</p>`;
   } else if (sheet.sphere === null) {
     const { chunk, page, pages } = paged(spheres(entries), sheet.page);
     body = h`<div class="sqpick-list">${raw(chunk.map(sphereRow).join(""))}</div>

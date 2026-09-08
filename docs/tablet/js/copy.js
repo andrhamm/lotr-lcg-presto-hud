@@ -190,8 +190,6 @@ export const CHROME = {
   actionWindowNext: "Then an action window.",
   actionWindowPrev: "After an action window.",
   legendFramework: "Framework",
-  checksMade: "Checks made",
-  checksSummary: "%d in staging, %d engaged",
   reset: "Reset",
   placeProgress: "Place progress",
   victory: "Victory!",
@@ -283,7 +281,6 @@ export const CHROME = {
   // steppers to fill in.
   sqpickTitle: "Add Side Quest",
   sqpickEmpty: "No side-quest catalog data available.",
-  sqpickEmptyHint: "Use Manual entry below.",
   // The chosen sphere, shown the way the scenario chooser shows the chosen
   // cycle: a LABEL naming the filter, then the filter itself on a row with an
   // X that clears it. There is no instruction line any more - "Lore - pick

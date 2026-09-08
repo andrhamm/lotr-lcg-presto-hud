@@ -135,15 +135,17 @@ function renderEngagedCell(game, i) {
 </div></div>`;
 }
 
-function renderEncChecksSummary(game) {
-  const engaged = game.engagedTotal();
-  return h`<div class="well"><div class="label">${CHROME.checksMade}</div><p class="body">${fmt(CHROME.checksSummary, game.staging_enemies, engaged)}</p></div>`;
-}
-
 // The skip offer block: the claim always, an amber border when the tracker
-// agrees (promoted), and - when it does not - a line naming the actual
-// counts so the player can see why. The skip CTA itself is added by the
-// common cta-row rule in renderPane, not here.
+// agrees (promoted), and - when it does not - a line naming the actual counts
+// so the player can see why not. The skip CTA itself is added by the common
+// cta-row rule in renderPane, not here.
+//
+// Those counts used to be drawn TWICE on Encounter: Checks - here, and again
+// in a "Checks made" well beside it reading "0 in staging, 0 engaged". Two
+// boxes, the same two numbers, and the well's label named something else
+// again (a board census is not a count of checks made). This block owns them,
+// and only in the case that needs them: when the tracker AGREES, the claim
+// ("No enemies are engaged and none are in staging.") already says it.
 function renderSkipOffer(offer) {
   const claim = h`<p class="body">${offer.skip.claim}</p>`;
   const counts = !offer.promoted
@@ -334,7 +336,7 @@ function renderViewParts(view, game, ui) {
 
     case "enc_checks": {
       const offer = game.skipOffer();
-      const twoCol = h`<div class="two-col">${raw(renderEncChecksSummary(game))}${offer ? raw(renderSkipOffer(offer)) : ""}</div>`;
+      const twoCol = offer ? h`<div class="two-col">${raw(renderSkipOffer(offer))}</div>` : "";
       // renderLoop()'s own framing band (loops.js) now carries the Rules
       // chip too (Fix round 1) - it opens with `kind: "framework"`
       // (LOOP_FLOW.enc_checks), so it takes the phase-begins step
