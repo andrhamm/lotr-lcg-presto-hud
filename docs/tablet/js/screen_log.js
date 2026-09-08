@@ -119,7 +119,7 @@ export function renderLogScreen(game, ui) {
 
   const foot = h`<footer class="log-foot">${raw(renderTransport(game))}
 <span class="label transport-readout">${fmt(CHROME.stepOf, game.replay_step + 1, game.deltas.length)}</span>
-${raw(rewind)}${raw(chip({ act: "export_log", label: CHROME.exportLog, tone: "tan" }))}</footer>`;
+${raw(rewind)}${raw(cta({ act: "export_log", label: CHROME.exportLog, tone: "plain", grow: false }))}</footer>`;
 
   return h`<section class="logscreen">
 <header class="log-head"><h1 class="display">${CHROME.log}</h1>${raw(reloadButton({ inline: true }))}${raw(chip({ act: "log_close", label: h`${CHROME.close} ›`, tone: "tan" }))}</header>

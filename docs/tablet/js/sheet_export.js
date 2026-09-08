@@ -13,7 +13,12 @@ import { cta } from "./primitives.js";
 import { logText } from "./logfilter.js";
 
 export function renderExportSheet(game, ui) {
+  // The box is as tall as the log, within reason. A fixed 16 rows meant a
+  // one-line log sat in a 570px void; the clamp keeps a long one scrollable
+  // instead of pushing the sheet past its own max-height.
+  const text = logText(game);
+  const rows = Math.max(6, Math.min(18, text.split("\n").length));
   return h`<h1 class="display">${CHROME.exportLog}</h1>
-<textarea class="export-text body" readonly rows="16">${logText(game)}</textarea>
+<textarea class="export-text body" readonly rows="${rows}">${text}</textarea>
 <div class="cta-row cta-row-end">${raw(cta({ act: "copy_log", label: CHROME.copyLog, tone: "plain", grow: false }))}${raw(cta({ act: "sheet_close", label: CHROME.done, grow: false }))}</div>`;
 }
