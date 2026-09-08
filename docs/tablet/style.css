@@ -579,7 +579,9 @@ button.log-line { background: var(--btn); border: 1px solid var(--bevel-l);
   border-radius: 8px; opacity: .55; }
 .app-reload .label { color: inherit; }
 /* In the strip it is a member of the tool cluster, not a floater over it. */
-.app-reload-inline { position: static; min-height: 36px; padding: 0 10px;
+/* 44, not 36: this is a tap target like any other, and the design system's
+   floor applies to it wherever it is seated. */
+.app-reload-inline { position: static; min-height: 44px; padding: 0 10px;
   flex: 0 0 auto; }
 /* The heads that carry it put it first in their right-hand cluster, so the
    screen's own forward action stays the last thing in the corner. */

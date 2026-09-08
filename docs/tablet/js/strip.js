@@ -160,7 +160,7 @@ export function renderStrip(game, ui) {
   // chrome, in the corner every other screen keeps app-level chrome in. It
   // was crammed against the round number, sharing a 2x2 grid with a replay
   // transport, in the spot the eye reads first.
-  const menuChip = chip({ act: "open_menu", label: h`${CHROME.menu}`, tone: "tan", height: 36 });
+  const menuChip = chip({ act: "open_menu", label: h`${CHROME.menu}`, tone: "tan" });
 
 
   // Round on the left, the round's own timeline across the middle, app chrome
