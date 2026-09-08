@@ -13,15 +13,15 @@
 // so a future corpus pass has somewhere to land), and Related chips
 // (STEP_ORDER prev/next plus the record's own see_also terms).
 //
-// ui.rules null, or missing the requested id/term entirely, degrades ONLY
-// the official excerpt to CHROME.rulesUnavailable - never a placeholder
-// rules claim. The Timing summary and the Related prev/next chips are both
+// ui.rules null, or missing the requested id/term entirely, DROPS the
+// official excerpt entirely - never a placeholder rules claim, and never a
+// heading over an apology for the missing text either. The Timing summary and the Related prev/next chips are both
 // static lookups (SECTION_SUMMARY / STEP_ORDER) that don't read `rules` at
 // all, so a build shipped without the rulebook artifact still shows this
 // tracker's own summary and a way to keep browsing - only the verbatim
 // official text is unavailable (Fix round 1: this used to read as "every
 // block but the footer degrades", which was never what the code did).
-import { h, raw, fmt } from "./dom.js";
+import { h, raw } from "./dom.js";
 import { CHROME, rulesPageUrl } from "./copy.js";
 import { chip, cta } from "./primitives.js";
 import { STEP_ORDER, SECTION_SUMMARY } from "./rules_map.js";
@@ -53,20 +53,35 @@ export function renderRulesSheet(game, ui) {
   const rules = ui.rules;
   const rec = section ? (rules?.sections?.[section] ?? null) : (rules?.glossary?.[term] ?? null);
 
+  // The eyebrow names the BOOK, the title names the section. It used to put
+  // the section number in both - "RULES REFERENCE · §1.2" over a DISPLAY
+  // reading "§1.2" - and then a third time in the summary's own attribution.
   const headerLine = section
-    ? h`${CHROME.rulesReference} · §${section}`
+    ? h`${CHROME.rulesReference}`
     : h`${CHROME.rulesReference} · ${CHROME.rulesGlossaryHeader}`;
-  const title = rec?.title ?? (section ? h`§${section}` : term);
+  const title = section
+    ? (rec?.title ? h`§${section} · ${rec.title}` : h`§${section}`)
+    : (rec?.title ?? term);
 
+  // No official text in this build: no block. It used to draw the heading
+  // "Official text" over the sentence "The official text is not in this
+  // build." - a heading for content that does not exist, and an apology for
+  // it. What the sheet has to say instead is what it does have, which is the
+  // block below (headed "This tracker's summary", so nothing can read as
+  // official) and the link to the book in the footer.
   const officialBlock = rec
-    ? h`<div class="rules-body">${raw(rec.text.split("\n\n").map(p => h`<p class="body">${p}</p>`).join(""))}</div>`
-    : h`<p class="body">${CHROME.rulesUnavailable}</p>`;
+    ? h`<div class="label rules-section">${CHROME.rulesOfficialHeader}</div>
+<div class="rules-body">${raw(rec.text.split("\n\n").map(p => h`<p class="body">${p}</p>`).join(""))}</div>`
+    : "";
 
   const summaryText = section ? summaryFor(section) : null;
+  // No attribution line under it: the block's own heading is the
+  // attribution. It used to carry "Summarised by this tracker from Rules
+  // Reference §1.2" as well - which said the same thing as the heading two
+  // lines above, and repeated the section number the title already carries.
   const summaryBlock = summaryText
     ? h`<div class="label rules-section">${CHROME.rulesSummaryHeader}</div>
-<p class="body">${summaryText}</p>
-<p class="body secondary">${fmt(CHROME.rulesSummarySource, section)}</p>`
+<p class="body">${summaryText}</p>`
     : "";
 
   // Entries are always [] today (tools/build_rules_text.py never populates
@@ -98,7 +113,6 @@ ${raw(cta({ act: "sheet_close", label: CHROME.done }))}
 
   return h`<p class="label">${headerLine}</p>
 <h1 class="display">${title}</h1>
-<div class="label rules-section">${CHROME.rulesOfficialHeader}</div>
 ${raw(officialBlock)}
 ${raw(summaryBlock)}
 ${raw(faqBlock)}

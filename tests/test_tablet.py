@@ -3903,11 +3903,15 @@ console.log(JSON.stringify({
 
 def test_rules_sheet_degrades_when_rules_text_is_unavailable():
     """ui.rules null (no rules_text.json this build - db.rulesText()'s own
-    "PROPAGATES on failure... returns null" contract) degrades the Official
-    text block to CHROME.rulesUnavailable rather than a blank sheet or a
-    crash (CLAUDE.md iron rule 4: no placeholder rules text ships). The
-    footer's Open-the-rulebook link still works, falling back to copy.js's
-    pinned page URL since there is no ui.rules.source.page to prefer.
+    "PROPAGATES on failure... returns null" contract) DROPS the Official text
+    block rather than a blank sheet or a crash (CLAUDE.md iron rule 4: no
+    placeholder rules text ships). It used to draw the heading "Official
+    text" over the sentence "The official text is not in this build." - a
+    heading for content that does not exist, and an apology for it. The sheet
+    says what it does have instead: the tracker's own summary, headed as
+    such, and the footer's link to the book - which still works, falling back
+    to copy.js's pinned page URL since there is no ui.rules.source.page to
+    prefer.
 
     Fix round 1, finding 2 (ruling reversed from the original brief's
     wording): the spec's own Risks section says a build shipped without the
@@ -3928,7 +3932,7 @@ const ui = { sheet: { kind: "rules", section: "6.2" }, rules: null };
 const html = renderRulesSheet({}, ui);
 console.log(JSON.stringify({
   html,
-  unavailable: html.includes(CHROME.rulesUnavailable),
+  noApology: !/Official text/.test(html) && !/not in this build/.test(html),
   hasLink: html.includes('href="' + rulesPageUrl + '"') && html.includes('target="_blank"'),
   // 6.2 "Deal shadow cards" summarises with the band that describes dealing
   // them - PHASE_FRAMEWORK, not the bare "Responses." window band, which is
@@ -3938,7 +3942,7 @@ console.log(JSON.stringify({
   noOfficialBody: !html.includes('class="rules-body"'),
 }));
 """)
-    assert js["unavailable"], js["html"]
+    assert js["noApology"], js["html"]
     assert js["hasLink"], js["html"]
     assert js["timingPresent"], "the Timing block must survive a missing rules build: %r" % js["html"]
     assert "6.1" in js["relatedChips"] and "6.3" in js["relatedChips"], (

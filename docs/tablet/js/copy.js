@@ -397,18 +397,17 @@ export const CHROME = {
   logEmptyFilter: "No lines match this filter.",
   // The Rules modal (Task 3, milestone 5) - primitives.js's band() chip
   // ("Rules §6.2 ›"), sheet_elim.js's own glossary chip, and sheet_rules.js
-  // itself. rulesUnavailable/rulesSummarySource are the only two rules
-  // CLAIMS this sheet makes in its own voice; everything else is either the
-  // catalog's own printed text (ui.rules.sections[id].text) or copy this
-  // tracker already shows elsewhere (the Timing block, via rules_map.js's
-  // SECTION_SUMMARY - never re-worded here).
+  // itself. Every string here is CHROME - a heading or a control label. The
+  // sheet makes no rules claim in its own voice at all: its content is
+  // either the book's own printed text (ui.rules.sections[id].text) or copy
+  // this tracker already shows elsewhere (the summary block, via
+  // rules_map.js's SECTION_SUMMARY - never re-worded here), and the heading
+  // over that block says which of the two the reader is looking at.
   rules: "Rules",
   rulesReference: "Rules Reference",
   rulesGlossaryHeader: "Glossary",
-  rulesUnavailable: "The official text is not in this build.",
   rulesOfficialHeader: "Official text",
   rulesSummaryHeader: "This tracker's summary",
-  rulesSummarySource: "Summarised by this tracker from Rules Reference §%s",
   rulesFaqHeader: "FAQ",
   rulesRelatedHeader: "Related",
   rulesOpenPdf: "Open the rulebook page ›",
