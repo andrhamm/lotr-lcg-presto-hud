@@ -20,7 +20,7 @@
 // and the notes are tips.json's already-fact-checked distillation.
 import { h, raw, fmt, cx } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { chip, cta, reloadButton } from "./primitives.js";
+import { chip, cta, reloadButton, sourceCite } from "./primitives.js";
 import { setIcon } from "./seticon.js";
 import { cardImage, cardFacts } from "./cardimage.js";
 import { releaseLabel } from "./cards.js";
@@ -259,11 +259,7 @@ ${raw(name)}
 function tipsSection(ui, slug, stage) {
   const at = notesAt(ui.tips, slug ?? ui.scenarioSlug, stage);
   if (!at) return "";
-  const name = at.source?.name ?? "";
-  const url = at.source?.url ?? "";
-  const link = url
-    ? h`<a class="chip chip-tan" href="${url}" target="_blank" rel="noopener">${CHROME.source} · ${name} ›</a>`
-    : (name ? h`<span class="label">${CHROME.source} · ${name}</span>` : "");
+  const link = sourceCite(at.source);
   return h`<section class="ov-section"><div class="label">${CHROME.notes}</div>
 <div class="tipslots">${raw(slotRows(at.slots))}</div>${raw(link)}</section>`;
 }

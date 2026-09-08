@@ -6,7 +6,7 @@
 // not the canvas layout.
 import { h, raw, fmt } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { chip, cta, counter, band } from "./primitives.js";
+import { chip, cta, counter, band, sourceCite } from "./primitives.js";
 import { renderLoop } from "./loops.js";
 import { sectionsFor, bandTextFor } from "./rules_map.js";
 import { notesFor } from "./notes.js";
@@ -165,11 +165,9 @@ function renderSkipOffer(offer) {
 // for the identical reason.
 function renderNotesPanel(notes) {
   const items = notes.items.map(t => h`<li class="body">${t}</li>`).join("");
-  const name = notes.source?.name ?? "";
-  const url = notes.source?.url ?? "";
-  const sourceLink = url
-    ? h`<a class="chip chip-tan" href="${url}" target="_blank" rel="noopener">${CHROME.source} · ${name} ›</a>`
-    : h`<span class="label">${CHROME.source} · ${name}</span>`;
+  // The citation is a citation (primitives.js's sourceCite); "More notes" is
+  // a control, so it keeps the chip. They were the same bevelled shape.
+  const sourceLink = sourceCite(notes.source);
   const more = chip({ act: "open_notes", label: h`${CHROME.moreNotes} ›` });
   return h`<aside class="notes"><div class="notes-head">${raw(icon("PIPE", 22, WILLPOWER_GOLD))}<span class="label">${CHROME.notes} · ${notes.scope}</span></div><ul>${raw(items)}</ul><div class="notes-foot">${raw(sourceLink)}${raw(more)}</div></aside>`;
 }

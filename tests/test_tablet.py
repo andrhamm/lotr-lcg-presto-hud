@@ -4029,9 +4029,13 @@ def test_notes_panel_shows_general_tips_and_the_source_link_at_stage_one():
     """notesFor() (notes.js) falls back to a scenario's general tips when
     the current stage (1, the default) has no group of its own in the
     fixture - R9's first half. At most three show (the panel's own 3-item
-    cap), and the Source chip is a real <a> carrying the fixture's own
-    href and rel="noopener" - CLAUDE.md iron rule 4: this is tips.json's
-    own text plus a link back to it, never a paraphrase."""
+    cap), and the citation is a real <a> carrying the fixture's own href and
+    rel="noopener" - CLAUDE.md iron rule 4: this is tips.json's own text plus
+    a link back to it, never a paraphrase.
+
+    It is a CITATION, not a control: quiet LABEL ink at the trailing edge
+    (primitives.js's sourceCite), not the bevelled chip a button wears. "More
+    notes" beside it is a control, and keeps the chip."""
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { renderPane } from "./pane.js";
@@ -4048,8 +4052,9 @@ console.log(JSON.stringify({
   hasG1: html.includes(">g1<"), hasG2: html.includes(">g2<"), hasG3: html.includes(">g3<"),
   hasG4: html.includes(">g4<"),
   hasHeader: html.includes("Notes \\u00b7 General"),
-  linkHref: (html.match(/<a class="chip chip-tan" href="([^"]*)"/) || [])[1],
+  linkHref: (html.match(/<a class="label cite" href="([^"]*)"/) || [])[1],
   hasNoopener: html.includes('rel="noopener"'),
+  citeIsNotAChip: !/<a[^>]*class="[^"]*chip/.test(html),
 }));
 """ % _NOTES_FIXTURE)
     assert js["hasNotes"], js["html"]
@@ -4058,6 +4063,7 @@ console.log(JSON.stringify({
     assert js["hasHeader"], js["html"]
     assert js["linkHref"] == "https://example.invalid/votp"
     assert js["hasNoopener"], js["html"]
+    assert js["citeIsNotAChip"], "a citation must not wear a control's bevel"
 
 
 def test_notes_panel_shows_the_current_stages_tips_over_general():
@@ -4090,8 +4096,15 @@ console.log(JSON.stringify({
 def test_open_notes_lists_every_group_general_then_stages_in_order():
     """acts_notes.js's open_notes seats {kind:"notes"}; sheet_notes.js's
     renderNotesSheet then lists notes.js's allNotes() in full - General
-    first, then each stage in numeric order (R9's second half), each group
-    carrying its own Source link and none of the panel's 3-item cap."""
+    first, then each stage in numeric order (R9's second half), with none of
+    the panel's 3-item cap.
+
+    The source is cited ONCE, at the foot. Every group in a scenario cites
+    the same article, so a link per group printed the identical full-width
+    bar under each of them - four of them on Passage Through Mirkwood, taking
+    as much of the sheet as the notes did. The dedupe is by (name, url), so a
+    tips.json that ever does attribute per stage still lists each source it
+    actually used."""
     js = node("""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { dispatch, newUi } from "./actions.js";
@@ -4108,7 +4121,8 @@ console.log(JSON.stringify({
   hasG4: html.includes(">g4<"),
   hasS2a: html.includes(">s2a<"),
   generalBeforeStage: html.indexOf("General") < html.indexOf("Stage 2"),
-  linkCount: (html.match(/chip chip-tan/g) || []).length,
+  citeCount: (html.match(/class="label cite"/g) || []).length,
+  citeAfterNotes: html.indexOf("cite-row") > html.lastIndexOf(">s2a<"),
 }));
 """ % _NOTES_FIXTURE)
     assert js["opened"] is True
@@ -4116,7 +4130,8 @@ console.log(JSON.stringify({
     assert js["hasG4"], "the sheet carries no 3-item cap"
     assert js["hasS2a"], js["html"]
     assert js["generalBeforeStage"], "General must list before Stage 2"
-    assert js["linkCount"] == 2, "every group must carry its own Source link"
+    assert js["citeCount"] == 1, "one source, cited once - not once per group"
+    assert js["citeAfterNotes"], "the citation sits at the foot, under the notes"
 
 
 def test_notes_panel_renders_nothing_for_a_scenario_absent_from_tips():

@@ -9,24 +9,37 @@
 // reference list, not an editor, so there is nothing else to confirm.
 import { h, raw } from "./dom.js";
 import { CHROME } from "./copy.js";
-import { cta } from "./primitives.js";
+import { cta, sourceCite } from "./primitives.js";
 import { allNotes } from "./notes.js";
 
 // Exported because the Scenario overview's Notes section draws the same
 // groups (Task 3, milestone 6) - one markup, so the sheet and the overview
 // can never drift into two shapes for the same list.
+//
+// No source link per group: every group in a scenario cites the same article,
+// so the sheet printed the identical bar four times. renderNotesSheet prints
+// the distinct sources ONCE, at the foot.
 export function renderNotesGroup(g) {
   const items = g.items.map(t => h`<li class="body">${t}</li>`).join("");
-  const name = g.source?.name ?? "";
-  const url = g.source?.url ?? "";
-  const sourceLink = url
-    ? h`<a class="chip chip-tan" href="${url}" target="_blank" rel="noopener">${CHROME.source} · ${name} ›</a>`
-    : h`<span class="label">${CHROME.source} · ${name}</span>`;
   return h`<div class="notes-group">
 <div class="label">${g.scope}</div>
 <ul>${raw(items)}</ul>
-${raw(sourceLink)}
 </div>`;
+}
+
+// Every distinct source across the groups, in the order they first appear -
+// a list, because tips.json CAN attribute per stage, and one line in practice
+// because no scenario does today.
+function cites(groups) {
+  const seen = new Set();
+  const out = [];
+  for (const g of groups) {
+    const key = `${g.source?.name ?? ""}|${g.source?.url ?? ""}`;
+    if (!g.source?.name || seen.has(key)) continue;
+    seen.add(key);
+    out.push(sourceCite(g.source));
+  }
+  return out.length ? h`<div class="cite-row">${raw(out.join(""))}</div>` : "";
 }
 
 export function renderNotesSheet(game, ui) {
@@ -35,5 +48,6 @@ export function renderNotesSheet(game, ui) {
   const footer = h`<div class="cta-row">${raw(cta({ act: "sheet_close", label: CHROME.done }))}</div>`;
   return h`<h1 class="display">${CHROME.notesSheetTitle}</h1>
 ${raw(body)}
+${raw(cites(groups))}
 ${raw(footer)}`;
 }

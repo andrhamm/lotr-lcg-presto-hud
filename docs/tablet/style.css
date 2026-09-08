@@ -1099,6 +1099,13 @@ a.chip { text-decoration: none; min-height: 44px; }
    card border - the sheet's .sheet already frames the whole thing. */
 .notes-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .notes-group:last-child { margin-bottom: 0; }
+/* A citation, not a control: quiet LABEL ink at the trailing edge, with a
+   link's own dotted underline when there is somewhere to go. */
+.cite { color: var(--dim); text-decoration: none; }
+a.cite { border-bottom: 1px dotted var(--dim); }
+a.cite:active { color: var(--gold); border-bottom-color: var(--gold); }
+.cite-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 14px;
+  padding-top: 8px; }
 
 /* The Scenario overview (Task 3, milestone 6): everything the players decide
    before setup, and the same page again read-only mid-game (the QUEST zone's

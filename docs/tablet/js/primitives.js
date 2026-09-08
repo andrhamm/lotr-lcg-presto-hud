@@ -88,6 +88,25 @@ export function cta({ act, arg = "", label, tone = "ok", grow = true }) {
 // is selected. A `disabled` <button> that kept its act was tried on the log
 // screen and dropped in the milestone-4 fix wave: it is a second way to say
 // the same thing, and the bevel is the client's one signal for "tappable".
+// WHERE A NOTE CAME FROM IS A CITATION, NOT A CONTROL.
+//
+// It was a full-width bevelled chip - the same weight as a button that
+// changes the game - and the Notes sheet drew one under every group, so four
+// identical "SOURCE - VISION OF THE PALANTIR" bars took as much of the sheet
+// as the notes did. Same call as the Rules reference on a guidance band: a
+// citation belongs at the trailing edge in LABEL, quiet, and only once.
+//
+// It stays a real link when there is a URL (it opens the article) and a plain
+// span when there is not, so nothing ever looks tappable and isn't.
+export function sourceCite(source) {
+  const name = source?.name ?? "";
+  if (!name) return "";
+  const text = h`${CHROME.source} · ${name}`;
+  return source?.url
+    ? h`<a class="label cite" href="${source.url}" target="_blank" rel="noopener">${text}</a>`
+    : h`<span class="label cite">${text}</span>`;
+}
+
 // `caption` is the button's NAME, under it, in LABEL. Six arrows in a row
 // where two of them move a whole round and two move a single tap is not
 // something a player can read off the shapes, and `title` is unreachable on a
