@@ -550,6 +550,40 @@ scenario by scenario, never as a flag day. **The firmware gets nothing**: this
 is a deliberate divergence from iron rule 1, because the long form exists
 precisely because the Presto cannot show it.
 
+**House voice for the long form — write like the source, not like an essay.**
+The distilled tips are terse because of a screen; the long ones are not
+licence to write *prose*. Match the register of the blogs they come from
+(`research/votp/`, `research/wotw/`), which is a player talking to another
+player:
+
+- **Lead with the instruction**, then give the reason in a plain
+  `as`/`because`/`so` clause. "Don't put Ungoliant's Spawn in the victory
+  display. One of the two stage 3 cards is won by finding and defeating it…"
+- **Second person, throughout.** "you", "your threat", "don't".
+- **Numbers stated flatly**, in passing, not built up to.
+- **Be willing to be blunt.** "Don't bother with easy mode." A tip that
+  hedges is a tip nobody acts on.
+- **Two to four short sentences.** Not one long one with subordinate clauses.
+
+And the failure mode this hit on its first attempt — LLM explainer voice, all
+of which was rejected and rewritten:
+
+- **Thesis framing.** "Two numbers matter more here than staying low in
+  general:" / "Taking an attack undefended is how this encounter deck
+  punishes you." The blogs never announce what a paragraph is about; they
+  just say the thing.
+- **Antithesis and cadence for their own sake.** "…where you can shoot them
+  instead of fighting them." "…a long fight to be starting from full."
+- **Vague summarising flourishes.** "…and they ask for very different
+  things."
+- **Em-dashes as rhetorical pivots.** The source uses commas and full stops.
+
+Same rules as ever apply on top of voice: written from the corpus, never
+inflated from the terse line (expanding a 70-character clause into a sentence
+is how invented claims get in), every claim re-checked against the compiled
+card data, and never reproduced — `build_tips._too_verbatim` is the check, at
+8 shared words.
+
 The article corpus the distillation is written from lives in **two**
 vault-side, **gitignored** directories — `research/votp/` (Vision of the
 Palantir, built by `tools/build_votp_corpus.py`) and `research/wotw/`
