@@ -302,7 +302,12 @@ async function boot() {
     // scenario slice - db.js's own comment). Both null for a bare/manual
     // game with no scenario at all (`b` null above), same degrade-to-
     // "no panel" contract as an absent tips.json.
-    ui.tips = b?.tips ?? null;
+    // ...in their LONG form: db.tipsFull() is the same map with the tablet's
+    // full-length text merged over it, tip by tip, and every tip that has no
+    // long form yet left exactly as tips.json wrote it. The Presto shows the
+    // short form because a 240x240 screen has no room for this one; nothing
+    // else about the tips path differs between the two.
+    ui.tips = b ? await db.tipsFull() : null;
     ui.scenarioSlug = game.scenario?.slug ?? null;
     // The pinned card-image URL prefix (M5, Task 6) is needed on BOTH boot
     // paths: a resumed game never builds a picker, but it can still open the
@@ -380,7 +385,7 @@ async function seatScenario(slug) {
   ui.locations = b.locations ?? [];
   // Same two fields as boot()'s resume path (Task 4) - seated here too since
   // a fresh pick never goes through that branch at all.
-  ui.tips = b.tips ?? null;
+  ui.tips = await db.tipsFull();
   ui.scenarioSlug = overview.entry.slug;
   ui.overview = overview;
   ui.sheet = null;

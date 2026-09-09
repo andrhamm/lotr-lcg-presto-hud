@@ -521,6 +521,35 @@ precedes it in the same tip ("Caradhras cannot be travelled to, so pre-load
 **it**"), dangling when nothing does ("**It** goes Underwater every quest
 phase").
 
+**The tablet reads a LONG form of the same tips.** The 140-char ceiling above
+is the Presto's 240x240 screen talking, not the advice's natural length - so
+`tools/data/tips_long.json` (committed) carries a full-length version of each
+tip, authored the same way (read the corpus, re-check every claim against the
+card data, never reproduce). It is **keyed by each short tip's own text**, not
+by position: position pairing breaks silently into WRONG pairings the moment
+anything reorders or reclassifies a list, whereas a text key cannot mispair
+and a key that matches nothing is reported as an orphan - which is exactly
+when its long form needs rewriting. `build_tips.py` compiles it to
+**`docs/tablet/data/tips_full.json`** (committed), positional against
+tips.json's own arrays with `null` where there is no long form yet.
+
+Two things about that output path, both load-bearing:
+
+- **Not under `docs/data/`.** The device deploy is `mpremote cp -r docs/data/
+  :/data/`, which copies that directory whole; long prose on Presto flash is
+  pure waste. Same reason `--svg-out` is kept out of it.
+- **`build()` writes it only when asked** (`long_out_path`, which `main()`
+  passes and nothing else does). It defaulted to the real path for one
+  commit, and every test that calls `build()` with a tmp `out_path` promptly
+  overwrote the repo's committed long file.
+
+The tablet merges long over short in `db.tipsFull()` (`quest_catalog.js`'s
+pure `mergeLongTips`), so every renderer keeps reading one tips map and a tip
+with no long form yet keeps the string tips.json wrote - the corpus lands
+scenario by scenario, never as a flag day. **The firmware gets nothing**: this
+is a deliberate divergence from iron rule 1, because the long form exists
+precisely because the Presto cannot show it.
+
 The article corpus the distillation is written from lives in **two**
 vault-side, **gitignored** directories — `research/votp/` (Vision of the
 Palantir, built by `tools/build_votp_corpus.py`) and `research/wotw/`

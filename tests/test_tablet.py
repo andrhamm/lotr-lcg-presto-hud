@@ -4029,6 +4029,59 @@ _NOTES_FIXTURE_EMPTY_URL = """{ "the-withered-heath": {
 } }"""
 
 
+def test_the_tablet_reads_the_long_form_of_every_tip_it_has_one_for():
+    """The tablet shows the LONG form. The short tips are 140 chars because
+    that is what the Presto's 240x240 screen allows - one clause, no
+    connective tissue - and this client has no such limit, so db.tipsFull()
+    merges tools/build_tips.py's long file over the short map before anything
+    renders.
+
+    Merged HERE, once, not in each renderer: every caller keeps reading one
+    tips map with one shape, and "no long form yet" is decided in one place.
+    That is what lets the corpus land scenario by scenario - a slot with no
+    long form keeps exactly the string tips.json wrote.
+
+    A tip that is an object rather than a string (the {kind, text} shape the
+    classification pass emits) keeps its other fields and has only its text
+    swapped, so the two efforts do not collide."""
+    js = node(r"""
+import { mergeLongTips } from "../../js/quest_catalog.js";
+const short = {
+  a: { attribution: { name: "V" },
+       general: ["A short one.", "Another short one."],
+       stages: { "1": ["A short stage tip."] } },
+  b: { general: [{ kind: "pacing", text: "Classified and short." }], stages: {} },
+  c: { general: ["No long form for this scenario at all."], stages: {} },
+};
+const long = {
+  a: { general: ["The first, written out at the length it wants.", null],
+       stages: { "1": [null] } },
+  b: { general: ["The classified one, written out in full."], stages: {} },
+};
+const m = mergeLongTips(short, long);
+console.log(JSON.stringify({
+  swapped: m.a.general[0],
+  keptShort: m.a.general[1],
+  keptStage: m.a.stages["1"][0],
+  keptAttribution: m.a.attribution.name,
+  objText: m.b.general[0].text,
+  objKind: m.b.general[0].kind,
+  untouched: m.c.general[0],
+  noLongAtAll: JSON.stringify(mergeLongTips(short, {})) === JSON.stringify(short),
+  noLongMap: JSON.stringify(mergeLongTips(short, null)) === JSON.stringify(short),
+}));
+""")
+    assert js["swapped"] == "The first, written out at the length it wants."
+    assert js["keptShort"] == "Another short one.", "a null slot keeps the short tip"
+    assert js["keptStage"] == "A short stage tip."
+    assert js["keptAttribution"] == "V", "the merge touches text, nothing else"
+    assert js["objText"] == "The classified one, written out in full."
+    assert js["objKind"] == "pacing", "a classified tip keeps its kind"
+    assert js["untouched"] == "No long form for this scenario at all."
+    assert js["noLongAtAll"] and js["noLongMap"], (
+        "an absent long file must leave every tip exactly as it was")
+
+
 def test_notes_panel_shows_general_tips_and_the_source_link_at_stage_one():
     """notesFor() (notes.js) falls back to a scenario's general tips when
     the current stage (1, the default) has no group of its own in the

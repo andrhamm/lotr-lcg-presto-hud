@@ -8,7 +8,8 @@
 // frames length-prefixed binary records into files, this keeps one array per
 // key, and both feed the identical foldLog/foldReplay.
 import { foldLog, foldReplay } from "./gamestate.js";
-import { loadIndex, loadScenario, loadIcons, loadTips, loadRulesText, loadIconSlugs, loadLocations,
+import { loadIndex, loadScenario, loadIcons, loadTips, loadTipsFull, mergeLongTips,
+         loadRulesText, loadIconSlugs, loadLocations,
          loadScenarioMedia, loadPlayerSideQuests } from "./quest_catalog.js";
 
 // Two clients share this origin (docs/ and docs/tablet/), so every key is
@@ -251,6 +252,7 @@ export class DataClient {
     this._index = null;
     this._icons = null;
     this._tips = null;
+    this._tipsFull = undefined;
     this._rulesText = undefined;
     this._sideQuests = null;
     this._bundles = {};
@@ -316,6 +318,21 @@ export class DataClient {
   async tips() {
     if (this._tips === null) this._tips = await loadTips();
     return this._tips;
+  }
+
+  // The tablet's long-form tips, MERGED over the short ones - so every caller
+  // keeps reading one tips map with one shape, and "no long form yet" is
+  // resolved here rather than in each renderer.
+  //
+  // Not part of bundle(): the Presto's twin shares this client and has no use
+  // for the file, so only the tablet asks. Any failure, any missing slot,
+  // leaves that tip exactly as tips.json wrote it.
+  async tipsFull() {
+    if (this._tipsFull === undefined) {
+      const short = await this.tips();
+      this._tipsFull = mergeLongTips(short, await loadTipsFull());
+    }
+    return this._tipsFull;
   }
 
   async rulesText() {

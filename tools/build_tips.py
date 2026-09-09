@@ -111,9 +111,27 @@ TIMEOUT = 30  # seconds
     # link to the external VotP article those notes happen to cite as
     # their own research source (see quests/*.md frontmatter `source:`).
 PROJECT_SOURCE_NAME = "Presto HUD notes"
+# The long form is the same advice as tips.json, written at the length it
+# wants rather than the length a 240x240 screen allows. Same authorship,
+# same fact-checking, same never-reproduced rule.
+LONG_SOURCE = ("the same tips as tips.json, written in full for a screen "
+               "with room for them - authored by this project from the "
+               "same sources, summarized, never reproduced, and re-checked "
+               "against the compiled card data")
 
 MAX_LEN = 140    # chars per tip - see the plan's Global Constraints
 MAX_TIPS = 4     # tips per scenario
+# The LONG form's own ceiling. The 140 above is the Presto's constraint: a
+# 240x240 screen with a fixed type scale, where a tip has to be one clause.
+# The tablet has no such limit, and the terseness that bought us the Presto
+# fit reads like a telegram - so the long form gets room for a real sentence
+# or two. Still a ceiling, because a tip is advice you act on mid-game, not
+# an article: past this it belongs in the source the citation points at.
+MAX_LONG_LEN = 320
+# A long tip has to earn the name. MIN_TIP_WORDS is the short form's
+# floor; anything near it in the long file is the terse line pasted into
+# the wrong place, which would silently ship the same sentence twice.
+MIN_LONG_TIP_WORDS = 14
 
 DEFAULT_INDEX = os.path.join("docs", "data", "index.json")
 DEFAULT_OUT = os.path.join("docs", "data", "tips.json")
@@ -123,6 +141,19 @@ DEFAULT_DELAY = 1.0  # seconds after each real network fetch (politeness)
 # The distilled strategy tips - COMMITTED derived data, this build's primary
 # source. See load_distillation() and the module docstring's Sources.
 DEFAULT_DISTILLED = os.path.join("tools", "data", "tips_distilled.json")
+# The LONG form of those same tips - committed derived data, authored the
+# same way (read the corpus, re-check every claim against the card data),
+# and keyed BY THE SHORT TIP'S OWN TEXT rather than by position. Position
+# pairing would break the moment anything reorders or reclassifies a list,
+# and it would break silently, into wrong pairings; a text key cannot
+# mispair, and a key that no longer matches any tip is reported as an
+# orphan - which is exactly when its long form needs rewriting anyway.
+DEFAULT_LONG = os.path.join("tools", "data", "tips_long.json")
+# TABLET ONLY, and deliberately not under docs/data/: the device deploy is
+# `mpremote cp -r docs/data/ :/data/`, which copies that directory whole,
+# and long prose on Presto flash is pure waste - the same reason the icon
+# pack's SVG export is kept out of it.
+DEFAULT_LONG_OUT = os.path.join("docs", "tablet", "data", "tips_full.json")
 
 
 # -- catalog scenario selection ----------------------------------------------
@@ -617,6 +648,81 @@ def is_valid_distilled_tip(text, max_len=MAX_LEN):
     return _has_antecedent(text)
 
 
+def is_valid_long_tip(text, max_len=MAX_LONG_LEN):
+    """True if an authored LONG-form tip is fit to ship.
+
+    The same gate as is_valid_distilled_tip - a real sentence, enough words,
+    no talking about the app, no dangling pronoun - with one thing relaxed
+    and one added:
+
+    - `max_len` is MAX_LONG_LEN, not MAX_LEN. That is the whole point of the
+      long form: 140 chars is the Presto's screen talking, not the advice's
+      natural length.
+    - it must actually BE longer than a telegram. A "long" tip that is 60
+      characters is the short one pasted into the wrong file, and pairing it
+      would quietly ship the terse version twice; MIN_TIP_WORDS is the floor
+      for the short form, so the long form asks for more.
+
+    Pure, host-tested."""
+    if not text:
+        return False
+    text = text.strip()
+    if not text or len(text) > max_len:
+        return False
+    if not (text[0].isupper() or text[0].isdigit()):
+        return False
+    if text[-1] not in ".!?":
+        return False
+    if len(_WORD_TOKEN.findall(text)) < MIN_LONG_TIP_WORDS:
+        return False
+    if _META_REFERENCE.search(text):
+        return False
+    return _has_antecedent(text)
+
+
+def load_long(path=DEFAULT_LONG):
+    """{slug: {"general": {short: long}, "stages": {n: {short: long}}}} from
+    the committed long-form file, or {} on ANY failure.
+
+    Absent-tolerant like load_distillation(): a build with no long file at
+    all still emits tips.json exactly as before, and the tablet falls back
+    to the short form tip by tip. That is what lets this land scenario by
+    scenario instead of as a flag day.
+
+    An entry that fails is_valid_long_tip() is DROPPED, not fatal - it just
+    means that one tip keeps its short form. Dropping is safe here in a way
+    it would not be under positional pairing: the key is the short tip's own
+    text, so removing one cannot shift any other."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        scenarios = data.get("scenarios")
+        if not isinstance(scenarios, dict):
+            return {}
+    except Exception:
+        return {}
+
+    out = {}
+    for slug, entry in scenarios.items():
+        if not isinstance(entry, dict):
+            continue
+
+        def _pairs(m):
+            return {str(k): v for k, v in (m or {}).items()
+                    if isinstance(v, str) and is_valid_long_tip(v)}
+
+        general = _pairs(entry.get("general"))
+        stages = {}
+        for key, pairs in (entry.get("stages") or {}).items():
+            kept = _pairs(pairs)
+            if kept:
+                stages[str(key)] = kept
+        if not general and not stages:
+            continue
+        out[slug] = {"general": general, "stages": stages}
+    return out
+
+
 def load_distillation(path=DEFAULT_DISTILLED):
     """{slug: entry} from the committed distillation, or {} on ANY failure.
 
@@ -974,8 +1080,52 @@ def fetch(url, cache_path, delay=DEFAULT_DELAY):
 
 # -- build: orchestrate the whole pipeline -----------------------------------
 
+def _long_arrays(entry, long_entry, orphans, slug):
+    """The long form of one scenario's tips, POSITIONAL against the entry
+    tips.json just emitted, with null where there is no long form yet.
+
+    The source file is keyed by short text (see DEFAULT_LONG) because that
+    is what a human edits and what survives a reorder. The OUTPUT is
+    positional because that is what a client wants: index into the array
+    beside the tips array it already has, and take the short one when the
+    slot is null. The two shapes cannot drift apart - one build writes both
+    from the same source in the same pass.
+
+    Any key that matched no tip is appended to `orphans`: its short tip was
+    reworded or removed, so its long form is now describing something that
+    is not on screen and needs rewriting.
+    """
+    used = set()
+
+    def arr(tips, pairs):
+        out = []
+        for t in tips:
+            long_text = (pairs or {}).get(t)
+            if long_text:
+                used.add(t)
+            out.append(long_text or None)
+        return out
+
+    general = arr(entry.get("general") or [], (long_entry or {}).get("general"))
+    stages = {}
+    for key, tips in (entry.get("stages") or {}).items():
+        stages[str(key)] = arr(tips, ((long_entry or {}).get("stages") or {}).get(str(key)))
+
+    for scope, pairs in [("general", (long_entry or {}).get("general") or {})] + [
+            ("stage " + k, v) for k, v in ((long_entry or {}).get("stages") or {}).items()]:
+        for short in pairs:
+            if short not in used:
+                orphans.append((slug, scope, short))
+
+    if not any(x for x in general) and not any(
+            x for arr_ in stages.values() for x in arr_):
+        return None
+    return {"general": general, "stages": stages}
+
+
 def build(index_path, out_path, distilled_path=DEFAULT_DISTILLED,
-          notes_dir=DEFAULT_NOTES):
+          notes_dir=DEFAULT_NOTES, long_path=DEFAULT_LONG,
+          long_out_path=None):
     """Compile docs/data/tips.json from COMMITTED sources only. No network.
 
     Two sources, in precedence order:
@@ -1006,7 +1156,15 @@ def build(index_path, out_path, distilled_path=DEFAULT_DISTILLED,
 
     distilled = load_distillation(distilled_path)
     notes_tips = load_project_notes(notes_dir)
+    # OPT-IN, and deliberately not defaulted to DEFAULT_LONG_OUT: build() is
+    # called by tests with a tmp `out_path`, and a real path defaulted here
+    # meant every one of those runs overwrote the repo's own committed long
+    # file with whatever fixture it happened to be using. main() passes the
+    # real path; anyone calling build() directly asks for it explicitly.
+    long_tips = load_long(long_path) if long_out_path else {}
 
+    long_scenarios = {}
+    orphans = []
     out_scenarios = {}
     from_distilled = from_notes = no_tips = skipped = 0
     for scn in scenarios:
@@ -1022,6 +1180,10 @@ def build(index_path, out_path, distilled_path=DEFAULT_DISTILLED,
                 entry["general"], stages=entry["stages"],
                 attribution=entry["attribution"] or None)
             from_distilled += 1
+            long_entry = _long_arrays(out_scenarios[slug], long_tips.get(slug),
+                                      orphans, slug)
+            if long_entry:
+                long_scenarios[slug] = long_entry
             continue
 
         if slug in notes_tips:
@@ -1057,14 +1219,47 @@ def build(index_path, out_path, distilled_path=DEFAULT_DISTILLED,
             "scenarios": out_scenarios,
         }, f, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
+    # The tablet's long form, written whether or not anything is in it yet:
+    # an empty map is a valid answer ("no scenario has a long form"), and a
+    # client that has to distinguish "absent file" from "empty file" is a
+    # client with two code paths for one state.
+    if long_out_path:
+        long_out_dir = os.path.dirname(long_out_path)
+        if long_out_dir:
+            os.makedirs(long_out_dir, exist_ok=True)
+        with open(long_out_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "generated": datetime.date.today().isoformat(),
+                "source": LONG_SOURCE,
+                "scenarios": long_scenarios,
+            }, f, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    # An orphan is a long tip whose short tip was reworded or removed, so it
+    # now describes something no longer on screen. Loud, but never fatal: it
+    # costs that one tip its long form, which is exactly the degrade the
+    # whole long path is built to survive.
+    for slug, scope, short in orphans:
+        print("build_tips: WARNING orphaned long tip - %s / %s / %r"
+              % (slug, scope, short[:60]))
+
+    long_count = sum(1 for v in long_scenarios.values()
+                     for arr_ in [v["general"], *v["stages"].values()]
+                     for x in arr_ if x)
     summary = {"resolved": from_distilled + from_notes,
                "from_distilled": from_distilled, "from_notes": from_notes,
                "no_tips": no_tips, "skipped": skipped,
-               "total": len(scenarios)}
+               "total": len(scenarios),
+               "long_scenarios": len(long_scenarios), "long_tips": long_count,
+               "orphans": len(orphans)}
     print("build_tips: %d scenarios with tips (%d distilled, %d from project "
           "notes), %d without, %d skipped (of %d pickable) -> %s"
           % (summary["resolved"], from_distilled, from_notes, no_tips,
              skipped, len(scenarios), out_path))
+    if long_out_path:
+        print("build_tips: long form for %d tips across %d scenarios%s -> %s"
+              % (long_count, len(long_scenarios),
+                 (", %d orphaned" % len(orphans)) if orphans else "",
+                 long_out_path))
     return summary
 
 
@@ -1088,13 +1283,26 @@ def main(argv=None):
                           "(default: %s) - used only for scenarios the "
                           "distillation does not cover, see build()"
                           % DEFAULT_NOTES)
+    ap.add_argument("--long", default=DEFAULT_LONG,
+                     help="committed LONG-form tips, keyed by each short "
+                          "tip's own text (default: %s); missing or corrupt "
+                          "is skipped and every tip keeps its short form - "
+                          "see load_long()" % DEFAULT_LONG)
+    ap.add_argument("--long-out", default=DEFAULT_LONG_OUT,
+                     help="where to write the tablet's long-form file "
+                          "(default: %s). NOT under docs/data/: the device "
+                          "deploy copies that directory whole and the Presto "
+                          "cannot show this text." % DEFAULT_LONG_OUT)
     ap.add_argument("--refresh", action="store_true",
                      help="rebuild --out even though it already exists. "
                           "Without this an existing --out is left alone - it "
                           "is committed derived data, see needs_refresh().")
     args = ap.parse_args(argv)
 
-    if not needs_refresh(args.out, args.refresh):
+    # The long output rides along with --out, so an --out that is present
+    # while the long file is not still has work to do (the first build after
+    # this landed, and any checkout that predates it).
+    if not needs_refresh(args.out, args.refresh) and os.path.exists(args.long_out):
         print("build_tips: %r already present (committed derived data - see "
               "CLAUDE.md's Card data section); nothing rebuilt. Pass "
               "--refresh to regenerate it." % args.out)
@@ -1104,7 +1312,8 @@ def main(argv=None):
         raise SystemExit("No catalog index at %r - run tools/build_card_data.py "
                           "first." % args.index)
     build(args.index, args.out, distilled_path=args.distilled,
-          notes_dir=args.notes)
+          notes_dir=args.notes, long_path=args.long,
+          long_out_path=args.long_out)
     return 0
 
 

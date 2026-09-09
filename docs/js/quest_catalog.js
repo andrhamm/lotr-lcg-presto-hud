@@ -11,6 +11,12 @@
 // twin's is docs/presto/index.html. Resolving against import.meta.url
 // makes both clients fetch docs/data/ regardless of the page they load from.
 export const dataUrl = path => new URL("../data/" + path, import.meta.url).href;
+// The TABLET's own data directory. Deliberately not under docs/data/: the
+// device deploy is `mpremote cp -r docs/data/ :/data/`, which copies that
+// directory whole, and everything here is for a screen the Presto does not
+// have. Same reason the icon pack's SVG export is kept out of it.
+export const tabletDataUrl = path =>
+  new URL("../tablet/data/" + path, import.meta.url).href;
 
 // Verified product/cycle order (see docs/superpowers/plans/
 // 2026-07-24-quest-picker-bcore.md Task-2 findings — includes the "Ered
@@ -507,6 +513,57 @@ export async function loadTips() {
     console.error("quest catalog: loadTips failed - Tips button stays disabled", e);
     return {};
   }
+}
+
+// The LONG form of those same tips (tools/build_tips.py's
+// docs/tablet/data/tips_full.json), positional against loadTips()'s own
+// arrays: index into it beside the tips array, take the short tip wherever
+// the slot is null. One build writes both files from one source in one pass,
+// so the two cannot drift apart.
+//
+// TABLET ONLY. The Presto has neither the screen for this text nor the flash
+// to hold it, which is the whole reason the long form exists as a separate
+// file rather than as a second field in tips.json.
+//
+// Same "optional at runtime" contract as loadTips(): ANY failure returns {},
+// and every tip simply keeps the short form it already had.
+export async function loadTipsFull() {
+  try {
+    const data = await (await fetch(tabletDataUrl("tips_full.json"))).json();
+    return data.scenarios ?? {};
+  } catch (e) {
+    console.error("quest catalog: loadTipsFull failed - tips stay short", e);
+    return {};
+  }
+}
+
+// Short tips with the long form substituted in wherever there is one - the
+// one map every caller then reads, so no renderer has to know the long form
+// exists and "this tip has no long version yet" is decided in one place.
+//
+// PURE, so it is testable without a network: `short` is loadTips()'s map,
+// `long` is loadTipsFull()'s, and anything missing on either side leaves the
+// short tip untouched. A tip that is an object rather than a string (the
+// {kind, text} shape the classification pass emits) keeps its other fields
+// and has only its text swapped.
+export function mergeLongTips(short, long) {
+  if (!long) return short ?? {};
+  const swap = (tips, arr) => (tips ?? []).map((t, i) => {
+    const full = (arr ?? [])[i];
+    if (!full) return t;
+    return typeof t === "string" ? full : { ...t, text: full };
+  });
+  const out = {};
+  for (const [slug, entry] of Object.entries(short ?? {})) {
+    const l = long[slug];
+    if (!l) { out[slug] = entry; continue; }
+    const stages = {};
+    for (const [k, tips] of Object.entries(entry.stages ?? {})) {
+      stages[k] = swap(tips, (l.stages ?? {})[k]);
+    }
+    out[slug] = { ...entry, general: swap(entry.general, l.general), stages };
+  }
+  return out;
 }
 
 // Read the parsed Rules Reference excerpts (tools/build_rules_text.py's
