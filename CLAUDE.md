@@ -563,10 +563,18 @@ player:
 - **Numbers stated flatly**, in passing, not built up to.
 - **Be willing to be blunt.** "Don't bother with easy mode." A tip that
   hedges is a tip nobody acts on.
-- **Two or three short sentences, and shorter is better.** The ceiling is
-  `MAX_LONG_LEN` (240 chars); most tips should land near 150-190. The first
-  authored scenario came in at 220-290 and read as wordy against the
-  source's own bullets, which say the same thing in half the words.
+- **Two or three sentences, roughly 180-220 chars.** The ceiling is
+  `MAX_LONG_LEN` (240).
+- **CUT IDEAS, NEVER GRAMMAR.** This is the one that took three passes to get
+  right. When a tip runs long, drop a whole clause or a whole sentence that
+  is not earning its place. Do NOT compress the sentences you keep: the
+  moment you strip the subject and verb off the front, you get telegraphese,
+  and telegraphese reads as machine-written even when every word is
+  defensible. "Keep your threat under 32 and Ungoliant's Spawn won't engage
+  you" became "Under 32 threat Ungoliant's Spawn won't engage you" - twelve
+  characters saved, and the sentence stopped sounding like a person. Keep the
+  imperative openers, the "you", and ordinary connectives ("and", "so",
+  "because", "as"); a semicolon joining two elliptical halves is the tell.
 
 And the failure mode this hit on its first attempt — LLM explainer voice, all
 of which was rejected and rewritten:
