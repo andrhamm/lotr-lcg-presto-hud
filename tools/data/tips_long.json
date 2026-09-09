@@ -3,20 +3,20 @@
  "scenarios": {
   "passage-through-mirkwood": {
    "general": {
-    "Don't victory-display the Spawn: one stage 3 needs it defeated.": "Don't put Ungoliant's Spawn in the victory display. One of the two stage 3 cards is won by finding and defeating it, and it only searches the encounter deck and the discard pile, so a Spawn sitting in the victory display leaves you nothing to find.",
-    "Never take an undefended attack - shadows here double up.": "Don't take undefended attacks. Several shadow cards in this deck have a second effect that only fires when nobody defended, and they hit hard: the Spawn raises your threat by 8 instead of 4, and the Hummerhorns deal 2 damage to every character you control instead of 1.",
-    "Tactics starter deck lacks willpower. Pair it with another sphere.": "If you are playing the Core Set's four pre-made decks, don't expect the Tactics one to get through this. It has almost no willpower, so it only wins when the encounter deck happens to deal it enemies to kill. Merge it with another sphere first.",
-    "Under 32 threat dodges Ungoliant's Spawn. Under 40 dodges Hummerhorns.": "Keep your threat under 32 and Ungoliant's Spawn will not engage you; keep it under 40 and neither will the Hummerhorns. There is not much point going lower than that, as most of the other enemies here engage cheaply anyway."
+    "Don't victory-display the Spawn: one stage 3 needs it defeated.": "Don't put Ungoliant's Spawn in the victory display. One of the two stage 3 cards is only won by defeating it, and there is a single copy in the deck.",
+    "Never take an undefended attack - shadows here double up.": "Don't take undefended attacks. Several shadows here get worse when nobody defends: the Spawn raises threat by 8 instead of 4, the Hummerhorns deal 2 damage to every character instead of 1.",
+    "Tactics starter deck lacks willpower. Pair it with another sphere.": "Don't expect the Core Set's Tactics starter to win here. It has almost no willpower, so it only gets through if the deck deals it enemies to kill. Pair it with another sphere.",
+    "Under 32 threat dodges Ungoliant's Spawn. Under 40 dodges Hummerhorns.": "Under 32 threat Ungoliant's Spawn won't engage you; under 40 the Hummerhorns won't either. Going lower buys you little, as most of the other enemies engage cheaply anyway."
    },
    "stages": {
     "1": {
-     "Forest Spider starts in staging, +1 attack once engaged. Have a defender.": "Have a defender ready in the first round or two. Setup drops a Forest Spider straight into the staging area, it engages at 25, and its Forced effect gives it +1 attack for the round as soon as it reaches you, so it hits for 3."
+     "Forest Spider starts in staging, +1 attack once engaged. Have a defender.": "Have a defender ready early. Setup drops a Forest Spider into the staging area, it engages at 25, and its Forced effect makes it hit for 3 the round it reaches you."
     },
     "2": {
-     "Just 2 points. Build up first - stage 3 branches at random.": "Stage 2 only needs 2 quest points, so a normal quest phase will take you straight past it. Clear what you can out of the staging area first, as beating this stage sends you to one of the two stage 3 cards at random and you don't get to pick."
+     "Just 2 points. Build up first - stage 3 branches at random.": "Only 2 quest points, so one ordinary quest phase clears it. Thin the staging area first, as beating this stage sends you to one of the two stage 3 cards at random."
     },
     "3": {
-     "Advance with the Spawn alive but nearly dead. Both branches need it gone.": "If Ungoliant's Spawn turns up early, don't kill it outright. Get its 9 hit points as low as you can and advance with it still in play: \"Don't Leave the Path!\" is won by defeating it, and Beorn's Path can't be beaten while it is on the table, so either way you want it one hit from dead."
+     "Advance with the Spawn alive but nearly dead. Both branches need it gone.": "If the Spawn turns up early, don't finish it off. Chip its 9 hit points down and advance with it alive: one stage 3 wins by defeating it, the other can't be beaten while it's in play."
     }
    }
   }

@@ -127,7 +127,12 @@ MAX_TIPS = 4     # tips per scenario
 # fit reads like a telegram - so the long form gets room for a real sentence
 # or two. Still a ceiling, because a tip is advice you act on mid-game, not
 # an article: past this it belongs in the source the citation points at.
-MAX_LONG_LEN = 320
+#
+# 240, not 320: the first authored scenario came in at 220-290 and read as
+# wordy against the source's own bullets, which say the same thing in half
+# the words. The ceiling is headroom, not a target - most tips should land
+# near 150-190.
+MAX_LONG_LEN = 240
 # A long tip has to earn the name. MIN_TIP_WORDS is the short form's
 # floor; anything near it in the long file is the terse line pasted into
 # the wrong place, which would silently ship the same sentence twice.

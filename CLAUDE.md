@@ -563,7 +563,10 @@ player:
 - **Numbers stated flatly**, in passing, not built up to.
 - **Be willing to be blunt.** "Don't bother with easy mode." A tip that
   hedges is a tip nobody acts on.
-- **Two to four short sentences.** Not one long one with subordinate clauses.
+- **Two or three short sentences, and shorter is better.** The ceiling is
+  `MAX_LONG_LEN` (240 chars); most tips should land near 150-190. The first
+  authored scenario came in at 220-290 and read as wordy against the
+  source's own bullets, which say the same thing in half the words.
 
 And the failure mode this hit on its first attempt — LLM explainer voice, all
 of which was rejected and rewritten:
