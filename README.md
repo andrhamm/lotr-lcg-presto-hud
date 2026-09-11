@@ -1,27 +1,110 @@
-# LOTR LCG Presto HUD
+# LOTR LCG Tracker
 
-A touchscreen companion HUD for **The Lord of the Rings: The Card Game**,
-running as custom MicroPython firmware on the
-[Pimoroni Presto](https://shop.pimoroni.com/en-us/products/presto)
-(480×480 IPS touch, RP2350B, 7 RGB LEDs) — with a pixel-faithful
-**[web digital twin you can play with right now →](https://lotrlcg.app/presto/)**
+A touchscreen companion for **The Lord of the Rings: The Card Game** — a
+tablet app that walks the official turn sequence, tracks threat and quest
+progress, teaches where the action windows are, and keeps a timestamped log of
+the whole game.
 
-Live: the **[tablet client](https://lotrlcg.app/)** (a full-screen iPad
-companion) and the **[Presto web twin](https://lotrlcg.app/presto/)** both
-run at [lotrlcg.app](https://lotrlcg.app/); the same layout also mirrors on
-GitHub Pages at
-[andrhamm.com/lotr-lcg-presto-hud/](https://andrhamm.com/lotr-lcg-presto-hud/)
-(root = tablet client, `/presto/` = the web twin).
+**[Open it → lotrlcg.app](https://lotrlcg.app/)** · no install, no account,
+works offline once loaded.
 
-It is a manual companion tracker, not a rules engine: players tap to adjust
-state while the HUD guides the official turn sequence, tracks threat and quest
-progress, surfaces action windows, and keeps a timestamped log of the whole
-game. The web twin runs the same screens with localStorage persistence —
-new features land on the web first, then port to the firmware.
+![The tracker in use](.github/media/tablet-tour.gif)
 
-## The app, screen by screen
+> [!WARNING]
+> **Alpha, and under active design work.** It is usable at the table today,
+> but screens, copy and layout change between releases. See
+> [Status and roadmap](#status-and-roadmap).
 
-All screenshots are true 480×480 device pixels.
+It is a **manual companion tracker, not a rules engine**: you tap to adjust
+state, and it never blocks a retcon. What it brings is the structure — the
+official step order, what may be played when, the numbers the cards actually
+print, and a running record of what happened.
+
+## What it does
+
+|  |  |
+|---|---|
+| ![Scenario chooser](.github/media/tablet-chooser.png) | ![A phase in play](.github/media/tablet-play.png) |
+
+**Pick a quest, see what you are walking into.** Every scenario in the card
+pool, grouped by cycle, with the encounter sets it gathers, the cards it can
+put into play, per-stage quest points, and strategy notes written for that
+scenario and that stage.
+
+**Play a round with the rules at your elbow.** Each step of the turn gets its
+own screen: what happens automatically, and — in purple, called out
+separately — the **action windows**, the only times an Action may be
+triggered. The phase timeline across the top shows the whole round at a
+glance, and every mark the round has reached is a tap-to-rewind target.
+
+**Look up a card without leaving the table.** Any card in the scenario opens
+full size, with its printed text and a table of what it actually costs you.
+
+![Card quick view](.github/media/tablet-card.png)
+
+Also in there: per-player threat and elimination levels, staging area
+tracking, engaged-enemy counts, location travel with its threat contribution,
+side quests, a guided quest-resolution flow, the Rules Reference sections
+behind each step, and a filterable game log you can rewind through or export.
+
+## Status and roadmap
+
+| | |
+|---|---|
+| **Stage** | Alpha — usable, unfinished, changing |
+| **Live** | [lotrlcg.app](https://lotrlcg.app/) (released) |
+| **Preview** | [andrhamm.com/lotr-lcg-presto-hud](https://andrhamm.com/lotr-lcg-presto-hud/) (tip of `main`) |
+| **Changes** | [CHANGELOG.md](CHANGELOG.md) · [Releases](../../releases) |
+
+**Now:** a design pass over every screen — layout, type scale, iconography,
+and cutting anything that says the same thing twice.
+
+**Next, roughly in order:**
+
+- **Long-form scenario notes.** The advice was written to fit a 240×240
+  screen, one clause per tip. A full-length version for the tablet is landing
+  scenario by scenario (1 of 122 so far).
+- **Classified notes** — pacing, what to do before you advance, what to watch
+  for, what to avoid, player-count effects — instead of one undifferentiated
+  list.
+- **Campaign mode** tracking across a saga's scenarios.
+- **Deck lists** alongside the quest, so the tracker knows what you brought.
+
+**Not planned:** enforcing rules, playing the game for you, or anything that
+needs an account.
+
+## Releases and deploys
+
+`main` is a preview channel. Merging a feature branch publishes the preview
+mirror and opens (or updates) a **release-please** release PR carrying the
+version bump and the changelog — it does **not** touch the live site.
+Production moves when that release PR is merged: that cuts the tagged GitHub
+Release, attaches the built site to it, and publishes to lotrlcg.app.
+
+```
+feature branch ──merge──▶ main ──▶ tests, build, preview mirror
+                                └─▶ release PR (opened/updated, not deployed)
+
+release PR ────merge──▶ tag + GitHub Release ──▶ lotrlcg.app
+```
+
+Commits use [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat:`, `fix:`, `docs:`, `ci:`, …) — that is what the changelog is built
+from, so the type and scope on a commit are load-bearing.
+
+## The Presto firmware
+
+The project started as custom MicroPython firmware for the
+[Pimoroni Presto](https://shop.pimoroni.com/en-us/products/presto) (480×480
+IPS touch, RP2350B), and that firmware is still here and still maintained —
+but it is no longer the primary target. The tablet client is.
+
+A pixel-faithful web twin of the device build runs at
+**[lotrlcg.app/presto/](https://lotrlcg.app/presto/)** if you want to see what
+it looks like without buying hardware.
+
+<details>
+<summary><b>The device build, screen by screen</b> (480×480 device pixels)</summary>
 
 ### Boot & setup
 
@@ -43,8 +126,7 @@ Before round 1 the HUD walks the rulebook's setup, focused on the part
 everyone gets wrong: **the order of effects during quest setup** — resolve
 stage 1A's Setup text in printed order (keywords on setup reveals *do*
 resolve), shuffle the encounter deck *after* any setup searches, then flip
-1A → 1B. Set stage 1B's quest points here so round 1 starts with the goal
-known.
+1A → 1B.
 
 ### The guided round
 
@@ -55,81 +137,25 @@ known.
 | ![Travel](docs/screenshots/play_travel.png) | ![Refresh](docs/screenshots/play_refresh.png) |
 
 Every stage of the round is its own view; the button at the bottom is always
-the next thing to do.
+the next thing to do. The header is the nav: tap `R# <step>` for the **Game
+Log**, the phase name for **Game Phases**, `Set.` for **Settings**. The step
+notation (`1.R`, `3.4`, `6.E`) matches the official turn-sequence chart.
 
-- **Header** is the nav: tap `R# <step>` for the **Game Log**, the phase name
-  for **Game Phases**, `Set.` for **Settings**. The step notation
-  (`1.R`, `3.4`, `6.E`) matches the official turn-sequence chart.
-- **Threat row** (helm) is always visible — tap a player card to edit their
-  threat; crossing a player's elimination level pops a confirmation
-  (eliminated / averted by card effect / level changed).
-- **Progress row** (trail icon) shows quest / active location / side quests —
-  tap any card to adjust its progress, `+SQ` to add side quests during
-  Planning or Staging.
-- **Questing** — commit willpower per player (tap a WP card to cycle through
-  everyone, or the *Questing for* card to edit all at once), reveal during
-  Staging with a high-end estimate of incoming threat, then resolve: success
-  opens a placement view (location fills first, overflow to the quest — or
-  place by hand), failure raises everyone's threat by the shortfall.
-- **Travel** subtracts the traveled location's threat contribution from the
-  staging area automatically.
-- **Refresh / End round** raises threat by each player's per-round setting,
-  passes the first-player token, and logs round stats (duration, threat
-  deltas, progress gained).
-
-### Reference screens
+### Reference, reminders, settings
 
 | | |
 |---|---|
 | ![Game Phases](docs/screenshots/phases_screen.png) | ![Game Log](docs/screenshots/log.png) |
+| ![Reminders](docs/screenshots/reminders_modal.png) | ![Settings](docs/screenshots/settings.png) |
 
 **Game Phases** — the full official turn sequence with the current step
-highlighted; purple squares mark player action windows, and the combat loop
-(every enemy attacks, then every player attacks, in turn order) is called
-out. Tap any step to jump the tracker there.
-**Game Log** — everything that happened, newest first, tagged
-`R<round>.<step>` with session timestamps.
+highlighted; purple squares mark player action windows. **Game Log** —
+everything that happened, tagged `R<round>.<step>`. **Encounter Reminders** —
+opt-in notifications for the effects everyone forgets (Archery, Battle/Siege,
+shadow-card discard, Time counters). **Settings** — save & quit, end game, and
+the 7-LED strip (phase colours, danger, torchlight, off).
 
-### Notifications & reminders
-
-![Reminders](docs/screenshots/reminders_modal.png)
-
-Tap the center of the *Staging area* card to open **Encounter Reminders** —
-opt-in notifications for the effects everyone forgets: Archery damage (only
-fires while staging threat > 0), Battle/Siege questing, shadow-card discard,
-Time counters. Enabled reminders appear as timed banners at the start of the
-matching phase with a pac-man countdown; action windows announce themselves
-in Leadership purple.
-
-### Settings
-
-![Settings](docs/screenshots/settings.png)
-
-*Save & Quit* returns to boot with the game saved; *End Game* (with confirm)
-wipes the save. The LEDs tile controls the 7-LED strip: brightness plus
-scenes — phase colors with a danger center, danger only, torchlight flicker,
-or off. (The web twin renders the strip under the screen.)
-
-## Web twin ↔ firmware
-
-```
-docs/           the web twin (GitHub Pages)
-  js/           ES-module port, file-for-file mirror of the Python
-  assets/       boot art
-gamestate.py    pure game logic (host-tested)
-phases.py       official turn-sequence data (from the DragnCards plugin)
-ui/             PicoGraphics screens, modals, icons, theme
-tools/          preview renderer, web-data generator
-tests/          ~2000 host tests incl. a 14-rule layout linter over 114 scenes
-```
-
-The twin shares the firmware's architecture — same screens, same button
-protocol, same bitmap8 text metrics, same palette — so a feature built on the
-web ports to MicroPython mechanically. `tools/gen_web_data.py` regenerates
-the shared data modules (turn sequence, icon masks, font metrics) from the
-Python source.
-
-## Running the firmware
+### Running it
 
 ```sh
 pip install mpremote
@@ -137,9 +163,45 @@ mpremote connect <port> fs cp gamestate.py phases.py leds.py hardware.py main.py
 mpremote connect <port> fs mkdir :ui
 mpremote connect <port> fs cp ui/*.py :ui/
 mpremote connect <port> fs cp assets/boot_bg.png :
+python3 tools/build_card_data.py && mpremote cp -r docs/data/ :/data/
 ```
 
-`main.py` auto-runs on boot. Host tests: `python -m pytest tests/`.
+`main.py` auto-runs on boot.
+
+</details>
+
+## Repo layout
+
+```
+docs/             the web app (this is what deploys)
+  index.html      the tablet client
+  tablet/         its renderers, styles and data
+  presto/         the Presto web twin
+  js/             shared game logic + data client, ES-module port of the Python
+gamestate.py      pure game logic (host-tested)
+phases.py         official turn-sequence data
+ui/               the firmware's screens, modals, icons, theme
+tools/            data builders (card DB, icons, catalog pack, tips)
+tests/            ~2600 host tests, incl. a layout linter over every screen
+```
+
+Three clients share one model. The tablet and the Presto twin are both ES
+modules over the same `docs/js/`; the firmware is the Python those were ported
+from, and `tools/gen_web_data.py` regenerates the shared data so the two
+cannot drift.
+
+## Development
+
+```sh
+python3 -m pytest tests/        # the whole suite
+python3 tools/build_card_data.py && python3 tools/build_catalog_pack.py
+python3 -m http.server -d docs  # then open http://localhost:8000/
+```
+
+The card database is compiled from a pinned upstream TSV and is **not**
+committed; run the build once before serving. See `CLAUDE.md` for the data
+policy, the architecture notes, and the rules about never shipping an
+unverified claim about the game.
 
 ## Disclaimer
 
