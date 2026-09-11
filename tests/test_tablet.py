@@ -2140,7 +2140,7 @@ def test_side_quest_picker_manual_back_cancel_and_render_shape():
     down in the footer, which put "go back a step" in the row reserved for
     leaving and committing. And there is no instruction sentence: the step
     is shown, not narrated."""
-    js = node("""
+    js = node(r"""
 import { GameState, setWindowPolicy, WINDOW_POLICY_BANDS } from "../../js/gamestate.js";
 import { perform, newUi } from "./actions.js";
 import { layout } from "./layout.js";

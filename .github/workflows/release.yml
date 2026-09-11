@@ -55,6 +55,14 @@ jobs:
     # merged the release PR.
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      # Granted HERE, on the calling job. A reusable workflow can never hold
+      # more permission than its caller, and this workflow's default is
+      # `contents: read` - so deploy-production.yml asking for `contents:
+      # write` (it attaches the built site to the Release) was an escalation,
+      # and GitHub rejected the whole file at parse time: the run came back
+      # `startup_failure` with no jobs at all.
+      contents: write
     uses: ./.github/workflows/deploy-production.yml
     secrets: inherit
     with:

@@ -29,7 +29,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest
+      # Pillow is not optional for the SUITE the way it is for the icon
+      # BUILD: build_icons.py degrades to a clean SystemExit without it
+      # (icons are optional at build time), and tests/test_icons.py
+      # asserts the rasterizer's actual output, so 14 tests need it.
+      - run: pip install pytest Pillow
       - run: python3 -m pytest tests/ -q
 
   build:
