@@ -92,6 +92,12 @@ Commits use [Conventional Commits](https://www.conventionalcommits.org/)
 (`feat:`, `fix:`, `docs:`, `ci:`, …) — that is what the changelog is built
 from, so the type and scope on a commit are load-bearing.
 
+`main` is protected and **squash-only**: work lands through a PR whose
+**title is the conventional commit**, because that title becomes the squash
+commit subject and therefore the changelog entry. `test` and `build` have to
+pass. The release PR is squashed too — release-please recommends it, and
+finds a merged release by its label, not by the shape of the merge.
+
 ## The Presto firmware
 
 The project started as custom MicroPython firmware for the

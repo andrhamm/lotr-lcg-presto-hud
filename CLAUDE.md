@@ -699,6 +699,22 @@ landing work.
   from events raised by that token ("this behavior prevents you from
   accidentally creating recursive workflow runs", Actions docs). A
   release-triggered workflow would never fire.
+- **main is protected: squash-only, via a PR.** Feature work goes on a
+  branch and merges through a pull request whose TITLE is the conventional
+  commit - GitHub is configured to use the PR title as the squash commit
+  subject (`squash_merge_commit_title: PR_TITLE`), so the PR title is
+  literally the changelog entry. Merge commits and rebase merges are turned
+  off and `required_linear_history` is on; every commit on main is a squash.
+  Required checks: `test` and `build / build`. Reviews are not required (0
+  approvals) - the gate is the suite, not a second pair of eyes.
+- **Squash is right for the release PR too**, not just feature branches:
+  release-please recommends it, and it detects a merged release by the
+  `autorelease: pending` label plus the release branch name rather than by
+  parsing the merge commit - so nothing about a squash hides the release
+  from it.
+- **The owner bypasses all of it** (`enforce_admins: false`), which is what
+  makes a direct `git push origin main` still work for them. Do not rely on
+  that: open a PR.
 - **Version state is two committed files**: `release-please-config.json` and
   `.release-please-manifest.json` (plus `version.txt`, which the `simple`
   release type stamps). The project is alpha and stays on `0.x`.
