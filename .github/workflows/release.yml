@@ -1,0 +1,61 @@
+# Release, and the only thing that touches production.
+#
+# The flow, end to end:
+#
+#   1. Merge a feature branch to main. release-please reads the conventional
+#      commits since the last release and opens (or updates) a release PR
+#      holding the version bump and the CHANGELOG entry. Nothing deploys.
+#   2. Merging that release PR is the release decision - a human one, taken
+#      when the user says so. release-please tags it and cuts the GitHub
+#      Release.
+#   3. Only then does deploy-production run: it builds the site from the
+#      release commit, attaches the built artifact to the Release, and
+#      publishes it to lotrlcg.app.
+#
+# WHY THE DEPLOY LIVES IN THIS FILE rather than triggering on `release:
+# published`: the Release is created by release-please using GITHUB_TOKEN, and
+# GitHub does not start workflow runs from events raised by that token - "for
+# all other events, this behavior prevents you from accidentally creating
+# recursive workflow runs" (GitHub Actions docs, GITHUB_TOKEN). A
+# release-triggered workflow would simply never fire. Gating a later job in
+# THIS run on the action's own `release_created` output is the documented way
+# round it.
+name: Release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # tag, and cut the GitHub Release
+      issues: write          # release-please labels its PR
+      pull-requests: write   # open/update the release PR
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          # Config and version state are the two committed files at the repo
+          # root; v4 reads them by default (manifest mode).
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  deploy-production:
+    # The gate. `release_created` is true on exactly one run: the push that
+    # merged the release PR.
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/deploy-production.yml
+    secrets: inherit
+    with:
+      tag_name: ${{ needs.release-please.outputs.tag_name }}

@@ -1,0 +1,66 @@
+# Tests, the site build, and the rolling PREVIEW deploy.
+#
+# Nothing here touches production. main is a preview channel now: every merge
+# republishes the GitHub Pages mirror so there is always somewhere to look at
+# what main currently is, and lotrlcg.app stays on the last release until a
+# release-please release PR is merged (release.yml).
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  # Per-ref: a second push to a PR cancels the first, but a main run is never
+  # cancelled by a PR run.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    # The host test suite - ~2600 tests including the layout linter over every
+    # screen scene. It never ran in CI before: the only workflow was a deploy,
+    # so a red suite still published. It gates the preview deploy below, and
+    # release.yml's production deploy runs from a commit that passed it here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - run: python3 -m pytest tests/ -q
+
+  build:
+    needs: test
+    uses: ./.github/workflows/build-site.yml
+
+  deploy-preview:
+    # main only. A PR gets the build (proof the site still compiles) and
+    # stops there - there is no per-PR environment to publish to.
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      # Shared with nothing else: GitHub Pages allows one in-flight deploy per
+      # repository, and this is the only workflow that deploys to it.
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: docs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4

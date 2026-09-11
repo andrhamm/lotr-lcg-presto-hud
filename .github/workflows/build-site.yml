@@ -1,15 +1,13 @@
-name: Deploy Pages
+# The site build, once, called by every workflow that needs it.
+#
+# It used to live inside pages.yml, which also deployed - so "build the site"
+# and "publish the site to the live domain" were the same event. They are not
+# any more (see ci.yml and release.yml): main gets a rolling preview, and
+# lotrlcg.app only moves when a release-please release PR is merged. One copy
+# of these steps, called from both.
+name: Build site
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-concurrency:
-  group: pages
-  cancel-in-progress: true
+  workflow_call:
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -107,46 +105,12 @@ jobs:
             python3 tools/build_rules_corpus.py /tmp/rr.pdf --title "Rules Reference" --no-ocr
             python3 tools/build_rules_text.py
           fi
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs
       - uses: actions/upload-artifact@v4
-        # The same built docs/ for the Cloudflare job below - GitHub Pages
-        # gets it through upload-pages-artifact (a tarball with its own
-        # name), so this is the plain copy the other publisher downloads.
+        # The built docs/ for whichever caller asked for it: the GitHub Pages
+        # preview deploy, the Cloudflare production deploy, or neither (a PR
+        # build, which just proves the site still builds).
         with:
           name: site
           path: docs
-          retention-days: 1
+          retention-days: 7
           include-hidden-files: true
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
-  publish-cloudflare:
-    # The second host (the hosting plan): lotrlcg.app, published from the SAME
-    # docs/ the build job produced - no second build. A separate job, in
-    # parallel with `deploy`, so a Cloudflare failure (token expiry, outage)
-    # shows red here without skipping the GitHub Pages deploy. main-only so a
-    # manual run from another branch never publishes to the live project.
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: site
-          path: docs
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
-          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          # --commit-dirty=true: the downloaded artifact makes the checkout
-          # dirty from wrangler's point of view (generated docs/data/).
-          command: pages deploy docs --project-name=lotrlcg --branch=main --commit-dirty=true

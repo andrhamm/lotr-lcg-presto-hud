@@ -672,6 +672,37 @@ someone fills it in from a verified source. Same no-op-when-present rule as
 the rest of `docs/data/`: the tool skips with a one-line message unless
 `--force` or the output is missing.
 
+## Releases: conventional commits, release-please, and what "prod" means
+
+**`main` is a preview channel, not production.** Merging a feature branch
+publishes the GitHub Pages mirror and opens (or updates) a release-please
+release PR. It does **not** touch lotrlcg.app. Production moves only when the
+user merges that release PR, which tags the release and triggers the
+Cloudflare deploy. Releasing is the user's call, never a side effect of
+landing work.
+
+- **Every commit message must be a Conventional Commit** (`feat:`, `fix:`,
+  `docs:`, `refactor:`, `perf:`, `build:`, `ci:`, `test:`, `chore:`, with an
+  optional scope: `fix(tablet): ...`). The changelog is generated from them,
+  so the type and scope are load-bearing, not decoration. A `feat:` bumps the
+  minor, a `fix:` the patch; `!` or a `BREAKING CHANGE:` footer bumps major.
+- **Four workflows, one build.** `build-site.yml` is a reusable
+  `workflow_call` holding the build steps; `ci.yml` (PRs and main) runs the
+  test suite, calls it, and deploys the preview on main only; `release.yml`
+  runs release-please on main and calls `deploy-production.yml` *only* when
+  `release_created` is true; `deploy-production.yml` has no `push:` trigger
+  and is the sole place wrangler runs. `tests/test_site_layout.py` asserts
+  all of that, including the negative: no wrangler in `ci.yml`.
+- **Why the prod deploy is a job in the release run** rather than a workflow
+  triggered by `release: published` - the Release is created by
+  release-please with `GITHUB_TOKEN`, and GitHub does not start workflow runs
+  from events raised by that token ("this behavior prevents you from
+  accidentally creating recursive workflow runs", Actions docs). A
+  release-triggered workflow would never fire.
+- **Version state is two committed files**: `release-please-config.json` and
+  `.release-please-manifest.json` (plus `version.txt`, which the `simple`
+  release type stamps). The project is alpha and stays on `0.x`.
+
 ## The TODO board (TODO.md)
 
 `TODO.md` is an Obsidian Kanban board (also plain markdown). Columns:

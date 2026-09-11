@@ -1,0 +1,65 @@
+# Production: lotrlcg.app.
+#
+# Called by release.yml only, and only on the run that cut a release. There is
+# no `push` trigger here on purpose - if this file listened to main, merging a
+# feature branch would publish to the live site, which is the thing this whole
+# restructure exists to stop.
+#
+# workflow_dispatch is kept as the manual escape hatch (re-publish a release
+# whose deploy failed on a Cloudflare outage, say) - that is a deliberate act
+# with a human behind it, which is the bar for prod.
+name: Deploy production
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        description: The release tag being published, e.g. v0.2.0
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: The release tag to publish, e.g. v0.2.0
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: production
+  cancel-in-progress: false
+jobs:
+  build:
+    uses: ./.github/workflows/build-site.yml
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # attach the built site to the GitHub Release
+    environment:
+      name: production
+      url: https://lotrlcg.app/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: docs
+      - name: Attach the built site to the release
+        # The RELEASE ARTIFACT, in the literal sense: the exact docs/ that is
+        # about to go live, hanging off the tag, so a release can be
+        # re-published or diffed later without rebuilding it from source (the
+        # card DB is compiled from a pinned TSV, but pins move).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag_name }}
+        run: |
+          zip -qr "site-${TAG}.zip" docs
+          gh release upload "$TAG" "site-${TAG}.zip" --clobber
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          # --commit-dirty=true: the downloaded artifact makes the checkout
+          # dirty from wrangler's point of view (generated docs/data/).
+          command: pages deploy docs --project-name=lotrlcg --branch=main --commit-dirty=true

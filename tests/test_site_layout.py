@@ -72,8 +72,49 @@ def test_the_old_tablet_index_is_a_stub_that_refreshes_to_the_root():
     assert 'href="../"' in html
 
 
-def test_the_pages_workflow_publishes_to_cloudflare_pages():
-    with open(os.path.join(ROOT, ".github", "workflows", "pages.yml"), encoding="utf-8") as f:
-        workflow = f.read()
-    assert "pages deploy docs --project-name=lotrlcg" in workflow
-    assert "cloudflare/wrangler-action@v3" in workflow
+def _workflow(name):
+    with open(os.path.join(ROOT, ".github", "workflows", name), encoding="utf-8") as f:
+        return f.read()
+
+
+def test_production_is_published_from_a_workflow_main_cannot_trigger():
+    """THE invariant of the release setup: merging a feature branch must not
+    move lotrlcg.app. The Cloudflare publish lives in one file, and that file
+    has no `push:` trigger at all - it runs when release.yml calls it (on the
+    run that cut a release) or when a human dispatches it by hand."""
+    prod = _workflow("deploy-production.yml")
+    assert "pages deploy docs --project-name=lotrlcg" in prod
+    assert "cloudflare/wrangler-action@v3" in prod
+    triggers = prod.split("jobs:")[0]
+    assert "workflow_call:" in triggers
+    assert "push:" not in triggers, (
+        "deploy-production must not listen to pushes - that is the whole point")
+
+
+def test_only_the_release_run_reaches_production():
+    """release.yml opens/updates the release PR on every push to main, and
+    calls the production deploy ONLY when release-please reports it actually
+    cut a release."""
+    rel = _workflow("release.yml")
+    assert "googleapis/release-please-action@v4" in rel
+    assert "uses: ./.github/workflows/deploy-production.yml" in rel
+    assert "needs.release-please.outputs.release_created == 'true'" in rel
+
+
+def test_ci_deploys_the_preview_and_nothing_else():
+    """main publishes the GitHub Pages mirror and stops there. If a wrangler
+    step ever appears in this file, main is deploying to production again."""
+    ci = _workflow("ci.yml")
+    assert "actions/deploy-pages@v4" in ci
+    assert "wrangler" not in ci, "CI must not publish to production"
+    assert "pytest" in ci, "the suite has to run before main deploys anything"
+
+
+def test_release_please_is_configured_at_the_repo_root():
+    import json
+    with open(os.path.join(ROOT, "release-please-config.json"), encoding="utf-8") as f:
+        cfg = json.load(f)
+    assert "." in cfg["packages"], "single root package"
+    with open(os.path.join(ROOT, ".release-please-manifest.json"), encoding="utf-8") as f:
+        manifest = json.load(f)
+    assert "." in manifest, "the manifest seeds the current version"
